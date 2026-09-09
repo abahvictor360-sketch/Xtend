@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { requireSession } from '@/lib/auth'
 import { SignOutButton } from '@/components/sign-out-button'
 import { AdminNav } from '@/components/admin/admin-nav'
+import { XpelMark } from '@/components/brand/logo'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,13 +12,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-dvh">
-      <header className="sticky top-0 z-20 border-b border-border bg-background">
+      <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
         <div className="flex items-center justify-between gap-4 px-4 py-3">
           <Link href="/admin" className="flex items-center gap-2">
-            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-sm font-bold text-primary-foreground">
-              X
+            <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-card shadow-soft">
+              <XpelMark className="h-5 w-5" />
             </span>
-            <span className="font-semibold">Xtend</span>
+            <span className="text-lg font-extrabold tracking-tight">Xtend</span>
           </Link>
           <div className="flex items-center gap-3">
             <span className="hidden text-sm text-muted-foreground sm:inline">

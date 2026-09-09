@@ -71,7 +71,7 @@ export function AttendanceMap({ rows }: { rows: AttendanceDetail[] }) {
             drawnOutlets.add(row.outlet_id)
             L.circle([row.outlet_lat, row.outlet_lng], {
               radius: row.outlet_radius_m ?? 150,
-              color: '#4c1d95',
+              color: '#c1572a',
               weight: 1,
               fillOpacity: 0.08,
             })
@@ -80,7 +80,7 @@ export function AttendanceMap({ rows }: { rows: AttendanceDetail[] }) {
             bounds.push([row.outlet_lat, row.outlet_lng])
           }
 
-          const colour = row.status === 'on_site' ? '#15803d' : '#b91c1c'
+          const colour = row.status === 'on_site' ? '#15803d' : '#c2410c'
           L.circleMarker([row.lat, row.lng], {
             radius: 6,
             color: colour,

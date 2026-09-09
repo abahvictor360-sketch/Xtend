@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { CloudUpload, WifiOff } from 'lucide-react'
 import { countOutbox } from '@/lib/offline/db'
 import { flushOutbox } from '@/lib/offline/sync'
-import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 
 /** Shows what is still sitting on the phone, and drains it on reconnect. */
@@ -57,9 +56,19 @@ export function OutboxBanner({ onFlushed }: { onFlushed?: () => void }) {
   if (!pending && online) return null
 
   return (
-    <Alert variant={online ? 'info' : 'warning'} className="flex items-center gap-2">
-      {online ? <CloudUpload className="h-4 w-4 shrink-0" /> : <WifiOff className="h-4 w-4 shrink-0" />}
-      <span className="flex-1 text-sm">
+    <div
+      className={`flex animate-fade-up items-center gap-3 rounded-2xl p-3 ${
+        online ? 'bg-tint text-tint-foreground' : 'bg-warning/12 text-foreground'
+      }`}
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/70">
+        {online ? (
+          <CloudUpload className="h-4 w-4 text-brand" />
+        ) : (
+          <WifiOff className="h-4 w-4 text-warning" />
+        )}
+      </span>
+      <span className="flex-1 text-xs font-medium leading-snug">
         {pending > 0
           ? `${pending} item${pending > 1 ? 's' : ''} waiting to send.`
           : 'You are offline. Anything you save is kept on this phone.'}
@@ -69,6 +78,6 @@ export function OutboxBanner({ onFlushed }: { onFlushed?: () => void }) {
           {busy ? 'Sending…' : 'Send now'}
         </Button>
       )}
-    </Alert>
+    </div>
   )
 }

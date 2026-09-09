@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import { ArrowRight, Eye, EyeOff } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -13,6 +14,7 @@ export function LoginForm() {
   const params = useSearchParams()
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
+  const [show, setShow] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -66,25 +68,37 @@ export function LoginForm() {
           required
           value={identifier}
           onChange={(e) => setIdentifier(e.target.value)}
-          placeholder="you@xpel.ng or 08012345678"
+          placeholder="you@xpelbeauty.ng or 08012345678"
         />
       </div>
 
       <div className="space-y-1.5">
         <Label htmlFor="password">Password</Label>
-        <Input
-          id="password"
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        <div className="relative">
+          <Input
+            id="password"
+            name="password"
+            type={show ? 'text' : 'password'}
+            autoComplete="current-password"
+            required
+            className="pr-12"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+          <button
+            type="button"
+            aria-label={show ? 'Hide password' : 'Show password'}
+            onClick={() => setShow((v) => !v)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+          >
+            {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
       </div>
 
-      <Button type="submit" size="lg" className="w-full" disabled={busy}>
+      <Button type="submit" size="xl" className="w-full" disabled={busy}>
         {busy ? 'Signing in…' : 'Sign in'}
+        {!busy && <ArrowRight className="h-4 w-4" />}
       </Button>
     </form>
   )

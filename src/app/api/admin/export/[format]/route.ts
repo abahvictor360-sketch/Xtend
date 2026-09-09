@@ -78,7 +78,7 @@ async function xlsx(rows: Awaited<ReturnType<typeof toExportRows>>) {
   ws.getRow(1).fill = {
     type: 'pattern',
     pattern: 'solid',
-    fgColor: { argb: 'FF111827' },
+    fgColor: { argb: 'FFC1572A' },
   }
   ws.getRow(1).font = { bold: true, color: { argb: 'FFFFFFFF' } }
 
@@ -87,7 +87,7 @@ async function xlsx(rows: Awaited<ReturnType<typeof toExportRows>>) {
     if (row.selfieUrl) {
       const cell = added.getCell(EXPORT_COLUMNS.length)
       cell.value = { text: 'Open selfie', hyperlink: row.selfieUrl }
-      cell.font = { color: { argb: 'FF1D4ED8' }, underline: true }
+      cell.font = { color: { argb: 'FFC2410C' }, underline: true }
     }
     const status = String(row.values[8])
     if (status !== 'on_site') {

@@ -26,8 +26,10 @@ export function AdminNav({ readOnly }: { readOnly: boolean }) {
             key={link.href}
             href={link.href}
             className={cn(
-              'whitespace-nowrap rounded-md px-3 py-1.5 text-sm',
-              active ? 'bg-secondary font-medium text-secondary-foreground' : 'text-muted-foreground hover:bg-muted',
+              'whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-semibold transition-colors',
+              active
+                ? 'bg-brand text-primary-foreground shadow-lift'
+                : 'text-muted-foreground hover:bg-tint hover:text-tint-foreground',
             )}
           >
             {link.label}

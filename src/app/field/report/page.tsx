@@ -1,7 +1,8 @@
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { ReportForm } from '@/components/field/report-form'
-import { Alert } from '@/components/ui/alert'
+import { SheetScreen, HeaderField } from '@/components/field/screen'
+import { longDate } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Daily report — Xtend' }
@@ -21,12 +22,21 @@ export default async function ReportPage() {
   const supabase = await createServerSupabase()
 
   const { data: today } = await supabase.rpc('business_date')
-  const { data: report } = await supabase
-    .from('reports')
-    .select('id, report_date, body, sales_summary, stock_status, competitor_activity, issues')
-    .eq('user_id', session.userId)
-    .eq('report_date', today)
-    .maybeSingle<ReportRow>()
+  const businessDate = (today as string) ?? ''
+
+  const [{ data: report }, { data: outlet }] = await Promise.all([
+    supabase
+      .from('reports')
+      .select('id, report_date, body, sales_summary, stock_status, competitor_activity, issues')
+      .eq('user_id', session.userId)
+      .eq('report_date', businessDate)
+      .maybeSingle<ReportRow>(),
+    supabase
+      .from('outlets')
+      .select('name')
+      .eq('id', session.profile.outlet_id ?? '')
+      .maybeSingle<{ name: string }>(),
+  ])
 
   const { count: photoCount } = report
     ? await supabase
@@ -36,16 +46,20 @@ export default async function ReportPage() {
     : { count: 0 }
 
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-lg font-semibold">Daily report</h1>
-        <p className="text-sm text-muted-foreground">
-          One report per day. You can edit it until midnight, not after.
-        </p>
-      </div>
-
-      {report && <Alert variant="info">Today’s report is filed. Any change below replaces it.</Alert>}
-
+    <SheetScreen
+      title={report ? 'Edit today’s report' : 'New daily report'}
+      back="/field"
+      header={
+        <>
+          <HeaderField label="Filed by" value={session.profile.full_name} />
+          <HeaderField label="Outlet" value={outlet?.name ?? 'No outlet assigned'} />
+          <HeaderField
+            label="Date"
+            value={businessDate ? longDate(businessDate) : 'Today'}
+          />
+        </>
+      }
+    >
       <ReportForm
         existing={
           report
@@ -60,6 +74,6 @@ export default async function ReportPage() {
         }
         photosAlready={photoCount ?? 0}
       />
-    </div>
+    </SheetScreen>
   )
 }

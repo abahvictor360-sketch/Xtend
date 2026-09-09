@@ -9,9 +9,13 @@ export const Select = React.forwardRef<
   <select
     ref={ref}
     className={cn(
-      'flex h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50',
+      'flex h-12 w-full appearance-none rounded-2xl border border-input bg-card bg-[length:1rem] bg-[right_0.9rem_center] bg-no-repeat px-4 pr-9 text-base focus-visible:border-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/25 disabled:opacity-50',
       className,
     )}
+    style={{
+      backgroundImage:
+        "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23997b6b' stroke-width='2.5' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E\")",
+    }}
     {...props}
   >
     {children}

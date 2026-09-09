@@ -2,11 +2,9 @@
 
 import { useCallback, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Camera, CheckCircle2, AlertTriangle, Clock } from 'lucide-react'
+import { AlertTriangle, Camera, CheckCircle2, CloudUpload, LogIn, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { processSelfie } from '@/lib/image'
 import { deviceInfo } from '@/lib/device'
 import { requireFix, GeoBlocked, haversineMetres } from '@/lib/geo'
@@ -39,8 +37,7 @@ export function ClockPanel({ day }: { day: DayState }) {
   const [error, setError] = useState<string | null>(null)
   const [outcome, setOutcome] = useState<Outcome | null>(null)
 
-  const done = { opening: Boolean(day.opening), closing: Boolean(day.closing) }
-  const nextType: AttendanceType | null = !done.opening ? 'opening' : !done.closing ? 'closing' : null
+  const nextType: AttendanceType | null = !day.opening ? 'opening' : !day.closing ? 'closing' : null
 
   const start = useCallback((type: AttendanceType) => {
     setError(null)
@@ -60,16 +57,16 @@ export function ClockPanel({ day }: { day: DayState }) {
       setError(null)
       try {
         // A fresh fix at the moment of capture, not the one from app open.
-        setBusyStep('Checking your location…')
+        setBusyStep('Checking your location')
         const fix = await requireFix()
 
-        setBusyStep('Compressing your selfie…')
+        setBusyStep('Compressing your selfie')
         const { full, thumb } = await processSelfie(file)
 
-        setBusyStep('Naming the place…')
+        setBusyStep('Naming the place')
         const address = await reverseGeocode(fix.lat, fix.lng)
 
-        setBusyStep('Sending…')
+        setBusyStep('Sending')
         const result = await submitOrQueue({
           kind: 'clock',
           type,
@@ -132,88 +129,69 @@ export function ClockPanel({ day }: { day: DayState }) {
   )
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Clock className="h-4 w-4" />
-          Today
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="grid grid-cols-2 gap-2">
-          <ClockSlot label="Clock in" state={day.opening} />
-          <ClockSlot label="Clock out" state={day.closing} />
-        </div>
+    <div className="space-y-3">
+      {error && <Alert variant="destructive">{error}</Alert>}
 
-        {error && <Alert variant="destructive">{error}</Alert>}
+      {outcome && (
+        <Alert
+          variant={outcome.tone === 'success' ? 'success' : outcome.tone === 'warning' ? 'warning' : 'info'}
+          className="animate-fade-up"
+        >
+          <p className="flex items-center gap-1.5 font-bold">
+            {outcome.tone === 'success' ? (
+              <CheckCircle2 className="h-4 w-4 text-success" />
+            ) : outcome.tone === 'info' ? (
+              <CloudUpload className="h-4 w-4 text-brand" />
+            ) : (
+              <AlertTriangle className="h-4 w-4 text-warning" />
+            )}
+            {outcome.title}
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{outcome.detail}</p>
+        </Alert>
+      )}
 
-        {outcome && (
-          <Alert variant={outcome.tone === 'success' ? 'success' : outcome.tone === 'warning' ? 'warning' : 'info'}>
-            <p className="flex items-center gap-1.5 font-medium">
-              {outcome.tone === 'success' ? (
-                <CheckCircle2 className="h-4 w-4" />
-              ) : (
-                <AlertTriangle className="h-4 w-4" />
-              )}
-              {outcome.title}
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">{outcome.detail}</p>
-          </Alert>
-        )}
+      {/* The selfie is mandatory and must come from the camera. */}
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*"
+        capture="user"
+        className="hidden"
+        onChange={onSelfie}
+      />
 
-        {/* The selfie is mandatory and must come from the camera. */}
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*"
-          capture="user"
-          className="hidden"
-          onChange={onSelfie}
-        />
-
-        {nextType ? (
-          <Button
-            size="xl"
-            className="w-full"
-            disabled={Boolean(busyStep)}
-            onClick={() => start(nextType)}
-          >
-            <Camera className="h-5 w-5" />
-            {busyStep ?? (nextType === 'opening' ? 'Clock in with selfie' : 'Clock out with selfie')}
-          </Button>
-        ) : (
-          <Alert variant="success">
-            Your shift is complete for today. One clock-in and one clock-out per day.
-          </Alert>
-        )}
-
-        {!day.outlet && (
-          <Alert variant="warning">
-            You have no outlet assigned, so distance cannot be checked and every clock event will be
-            flagged. Ask your admin to assign your outlet.
-          </Alert>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-function ClockSlot({ label, state }: { label: string; state: DayState['opening'] }) {
-  return (
-    <div className="rounded-md border border-border p-3">
-      <p className="text-xs uppercase tracking-wide text-muted-foreground">{label}</p>
-      {state ? (
-        <>
-          <p className="mt-1 text-lg font-semibold tabular-nums">{formatLagos(state.at, false)}</p>
-          <Badge
-            className="mt-1"
-            variant={state.status === 'on_site' ? 'success' : 'destructive'}
-          >
-            {state.status === 'on_site' ? 'On site' : state.status === 'off_site' ? 'Off site' : 'Flagged'}
-          </Badge>
-        </>
+      {nextType ? (
+        <Button
+          size="xl"
+          className="w-full"
+          disabled={Boolean(busyStep)}
+          onClick={() => start(nextType)}
+        >
+          {busyStep ? (
+            <>
+              <Camera className="h-5 w-5 animate-pulse" />
+              {busyStep}…
+            </>
+          ) : (
+            <>
+              {nextType === 'opening' ? <LogIn className="h-5 w-5" /> : <LogOut className="h-5 w-5" />}
+              {nextType === 'opening' ? 'Clock in with selfie' : 'Clock out with selfie'}
+            </>
+          )}
+        </Button>
       ) : (
-        <p className="mt-1 text-lg font-semibold text-muted-foreground">—</p>
+        <Alert variant="success" className="flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />
+          <span>Shift complete. One clock-in and one clock-out per day.</span>
+        </Alert>
+      )}
+
+      {!day.outlet && (
+        <Alert variant="warning">
+          You have no outlet assigned, so distance cannot be checked and every clock event will be
+          flagged. Ask your admin to assign your outlet.
+        </Alert>
       )}
     </div>
   )

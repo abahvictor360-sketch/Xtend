@@ -2,13 +2,14 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { ImagePlus, X } from 'lucide-react'
+import { Check, ImagePlus, Send, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert } from '@/components/ui/alert'
 import { processReportPhoto } from '@/lib/image'
 import { submitOrQueue, PermanentJobError } from '@/lib/offline/sync'
+import { cn } from '@/lib/utils'
 
 const MAX_PHOTOS = 5
 
@@ -20,14 +21,51 @@ export interface ReportFields {
   issues: string
 }
 
-const FIELDS: { key: keyof ReportFields; label: string; placeholder: string }[] = [
-  { key: 'body', label: 'How the day went', placeholder: 'Footfall, staffing, anything notable.' },
-  { key: 'sales_summary', label: 'Sales summary', placeholder: 'Units moved, best sellers, value.' },
-  { key: 'stock_status', label: 'Stock status', placeholder: 'What is low, what is out, what arrived.' },
-  { key: 'competitor_activity', label: 'Competitor activity', placeholder: 'Promos, new SKUs, price moves.' },
-  { key: 'issues', label: 'Issues', placeholder: 'Anything that needs the office to act.' },
+const SECTIONS: { key: keyof ReportFields; label: string; hint: string; placeholder: string }[] = [
+  {
+    key: 'body',
+    label: 'The day',
+    hint: 'How the day went',
+    placeholder: 'Footfall, staffing, anything notable.',
+  },
+  {
+    key: 'sales_summary',
+    label: 'Sales',
+    hint: 'What moved',
+    placeholder: 'Units sold, best sellers, value.',
+  },
+  {
+    key: 'stock_status',
+    label: 'Stock',
+    hint: 'What is on the shelf',
+    placeholder: 'What is low, what is out, what arrived.',
+  },
+  {
+    key: 'competitor_activity',
+    label: 'Competitors',
+    hint: 'What they are doing',
+    placeholder: 'Promos, new SKUs, price moves.',
+  },
+  {
+    key: 'issues',
+    label: 'Issues',
+    hint: 'What needs the office',
+    placeholder: 'Anything head office has to act on.',
+  },
 ]
 
+const EMPTY: ReportFields = {
+  body: '',
+  sales_summary: '',
+  stock_status: '',
+  competitor_activity: '',
+  issues: '',
+}
+
+/**
+ * One section at a time. Five stacked textareas is a wall on a 360px screen;
+ * the chips make it a five-step form that still submits as one report.
+ */
 export function ReportForm({
   existing,
   photosAlready,
@@ -36,21 +74,16 @@ export function ReportForm({
   photosAlready: number
 }) {
   const router = useRouter()
-  const [fields, setFields] = useState<ReportFields>(
-    existing ?? {
-      body: '',
-      sales_summary: '',
-      stock_status: '',
-      competitor_activity: '',
-      issues: '',
-    },
-  )
+  const [fields, setFields] = useState<ReportFields>(existing ?? EMPTY)
+  const [active, setActive] = useState<keyof ReportFields>('body')
   const [photos, setPhotos] = useState<{ blob: Blob; url: string }[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
   const remaining = Math.max(0, MAX_PHOTOS - photosAlready - photos.length)
+  const section = SECTIONS.find((s) => s.key === active)!
+  const filled = SECTIONS.filter((s) => fields[s.key].trim()).length
 
   async function addPhotos(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []).slice(0, remaining)
@@ -91,7 +124,7 @@ export function ReportForm({
       setNotice(
         result.queued
           ? 'No data right now. Your report is saved on this phone and will send itself when you get signal.'
-          : 'Report saved.',
+          : 'Report saved. You can keep editing it until midnight.',
       )
       setPhotos([])
       router.refresh()
@@ -104,35 +137,72 @@ export function ReportForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
+    <form onSubmit={onSubmit} className="space-y-5">
       {error && <Alert variant="destructive">{error}</Alert>}
       {notice && <Alert variant="success">{notice}</Alert>}
 
-      {FIELDS.map(({ key, label, placeholder }) => (
-        <div key={key} className="space-y-1.5">
-          <Label htmlFor={key}>{label}</Label>
-          <Textarea
-            id={key}
-            value={fields[key]}
-            placeholder={placeholder}
-            onChange={(e) => setFields((f) => ({ ...f, [key]: e.target.value }))}
-          />
+      <div>
+        <div className="mb-2 flex items-center justify-between">
+          <Label className="field-label">Section</Label>
+          <span className="text-[11px] font-semibold text-muted-foreground">
+            {filled}/{SECTIONS.length} filled
+          </span>
         </div>
-      ))}
+
+        <div className="no-scrollbar -mx-4 flex flex-wrap gap-2 px-4">
+          {SECTIONS.map((item) => {
+            const done = Boolean(fields[item.key].trim())
+            const isActive = item.key === active
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => setActive(item.key)}
+                aria-pressed={isActive}
+                className={cn(
+                  'flex h-9 items-center gap-1.5 rounded-full px-4 text-xs font-semibold transition-all active:scale-95',
+                  isActive
+                    ? 'bg-brand text-primary-foreground shadow-lift'
+                    : 'bg-tint text-tint-foreground',
+                )}
+              >
+                {done && <Check className={cn('h-3 w-3', isActive ? 'text-white' : 'text-brand')} />}
+                {item.label}
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label htmlFor={active}>{section.hint}</Label>
+        <Textarea
+          id={active}
+          key={active}
+          autoFocus
+          value={fields[active]}
+          placeholder={section.placeholder}
+          onChange={(e) => setFields((f) => ({ ...f, [active]: e.target.value }))}
+          className="min-h-[132px]"
+        />
+      </div>
 
       <div className="space-y-2">
-        <Label>Photos ({photosAlready + photos.length}/{MAX_PHOTOS})</Label>
+        <Label className="field-label">
+          Photos ({photosAlready + photos.length}/{MAX_PHOTOS})
+        </Label>
+
         {photos.length > 0 && (
           <div className="grid grid-cols-3 gap-2">
             {photos.map((photo, index) => (
               <div key={photo.url} className="relative">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={photo.url} alt="" className="h-24 w-full rounded-md object-cover" />
+                <img src={photo.url} alt="" className="h-24 w-full rounded-2xl object-cover" />
                 <button
                   type="button"
                   aria-label="Remove photo"
                   onClick={() => removePhoto(index)}
-                  className="absolute right-1 top-1 rounded-full bg-background/90 p-1"
+                  className="absolute right-1.5 top-1.5 rounded-full bg-background/90 p-1 shadow-soft"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -142,7 +212,7 @@ export function ReportForm({
         )}
 
         {remaining > 0 && (
-          <label className="flex h-11 cursor-pointer items-center justify-center gap-2 rounded-md border border-dashed border-input text-sm text-muted-foreground">
+          <label className="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-brand/35 bg-tint/50 text-sm font-semibold text-brand">
             <ImagePlus className="h-4 w-4" />
             Add photo
             <input type="file" accept="image/*" multiple className="hidden" onChange={addPhotos} />
@@ -150,9 +220,14 @@ export function ReportForm({
         )}
       </div>
 
-      <Button type="submit" size="lg" className="w-full" disabled={busy}>
+      <Button type="submit" size="xl" className="w-full" disabled={busy}>
+        <Send className="h-4 w-4" />
         {busy ? 'Saving…' : existing ? 'Update report' : 'Submit report'}
       </Button>
+
+      <p className="pb-2 text-center text-[11px] text-muted-foreground">
+        One report per day. Editable until midnight, not after.
+      </p>
     </form>
   )
 }
