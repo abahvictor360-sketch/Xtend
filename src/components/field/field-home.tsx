@@ -8,6 +8,7 @@ import { GreetingHeader } from '@/components/field/greeting-header'
 import { LocationGate } from '@/components/field/location-gate'
 import { useLocationGate } from '@/components/field/use-location-gate'
 import { useHeartbeat } from '@/components/field/heartbeat'
+import { usePlace } from '@/components/field/use-place'
 import { OutboxBanner } from '@/components/field/outbox-banner'
 import { ClockPanel } from '@/components/field/clock-panel'
 import { TrackingPanel } from '@/components/field/tracking-panel'
@@ -35,6 +36,9 @@ export function FieldHome({ day, coverage }: { day: DayState; coverage: Coverage
 
   const onShift = Boolean(day.opening) && !day.closing
   const heartbeat = useHeartbeat(onShift && gate.status === 'ready')
+
+  const { place, loading: placeLoading } = usePlace(gate.fix)
+  const whereIAm = place?.place ?? place?.address ?? null
 
   const liveDistance =
     gate.fix && day.outlet
@@ -91,6 +95,23 @@ export function FieldHome({ day, coverage }: { day: DayState; coverage: Coverage
           date={day.date}
         />
       </div>
+
+      {gate.status === 'ready' && (
+        <div className="flex items-start gap-2 rounded-2xl bg-tint px-3 py-2.5 text-tint-foreground">
+          <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
+          <p className="text-xs leading-snug">
+            <span className="font-semibold">You are at </span>
+            {whereIAm ?? (placeLoading ? 'finding the place name…' : 'an unnamed spot')}
+            {gate.fix && (
+              <span className="block text-[11px] opacity-80">
+                {gate.fix.lat.toFixed(5)}, {gate.fix.lng.toFixed(5)} · accurate to ±
+                {Math.round(gate.fix.accuracy_m)} m
+                {liveDistance !== null && ` · ${metres(liveDistance)} from your outlet`}
+              </span>
+            )}
+          </p>
+        </div>
+      )}
 
       <LocationGate
         status={gate.status}
@@ -176,6 +197,7 @@ export function FieldHome({ day, coverage }: { day: DayState; coverage: Coverage
                     value={liveDistance === null ? 'Locating…' : `${metres(liveDistance)} away`}
                     tone={inside === null ? undefined : inside ? 'good' : 'bad'}
                   />
+                  <Detail label="Your location" value={whereIAm ?? 'Unnamed spot'} />
                   <Detail
                     label="Fix accuracy"
                     value={gate.fix ? `±${Math.round(gate.fix.accuracy_m)} m` : '—'}

@@ -98,6 +98,31 @@ the route handler rejects the request first for a readable error. The field
 app hides the Report tab for merchandisers by asking Postgres the same
 question rather than guessing from the role name.
 
+## Telling the office nobody is in the store
+
+Three things reach an admin or supervisor without anyone opening the
+dashboard, each pushed to their phone and written to the notification log:
+
+| When | Who is told | Sent by |
+|---|---|---|
+| A clock-in or clock-out lands outside the geofence, or cannot be verified | Admins + that outlet's supervisor | `/api/attendance` after the insert |
+| A heartbeat puts someone more than 300 m from where they clocked in | Same | `/api/pings`, only when the trigger actually raised the alert |
+| Someone has not clocked in past their outlet's shift start | Same | `/api/cron/absence-sweep`, once per person per day |
+
+`alert_watchers()` decides who hears about whom: every active admin, plus
+the supervisor of that person's own outlet, never the subject themselves.
+The heartbeat path does not re-implement the 30-minute alert throttle — it
+asks whether the database trigger fired for that ping and stays silent if it
+did not, so a staff member sitting off-site does not generate a push every
+five minutes.
+
+The absence sweep is idempotent: `no_show_already_reported()` means running
+it repeatedly cannot notify the same person twice in a day. On Vercel's
+Hobby plan a cron may run once daily, so it is scheduled at 09:30 Lagos,
+past the 30-minute grace for both an 08:00 and a 09:00 shift. On Pro,
+change the schedule to `0 6-16 * * 1-6` and each outlet is judged close to
+its own start.
+
 ## Notifications
 
 Admins and supervisors send Web Push notifications to staff phones from

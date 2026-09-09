@@ -1,8 +1,13 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "crons": [
     {
       "path": "/api/cron/purge-selfies",
       "schedule": "20 2 * * *"
+    },
+    {
+      "path": "/api/cron/absence-sweep",
+      "schedule": "30 8 * * 1-6"
     }
   ]
 }

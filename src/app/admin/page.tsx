@@ -72,7 +72,7 @@ export default async function AdminOverview() {
         <Stat label="Clocked out" value={stats.clocked_out} />
         <Stat label="Late" value={stats.late} tone={stats.late ? 'warn' : undefined} />
         <Stat label="Absent" value={stats.absent} tone={stats.absent ? 'bad' : undefined} />
-        <Stat label="Off site" value={stats.off_site} tone={stats.off_site ? 'bad' : undefined} />
+        <Stat label="Not in store" value={stats.off_site} tone={stats.off_site ? 'bad' : undefined} />
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">

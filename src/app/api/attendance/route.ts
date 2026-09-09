@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, FIELD_ROLES } from '@/lib/auth'
+import { notifyWatchers } from '@/lib/notify'
 
 /**
  * The client sends what it observed. distance_m, status, user_id and
@@ -51,7 +52,9 @@ export async function POST(request: Request) {
         device_info: input.device_info,
         client_captured_at: input.client_captured_at,
       })
-      .select('id, type, status, distance_m, address, accuracy_m, created_at, outlet_radius_m')
+      .select(
+        'id, type, status, distance_m, address, accuracy_m, created_at, outlet_radius_m, outlet_id',
+      )
       .single()
 
     if (error) {
@@ -73,6 +76,33 @@ export async function POST(request: Request) {
         )
       }
       return Response.json({ error: error.message }, { status: 400 })
+    }
+
+    // An off-site or unverifiable clock event is worth interrupting someone
+    // for, so the office hears about it now rather than when they next open
+    // the dashboard. The database has already written the location_alerts
+    // row; this only carries it to a phone.
+    if (data && data.status !== 'on_site') {
+      const event = data.type === 'opening' ? 'clocked in' : 'clocked out'
+      const distance =
+        data.distance_m === null
+          ? 'an unverified location'
+          : `${Math.round(data.distance_m)} m from the outlet`
+      const where = input.address ? ` at ${input.address.split(',').slice(0, 2).join(',')}` : ''
+
+      await notifyWatchers({
+        subjectId: session.userId,
+        title:
+          data.status === 'off_site'
+            ? `${session.profile.full_name} ${event} off site`
+            : `${session.profile.full_name}: ${event}, flagged`,
+        body:
+          data.status === 'off_site'
+            ? `${distance}${where}.`
+            : `Location could not be verified${where}. Fix accuracy ±${Math.round(data.accuracy_m)} m.`,
+        url: '/admin/attendance',
+        detail: { kind: 'attendance_off_site', attendance_id: data.id, status: data.status },
+      })
     }
 
     return Response.json({ attendance: data }, { status: 201 })

@@ -12,10 +12,10 @@ import { formatLagos, metres } from '@/lib/utils'
 import type { AlertDetail } from '@/lib/types'
 
 const LABEL: Record<string, string> = {
-  left_geofence: 'Left the geofence during a shift',
+  left_geofence: 'Left the store during their shift',
   low_accuracy: 'Location fix too rough to trust',
   permission_denied: 'Tried to open Xtend with location off',
-  off_site_clock: 'Clocked in or out away from the outlet',
+  off_site_clock: 'Clocked in or out away from the store',
 }
 
 export function AlertsList({

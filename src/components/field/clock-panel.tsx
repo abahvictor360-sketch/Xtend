@@ -22,11 +22,10 @@ interface Outcome {
 async function reverseGeocode(lat: number, lng: number) {
   try {
     const res = await fetch(`/api/geocode?lat=${lat}&lng=${lng}`)
-    if (!res.ok) return null
-    const { address } = (await res.json()) as { address: string | null }
-    return address
+    if (!res.ok) return { address: null, place: null }
+    return (await res.json()) as { address: string | null; place: string | null }
   } catch {
-    return null
+    return { address: null, place: null }
   }
 }
 
@@ -61,7 +60,8 @@ export function ClockPanel({ day }: { day: DayState }) {
         const { full, thumb } = await processSelfie(photo)
 
         setBusyStep('Naming the place')
-        const address = await reverseGeocode(fix.lat, fix.lng)
+        const { address, place } = await reverseGeocode(fix.lat, fix.lng)
+        const where = place ?? address ?? `${fix.lat.toFixed(5)}, ${fix.lng.toFixed(5)}`
 
         setBusyStep('Sending')
         const result = await submitOrQueue({
@@ -85,9 +85,9 @@ export function ClockPanel({ day }: { day: DayState }) {
           setOutcome({
             tone: 'info',
             title: 'Saved on your phone',
-            detail: `No data right now. This ${type === 'opening' ? 'clock-in' : 'clock-out'} is queued with the time and place it was taken (${formatLagos(fix.captured_at, false)}${
+            detail: `No data right now. This ${type === 'opening' ? 'clock-in' : 'clock-out'} is queued from ${where} at ${formatLagos(fix.captured_at, false)}${
               guess ? `, about ${metres(guess)} from your outlet` : ''
-            }) and will send itself when you get signal.`,
+            }, and will send itself when you get signal.`,
           })
         } else {
           const record = (result.data as { attendance: { status: string; distance_m: number | null } })
@@ -97,20 +97,19 @@ export function ClockPanel({ day }: { day: DayState }) {
             setOutcome({
               tone: 'success',
               title: type === 'opening' ? 'Clocked in' : 'Clocked out',
-              detail: `You were ${metres(record.distance_m)} from ${day.outlet?.name ?? 'your outlet'}. Inside the geofence, nothing flagged.`,
+              detail: `Location: ${where}. That is ${metres(record.distance_m)} from ${day.outlet?.name ?? 'your outlet'} — inside the geofence, nothing flagged.`,
             })
           } else if (record.status === 'off_site') {
             setOutcome({
               tone: 'warning',
               title: `${type === 'opening' ? 'Clocked in' : 'Clocked out'} off site`,
-              detail: `You were ${metres(record.distance_m)} from ${day.outlet?.name ?? 'your outlet'}, outside the ${day.outlet?.radius_m ?? 150} m geofence. This is recorded and your admin has been notified.`,
+              detail: `Location: ${where}. That is ${metres(record.distance_m)} from ${day.outlet?.name ?? 'your outlet'}, outside the ${day.outlet?.radius_m ?? 150} m geofence. This is recorded and your admin has been notified.`,
             })
           } else {
             setOutcome({
               tone: 'warning',
               title: 'Recorded, but flagged',
-              detail:
-                'Your location could not be verified against an outlet, or the fix was too rough. This is recorded and your admin has been notified.',
+              detail: `Location: ${where}. It could not be verified against an outlet, or the fix was too rough. This is recorded and your admin has been notified.`,
             })
           }
         }

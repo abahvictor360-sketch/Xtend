@@ -322,6 +322,45 @@ begin
   end;
 
   -- ---------------------------------------------------------------
+  -- The no-show sweep, exercised through the real function by giving an
+  -- outlet a shift start that has already passed today.
+  -- ---------------------------------------------------------------
+  perform act_as(boss);
+  update public.outlets set shift_start = '00:01' where id = kiosk_id;
+  -- Bala is at the kiosk and clocked in, so he is not a no-show; Grace is
+  -- at the mall whose shift has not started.
+  perform assert(
+    (select count(*) from public.staff_no_show(0)
+      where outlet_id = kiosk_id) = 0,
+    'someone who clocked in is never a no-show');
+
+  -- Move the marketer to the early outlet: she never clocked in.
+  update public.profiles set outlet_id = kiosk_id where id = grace;
+  perform assert(
+    (select count(*) from public.staff_no_show(0) where user_id = grace) = 1,
+    'a marketer who never clocked in is reported');
+  perform assert(
+    (select minutes_late from public.staff_no_show(0) where user_id = grace) > 0,
+    'the sweep says how late they are');
+
+  -- Put it back so later assertions see the original arrangement.
+  update public.profiles set outlet_id = mall_id where id = grace;
+  update public.outlets set shift_start = '09:00' where id = kiosk_id;
+
+  -- ---------------------------------------------------------------
+  -- Who gets told about a given person (migration 007).
+  -- ---------------------------------------------------------------
+  perform assert(
+    (select count(*) from public.alert_watchers(ada)) = 1,
+    'an admin is told about a merchandiser');
+  perform assert(
+    (select full_name from public.alert_watchers(ada)) = 'Ngozi Eze',
+    'the watcher is the admin');
+  perform assert(
+    (select count(*) from public.alert_watchers(boss) where role = 'admin') = 0,
+    'nobody is their own watcher');
+
+  -- ---------------------------------------------------------------
   -- Push targeting: reach is the sender's, not the caller's wish.
   -- ---------------------------------------------------------------
   perform act_as(boss);
