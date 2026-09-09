@@ -1,11 +1,13 @@
 import Link from 'next/link'
-import { KeyRound, MapPin, Radio, ShieldCheck, Smartphone } from 'lucide-react'
+import { Bell, KeyRound, MapPin, Radio, ShieldCheck, Smartphone } from 'lucide-react'
 import { FIELD_ROLES, requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { SheetScreen, HeaderField, SectionHeader } from '@/components/field/screen'
 import { TaskRow } from '@/components/field/task-row'
 import { SignOutButton } from '@/components/sign-out-button'
 import { XpelLockup } from '@/components/brand/logo'
+import { PushToggle } from '@/components/field/push-toggle'
+import { formatLagos } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Your account — Xtend' }
@@ -13,6 +15,16 @@ export const metadata = { title: 'Your account — Xtend' }
 export default async function AccountPage() {
   const session = await requireSession(FIELD_ROLES)
   const supabase = await createServerSupabase()
+
+  const { data: inbox } = await supabase.rpc('my_notifications', { p_limit: 10 })
+  const messages = (inbox ?? []) as {
+    id: string
+    title: string
+    body: string
+    sent_at: string
+    sender_name: string | null
+    read_at: string | null
+  }[]
 
   const { data: outlet } = await supabase
     .from('outlets')
@@ -54,6 +66,31 @@ export default async function AccountPage() {
             }
             muted={!outlet}
           />
+        </section>
+
+        <section className="space-y-3">
+          <SectionHeader title="Messages from the office" />
+          <PushToggle />
+          {messages.length > 0 && (
+            <div className="space-y-2">
+              {messages.map((message) => (
+                <TaskRow
+                  key={message.id}
+                  icon={<Bell className="h-5 w-5" />}
+                  title={message.title}
+                  meta={
+                    <>
+                      {message.body}
+                      <span className="mt-0.5 block text-[11px]">
+                        {message.sender_name ?? 'Office'} · {formatLagos(message.sent_at)}
+                      </span>
+                    </>
+                  }
+                  muted={Boolean(message.read_at)}
+                />
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="space-y-3">

@@ -11,6 +11,7 @@ const LINKS = [
   { href: '/admin/attendance', label: 'Attendance', adminOnly: false },
   { href: '/admin/alerts', label: 'Alerts', adminOnly: false },
   { href: '/admin/analytics', label: 'Analytics', adminOnly: false },
+  { href: '/admin/notifications', label: 'Notifications', adminOnly: false },
   { href: '/admin/users', label: 'Staff', adminOnly: true },
   { href: '/admin/outlets', label: 'Outlets', adminOnly: true },
   { href: '/admin/audit', label: 'Audit log', adminOnly: true },

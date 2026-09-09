@@ -69,7 +69,7 @@ export interface ProcessedSelfie {
  * 640px wide under a 150kb ceiling, plus a 200x200 thumbnail. Both are
  * produced on the handset: staff pay for their own data.
  */
-export async function processSelfie(file: File): Promise<ProcessedSelfie> {
+export async function processSelfie(file: Blob): Promise<ProcessedSelfie> {
   const bitmap = await loadBitmap(file)
   const sw = 'width' in bitmap ? bitmap.width : 0
   const sh = 'height' in bitmap ? bitmap.height : 0
@@ -94,7 +94,7 @@ export async function processSelfie(file: File): Promise<ProcessedSelfie> {
 }
 
 /** Report photos: same compression, a little wider. */
-export async function processReportPhoto(file: File): Promise<Blob> {
+export async function processReportPhoto(file: Blob): Promise<Blob> {
   const bitmap = await loadBitmap(file)
   const sw = 'width' in bitmap ? bitmap.width : 0
   const sh = 'height' in bitmap ? bitmap.height : 0

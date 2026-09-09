@@ -1,9 +1,10 @@
 'use client'
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, Camera, CheckCircle2, CloudUpload, LogIn, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { CameraCapture } from '@/components/field/camera-capture'
 import { Alert } from '@/components/ui/alert'
 import { processSelfie } from '@/lib/image'
 import { deviceInfo } from '@/lib/device'
@@ -31,7 +32,6 @@ async function reverseGeocode(lat: number, lng: number) {
 
 export function ClockPanel({ day }: { day: DayState }) {
   const router = useRouter()
-  const inputRef = useRef<HTMLInputElement | null>(null)
   const [pendingType, setPendingType] = useState<AttendanceType | null>(null)
   const [busyStep, setBusyStep] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -43,16 +43,13 @@ export function ClockPanel({ day }: { day: DayState }) {
     setError(null)
     setOutcome(null)
     setPendingType(type)
-    inputRef.current?.click()
   }, [])
 
   const onSelfie = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0]
-      event.target.value = ''
+    async (photo: Blob) => {
       const type = pendingType
       setPendingType(null)
-      if (!file || !type) return
+      if (!type) return
 
       setError(null)
       try {
@@ -61,7 +58,7 @@ export function ClockPanel({ day }: { day: DayState }) {
         const fix = await requireFix()
 
         setBusyStep('Compressing your selfie')
-        const { full, thumb } = await processSelfie(file)
+        const { full, thumb } = await processSelfie(photo)
 
         setBusyStep('Naming the place')
         const address = await reverseGeocode(fix.lat, fix.lng)
@@ -74,7 +71,9 @@ export function ClockPanel({ day }: { day: DayState }) {
           lng: fix.lng,
           accuracy_m: fix.accuracy_m,
           address,
-          device_info: deviceInfo(),
+          // Recorded so an auditor can see the image came from the live
+          // camera rather than a file chosen on the device.
+          device_info: { ...deviceInfo(), selfie_source: 'in_app_camera' },
           client_captured_at: fix.captured_at,
           selfie: full,
           thumb,
@@ -151,14 +150,13 @@ export function ClockPanel({ day }: { day: DayState }) {
         </Alert>
       )}
 
-      {/* The selfie is mandatory and must come from the camera. */}
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/*"
-        capture="user"
-        className="hidden"
-        onChange={onSelfie}
+      {/* The selfie is mandatory and is taken in-app. There is no file
+          input in this flow, so a gallery photo cannot be submitted. */}
+      <CameraCapture
+        open={pendingType !== null}
+        title={pendingType === 'opening' ? 'Clock in selfie' : 'Clock out selfie'}
+        onCapture={(photo) => void onSelfie(photo)}
+        onClose={() => setPendingType(null)}
       />
 
       {nextType ? (

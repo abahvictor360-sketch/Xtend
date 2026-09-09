@@ -2,12 +2,13 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, ImagePlus, Send, X } from 'lucide-react'
+import { Camera, Check, ImagePlus, Send, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert } from '@/components/ui/alert'
 import { processReportPhoto } from '@/lib/image'
+import { CameraCapture } from '@/components/field/camera-capture'
 import { submitOrQueue, PermanentJobError } from '@/lib/offline/sync'
 import { cn } from '@/lib/utils'
 
@@ -77,6 +78,7 @@ export function ReportForm({
   const [fields, setFields] = useState<ReportFields>(existing ?? EMPTY)
   const [active, setActive] = useState<keyof ReportFields>('body')
   const [photos, setPhotos] = useState<{ blob: Blob; url: string }[]>([])
+  const [camera, setCamera] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -97,6 +99,17 @@ export function ReportForm({
       } catch (err) {
         setError(err instanceof Error ? err.message : 'That photo could not be read.')
       }
+    }
+  }
+
+  async function addFromCamera(photo: Blob) {
+    setCamera(false)
+    setError(null)
+    try {
+      const blob = await processReportPhoto(photo)
+      setPhotos((current) => [...current, { blob, url: URL.createObjectURL(blob) }])
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'That photo could not be read.')
     }
   }
 
@@ -212,12 +225,29 @@ export function ReportForm({
         )}
 
         {remaining > 0 && (
-          <label className="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-brand/35 bg-tint/50 text-sm font-semibold text-brand">
-            <ImagePlus className="h-4 w-4" />
-            Add photo
-            <input type="file" accept="image/*" multiple className="hidden" onChange={addPhotos} />
-          </label>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setCamera(true)}
+              className="flex h-12 items-center justify-center gap-2 rounded-2xl bg-brand text-sm font-semibold text-primary-foreground"
+            >
+              <Camera className="h-4 w-4" />
+              Take photo
+            </button>
+            <label className="flex h-12 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-brand/35 bg-tint/50 text-sm font-semibold text-brand">
+              <ImagePlus className="h-4 w-4" />
+              From gallery
+              <input type="file" accept="image/*" multiple className="hidden" onChange={addPhotos} />
+            </label>
+          </div>
         )}
+
+        <CameraCapture
+          open={camera}
+          title="Report photo"
+          onCapture={(photo) => void addFromCamera(photo)}
+          onClose={() => setCamera(false)}
+        />
       </div>
 
       <Button type="submit" size="xl" className="w-full" disabled={busy}>

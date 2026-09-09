@@ -98,6 +98,26 @@ the route handler rejects the request first for a readable error. The field
 app hides the Report tab for merchandisers by asking Postgres the same
 question rather than guessing from the role name.
 
+## Notifications
+
+Admins and supervisors send Web Push notifications to staff phones from
+**Dashboard → Notifications**, targeted four ways: everyone, a role, an
+outlet, or named people. The composer shows the live recipient count and how
+many of those have a device registered, so nobody sends into the void.
+
+Reach is decided in Postgres, not in the UI. `resolve_notification_targets()`
+returns an admin everyone, and returns a supervisor only the *field staff at
+their own outlet* — naming an admin explicitly resolves to nobody. Every send
+writes an `audit_log` row and one `notification_deliveries` row per person,
+recording `sent`, `failed`, or `no_device`.
+
+Staff turn notifications on per device from **You → Notifications**, which
+stores a subscription keyed by endpoint. Dead subscriptions (a 404 or 410
+from the push service) are deactivated automatically on the next send.
+
+Needs `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT`.
+Without them the app runs normally and the send endpoint returns a clear 503.
+
 ## Design
 
 One saturated colour on a warm off-white canvas. The palette is sampled from

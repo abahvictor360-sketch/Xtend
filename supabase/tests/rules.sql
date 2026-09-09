@@ -322,6 +322,34 @@ begin
   end;
 
   -- ---------------------------------------------------------------
+  -- Push targeting: reach is the sender's, not the caller's wish.
+  -- ---------------------------------------------------------------
+  perform act_as(boss);
+  perform assert(public.can_send_notifications(), 'an admin can send notifications');
+  perform assert(
+    (select count(*) from public.resolve_notification_targets('everyone')) = 4,
+    'everyone reaches all four active staff');
+  perform assert(
+    (select count(*) from public.resolve_notification_targets(
+      'role', jsonb_build_object('role', 'marketer'))) = 1,
+    'targeting a role reaches only that role');
+  perform assert(
+    (select count(*) from public.resolve_notification_targets(
+      'outlet', jsonb_build_object('outlet_id', kiosk_id))) = 1,
+    'targeting an outlet reaches only that outlet');
+  perform assert(
+    (select count(*) from public.resolve_notification_targets(
+      'users', jsonb_build_object('user_ids', jsonb_build_array(ada, grace)))) = 2,
+    'targeting named people reaches exactly them');
+
+  -- A merchandiser cannot address anybody.
+  perform act_as(ada);
+  perform assert(not public.can_send_notifications(), 'a merchandiser cannot send notifications');
+  perform assert(
+    (select count(*) from public.resolve_notification_targets('everyone')) = 0,
+    'a merchandiser resolves no targets at all');
+
+  -- ---------------------------------------------------------------
   -- Retention keeps the thumbnail and drops the full image.
   -- ---------------------------------------------------------------
   perform act_as(bala);
