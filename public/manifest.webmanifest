@@ -1,7 +1,11 @@
 {
+  "id": "/",
   "name": "Xtend — Xpel Beauty",
   "short_name": "Xtend",
-  "description": "Field attendance and daily reporting for Xpel Beauty merchandisers.",
+  "description": "Field attendance and daily reporting for Xpel Beauty.",
+  "lang": "en-NG",
+  "dir": "ltr",
+  "categories": ["business", "productivity"],
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
@@ -13,5 +17,25 @@
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
     { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Clock in or out",
+      "short_name": "Clock",
+      "url": "/field",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Daily report",
+      "short_name": "Report",
+      "url": "/field/report",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "My attendance",
+      "short_name": "History",
+      "url": "/field/history",
+      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+    }
   ]
 }

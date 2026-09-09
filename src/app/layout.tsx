@@ -8,6 +8,7 @@ export const metadata: Metadata = {
   description: 'Clock in, clock out and report from the field.',
   manifest: '/manifest.webmanifest',
   appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Xtend' },
+  other: { 'apple-mobile-web-app-capable': 'yes' },
   icons: {
     icon: [
       { url: '/icons/icon-64.png', sizes: '64x64', type: 'image/png' },
@@ -20,7 +21,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
+  // Deliberately no maximumScale: pinch-zoom stays available. Locking it
+  // buys a marginally more "app-like" feel and fails WCAG 1.4.4.
   viewportFit: 'cover',
   themeColor: '#d1531b',
 }
