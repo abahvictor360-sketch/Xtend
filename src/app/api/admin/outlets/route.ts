@@ -1,0 +1,41 @@
+import { z } from 'zod'
+import { createServerSupabase } from '@/lib/supabase/server'
+import { apiError, requireApiSession } from '@/lib/auth'
+import { audit } from '@/lib/audit'
+
+const schema = z.object({
+  name: z.string().min(2).max(160),
+  address: z.string().max(400).nullable().optional(),
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  geofence_radius_m: z.number().int().min(25).max(2000).default(150),
+  shift_start: z.string().regex(/^\d{2}:\d{2}$/),
+  shift_end: z.string().regex(/^\d{2}:\d{2}$/),
+})
+
+export async function POST(request: Request) {
+  try {
+    await requireApiSession(['admin'])
+    const parsed = schema.safeParse(await request.json())
+    if (!parsed.success) {
+      return Response.json(
+        { error: parsed.error.issues[0]?.message ?? 'Invalid outlet' },
+        { status: 400 },
+      )
+    }
+
+    const supabase = await createServerSupabase()
+    const { data, error } = await supabase
+      .from('outlets')
+      .insert(parsed.data)
+      .select('id')
+      .single<{ id: string }>()
+
+    if (error) return Response.json({ error: error.message }, { status: 400 })
+
+    await audit(supabase, 'outlet.create', 'outlets', data.id, parsed.data)
+    return Response.json({ outlet_id: data.id }, { status: 201 })
+  } catch (error) {
+    return apiError(error)
+  }
+}

@@ -1,0 +1,151 @@
+# Xtend
+
+Field attendance and reporting for Xpel Beauty merchandisers and marketers
+across Nigeria. Field staff clock in and out with a verified GPS fix and an
+in-app selfie; admins manage staff and audit attendance from a web dashboard.
+
+- **Stack:** Next.js 15 (App Router, TypeScript), Tailwind, Supabase
+  (Auth, Postgres, Storage, Realtime, RLS), Vercel + Vercel Cron.
+- **Surface:** installable PWA for the field, web dashboard for the office.
+- **Timezone of record:** Africa/Lagos. **Scale:** 30–100 staff, one outlet each.
+
+## The architectural rule
+
+All business logic lives in Postgres functions, triggers and thin route
+handlers. None of it lives in React. Phase 4 wraps this in Expo and the backend
+must be reused untouched.
+
+Concretely, the client sends only what it observed — type, coordinates,
+accuracy, address, selfie path, device info, capture timestamp. A trigger sets
+`user_id`, `distance_m`, `status` and `attendance_date` on every row, and
+overwrites anything the client tried to put there. There is a test that proves
+it (`supabase/tests/rules.sql`).
+
+## Getting it running
+
+```bash
+npm install
+cp .env.example .env.local     # fill in your Supabase keys
+```
+
+1. **Create a Supabase project**, then apply the migrations in order — the
+   SQL editor, `supabase db push`, or `psql`:
+
+   ```
+   supabase/migrations/0001_init.sql    # tables, RLS, storage, retention
+   supabase/migrations/0002_logic.sql   # heartbeat, supervisors, views, audit
+   ```
+
+2. **Environment** (`.env.local`, and the same in Vercel):
+
+   | Variable | Purpose |
+   |---|---|
+   | `NEXT_PUBLIC_SUPABASE_URL` | Project URL |
+   | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Browser client |
+   | `SUPABASE_SERVICE_ROLE_KEY` | Admin route handlers only, never shipped to the browser |
+   | `CRON_SECRET` | Shared secret for the nightly retention job |
+   | `GEOCODER_USER_AGENT` | Contact string for Nominatim's usage policy |
+   | `CREDENTIALS_WEBHOOK_URL` | Optional: relay that SMS/emails temporary passwords |
+
+3. **Bootstrap the first admin.** There is no public signup:
+
+   ```bash
+   NEXT_PUBLIC_SUPABASE_URL=… SUPABASE_SERVICE_ROLE_KEY=… \
+     npx tsx scripts/create-admin.ts "Ngozi Eze" ngozi@xpel.ng 'a-strong-password'
+   ```
+
+4. `npm run dev`, sign in, create outlets, then create or import staff.
+
+Geolocation needs a secure context: `localhost` or HTTPS. Testing the clock-in
+flow over a plain-HTTP LAN address will fail at the location gate, correctly.
+
+### Deployment
+
+Vercel picks up `vercel.json`, which schedules `/api/cron/purge-selfies`
+nightly at 02:20 UTC (03:20 Lagos). Set `CRON_SECRET` in the project; the route
+refuses anything without the matching bearer token.
+
+## What is where
+
+```
+src/app/field/…        Mobile PWA: clock, daily report, own history
+src/app/admin/…        Dashboard: overview, attendance, alerts, analytics,
+                       staff, outlets, audit log
+src/app/api/…          Thin route handlers (validate → call Postgres → map errors)
+src/lib/offline/…      IndexedDB outbox and the flush loop
+src/lib/geo.ts         Location gate: accuracy ceiling, block reasons
+src/lib/image.ts       On-device resize to 640px/150kb plus a 200×200 thumbnail
+supabase/migrations/…  The whole of the business logic
+supabase/tests/…       Local Postgres harness and 40 rule assertions
+```
+
+## Phase coverage
+
+| Phase | Status |
+|---|---|
+| 1 — auth, forced password change, location gate, clock in/out with selfie and server-side distance, staff management, CSV import, outlets, attendance table | Built |
+| 2 — daily reports with photos, XLSX/DOCX/PDF (and CSV) export, IndexedDB offline queue, retention cron | Built |
+| 3 — heartbeat pings, geofence alerts, realtime dashboard, punctuality and coverage analytics, map view | Built |
+| 4 — Expo wrapper, background tracking, mock-location detection | Not started; the backend is designed to be reused unchanged |
+
+## Things worth knowing
+
+**Fraud, stated plainly.** Browser geolocation can be spoofed with a fake GPS
+app and the web platform gives no way to detect it. What is here is layered,
+not absolute: a mandatory live selfie, a 100 m accuracy ceiling, server-set
+timestamps, geofence distance computed in the database, and an admin review
+queue. Real mock-location detection arrives in Phase 4 with Expo's
+`isFromMockProvider`. Do not promise the client tamper-proof attendance before
+then.
+
+**Tracking is foreground only.** The heartbeat runs every 5 minutes while the
+app is open and a shift is running. It stops when the tab is backgrounded. The
+field UI says so in those words rather than implying background tracking the
+web cannot deliver.
+
+**Attendance is append-only.** There is no UPDATE or DELETE policy on the
+table, by design — not even for an admin. Deactivating a user is a soft delete
+and the foreign key is `on delete restrict`, so history cannot be destroyed by
+deleting a person.
+
+**Off-site clocking is shown to the user.** If someone clocks in 400 m out,
+the app tells them the distance and tells them the admin was notified. Silent
+flagging breeds distrust and deters nothing.
+
+**Temporary passwords.** Xpel has no SMS or email provider wired up, so a new
+account's password is shown to the admin once, to hand over. Point
+`CREDENTIALS_WEBHOOK_URL` at a Termii or SendGrid relay and the same code path
+delivers it automatically.
+
+### Two corrections to the supplied migration
+
+`0001_init.sql` is the schema as supplied, with three changes that were needed
+for it to apply and to work:
+
+1. `public.current_role()` is renamed `public.current_user_role()`.
+   `CURRENT_ROLE` is a reserved SQL keyword and Postgres rejects it as a
+   function name.
+2. The role helpers are declared after `public.profiles` rather than before it.
+   A `LANGUAGE SQL` body is parsed at creation time, so the original order
+   fails with "relation public.profiles does not exist".
+3. `profiles_self_update`'s `WITH CHECK` used a subquery on `public.profiles`
+   inside a policy on `public.profiles`, which recurses. It now calls the
+   `SECURITY DEFINER` helper, which is what that helper exists for.
+
+## Checks
+
+```bash
+npm run typecheck     # tsc --noEmit
+npm run lint          # next lint
+npm run build         # production build
+
+# SQL rules, against a throwaway Postgres 16 (not your project):
+PGURL=postgres://postgres@localhost:5432/postgres ./scripts/test-sql.sh
+```
+
+`scripts/test-sql.sh` stubs the Supabase-specific schemas, applies both
+migrations and runs 40 assertions covering distance and status computation,
+the one-per-day constraint, timestamp rejection, geofence alerts and their
+throttles, report rules, the read models, admin-only alert resolution with its
+audit row, and the 90-day retention swap. It does not exercise RLS: a superuser
+session bypasses policies, so those are verified against the project itself.
