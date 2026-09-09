@@ -69,16 +69,39 @@ refuses anything without the matching bearer token.
 ## What is where
 
 ```
-src/app/field/…        Mobile PWA: clock, daily report, own history
+src/app/field/…        Mobile PWA: clock, history, daily report, account
 src/app/admin/…        Dashboard: overview, attendance, alerts, analytics,
                        staff, outlets, audit log
 src/app/api/…          Thin route handlers (validate → call Postgres → map errors)
 src/lib/offline/…      IndexedDB outbox and the flush loop
 src/lib/geo.ts         Location gate: accuracy ceiling, block reasons
 src/lib/image.ts       On-device resize to 640px/150kb plus a 200×200 thumbnail
+src/components/brand/  The Xpel mark and lockup
+public/brand/          The supplied logo, background removed
 supabase/migrations/…  The whole of the business logic
 supabase/tests/…       Local Postgres harness and 40 rule assertions
 ```
+
+## Design
+
+One saturated colour on a warm off-white canvas. The palette is sampled from
+the Xpel Beauty logo — terracotta `#C1572A` through to gold `#C49420` — with
+the terracotta doing the UI work and the gold kept as an accent, because white
+text on gold fails contrast and so it never becomes a surface. Tints of the
+brand carry every inactive state, so the interface never needs a second hue.
+
+The layout language is the same on every screen: rounded white cards on a soft
+shadow, pill chips for filters and switches, brand-filled cards for the things
+that matter, and a floating four-target bottom bar. Form-heavy screens use the
+sheet pattern — a brand header carrying the read-only context, with a white
+sheet lifted over its lower edge holding the inputs.
+
+**The app mark** is not the printed lockup. The logo's X and wordmark overlap,
+so no crop separates them, and the full lockup turns to mush at tab-icon size.
+`src/components/brand/logo.tsx` redraws the X as two bowed strokes in the
+logo's own gradient: inline SVG for the interface, rasterised into the PWA
+icons. The real lockup still appears at full size on the login and account
+screens, where there is room to read it.
 
 ## The RPC surface
 
