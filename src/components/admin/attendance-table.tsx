@@ -1,7 +1,7 @@
 'use client'
 
 import { Fragment, useCallback, useState } from 'react'
-import { ChevronDown, Map as MapIcon, Table as TableIcon } from 'lucide-react'
+import { ChevronDown, LogIn, LogOut, Map as MapIcon, Table as TableIcon } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -63,7 +63,89 @@ export function AttendanceTable({ rows }: { rows: AttendanceDetail[] }) {
       {view === 'map' ? (
         <AttendanceMap rows={rows} />
       ) : (
-        <div className="rounded-lg border border-border">
+        <>
+        {/* Phone: a card per event, tapping opens the same detail. */}
+        <div className="space-y-3 md:hidden">
+          {rows.map((row) => (
+            <div key={row.id} className="surface p-3">
+              <button
+                type="button"
+                className="flex w-full items-start gap-3 text-left"
+                onClick={() => void expand(row)}
+              >
+                <span className="icon-tile">
+                  {row.type === 'opening' ? (
+                    <LogIn className="h-5 w-5" />
+                  ) : (
+                    <LogOut className="h-5 w-5" />
+                  )}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="truncate text-sm font-bold">{row.staff_name}</span>
+                    <Badge variant={row.status === 'on_site' ? 'success' : 'destructive'}>
+                      {row.status === 'on_site'
+                        ? 'On site'
+                        : row.status === 'off_site'
+                          ? 'Off site'
+                          : 'Flagged'}
+                    </Badge>
+                  </span>
+                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                    {row.attendance_date} · {row.type === 'opening' ? 'In' : 'Out'}{' '}
+                    {formatLagos(row.created_at, false)}
+                    {row.is_late && <span className="ml-1 text-warning">late</span>}
+                  </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {row.outlet_name ?? 'No outlet'} · {metres(row.distance_m)} · ±
+                    {Math.round(row.accuracy_m)} m
+                  </span>
+                </span>
+                <ChevronDown
+                  className={`mt-1 h-4 w-4 shrink-0 transition-transform ${
+                    expanded === row.id ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+
+              {expanded === row.id && (
+                <div className="mt-3 space-y-3 border-t border-border pt-3">
+                  {loading === row.id ? (
+                    <Skeleton className="h-40 w-32" />
+                  ) : selfies[row.id] ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={selfies[row.id]}
+                      alt={`Selfie for ${row.staff_name}`}
+                      className="w-32 rounded-2xl border border-border"
+                    />
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Selfie unavailable.</p>
+                  )}
+                  <dl className="grid gap-x-4 gap-y-1 text-sm">
+                    <Detail label="Captured address" value={row.address ?? '—'} />
+                    <Detail
+                      label="Coordinates"
+                      value={`${row.lat.toFixed(6)}, ${row.lng.toFixed(6)}`}
+                    />
+                    <Detail
+                      label="Geofence radius"
+                      value={row.outlet_radius_m ? `${row.outlet_radius_m} m` : '—'}
+                    />
+                    <Detail label="Captured on device at" value={formatLagos(row.client_captured_at)} />
+                    <Detail label="Recorded by server at" value={formatLagos(row.created_at)} />
+                    <Detail
+                      label="Device"
+                      value={String((row.device_info as { ua?: string })?.ua ?? 'not reported')}
+                    />
+                  </dl>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        <div className="hidden rounded-lg border border-border md:block">
           <Table>
             <TableHeader>
               <TableRow>
@@ -157,6 +239,7 @@ export function AttendanceTable({ rows }: { rows: AttendanceDetail[] }) {
             </TableBody>
           </Table>
         </div>
+        </>
       )}
     </div>
   )

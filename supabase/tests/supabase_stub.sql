@@ -10,6 +10,7 @@
 --   psql -f supabase/migrations/0001_init.sql
 --   psql -f supabase/migrations/0002_logic.sql
 --   psql -f supabase/migrations/0003_harden.sql
+--   psql -f supabase/migrations/0004_tracking_coverage.sql
 --   psql -f supabase/tests/rules.sql
 -- =====================================================================
 -- Supabase's API roles. Migration 003 grants and revokes against these.

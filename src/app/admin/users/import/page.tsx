@@ -16,7 +16,9 @@ export default async function ImportPage() {
         <h1 className="text-xl font-semibold">Bulk import staff</h1>
         <p className="text-sm text-muted-foreground">
           Upload a CSV with the columns <code>full_name, email, phone, outlet_name, role</code>.
-          The whole file is validated first; nothing is created until you commit.
+          Role is one of <code>merchandiser</code>, <code>marketer</code>,{' '}
+          <code>supervisor</code> or <code>admin</code>; only marketers file daily reports. The
+          whole file is validated first, and nothing is created until you commit.
         </p>
       </div>
 

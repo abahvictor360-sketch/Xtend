@@ -10,7 +10,7 @@ const rowSchema = z.object({
   email: z.string().email().max(200),
   phone: z.string().max(20).nullable().optional(),
   outlet_name: z.string().max(160).nullable().optional(),
-  role: z.enum(['merchandiser', 'supervisor', 'admin']).default('merchandiser'),
+  role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).default('merchandiser'),
 })
 
 const bodySchema = z.object({

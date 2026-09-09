@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ArrowLeft, CalendarDays, LogIn, LogOut, MapPin } from 'lucide-react'
-import { requireSession } from '@/lib/auth'
+import { FIELD_ROLES, requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { DayStrip } from '@/components/field/day-strip'
 import { TaskRow } from '@/components/field/task-row'
@@ -19,7 +19,7 @@ export default async function HistoryPage({
 }: {
   searchParams: Promise<{ d?: string }>
 }) {
-  const session = await requireSession(['merchandiser', 'admin'])
+  const session = await requireSession(FIELD_ROLES)
   const { d } = await searchParams
 
   const supabase = await createServerSupabase()

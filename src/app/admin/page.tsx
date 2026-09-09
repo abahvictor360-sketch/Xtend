@@ -20,6 +20,15 @@ interface Overview {
   open_alerts: number
 }
 
+interface CoverageRow {
+  user_id: string
+  full_name: string
+  outlet_name: string | null
+  ping_count: number
+  coverage_pct: number | null
+  last_ping_at: string | null
+}
+
 interface Absentee {
   user_id: string
   full_name: string
@@ -31,9 +40,11 @@ export default async function AdminOverview() {
   await requireSession(['admin', 'supervisor'])
   const supabase = await createServerSupabase()
 
-  const [{ data: overview }, { data: absentees }, { data: alerts }] = await Promise.all([
+  const [{ data: overview }, { data: absentees }, { data: coverage }, { data: alerts }] =
+    await Promise.all([
     supabase.rpc('admin_overview'),
     supabase.rpc('absentees_today'),
+    supabase.rpc('coverage_today'),
     supabase
       .from('alert_detail')
       .select('*')
@@ -44,6 +55,7 @@ export default async function AdminOverview() {
 
   const stats = (overview ?? {}) as Partial<Overview>
   const away = (absentees ?? []) as Absentee[]
+  const tracked = (coverage ?? []) as CoverageRow[]
 
   return (
     <div className="space-y-6">
@@ -94,6 +106,47 @@ export default async function AdminOverview() {
         </Card>
 
         <LiveAlertFeed initial={(alerts ?? []) as AlertDetail[]} />
+
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>Location tracking today ({tracked.length} on shift)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {tracked.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Nobody has clocked in yet.</p>
+            ) : (
+              <ul className="divide-y divide-border text-sm">
+                {tracked.map((row) => (
+                  <li key={row.user_id} className="flex items-center gap-3 py-2">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">{row.full_name}</span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {row.outlet_name ?? 'No outlet'} · {row.ping_count} check
+                        {row.ping_count === 1 ? '' : 's'}
+                        {row.last_ping_at && ` · last ${formatLagos(row.last_ping_at, false)}`}
+                      </span>
+                    </span>
+                    <span className="w-28 shrink-0">
+                      <span className="block h-2 w-full overflow-hidden rounded-full bg-muted">
+                        <span
+                          className={
+                            (row.coverage_pct ?? 0) >= 70
+                              ? 'block h-full rounded-full bg-success'
+                              : 'block h-full rounded-full bg-warning'
+                          }
+                          style={{ width: `${Math.max(2, row.coverage_pct ?? 0)}%` }}
+                        />
+                      </span>
+                    </span>
+                    <span className="w-10 shrink-0 text-right text-xs font-semibold tabular-nums">
+                      {row.coverage_pct ?? 0}%
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   )

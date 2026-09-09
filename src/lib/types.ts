@@ -1,4 +1,4 @@
-export type UserRole = 'merchandiser' | 'supervisor' | 'admin'
+export type UserRole = 'merchandiser' | 'marketer' | 'supervisor' | 'admin'
 export type AttendanceType = 'opening' | 'closing'
 export type AttendanceStatus = 'on_site' | 'off_site' | 'flagged'
 export type AlertType = 'left_geofence' | 'low_accuracy' | 'permission_denied' | 'off_site_clock'
@@ -76,6 +76,8 @@ export interface AlertDetail {
 
 export interface DayState {
   date: string
+  /** Marketers file the daily report; merchandisers do not. Set by Postgres. */
+  can_file_report: boolean
   profile: Pick<Profile, 'id' | 'full_name' | 'role' | 'must_change_password' | 'is_active'> | null
   outlet: {
     id: string
@@ -111,4 +113,15 @@ export interface ClockPayload {
   thumb_path: string | null
   device_info: Record<string, unknown>
   client_captured_at: string
+}
+
+/** Output of the tracking_coverage / my_coverage database functions. */
+export interface Coverage {
+  date: string
+  shift_seconds: number
+  tracked_seconds: number
+  ping_count: number
+  longest_gap_seconds: number
+  last_ping_at: string | null
+  coverage_pct: number | null
 }

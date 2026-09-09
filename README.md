@@ -82,6 +82,22 @@ supabase/migrations/…  The whole of the business logic
 supabase/tests/…       Local Postgres harness and 40 rule assertions
 ```
 
+## Roles
+
+| Role | Surface | Clocks in/out | Files the daily report |
+|---|---|---|---|
+| merchandiser | Mobile PWA | Yes | No |
+| marketer | Mobile PWA | Yes | Yes |
+| supervisor | Web, read-only | No | No |
+| admin | Web dashboard | — | Yes, for corrections |
+
+Only marketers file the daily report. That is enforced in three places, so no
+client can route around it: the `reports` insert and update policies call
+`can_file_report()`, the `report_enforce` trigger raises on the way in, and
+the route handler rejects the request first for a readable error. The field
+app hides the Report tab for merchandisers by asking Postgres the same
+question rather than guessing from the role name.
+
 ## Design
 
 One saturated colour on a warm off-white canvas. The palette is sampled from

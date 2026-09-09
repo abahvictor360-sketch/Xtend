@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, requireApiSession, REPORTING_ROLES } from '@/lib/auth'
 
 const schema = z.object({
   body: z.string().max(4000).default(''),
@@ -17,7 +17,9 @@ const schema = z.object({
  */
 export async function POST(request: Request) {
   try {
-    const session = await requireApiSession(['merchandiser', 'admin'])
+    // Marketers file the report. The database enforces this as well, in the
+    // insert policy and in the trigger.
+    const session = await requireApiSession(REPORTING_ROLES)
     const parsed = schema.safeParse(await request.json())
     if (!parsed.success) {
       return Response.json(

@@ -64,6 +64,12 @@ export function apiError(error: unknown) {
   return Response.json({ error: message }, { status: 500 })
 }
 
+/** The roles that use the phone app: they clock in, out and are tracked. */
+export const FIELD_ROLES: UserRole[] = ['merchandiser', 'marketer', 'admin']
+
+/** The roles that file the daily report. Postgres enforces this too. */
+export const REPORTING_ROLES: UserRole[] = ['marketer', 'admin']
+
 export function landingPathFor(role: UserRole) {
-  return role === 'merchandiser' ? '/field' : '/admin'
+  return role === 'merchandiser' || role === 'marketer' ? '/field' : '/admin'
 }

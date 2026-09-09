@@ -23,6 +23,7 @@ interface RowResult {
 const TEMPLATE = `full_name,email,phone,outlet_name,role
 Ada Okafor,ada@xpel.ng,08031234567,Ikeja City Mall,merchandiser
 Bala Yusuf,bala@xpel.ng,08039876543,Wuse Market Kiosk,merchandiser
+Grace Nnadi,grace@xpel.ng,08067778888,Ikeja City Mall,marketer
 `
 
 export function CsvImporter({ outletNames }: { outletNames: string[] }) {

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { KeyRound, MapPin, Radio, ShieldCheck, Smartphone } from 'lucide-react'
-import { requireSession } from '@/lib/auth'
+import { FIELD_ROLES, requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { SheetScreen, HeaderField, SectionHeader } from '@/components/field/screen'
 import { TaskRow } from '@/components/field/task-row'
@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Your account — Xtend' }
 
 export default async function AccountPage() {
-  const session = await requireSession(['merchandiser', 'admin'])
+  const session = await requireSession(FIELD_ROLES)
   const supabase = await createServerSupabase()
 
   const { data: outlet } = await supabase
@@ -77,8 +77,8 @@ export default async function AccountPage() {
           <SectionHeader title="How Xtend tracks you" />
           <TaskRow
             icon={<Radio className="h-5 w-5" />}
-            title="Only while the app is open"
-            meta="Your location is checked every 5 minutes on shift, and only while this app is on screen. It stops when you switch away. A browser cannot track you in the background."
+            title="Location checks every 5 minutes"
+            meta="While you are on shift, Xtend records where you are every 5 minutes and how far that is from your outlet. Going more than 300 m from where you clocked in notifies your admin."
           />
           <TaskRow
             icon={<Smartphone className="h-5 w-5" />}

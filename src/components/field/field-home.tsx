@@ -3,24 +3,14 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import {
-  Activity,
-  CheckCircle2,
-  Circle,
-  Clock3,
-  FileText,
-  LogIn,
-  LogOut,
-  MapPin,
-  Radio,
-  Store,
-} from 'lucide-react'
+import { CheckCircle2, Circle, Clock3, FileText, LogIn, LogOut, MapPin, Store } from 'lucide-react'
 import { GreetingHeader } from '@/components/field/greeting-header'
 import { LocationGate } from '@/components/field/location-gate'
 import { useLocationGate } from '@/components/field/use-location-gate'
 import { useHeartbeat } from '@/components/field/heartbeat'
 import { OutboxBanner } from '@/components/field/outbox-banner'
 import { ClockPanel } from '@/components/field/clock-panel'
+import { TrackingPanel } from '@/components/field/tracking-panel'
 import { TaskRow } from '@/components/field/task-row'
 import { SectionHeader } from '@/components/field/screen'
 import { Chip } from '@/components/ui/chip'
@@ -28,7 +18,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { haversineMetres } from '@/lib/geo'
 import { formatLagos, metres } from '@/lib/utils'
-import type { ClockSummary, DayState } from '@/lib/types'
+import type { ClockSummary, Coverage, DayState } from '@/lib/types'
 
 type Tab = 'day' | 'outlet' | 'tracking'
 
@@ -38,13 +28,13 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'tracking', label: 'Tracking' },
 ]
 
-export function FieldHome({ day }: { day: DayState }) {
+export function FieldHome({ day, coverage }: { day: DayState; coverage: Coverage | null }) {
   const router = useRouter()
   const gate = useLocationGate()
   const [tab, setTab] = useState<Tab>('day')
 
   const onShift = Boolean(day.opening) && !day.closing
-  useHeartbeat(onShift && gate.status === 'ready')
+  const heartbeat = useHeartbeat(onShift && gate.status === 'ready')
 
   const liveDistance =
     gate.fix && day.outlet
@@ -55,7 +45,7 @@ export function FieldHome({ day }: { day: DayState }) {
   const steps = [
     { done: Boolean(day.opening), label: 'Clock in' },
     { done: onShift || Boolean(day.closing), label: 'On shift' },
-    { done: day.report_filed, label: 'Daily report' },
+    ...(day.can_file_report ? [{ done: day.report_filed, label: 'Daily report' }] : []),
     { done: Boolean(day.closing), label: 'Clock out' },
   ]
   const progress = Math.round((steps.filter((s) => s.done).length / steps.length) * 100)
@@ -130,17 +120,19 @@ export function FieldHome({ day }: { day: DayState }) {
             trailing={<StatusDot summary={day.opening} />}
           />
 
-          <TaskRow
-            icon={<FileText className="h-5 w-5" />}
-            title="Daily report"
-            meta={day.report_filed ? 'Filed. Editable until midnight.' : 'Not filed yet'}
-            muted={!day.report_filed}
-            trailing={
-              <Link href="/field/report" className="text-xs font-semibold text-brand">
-                {day.report_filed ? 'Edit' : 'File'}
-              </Link>
-            }
-          />
+          {day.can_file_report && (
+            <TaskRow
+              icon={<FileText className="h-5 w-5" />}
+              title="Daily report"
+              meta={day.report_filed ? 'Filed. Editable until midnight.' : 'Not filed yet'}
+              muted={!day.report_filed}
+              trailing={
+                <Link href="/field/report" className="text-xs font-semibold text-brand">
+                  {day.report_filed ? 'Edit' : 'File'}
+                </Link>
+              }
+            />
+          )}
 
           <TaskRow
             icon={<LogOut className="h-5 w-5" />}
@@ -216,45 +208,7 @@ export function FieldHome({ day }: { day: DayState }) {
       {tab === 'tracking' && (
         <section className="space-y-3">
           <SectionHeader title="Location tracking" />
-          <Card>
-            <CardContent className="space-y-3 pt-5">
-              <div className="flex items-center gap-3">
-                <span className={`icon-tile ${onShift ? '' : 'bg-muted text-muted-foreground'}`}>
-                  <Radio className={`h-5 w-5 ${onShift ? 'animate-pulse' : ''}`} />
-                </span>
-                <div>
-                  <p className="text-sm font-bold">
-                    {onShift ? 'Checking every 5 minutes' : 'Not running'}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {onShift
-                      ? 'While this screen is open.'
-                      : 'Tracking starts when you clock in.'}
-                  </p>
-                </div>
-              </div>
-
-              <p className="rounded-2xl bg-muted p-3 text-xs leading-relaxed text-muted-foreground">
-                Xtend checks your location every 5 minutes <strong>only while the app is open on
-                screen</strong>. It stops the moment you switch away or lock the phone. A web app
-                cannot track you in the background, and this one does not pretend to. If you go
-                more than 300 m from where you clocked in, your admin is notified.
-              </p>
-
-              {liveDistance !== null && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Activity className="h-4 w-4 text-brand" />
-                  <span>
-                    Currently{' '}
-                    <strong className={inside ? 'text-success' : 'text-destructive'}>
-                      {metres(liveDistance)}
-                    </strong>{' '}
-                    from the outlet.
-                  </span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <TrackingPanel onShift={onShift} status={heartbeat} coverage={coverage} />
         </section>
       )}
     </div>

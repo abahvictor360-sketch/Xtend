@@ -133,7 +133,7 @@ export function StaffManager({ staff, outlets }: { staff: Profile[]; outlets: Ou
       {creating && (
         <Card>
           <CardContent className="pt-4">
-            <form onSubmit={create} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <form onSubmit={create} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <div className="space-y-1">
                 <Label>Full name</Label>
                 <Input
@@ -166,6 +166,7 @@ export function StaffManager({ staff, outlets }: { staff: Profile[]; outlets: Ou
                   onChange={(e) => setDraft({ ...draft, role: e.target.value as UserRole })}
                 >
                   <option value="merchandiser">Merchandiser</option>
+                  <option value="marketer">Marketer</option>
                   <option value="supervisor">Supervisor</option>
                   <option value="admin">Admin</option>
                 </Select>
@@ -194,7 +195,8 @@ export function StaffManager({ staff, outlets }: { staff: Profile[]; outlets: Ou
         </Card>
       )}
 
-      <div className="rounded-lg border border-border">
+      {/* Desktop: the full table. */}
+      <div className="hidden rounded-lg border border-border md:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -222,6 +224,7 @@ export function StaffManager({ staff, outlets }: { staff: Profile[]; outlets: Ou
                     onChange={(e) => void patch(person.id, { role: e.target.value })}
                   >
                     <option value="merchandiser">Merchandiser</option>
+                    <option value="marketer">Marketer</option>
                     <option value="supervisor">Supervisor</option>
                     <option value="admin">Admin</option>
                   </Select>
@@ -274,6 +277,81 @@ export function StaffManager({ staff, outlets }: { staff: Profile[]; outlets: Ou
             ))}
           </TableBody>
         </Table>
+      </div>
+
+      {/* Phone: one card per person. A seven-column table is unusable here. */}
+      <div className="space-y-3 md:hidden">
+        {visible.map((person) => (
+          <Card key={person.id}>
+            <CardContent className="space-y-3 pt-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="truncate font-semibold">{person.full_name}</p>
+                  <p className="truncate text-xs text-muted-foreground">{person.email}</p>
+                  <p className="text-xs text-muted-foreground">{person.phone ?? 'No phone'}</p>
+                </div>
+                <div className="flex shrink-0 flex-col items-end gap-1">
+                  {person.is_active ? (
+                    <Badge variant="success">Active</Badge>
+                  ) : (
+                    <Badge variant="outline">Deactivated</Badge>
+                  )}
+                  {person.must_change_password && <Badge variant="warning">Temp password</Badge>}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="field-label">Role</Label>
+                  <Select
+                    className="h-10"
+                    value={person.role}
+                    onChange={(e) => void patch(person.id, { role: e.target.value })}
+                  >
+                    <option value="merchandiser">Merchandiser</option>
+                    <option value="marketer">Marketer</option>
+                    <option value="supervisor">Supervisor</option>
+                    <option value="admin">Admin</option>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label className="field-label">Outlet</Label>
+                  <Select
+                    className="h-10"
+                    value={person.outlet_id ?? ''}
+                    onChange={(e) => void patch(person.id, { outlet_id: e.target.value || null })}
+                  >
+                    <option value="">No outlet</option>
+                    {outlets.map((outlet) => (
+                      <option key={outlet.id} value={outlet.id}>
+                        {outletName.get(outlet.id)}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => void patch(person.id, { reset_password: true })}
+                >
+                  Reset password
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={busy}
+                  onClick={() => void patch(person.id, { is_active: !person.is_active })}
+                >
+                  {person.is_active ? 'Deactivate' : 'Reactivate'}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
     </div>
   )

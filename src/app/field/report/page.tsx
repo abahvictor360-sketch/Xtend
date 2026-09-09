@@ -1,4 +1,5 @@
-import { requireSession } from '@/lib/auth'
+import { redirect } from 'next/navigation'
+import { REPORTING_ROLES, requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { ReportForm } from '@/components/field/report-form'
 import { SheetScreen, HeaderField } from '@/components/field/screen'
@@ -18,7 +19,8 @@ interface ReportRow {
 }
 
 export default async function ReportPage() {
-  const session = await requireSession(['merchandiser', 'admin'])
+  const session = await requireSession()
+  if (!REPORTING_ROLES.includes(session.profile.role)) redirect('/field')
   const supabase = await createServerSupabase()
 
   const { data: today } = await supabase.rpc('business_date')

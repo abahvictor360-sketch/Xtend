@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, requireApiSession, FIELD_ROLES } from '@/lib/auth'
 
 /**
  * The client sends what it observed. distance_m, status, user_id and
@@ -21,7 +21,7 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const session = await requireApiSession(['merchandiser', 'admin'])
+    const session = await requireApiSession(FIELD_ROLES)
     const parsed = schema.safeParse(await request.json())
     if (!parsed.success) {
       return Response.json(

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, requireApiSession, FIELD_ROLES } from '@/lib/auth'
 
 const schema = z.object({
   lat: z.number().min(-90).max(90),
@@ -11,7 +11,7 @@ const schema = z.object({
 /** Foreground heartbeat. The geofence decision is a database trigger. */
 export async function POST(request: Request) {
   try {
-    await requireApiSession(['merchandiser', 'admin'])
+    await requireApiSession(FIELD_ROLES)
     const parsed = schema.safeParse(await request.json())
     if (!parsed.success) {
       return Response.json({ error: 'Invalid ping' }, { status: 400 })

@@ -28,6 +28,7 @@ declare
   ada        uuid := gen_random_uuid();
   bala       uuid := gen_random_uuid();
   boss       uuid := gen_random_uuid();
+  grace      uuid := gen_random_uuid();
   row_status attendance_status;
   row_dist   double precision;
   alert_count integer;
@@ -36,7 +37,8 @@ declare
   payload    jsonb;
 begin
   insert into auth.users (id, email) values
-    (ada, 'ada@xpel.ng'), (bala, 'bala@xpel.ng'), (boss, 'boss@xpel.ng');
+    (ada, 'ada@xpel.ng'), (bala, 'bala@xpel.ng'), (boss, 'boss@xpel.ng'),
+    (grace, 'grace@xpel.ng');
 
   insert into public.outlets (name, lat, lng, geofence_radius_m, shift_start, shift_end)
   values ('Ikeja City Mall', 6.6018, 3.3515, 150, '08:00', '18:00')
@@ -49,7 +51,8 @@ begin
   insert into public.profiles (id, full_name, email, role, outlet_id) values
     (ada,  'Ada Okafor', 'ada@xpel.ng',  'merchandiser', mall_id),
     (bala, 'Bala Yusuf', 'bala@xpel.ng', 'merchandiser', kiosk_id),
-    (boss, 'Ngozi Eze',  'boss@xpel.ng', 'admin',        null);
+    (boss, 'Ngozi Eze',  'boss@xpel.ng', 'admin',        null),
+    (grace,'Grace Nnadi','grace@xpel.ng','marketer',     mall_id);
 
   -- ---------------------------------------------------------------
   -- The trigger owns distance and status.
@@ -160,6 +163,25 @@ begin
      where user_id = ada and alert_type = 'left_geofence') = 1,
     'a second breach inside 30 minutes does not flood the queue');
 
+  -- Every ping records the gap since the previous one, which is how a
+  -- locked phone or a backgrounded app becomes visible (migration 004).
+  -- Every ping but the first records the gap since the previous one. All the
+  -- fixture rows share one transaction timestamp, so the gaps here are zero;
+  -- what matters is that they are recorded rather than left null.
+  perform assert(
+    (select count(*) from public.location_pings where user_id = ada and gap_seconds is null) = 1,
+    'only the first ping of the day has no gap');
+  perform assert(
+    (select count(*) from public.location_pings where user_id = ada and gap_seconds is not null) = 2,
+    'later pings record the gap since the previous one');
+
+  payload := public.tracking_coverage(ada, public.business_date());
+  perform assert((payload ->> 'ping_count')::int = 3, 'coverage counts the shift''s pings');
+  perform assert((payload ->> 'last_ping_at') is not null, 'coverage reports the last ping');
+  -- One uncapped first ping contributes the 6-minute cap, the two zero-gap
+  -- pings contribute nothing.
+  perform assert((payload ->> 'tracked_seconds')::int = 360, 'a ping covers at most six minutes');
+
   -- ---------------------------------------------------------------
   -- The location gate logs blocks, and throttles them.
   -- ---------------------------------------------------------------
@@ -172,12 +194,23 @@ begin
   -- ---------------------------------------------------------------
   -- Reports: one per day, server-stamped, same-day edits only.
   -- ---------------------------------------------------------------
+  -- A merchandiser must not be able to file a report (migration 005).
+  begin
+    insert into public.reports (body) values ('merchandiser attempt');
+    perform assert(false, 'a merchandiser must not file a report');
+  exception when others then
+    perform assert(sqlerrm like '%Only marketers%' or sqlerrm like '%row-level security%',
+      'a merchandiser cannot file the daily report');
+  end;
+
+  -- The marketer files it instead.
+  perform act_as(grace);
   insert into public.reports (body, user_id, report_date)
   values ('Busy morning', bala, date '2001-01-01')
   returning id into report_id;
 
   perform assert(
-    (select user_id from public.reports where id = report_id) = ada,
+    (select user_id from public.reports where id = report_id) = grace,
     'a report belongs to the session user');
   perform assert(
     (select report_date from public.reports where id = report_id) = (now() at time zone 'Africa/Lagos')::date,
@@ -185,6 +218,8 @@ begin
   perform assert(
     (select r.outlet_id from public.reports r where r.id = report_id) = mall_id,
     'the outlet is snapshotted onto the report');
+  perform assert(public.can_file_report(), 'a marketer can file reports');
+  perform assert(public.is_field_role('marketer'), 'a marketer is field staff');
 
   update public.reports set body = 'Busy afternoon' where id = report_id;
   perform assert(
@@ -216,7 +251,11 @@ begin
   -- ---------------------------------------------------------------
   -- Read models.
   -- ---------------------------------------------------------------
+  perform act_as(ada);
+  perform assert(not public.can_file_report(), 'a merchandiser cannot file reports');
   payload := public.my_day();
+  perform assert((payload ->> 'can_file_report')::boolean = false,
+    'my_day tells a merchandiser they cannot file');
   perform assert(payload -> 'opening' ->> 'status' = 'on_site', 'my_day reports today''s opening');
   perform assert(payload -> 'outlet' ->> 'name' = 'Ikeja City Mall', 'my_day carries the outlet');
   perform assert((payload ->> 'report_filed')::boolean = false,
@@ -228,9 +267,14 @@ begin
   perform assert((payload ->> 'off_site')::int = 1, 'the overview counts flagged openings');
   perform assert((payload ->> 'open_alerts')::int >= 3, 'the overview counts open alerts');
 
+  -- Both merchandisers clocked in; the marketer did not, and marketers are
+  -- field staff too, so she is the one absentee.
   perform assert(
-    (select count(*) from public.absentees_today()) = 0,
-    'both merchandisers clocked in, so nobody is absent');
+    (select count(*) from public.absentees_today()) = 1,
+    'the marketer who never clocked in is the only absentee');
+  perform assert(
+    (select full_name from public.absentees_today()) = 'Grace Nnadi',
+    'absentees name the right person');
 
   perform assert(
     (select count(*) from public.attendance_detail where staff_name = 'Ada Okafor') = 2,

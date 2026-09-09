@@ -9,7 +9,7 @@ const createUserSchema = z.object({
   full_name: z.string().min(2).max(120),
   email: z.string().email().max(200),
   phone: z.string().min(7).max(20).nullable().optional(),
-  role: z.enum(['merchandiser', 'supervisor', 'admin']).default('merchandiser'),
+  role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).default('merchandiser'),
   outlet_id: z.string().uuid().nullable().optional(),
 })
 
