@@ -21,4 +21,5 @@ psql "$PGURL" -v ON_ERROR_STOP=1 -q -c \
 run supabase/tests/supabase_stub.sql
 run supabase/migrations/0001_init.sql
 run supabase/migrations/0002_logic.sql
+run supabase/migrations/0003_harden.sql
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rules.sql 2>&1 | grep -E 'NOTICE|ERROR' | sed 's/^psql:[^ ]*: //'

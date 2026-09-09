@@ -9,8 +9,26 @@
 --   psql -f supabase/tests/supabase_stub.sql
 --   psql -f supabase/migrations/0001_init.sql
 --   psql -f supabase/migrations/0002_logic.sql
+--   psql -f supabase/migrations/0003_harden.sql
 --   psql -f supabase/tests/rules.sql
 -- =====================================================================
+-- Supabase's API roles. Migration 003 grants and revokes against these.
+do $$
+begin
+  create role anon nologin noinherit;
+exception when duplicate_object then null;
+end $$;
+do $$
+begin
+  create role authenticated nologin noinherit;
+exception when duplicate_object then null;
+end $$;
+do $$
+begin
+  create role service_role nologin noinherit bypassrls;
+exception when duplicate_object then null;
+end $$;
+
 create schema if not exists auth;
 create schema if not exists storage;
 

@@ -268,6 +268,15 @@ begin
     perform assert(sqlerrm like '%Admins only%', 'a merchandiser cannot resolve an alert');
   end;
 
+  -- The audit trail is admin-only. A merchandiser must not be able to
+  -- forge a row naming themselves as the actor (migration 003).
+  begin
+    perform public.write_audit('user.delete', 'profiles', boss, '{"forged":true}'::jsonb);
+    perform assert(false, 'a merchandiser must not write an audit row');
+  exception when others then
+    perform assert(sqlerrm like '%Admins only%', 'a merchandiser cannot write an audit row');
+  end;
+
   -- ---------------------------------------------------------------
   -- Retention keeps the thumbnail and drops the full image.
   -- ---------------------------------------------------------------

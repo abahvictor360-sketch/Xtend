@@ -34,6 +34,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    ```
    supabase/migrations/0001_init.sql    # tables, RLS, storage, retention
    supabase/migrations/0002_logic.sql   # heartbeat, supervisors, views, audit
+   supabase/migrations/0003_harden.sql  # RPC grants: see "The RPC surface" below
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
@@ -78,6 +79,27 @@ src/lib/image.ts       On-device resize to 640px/150kb plus a 200×200 thumbnail
 supabase/migrations/…  The whole of the business logic
 supabase/tests/…       Local Postgres harness and 40 rule assertions
 ```
+
+## The RPC surface
+
+Supabase publishes every function in `public` at `/rest/v1/rpc/<name>`, so a
+`SECURITY DEFINER` function is reachable by anyone holding the anon key unless
+`EXECUTE` is revoked. Migration 0003 closes that. Two of the seventeen actually
+mattered:
+
+- `purge_old_selfies()` — anyone could have triggered the 90-day image
+  deletion. Now service-role only, which is what the cron route uses.
+- `write_audit(...)` — any signed-in user could have written an audit row
+  naming themselves as the actor of anything. Now guarded by `is_admin()`.
+
+The rest are either trigger functions (not an API; `EXECUTE` revoked) or
+already decide internally what the caller may see, and are granted to
+`authenticated` only. Supabase's linter still lists those ten as
+"signed-in users can execute", which is correct and intended.
+
+One advisory is left open deliberately: **leaked password protection** is off.
+It is an Auth setting, not SQL — turn it on under Authentication → Policies if
+you want passwords checked against HaveIBeenPwned.
 
 ## Phase coverage
 
@@ -143,9 +165,13 @@ npm run build         # production build
 PGURL=postgres://postgres@localhost:5432/postgres ./scripts/test-sql.sh
 ```
 
-`scripts/test-sql.sh` stubs the Supabase-specific schemas, applies both
-migrations and runs 40 assertions covering distance and status computation,
+`scripts/test-sql.sh` stubs the Supabase-specific schemas and roles, applies
+all three migrations and runs 41 assertions covering distance and status computation,
 the one-per-day constraint, timestamp rejection, geofence alerts and their
 throttles, report rules, the read models, admin-only alert resolution with its
 audit row, and the 90-day retention swap. It does not exercise RLS: a superuser
 session bypasses policies, so those are verified against the project itself.
+
+RLS was verified on the live project by running the same query while
+impersonating each role — an admin sees 5 profiles, a merchandiser sees 1, a
+supervisor sees the 2 at their own outlet.
