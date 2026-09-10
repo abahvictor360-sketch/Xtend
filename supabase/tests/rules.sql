@@ -782,5 +782,51 @@ begin
     public.nearest_outlet_for_user(grace, 9.0766, 7.3987) = kiosk_id,
     'the nearest-store helper agrees');
 
+  -- ---------------------------------------------------------------
+  -- The map names the store when they are not in one of their own
+  -- (migration 015).
+  -- ---------------------------------------------------------------
+  insert into public.store_visits
+    (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at,
+     arrived_place_name, arrived_address)
+  values (6.5390, 3.3841, 10, now(), 'Justrite Superstore Bariga', '56/58 Jagun Molu St, Lagos')
+  returning id into visit_id;
+  perform assert(
+    (select store_label from public.store_visit_detail where id = visit_id) = 'Bariga Depot',
+    'inside their own fence the outlet names itself');
+  perform assert(
+    (select store_label_source from public.store_visit_detail where id = visit_id) = 'outlet',
+    'and the label says so');
+  perform public.end_store_visit(visit_id, 6.5390, 3.3841, 10, null, null);
+
+  insert into public.store_visits
+    (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at,
+     arrived_place_name, arrived_address)
+  values (6.4500, 3.4000, 10, now(), 'Justrite Superstore Bariga', '56/58 Jagun Molu St, Lagos')
+  returning id into visit_id;
+  perform assert(
+    (select store_label from public.store_visit_detail where id = visit_id)
+      = 'Justrite Superstore Bariga',
+    'away from their stores the map names the premises');
+  perform assert(
+    (select store_label_source from public.store_visit_detail where id = visit_id) = 'map',
+    'and it is marked as coming from the map');
+  perform assert(
+    (select arrived_status from public.store_visit_detail where id = visit_id) = 'off_site',
+    'naming it does not make it on_site');
+  perform assert(
+    (select outlet_name from public.store_visit_detail where id = visit_id) is not null,
+    'and the store it was measured against is still there');
+  perform public.end_store_visit(visit_id, 6.45, 3.40, 10, null, null);
+
+  insert into public.store_visits
+    (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
+  values (6.4500, 3.4000, 10, now())
+  returning id into visit_id;
+  perform assert(
+    (select store_label from public.store_visit_detail where id = visit_id) is not null,
+    'with nothing from the map it falls back to the outlet');
+  perform public.end_store_visit(visit_id, 6.45, 3.40, 10, null, null);
+
   raise notice 'ALL RULES PASSED';
 end $$;

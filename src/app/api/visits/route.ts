@@ -95,29 +95,48 @@ export async function POST(request: Request) {
       return Response.json({ error: error.message }, { status: 400 })
     }
 
-    // The store may have been chosen by the database, so read the name off
-    // the row that was actually written rather than off the request.
-    const { data: outlet } = await supabase
-      .from('outlets')
-      .select('name')
-      .eq('id', data.outlet_id)
-      .maybeSingle<{ name: string }>()
+    // The store may have been chosen by the database, and when they are
+    // not inside one of their own the map names the premises instead, so
+    // both come from the row that was written rather than the request.
+    const { data: detail } = await supabase
+      .from('store_visit_detail')
+      .select('outlet_name, store_label, store_label_source')
+      .eq('id', data.id)
+      .maybeSingle<{
+        outlet_name: string
+        store_label: string
+        store_label_source: 'outlet' | 'map'
+      }>()
+    const outlet = detail ? { name: detail.outlet_name } : null
 
     if (data.arrived_status !== 'on_site') {
       await notifyWatchers({
         subjectId: session.userId,
-        title: `${session.profile.full_name} checked in away from ${outlet?.name ?? 'the store'}`,
+        title:
+          detail?.store_label_source === 'map'
+            ? `${session.profile.full_name} checked in at ${detail.store_label}`
+            : `${session.profile.full_name} checked in away from ${outlet?.name ?? 'the store'}`,
         body:
           data.arrived_distance_m === null
             ? 'The location could not be verified.'
             : `${Math.round(data.arrived_distance_m)} m from ${outlet?.name ?? 'the store'}` +
-              (input.place_name ? `, at ${input.place_name}.` : '.'),
+              (detail?.store_label_source === 'map' ? ', which is not one of their stores.' : '.'),
         url: '/admin/visits',
         detail: { kind: 'store_visit_off_site', visit_id: data.id },
       })
     }
 
-    return Response.json({ visit: { ...data, outlet_name: outlet?.name ?? null } }, { status: 201 })
+    return Response.json(
+      {
+        visit: {
+          ...data,
+          outlet_name: detail?.outlet_name ?? null,
+          store_label: detail?.store_label ?? null,
+          store_label_source: detail?.store_label_source ?? null,
+        },
+      },
+      { status: 201 },
+    )
   } catch (error) {
     return apiError(error)
   }

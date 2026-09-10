@@ -26,6 +26,8 @@ const visits: VisitExportRow[] = Array.from({ length: 60 }, (_, i) => ({
   arrived_distance_m: i % 5 === 0 ? 901 : 16,
   departed_distance_m: 16,
   arrived_label: LABEL,
+  store_label: i % 4 === 0 ? 'Justrite Superstore Bariga' : 'Ikeja City Mall',
+  store_label_source: i % 4 === 0 ? 'map' : 'outlet',
   selfie_path: i % 3 === 0 ? null : `u/${i}.jpg`,
 }))
 
@@ -34,6 +36,8 @@ const visitRows = visits.map((v, i) => ({
   values: [
     v.staff_name,
     v.visit_date,
+    v.store_label ?? v.outlet_name,
+    v.store_label_source === 'map' ? 'the map' : 'their own store record',
     v.outlet_name,
     '09:00',
     v.departed_at ? '10:12' : 'still there (open)',

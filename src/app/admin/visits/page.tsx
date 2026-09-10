@@ -104,8 +104,8 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
                   <span className="min-w-0">
                     <span className="block truncate font-semibold">{visit.staff_name}</span>
                     <span className="block truncate text-xs text-muted-foreground">
-                      {visit.outlet_name} · since {formatLagos(visit.arrived_at, false)} ·{' '}
-                      {visit.minutes} min
+                      {visit.store_label ?? visit.outlet_name} · since{' '}
+                      {formatLagos(visit.arrived_at, false)} · {visit.minutes} min
                     </span>
                   </span>
                   <StatusBadge status={visit.arrived_status} />
@@ -150,7 +150,14 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
                   <TableBody>
                     {rows.map((visit) => (
                       <TableRow key={visit.id}>
-                        <TableCell className="font-medium">{visit.outlet_name}</TableCell>
+                        <TableCell className="font-medium">
+                          {visit.store_label ?? visit.outlet_name}
+                          {visit.store_label_source === 'map' && (
+                            <span className="block text-xs font-normal text-muted-foreground">
+                              named by the map · nearest of theirs: {visit.outlet_name}
+                            </span>
+                          )}
+                        </TableCell>
                         <TableCell className="tabular-nums">
                           {ranged && (
                             <span className="mr-1 text-xs text-muted-foreground">
@@ -199,7 +206,7 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
                 {rows.map((visit) => (
                   <li key={visit.id} className="space-y-1 py-3">
                     <p className="flex items-center justify-between gap-2 text-sm font-semibold">
-                      {visit.outlet_name}
+                      {visit.store_label ?? visit.outlet_name}
                       {visit.departed_at ? (
                         <span className="text-xs font-normal text-muted-foreground">
                           {visit.minutes} min

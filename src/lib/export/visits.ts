@@ -28,6 +28,9 @@ export interface VisitExportRow {
   arrived_distance_m: number | null
   departed_distance_m: number | null
   arrived_label: string | null
+  /** The outlet's name inside its fence; the map's premises name outside. */
+  store_label: string | null
+  store_label_source: 'outlet' | 'map' | null
   selfie_path: string | null
 }
 
@@ -77,6 +80,8 @@ export const VISIT_COLUMNS = [
   'Marketer',
   'Date',
   'Store',
+  'Store named by',
+  'Nearest of their stores',
   'Checked in',
   'Checked out',
   'Minutes in store',
@@ -104,6 +109,8 @@ export async function toVisitRows(
       values: [
         v.staff_name,
         v.visit_date,
+        v.store_label ?? v.outlet_name,
+        v.store_label_source === 'map' ? 'the map' : 'their own store record',
         v.outlet_name,
         formatLagos(v.arrived_at, false),
         v.departed_at ? formatLagos(v.departed_at, false) : `still there (${v.status})`,
@@ -141,11 +148,11 @@ export function visitSheet(visits: VisitExportRow[], rows: ExportRow[]): Sheet {
     columns: VISIT_COLUMNS,
     rows,
     widths: {
-      xlsx: [22, 12, 24, 14, 18, 14, 12, 16, 12, 18, 42, 16],
-      pdf: [84, 52, 92, 48, 56, 38, 42, 50, 42, 50, 160, 52],
+      xlsx: [20, 11, 26, 14, 22, 12, 16, 12, 12, 14, 12, 16, 34, 15],
+      pdf: [74, 46, 92, 44, 74, 42, 50, 34, 38, 46, 38, 46, 130, 44],
     },
     linkColumn: VISIT_COLUMNS.length - 1,
-    statusColumn: 6,
+    statusColumn: 8,
     fileBase: 'xtend-store-visits',
   }
 }

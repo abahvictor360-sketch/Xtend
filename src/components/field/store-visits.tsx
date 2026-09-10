@@ -28,6 +28,9 @@ export interface VisitOutlet {
 export interface VisitRow {
   id: string
   outlet_name: string
+  /** The outlet's name inside its fence; the map's premises name outside. */
+  store_label: string | null
+  store_label_source: 'outlet' | 'map' | null
   visit_date: string
   status: 'open' | 'closed' | 'abandoned'
   arrived_at: string
@@ -204,11 +207,14 @@ export function StoreVisits({
         }
 
         const distance = data.visit?.arrived_distance_m
-        const where = data.visit?.outlet_name ?? outlet?.name ?? 'the store'
+        const nearest = data.visit?.outlet_name ?? outlet?.name ?? 'your store'
+        const label = data.visit?.store_label ?? nearest
         setNotice(
           data.visit?.arrived_status === 'on_site'
-            ? `Checked in at ${where}. You were ${metres(distance)} from the door.`
-            : `Checked in, but you are ${metres(distance)} from ${where}. This is recorded and your admin has been notified.`,
+            ? `Checked in at ${label}. You were ${metres(distance)} from the door.`
+            : data.visit?.store_label_source === 'map'
+              ? `Checked in at ${label}. That is not one of your stores — the nearest, ${nearest}, is ${metres(distance)} away. This is recorded and your admin has been notified.`
+              : `Checked in, but you are ${metres(distance)} from ${nearest}. This is recorded and your admin has been notified.`,
         )
         router.refresh()
       } catch (err) {
@@ -251,7 +257,7 @@ export function StoreVisits({
       }
 
       setNotice(
-        `Checked out of ${open.outlet_name} after ${data.visit?.minutes ?? open.minutes} minutes.`,
+        `Checked out of ${open.store_label ?? open.outlet_name} after ${data.visit?.minutes ?? open.minutes} minutes.`,
       )
       router.refresh()
     } catch (err) {
@@ -285,7 +291,7 @@ export function StoreVisits({
               </span>
               <div className="min-w-0 flex-1">
                 <p className="flex items-center gap-2 text-sm font-bold">
-                  {open.outlet_name}
+                  {open.store_label ?? open.outlet_name}
                   <Badge variant={open.arrived_status === 'on_site' ? 'success' : 'destructive'}>
                     {open.arrived_status === 'on_site' ? 'On site' : 'Off site'}
                   </Badge>
@@ -298,7 +304,7 @@ export function StoreVisits({
 
             <Button size="xl" className="w-full" disabled={Boolean(busy)} onClick={checkOut}>
               <LogOut className="h-5 w-5" />
-              {busy ?? `Check out of ${open.outlet_name}`}
+              {busy ?? `Check out of ${open.store_label ?? open.outlet_name}`}
             </Button>
           </CardContent>
         </Card>
@@ -389,7 +395,7 @@ export function StoreVisits({
         <TaskRow
           key={visit.id}
           icon={<Store className="h-5 w-5" />}
-          title={visit.outlet_name}
+          title={visit.store_label ?? visit.outlet_name}
           meta={
             <>
               {formatLagos(visit.arrived_at, false)}
