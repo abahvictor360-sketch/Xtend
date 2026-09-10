@@ -739,5 +739,48 @@ begin
       'a marketer cannot check into a store they were never allocated');
   end;
 
+  -- ---------------------------------------------------------------
+  -- Checking in without naming the store (migration 014).
+  -- ---------------------------------------------------------------
+  perform act_as(boss);
+  perform set_staff_outlets(grace, array[kiosk_id, depot_id]);
+
+  perform act_as(grace);
+  perform public.end_store_visit(v.id, 9.0765, 7.3986, 12, null, null)
+  from public.store_visits v where v.user_id = grace and v.status = 'open';
+
+  -- Standing at the kiosk, saying nothing about which store it is.
+  insert into public.store_visits
+    (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at, selfie_path)
+  values (9.0766, 7.3987, 10, now(), 'auto/1.jpg')
+  returning id into visit_id;
+
+  perform assert(
+    (select outlet_id from public.store_visits where id = visit_id) = kiosk_id,
+    'an unnamed check-in lands at the store they are standing in');
+  perform assert(
+    (select arrived_status from public.store_visits where id = visit_id) = 'on_site',
+    'and is on_site, measured against that store');
+
+  perform public.end_store_visit(visit_id, 9.0766, 7.3987, 10, null, null);
+
+  -- Nowhere near any of their stores: still recorded, against the nearest,
+  -- off site, rather than refused and lost.
+  insert into public.store_visits
+    (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
+  values (6.5390, 3.3841, 10, now())
+  returning id into visit_id;
+  perform assert(
+    (select outlet_id from public.store_visits where id = visit_id) = depot_id,
+    'far from everything, the nearest of their own stores is chosen');
+  perform assert(
+    (select arrived_status from public.store_visits where id = visit_id) = 'on_site',
+    'standing at the depot is on_site there');
+  perform public.end_store_visit(visit_id, 6.5390, 3.3841, 10, null, null);
+
+  perform assert(
+    public.nearest_outlet_for_user(grace, 9.0766, 7.3987) = kiosk_id,
+    'the nearest-store helper agrees');
+
   raise notice 'ALL RULES PASSED';
 end $$;

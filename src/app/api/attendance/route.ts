@@ -113,7 +113,21 @@ export async function POST(request: Request) {
       })
     }
 
-    return Response.json({ attendance: data }, { status: 201 })
+    // The trigger measures against whichever of the person's stores they
+    // are nearest, which may not be their home outlet, so the response says
+    // which one it actually used rather than leaving the app to guess.
+    const outletId = (data as { outlet_id: string | null }).outlet_id
+    let outlet_name: string | null = null
+    if (outletId) {
+      const { data: outlet } = await supabase
+        .from('outlets')
+        .select('name')
+        .eq('id', outletId)
+        .maybeSingle<{ name: string }>()
+      outlet_name = outlet?.name ?? null
+    }
+
+    return Response.json({ attendance: { ...data, outlet_name } }, { status: 201 })
   } catch (error) {
     return apiError(error)
   }

@@ -36,7 +36,14 @@ async function reverseGeocode(lat: number, lng: number): Promise<ResolvedPlace> 
   }
 }
 
-export function ClockPanel({ day }: { day: DayState }) {
+export function ClockPanel({
+  day,
+  outletCount = 0,
+}: {
+  day: DayState
+  /** How many stores they have altogether, home outlet included. */
+  outletCount?: number
+}) {
   const router = useRouter()
   const [pendingType, setPendingType] = useState<AttendanceType | null>(null)
   const [busyStep, setBusyStep] = useState<string | null>(null)
@@ -99,20 +106,31 @@ export function ClockPanel({ day }: { day: DayState }) {
             }, and will send itself when you get signal.`,
           })
         } else {
-          const record = (result.data as { attendance: { status: string; distance_m: number | null } })
-            .attendance
+          const record = (
+            result.data as {
+              attendance: {
+                status: string
+                distance_m: number | null
+                outlet_name: string | null
+                outlet_radius_m: number | null
+              }
+            }
+          ).attendance
+          // Whichever store the server measured against — for a marketer on
+          // a round that is rarely the home outlet.
+          const against = record.outlet_name ?? day.outlet?.name ?? 'your outlet'
           // Tell them the truth, including when the truth is inconvenient.
           if (record.status === 'on_site') {
             setOutcome({
               tone: 'success',
               title: type === 'opening' ? 'Clocked in' : 'Clocked out',
-              detail: `Location: ${where}. That is ${metres(record.distance_m)} from ${day.outlet?.name ?? 'your outlet'} — inside the geofence, nothing flagged.`,
+              detail: `Location: ${where}. That is ${metres(record.distance_m)} from ${against} — inside the geofence, nothing flagged.`,
             })
           } else if (record.status === 'off_site') {
             setOutcome({
               tone: 'warning',
               title: `${type === 'opening' ? 'Clocked in' : 'Clocked out'} off site`,
-              detail: `Location: ${where}. That is ${metres(record.distance_m)} from ${day.outlet?.name ?? 'your outlet'}, outside the ${day.outlet?.radius_m ?? 150} m geofence. This is recorded and your admin has been notified.`,
+              detail: `Location: ${where}. That is ${metres(record.distance_m)} from ${against}, outside the ${record.outlet_radius_m ?? day.outlet?.radius_m ?? 150} m geofence. This is recorded and your admin has been notified.`,
             })
           } else {
             setOutcome({
@@ -193,11 +211,18 @@ export function ClockPanel({ day }: { day: DayState }) {
         </Alert>
       )}
 
-      {!day.outlet && (
+      {outletCount === 0 && (
         <Alert variant="warning">
-          You have no outlet assigned, so distance cannot be checked and every clock event will be
-          flagged. Ask your admin to assign your outlet.
+          You have no store assigned, so distance cannot be checked and every clock event will be
+          flagged. Ask your admin to assign one.
         </Alert>
+      )}
+
+      {outletCount > 1 && (
+        <p className="text-xs text-muted-foreground">
+          You cover {outletCount} stores. You do not have to choose one — Xtend measures against
+          whichever you are closest to when you clock.
+        </p>
       )}
     </div>
   )

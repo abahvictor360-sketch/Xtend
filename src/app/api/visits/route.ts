@@ -4,11 +4,12 @@ import { apiError, requireApiSession, REPORTING_ROLES } from '@/lib/auth'
 import { notifyWatchers } from '@/lib/notify'
 
 /**
- * Check in to a store. The client names the store it thinks it is at; the
- * database measures the distance against that store and decides the status.
+ * Check in to a store. Naming the store is optional: left out, the
+ * database picks whichever of the person's own stores they are closest to.
+ * Either way it measures the distance itself and decides the status.
  */
 const schema = z.object({
-  outlet_id: z.string().uuid(),
+  outlet_id: z.string().uuid().nullable().optional(),
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   accuracy_m: z.number().nonnegative(),
@@ -41,7 +42,8 @@ export async function POST(request: Request) {
     const { data, error } = await supabase
       .from('store_visits')
       .insert({
-        outlet_id: input.outlet_id,
+        // Null lets the trigger choose; it is never left null on the row.
+        outlet_id: input.outlet_id ?? null,
         arrived_lat: input.lat,
         arrived_lng: input.lng,
         arrived_accuracy_m: input.accuracy_m,
@@ -52,9 +54,10 @@ export async function POST(request: Request) {
         device_info: input.device_info,
         client_captured_at: input.client_captured_at,
       })
-      .select('id, arrived_at, arrived_status, arrived_distance_m, outlet_radius_m')
+      .select('id, outlet_id, arrived_at, arrived_status, arrived_distance_m, outlet_radius_m')
       .single<{
         id: string
+        outlet_id: string
         arrived_at: string
         arrived_status: string
         arrived_distance_m: number | null
@@ -71,6 +74,12 @@ export async function POST(request: Request) {
       if (error.message.includes('Only marketers')) {
         return Response.json({ error: 'Only marketers record store visits.' }, { status: 403 })
       }
+      if (error.message.includes('no stores allocated')) {
+        return Response.json(
+          { error: 'You have no stores allocated. Ask your supervisor to add some.' },
+          { status: 400 },
+        )
+      }
       if (error.message.includes('not one of yours')) {
         return Response.json(
           { error: 'That store is not allocated to you. Ask your supervisor to add it.' },
@@ -86,11 +95,12 @@ export async function POST(request: Request) {
       return Response.json({ error: error.message }, { status: 400 })
     }
 
-    // The name of the store is worth having in the alert, so read it back.
+    // The store may have been chosen by the database, so read the name off
+    // the row that was actually written rather than off the request.
     const { data: outlet } = await supabase
       .from('outlets')
       .select('name')
-      .eq('id', input.outlet_id)
+      .eq('id', data.outlet_id)
       .maybeSingle<{ name: string }>()
 
     if (data.arrived_status !== 'on_site') {

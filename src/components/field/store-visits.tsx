@@ -74,6 +74,8 @@ export function StoreVisits({
 
   const [picking, setPicking] = useState(false)
   const [target, setTarget] = useState<VisitOutlet | null>(null)
+  // The camera is open for a check-in whose store has not been named.
+  const [capturing, setCapturing] = useState(false)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -88,11 +90,27 @@ export function StoreVisits({
     )
   }, [outlets, currentFix])
 
+  /**
+   * Display only. Which store the visit is actually recorded against is
+   * decided by the database from the fix taken at the moment of capture,
+   * not from this.
+   */
+  const here = useMemo(() => {
+    if (!currentFix) return null
+    return (
+      sorted.find(
+        (outlet) =>
+          haversineMetres(currentFix.lat, currentFix.lng, outlet.lat, outlet.lng) <=
+          outlet.geofence_radius_m,
+      ) ?? null
+    )
+  }, [sorted, currentFix])
+
   const checkIn = useCallback(
     async (photo: Blob) => {
       const outlet = target
+      setCapturing(false)
       setTarget(null)
-      if (!outlet) return
 
       setError(null)
       setNotice(null)
@@ -130,7 +148,9 @@ export function StoreVisits({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            outlet_id: outlet.id,
+            // Left out when they did not pick one: the database works out
+            // which of their stores they are standing in.
+            outlet_id: outlet?.id ?? null,
             lat: fix.lat,
             lng: fix.lng,
             accuracy_m: fix.accuracy_m,
@@ -149,10 +169,11 @@ export function StoreVisits({
         }
 
         const distance = data.visit?.arrived_distance_m
+        const where = data.visit?.outlet_name ?? outlet?.name ?? 'the store'
         setNotice(
           data.visit?.arrived_status === 'on_site'
-            ? `Checked in at ${outlet.name}. You were ${metres(distance)} from the door.`
-            : `Checked in, but you are ${metres(distance)} from ${outlet.name}. This is recorded and your admin has been notified.`,
+            ? `Checked in at ${where}. You were ${metres(distance)} from the door.`
+            : `Checked in, but you are ${metres(distance)} from ${where}. This is recorded and your admin has been notified.`,
         )
         setPicking(false)
         router.refresh()
@@ -251,6 +272,9 @@ export function StoreVisits({
         <Card>
           <CardContent className="space-y-2 pt-5">
             <p className="text-sm font-semibold">Which store are you at?</p>
+            <p className="text-xs text-muted-foreground">
+              Only needed if Xtend picked the wrong one.
+            </p>
             {sorted.map((outlet) => {
               const away = currentFix
                 ? haversineMetres(currentFix.lat, currentFix.lng, outlet.lat, outlet.lng)
@@ -283,17 +307,50 @@ export function StoreVisits({
           </CardContent>
         </Card>
       ) : (
-        <Button size="xl" className="w-full" disabled={Boolean(busy)} onClick={() => setPicking(true)}>
-          <Camera className="h-5 w-5" />
-          {busy ?? 'Check in to a store'}
-        </Button>
+        <div className="space-y-2">
+          <Button
+            size="xl"
+            className="w-full"
+            disabled={Boolean(busy)}
+            onClick={() => setCapturing(true)}
+          >
+            <Camera className="h-5 w-5" />
+            {busy ?? 'Check in here'}
+          </Button>
+
+          <p className="text-center text-xs text-muted-foreground">
+            {here
+              ? `You are at ${here.name}.`
+              : 'Xtend works out which of your stores you are at.'}
+          </p>
+
+          {outlets.length > 1 && (
+            <Button
+              variant="ghost"
+              className="w-full"
+              disabled={Boolean(busy)}
+              onClick={() => setPicking(true)}
+            >
+              Pick the store myself
+            </Button>
+          )}
+        </div>
       )}
 
       <CameraCapture
-        open={target !== null}
-        title={target ? `Check in at ${target.name}` : 'Check in'}
+        open={target !== null || capturing}
+        title={
+          target
+            ? `Check in at ${target.name}`
+            : here
+              ? `Check in at ${here.name}`
+              : 'Check in'
+        }
         onCapture={(photo) => void checkIn(photo)}
-        onClose={() => setTarget(null)}
+        onClose={() => {
+          setTarget(null)
+          setCapturing(false)
+        }}
       />
 
       {done.map((visit) => (
