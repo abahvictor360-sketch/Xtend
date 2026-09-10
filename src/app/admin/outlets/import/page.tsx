@@ -15,8 +15,9 @@ export default async function OutletImportPage() {
         <div>
           <h1 className="text-xl font-semibold">Add stores in bulk</h1>
           <p className="text-sm text-muted-foreground">
-            Paste a stockist list — the names and addresses are enough. Xtend looks up the
-            coordinates for each one and shows you where it landed before anything is saved.
+            Load the July customer list, or paste your own — names and addresses are enough.
+            Xtend looks up the coordinates for each one and shows you where it landed before
+            anything is saved.
           </p>
         </div>
         <Link href="/admin/outlets" className={buttonVariants({ variant: 'outline' })}>

@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Papa from 'papaparse'
-import { MapPin, Upload } from 'lucide-react'
+import { ListPlus, MapPin, Upload } from 'lucide-react'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -29,6 +29,9 @@ interface Draft {
   name: string
   address: string | null
 }
+
+/** The server geocodes a few at a time; this keeps each request short. */
+const CHUNK = 25
 
 const SAMPLE = `Justrite Superstore Bariga, 56/58 Jagun Molu St, Bariga, Lagos
 Shoprite Ikeja City Mall, Obafemi Awolowo Way, Ikeja, Lagos
@@ -57,6 +60,9 @@ export function StoreImporter() {
   const [created, setCreated] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
+  const [skipTraders, setSkipTraders] = useState(true)
+  const [loadedList, setLoadedList] = useState<{ total: number; visitable: number } | null>(null)
 
   /** One store per line: the name, then a comma, then the address. */
   function parseText(value: string): Draft[] {
@@ -98,35 +104,88 @@ export function StoreImporter() {
     })
   }
 
+  /**
+   * Six hundred addresses will not geocode inside one request, so the list
+   * goes up in chunks and the results are stitched back together. A chunk
+   * that fails stops the run rather than leaving a half-imported list with
+   * no record of where it stopped.
+   */
   async function send(rows: Draft[], commit: boolean) {
     setBusy(commit ? 'Importing' : 'Looking up each address')
     setError(null)
+    setProgress({ done: 0, total: rows.length })
+
+    const collected: RowResult[] = []
+    let createdTotal = 0
+
     try {
-      const res = await fetch('/api/admin/outlets/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          rows,
-          geofence_radius_m: radius,
-          shift_start: shiftStart,
-          shift_end: shiftEnd,
-          commit,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setError(data.error ?? 'That import did not go through.')
-        return
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        const chunk = rows.slice(i, i + CHUNK)
+        const res = await fetch('/api/admin/outlets/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            rows: chunk,
+            geofence_radius_m: radius,
+            shift_start: shiftStart,
+            shift_end: shiftEnd,
+            commit,
+          }),
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          setError(
+            collected.length
+              ? `${data.error ?? 'That import stopped'} after ${collected.length} of ${rows.length}.`
+              : (data.error ?? 'That import did not go through.'),
+          )
+          break
+        }
+
+        // Line numbers restart per request; renumber against the whole list.
+        for (const [n, row] of (data.rows as RowResult[]).entries()) {
+          collected.push({ ...row, line: i + n + 1 })
+        }
+        createdTotal += (data.created as number) ?? 0
+        setProgress({ done: Math.min(i + CHUNK, rows.length), total: rows.length })
+        setPreview([...collected])
       }
-      setPreview(data.rows as RowResult[])
+
+      setPreview(collected)
       if (commit) {
-        setCreated(data.created as number)
+        setCreated(createdTotal)
         setDrafts(null)
         router.refresh()
       } else {
-        setReady(data.ready as number)
+        const usable = collected.filter((r) => !r.error && r.lat !== null)
+        setReady(usable.length)
         setDrafts(rows)
       }
+    } finally {
+      setBusy(null)
+      setProgress(null)
+    }
+  }
+
+  /** Pulls the supplied customer list straight into the box. */
+  async function loadSuppliedList() {
+    setBusy('Loading the list')
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/outlets/stockists')
+      const data = await res.json()
+      if (!res.ok) {
+        setError(data.error ?? 'Could not load that list.')
+        return
+      }
+      const rows = (data.rows as { query: string; visitable: boolean }[]).filter(
+        (row) => !skipTraders || row.visitable,
+      )
+      setText(rows.map((row) => row.query).join('\n'))
+      setLoadedList({ total: data.total as number, visitable: data.visitable as number })
+      setPreview(null)
+      setDrafts(null)
+      setCreated(null)
     } finally {
       setBusy(null)
     }
@@ -142,6 +201,28 @@ export function StoreImporter() {
           {created} store{created === 1 ? '' : 's'} added. They can be allocated to staff now.
         </Alert>
       )}
+
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-card p-3">
+        <Button variant="outline" size="sm" disabled={Boolean(busy)} onClick={() => void loadSuppliedList()}>
+          <ListPlus className="h-3.5 w-3.5" />
+          {busy === 'Loading the list' ? busy : 'Load the July stockist list'}
+        </Button>
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-[hsl(var(--brand))]"
+            checked={skipTraders}
+            onChange={(event) => setSkipTraders(event.target.checked)}
+          />
+          Leave out Trade Fair traders and named individuals
+        </label>
+        {loadedList && (
+          <span className="text-xs text-muted-foreground">
+            {loadedList.visitable} of {loadedList.total} on that list are premises with a fixed
+            address.
+          </span>
+        )}
+      </div>
 
       <div className="space-y-2">
         <Label htmlFor="stores">One store per line — name, then the address</Label>
@@ -184,7 +265,7 @@ export function StoreImporter() {
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button disabled={Boolean(busy) || lines.length === 0} onClick={() => void send(lines, false)}>
           <MapPin className="h-4 w-4" />
           {busy === 'Looking up each address' ? busy : 'Find these on the map'}
@@ -195,7 +276,21 @@ export function StoreImporter() {
             {busy === 'Importing' ? busy : `Import ${ready} store${ready === 1 ? '' : 's'}`}
           </Button>
         )}
+        {progress && (
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {progress.done} of {progress.total}
+          </span>
+        )}
       </div>
+
+      {progress && (
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+          <div
+            className="h-full rounded-full bg-brand transition-[width] duration-300"
+            style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
+          />
+        </div>
+      )}
 
       {preview && (
         <div className="space-y-2">

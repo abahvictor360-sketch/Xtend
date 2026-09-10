@@ -76,6 +76,9 @@ src/app/admin/…        Dashboard: overview, attendance, store visits,
 src/app/api/…          Thin route handlers (validate → call Postgres → map errors)
 src/lib/export/…       One renderer, two datasets: attendance and store visits
 src/lib/retention*     The 24-hour rule for clock photos, and the sweep
+src/lib/platform.ts    Device detection, purely to pick the right help text
+src/lib/stockists*     The supplied customer list and how it is searched
+data/                  The customer list as CSV, as supplied
 src/lib/offline/…      IndexedDB outbox and the flush loop
 src/lib/geo.ts         Location gate: accuracy ceiling, block reasons
 src/lib/image.ts       On-device resize to 640px/150kb plus a 200×200 thumbnail
@@ -222,7 +225,8 @@ you want passwords checked against HaveIBeenPwned.
 | 2 — daily reports with photos, XLSX/DOCX/PDF (and CSV) export, IndexedDB offline queue, retention cron | Built |
 | 3 — heartbeat pings, geofence alerts, realtime dashboard, punctuality and coverage analytics, map view | Built |
 | Store rounds — multi-store allocation, per-store check in and out, store visit reports in PDF/Word/Excel/CSV | Built |
-| Stores in bulk — paste a stockist list, addresses geocoded server-side, reviewed before saving | Built |
+| Stores in bulk — load the supplied customer list or paste your own, geocoded server-side in chunks, reviewed before saving | Built |
+| Location help — per-device instructions for turning location back on, clearing itself when the permission changes | Built |
 | Photo retention — clock and store-visit selfies deleted 24 hours after capture | Built |
 | 4 — Expo wrapper, background tracking, mock-location detection | Not started; the backend is designed to be reused unchanged |
 

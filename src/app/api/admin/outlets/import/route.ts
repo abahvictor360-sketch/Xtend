@@ -17,7 +17,7 @@ const rowSchema = z.object({
 })
 
 const bodySchema = z.object({
-  rows: z.array(rowSchema).min(1).max(120),
+  rows: z.array(rowSchema).min(1).max(40),
   geofence_radius_m: z.number().int().min(25).max(2000).default(150),
   shift_start: z.string().regex(/^\d{2}:\d{2}$/).default('08:00'),
   shift_end: z.string().regex(/^\d{2}:\d{2}$/).default('18:00'),
@@ -67,17 +67,15 @@ export async function POST(request: Request) {
     const seen = new Set<string>()
     const results: OutletImportRow[] = []
 
-    // Sequential on purpose: a burst of lookups gets rate-limited, and this
-    // runs once when the stores are first set up.
+    // Duplicate checks first, in order, so "appears twice" always blames the
+    // second one no matter how the lookups below interleave.
     for (const [index, row] of rows.entries()) {
       const name = row.name.trim()
-      const address = row.address?.trim() || null
       const key = name.toLowerCase()
-
       const result: OutletImportRow = {
         line: index + 1,
         name,
-        address,
+        address: row.address?.trim() || null,
         lat: row.lat ?? null,
         lng: row.lng ?? null,
         geofence_radius_m: row.geofence_radius_m ?? geofence_radius_m,
@@ -86,24 +84,31 @@ export async function POST(request: Request) {
         error: null,
       }
 
-      if (taken.has(key)) {
-        result.error = 'A store with that name already exists'
-      } else if (seen.has(key)) {
-        result.error = 'That store appears twice in this list'
-      } else if (result.lat == null || result.lng == null) {
-        const found = await locateAddress(name, address)
-        if (!found) {
-          result.error = 'Could not find that address on the map'
-        } else {
+      if (taken.has(key)) result.error = 'A store with that name already exists'
+      else if (seen.has(key)) result.error = 'That store appears twice in this list'
+      else seen.add(key)
+
+      results.push(result)
+    }
+
+    // A few at a time: one at a time is too slow for a list of hundreds,
+    // and all at once gets rate-limited by the geocoder.
+    const pending = results.filter((r) => !r.error && (r.lat == null || r.lng == null))
+    const CONCURRENCY = 5
+    for (let i = 0; i < pending.length; i += CONCURRENCY) {
+      await Promise.all(
+        pending.slice(i, i + CONCURRENCY).map(async (result) => {
+          const found = await locateAddress(result.name, result.address)
+          if (!found) {
+            result.error = 'Could not find that address on the map'
+            return
+          }
           result.lat = found.lat
           result.lng = found.lng
           result.source = found.source
           result.resolved_address = found.address
-        }
-      }
-
-      if (!result.error) seen.add(key)
-      results.push(result)
+        }),
+      )
     }
 
     const usable = results.filter((r) => !r.error && r.lat != null && r.lng != null)

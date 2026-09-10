@@ -1,15 +1,16 @@
 'use client'
 
-import { LocateFixed, MapPinOff, RefreshCw } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { useEffect, useRef } from 'react'
+import { LocateFixed, MapPinOff } from 'lucide-react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { LocationHelp, useLocationPermission } from '@/components/field/location-help'
 import type { GateStatus } from '@/components/field/use-location-gate'
 import type { GeoBlockReason } from '@/lib/geo'
 
 const HELP: Record<GeoBlockReason, string> = {
   permission_denied:
-    'Open your browser settings for this site and set Location to Allow, then tap retry.',
+    'Location permission is off for Xtend. Turn it on and this screen will clear itself.',
   position_unavailable:
     'Turn phone Location on, set it to High accuracy, and step outside or near a window.',
   low_accuracy:
@@ -30,6 +31,19 @@ export function LocationGate({
   onRetry: () => void
   children: React.ReactNode
 }) {
+  const permission = useLocationPermission()
+  const wasBlocked = useRef(false)
+
+  // Somebody who goes into Settings and allows location should come back to
+  // a working screen, not to the same error and another button to press.
+  useEffect(() => {
+    if (status === 'blocked') wasBlocked.current = true
+    if (permission === 'granted' && wasBlocked.current && status === 'blocked') {
+      wasBlocked.current = false
+      onRetry()
+    }
+  }, [permission, status, onRetry])
+
   if (status === 'checking') {
     return (
       <div className="space-y-3">
@@ -62,14 +76,14 @@ export function LocationGate({
             </p>
           )}
 
+          <LocationHelp
+            permission={reason === 'permission_denied' ? 'denied' : permission}
+            onRetry={onRetry}
+          />
+
           <p className="text-[11px] text-muted-foreground">
             This attempt was logged. Your admin can see that you opened Xtend without a location fix.
           </p>
-
-          <Button className="w-full" size="lg" onClick={onRetry}>
-            <RefreshCw className="h-4 w-4" />
-            Retry
-          </Button>
         </CardContent>
       </Card>
     )
