@@ -67,7 +67,14 @@ export interface AlertDetail {
   id: string
   user_id: string
   staff_name: string
+  staff_phone: string | null
   outlet_name: string | null
+  place_name: string | null
+  address: string | null
+  lat: number | null
+  lng: number | null
+  /** Where the alert happened. Null when it came from a ping, not a clock event. */
+  location_label: string | null
   alert_type: AlertType
   distance_m: number | null
   is_resolved: boolean

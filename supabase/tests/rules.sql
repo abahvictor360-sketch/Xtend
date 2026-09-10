@@ -370,6 +370,36 @@ begin
   update public.outlets set shift_start = '09:00' where id = kiosk_id;
 
   -- ---------------------------------------------------------------
+  -- The office can see where people are (migration 009).
+  -- ---------------------------------------------------------------
+  perform act_as(boss);
+  perform assert(
+    (select count(*) from public.live_locations()) = 1,
+    'live locations lists the one person still on shift');
+  perform assert(
+    (select full_name from public.live_locations()) = 'Bala Yusuf',
+    'and names them');
+  perform assert(
+    (select distance_from_outlet_m from public.live_locations()) is not null,
+    'with their distance from the outlet');
+  perform assert(
+    (select inside_geofence from public.live_locations()) is not null,
+    'and whether that is inside the fence');
+
+  -- An alert now says where, not only how far.
+  perform assert(
+    (select location_label from public.alert_detail
+      where alert_type = 'off_site_clock' limit 1) is not null,
+    'an off-site alert carries the location it happened at');
+
+  -- A merchandiser sees none of this.
+  perform act_as(ada);
+  perform assert(
+    (select count(*) from public.live_locations()) = 0,
+    'a merchandiser cannot see where anyone is');
+  perform act_as(boss);
+
+  -- ---------------------------------------------------------------
   -- Who gets told about a given person (migration 007).
   -- ---------------------------------------------------------------
   perform assert(

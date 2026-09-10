@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { MapPin } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -93,6 +94,22 @@ export function AlertsList({
                     {formatLagos(alert.created_at)}
                     {alert.distance_m !== null && ` · ${metres(alert.distance_m)}`}
                   </p>
+                  {alert.location_label && (
+                    <p className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground">
+                      <MapPin className="mt-0.5 h-3 w-3 shrink-0" />
+                      <span className="min-w-0">{alert.location_label}</span>
+                      {alert.lat !== null && alert.lng !== null && (
+                        <a
+                          className="shrink-0 font-semibold text-brand"
+                          href={`https://www.google.com/maps/search/?api=1&query=${alert.lat},${alert.lng}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          map
+                        </a>
+                      )}
+                    </p>
+                  )}
                   {alert.is_resolved && (
                     <p className="mt-1 text-xs text-muted-foreground">
                       Resolved by {alert.resolved_by_name ?? 'an admin'}{' '}

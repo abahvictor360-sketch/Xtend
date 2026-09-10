@@ -3,6 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { apiError, requireApiSession, FIELD_ROLES } from '@/lib/auth'
 import { notifyWatchers } from '@/lib/notify'
+import { resolvePlace } from '@/lib/geocode'
 import { HEARTBEAT_GEOFENCE_M } from '@/lib/geo'
 
 const schema = z.object({
@@ -43,12 +44,24 @@ export async function POST(request: Request) {
         .limit(1)
 
       if (raised && raised.length > 0) {
+        // Name the spot once, here, rather than geocoding every ping: this
+        // runs at most once per person per 30 minutes, when a breach fires.
+        const place = await resolvePlace(parsed.data.lat, parsed.data.lng, null)
+        if (place.label) {
+          await admin
+            .from('location_pings')
+            .update({ place_name: place.label })
+            .eq('id', data.id)
+        }
+
         await notifyWatchers({
           subjectId: session.userId,
           title: `${session.profile.full_name} left the outlet`,
-          body: `Now ${Math.round(data.distance_m ?? 0)} m from where they clocked in, during their shift.`,
-          url: '/admin/alerts',
-          detail: { kind: 'left_geofence', alert_id: raised[0].id },
+          body:
+            `Now at ${place.label}, ` +
+            `${Math.round(data.distance_m ?? 0)} m from where they clocked in.`,
+          url: '/admin',
+          detail: { kind: 'left_geofence', alert_id: raised[0].id, place: place.label },
         })
       }
     }

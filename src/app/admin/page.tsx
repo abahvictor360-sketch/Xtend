@@ -2,6 +2,7 @@ import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LiveAlertFeed } from '@/components/admin/live-alert-feed'
+import { LiveLocations, type LiveLocation } from '@/components/admin/live-locations'
 import { formatLagos } from '@/lib/utils'
 import type { AlertDetail } from '@/lib/types'
 
@@ -40,11 +41,17 @@ export default async function AdminOverview() {
   await requireSession(['admin', 'supervisor'])
   const supabase = await createServerSupabase()
 
-  const [{ data: overview }, { data: absentees }, { data: coverage }, { data: alerts }] =
-    await Promise.all([
+  const [
+    { data: overview },
+    { data: absentees },
+    { data: coverage },
+    { data: live },
+    { data: alerts },
+  ] = await Promise.all([
     supabase.rpc('admin_overview'),
     supabase.rpc('absentees_today'),
     supabase.rpc('coverage_today'),
+    supabase.rpc('live_locations'),
     supabase
       .from('alert_detail')
       .select('*')
@@ -74,6 +81,8 @@ export default async function AdminOverview() {
         <Stat label="Absent" value={stats.absent} tone={stats.absent ? 'bad' : undefined} />
         <Stat label="Not in store" value={stats.off_site} tone={stats.off_site ? 'bad' : undefined} />
       </div>
+
+      <LiveLocations rows={(live ?? []) as LiveLocation[]} />
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

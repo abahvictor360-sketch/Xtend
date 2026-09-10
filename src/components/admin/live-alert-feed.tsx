@@ -66,6 +66,9 @@ export function LiveAlertFeed({ initial }: { initial: AlertDetail[] }) {
                     {LABEL[alert.alert_type] ?? alert.alert_type}
                     {alert.distance_m !== null && ` · ${metres(alert.distance_m)}`}
                   </p>
+                  {alert.location_label && (
+                    <p className="truncate text-xs text-muted-foreground">{alert.location_label}</p>
+                  )}
                 </div>
                 <Badge variant="outline">{formatLagos(alert.created_at, false)}</Badge>
               </li>
