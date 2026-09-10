@@ -8,10 +8,13 @@ import { CameraCapture } from '@/components/field/camera-capture'
 import { Alert } from '@/components/ui/alert'
 import { processSelfie } from '@/lib/image'
 import { deviceInfo } from '@/lib/device'
-import { requireFix, GeoBlocked, haversineMetres } from '@/lib/geo'
+import { requireFix, GeoBlocked, haversineMetres, type Fix } from '@/lib/geo'
 import { submitOrQueue, PermanentJobError } from '@/lib/offline/sync'
 import { formatLagos, metres } from '@/lib/utils'
 import type { AttendanceType, DayState } from '@/lib/types'
+
+/** Older than this and the fix is read again before it is submitted. */
+const STALE_FIX_MS = 90_000
 
 interface Outcome {
   tone: 'success' | 'warning' | 'info'
@@ -45,37 +48,69 @@ export function ClockPanel({
   outletCount?: number
 }) {
   const router = useRouter()
-  const [pendingType, setPendingType] = useState<AttendanceType | null>(null)
+  // Set once the location is in hand; that is what opens the camera.
+  const [pending, setPending] = useState<{
+    type: AttendanceType
+    fix: Fix
+    place: ResolvedPlace
+  } | null>(null)
   const [busyStep, setBusyStep] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [outcome, setOutcome] = useState<Outcome | null>(null)
 
   const nextType: AttendanceType | null = !day.opening ? 'opening' : !day.closing ? 'closing' : null
 
-  const start = useCallback((type: AttendanceType) => {
+  /**
+   * Location first, camera second.
+   *
+   * Taking the selfie before knowing whether there is a usable fix wastes
+   * the one thing that is actually awkward to redo, and a fix read after
+   * the photo is a fix read from wherever they happened to be standing by
+   * then. So the location is settled and named before the camera opens,
+   * and the shutter screen says where it thinks they are.
+   */
+  const start = useCallback(async (type: AttendanceType) => {
     setError(null)
     setOutcome(null)
-    setPendingType(type)
+    try {
+      setBusyStep('Getting your location')
+      const fix = await requireFix()
+
+      setBusyStep('Naming the place')
+      const place = await reverseGeocode(fix.lat, fix.lng)
+
+      setPending({ type, fix, place })
+    } catch (err) {
+      if (err instanceof GeoBlocked) setError(err.message)
+      else setError(err instanceof Error ? err.message : 'Could not read your location.')
+    } finally {
+      setBusyStep(null)
+    }
   }, [])
 
   const onSelfie = useCallback(
     async (photo: Blob) => {
-      const type = pendingType
-      setPendingType(null)
-      if (!type) return
+      const started = pending
+      setPending(null)
+      if (!started) return
+      const type = started.type
 
       setError(null)
       try {
-        // A fresh fix at the moment of capture, not the one from app open.
-        setBusyStep('Checking your location')
-        const fix = await requireFix()
+        // The fix from a moment ago still describes where they are. If the
+        // camera was left open, read it again rather than record a place
+        // they have since walked away from.
+        let fix = started.fix
+        let resolved = started.place
+        if (Date.now() - Date.parse(fix.captured_at) > STALE_FIX_MS) {
+          setBusyStep('Checking your location again')
+          fix = await requireFix()
+          resolved = await reverseGeocode(fix.lat, fix.lng)
+        }
+        const where = resolved.label ?? `${fix.lat.toFixed(5)}, ${fix.lng.toFixed(5)}`
 
         setBusyStep('Compressing your selfie')
         const { full, thumb } = await processSelfie(photo)
-
-        setBusyStep('Naming the place')
-        const resolved = await reverseGeocode(fix.lat, fix.lng)
-        const where = resolved.label ?? `${fix.lat.toFixed(5)}, ${fix.lng.toFixed(5)}`
 
         setBusyStep('Sending')
         const result = await submitOrQueue({
@@ -150,7 +185,7 @@ export function ClockPanel({
         setBusyStep(null)
       }
     },
-    [day.outlet, pendingType, router],
+    [day.outlet, pending, router],
   )
 
   return (
@@ -179,10 +214,11 @@ export function ClockPanel({
       {/* The selfie is mandatory and is taken in-app. There is no file
           input in this flow, so a gallery photo cannot be submitted. */}
       <CameraCapture
-        open={pendingType !== null}
-        title={pendingType === 'opening' ? 'Clock in selfie' : 'Clock out selfie'}
+        open={pending !== null}
+        title={pending?.type === 'closing' ? 'Clock out selfie' : 'Clock in selfie'}
+        subtitle={pending?.place.label ?? null}
         onCapture={(photo) => void onSelfie(photo)}
-        onClose={() => setPendingType(null)}
+        onClose={() => setPending(null)}
       />
 
       {nextType ? (
@@ -190,7 +226,7 @@ export function ClockPanel({
           size="xl"
           className="w-full"
           disabled={Boolean(busyStep)}
-          onClick={() => start(nextType)}
+          onClick={() => void start(nextType)}
         >
           {busyStep ? (
             <>

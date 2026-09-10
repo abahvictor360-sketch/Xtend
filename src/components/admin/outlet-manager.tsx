@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
+import { cn } from '@/lib/utils'
 import type { Outlet } from '@/lib/types'
 
 interface Draft {
@@ -44,18 +45,50 @@ export function OutletManager({
   const [editing, setEditing] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [locating, setLocating] = useState(false)
 
+  /**
+   * Standing in the shop is the most accurate way there is to place a
+   * geofence — better than any geocoder — so this also asks what the
+   * place is called and fills the name and address in, leaving only the
+   * radius to confirm.
+   */
   function useMyLocation() {
     if (!navigator.geolocation) return
+    setLocating(true)
+    setError(null)
     navigator.geolocation.getCurrentPosition(
-      (pos) =>
+      async (pos) => {
+        const { latitude, longitude, accuracy } = pos.coords
         setDraft((d) => ({
           ...d,
-          lat: pos.coords.latitude.toFixed(6),
-          lng: pos.coords.longitude.toFixed(6),
-        })),
-      () => setError('Could not read your location. Type the coordinates instead.'),
-      { enableHighAccuracy: true, timeout: 15000 },
+          lat: latitude.toFixed(6),
+          lng: longitude.toFixed(6),
+        }))
+        if (accuracy > 100) {
+          setError(
+            `Your location is only accurate to ${Math.round(accuracy)} m. Step outside and try again, or the fence will be in the wrong place.`,
+          )
+        }
+        try {
+          const res = await fetch(`/api/geocode?lat=${latitude}&lng=${longitude}`)
+          if (res.ok) {
+            const place = (await res.json()) as { name: string | null; address: string | null }
+            setDraft((d) => ({
+              ...d,
+              name: d.name || (place.name ?? ''),
+              address: d.address || (place.address ?? ''),
+            }))
+          }
+        } finally {
+          setLocating(false)
+        }
+      },
+      () => {
+        setLocating(false)
+        setError('Could not read your location. Type the coordinates instead.')
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
     )
   }
 
@@ -180,9 +213,15 @@ export function OutletManager({
                 />
               </div>
               <div className="flex items-end">
-                <Button type="button" variant="outline" onClick={useMyLocation} className="w-full">
-                  <Crosshair className="h-4 w-4" />
-                  Use my location
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={locating}
+                  onClick={useMyLocation}
+                  className="w-full"
+                >
+                  <Crosshair className={cn('h-4 w-4', locating && 'animate-pulse')} />
+                  {locating ? 'Reading…' : 'I am standing here'}
                 </Button>
               </div>
               <div className="space-y-1">

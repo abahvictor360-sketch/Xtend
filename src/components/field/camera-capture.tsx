@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Camera, RefreshCw, SwitchCamera, X } from 'lucide-react'
+import { Camera, MapPin, RefreshCw, SwitchCamera, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
 type Facing = 'user' | 'environment'
@@ -14,11 +14,14 @@ type Facing = 'user' | 'environment'
 export function CameraCapture({
   open,
   title,
+  subtitle,
   onCapture,
   onClose,
 }: {
   open: boolean
   title: string
+  /** Where the location was read as, shown so it can be checked before the shot. */
+  subtitle?: string | null
   onCapture: (photo: Blob) => void
   onClose: () => void
 }) {
@@ -120,7 +123,15 @@ export function CameraCapture({
         <button type="button" aria-label="Cancel" onClick={onClose} className="rounded-xl bg-white/15 p-2">
           <X className="h-5 w-5" />
         </button>
-        <p className="text-sm font-semibold">{title}</p>
+        <div className="min-w-0 px-2 text-center">
+          <p className="truncate text-sm font-semibold">{title}</p>
+          {subtitle && (
+            <p className="flex items-center justify-center gap-1 truncate text-[11px] text-white/70">
+              <MapPin className="h-3 w-3 shrink-0" />
+              {subtitle}
+            </p>
+          )}
+        </div>
         <button
           type="button"
           aria-label="Switch camera"

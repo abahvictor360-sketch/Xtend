@@ -11,7 +11,7 @@ import { CameraCapture } from '@/components/field/camera-capture'
 import { SectionHeader } from '@/components/field/screen'
 import { TaskRow } from '@/components/field/task-row'
 import { deviceInfo } from '@/lib/device'
-import { GeoBlocked, haversineMetres, requireFix } from '@/lib/geo'
+import { GeoBlocked, haversineMetres, requireFix, type Fix } from '@/lib/geo'
 import { processSelfie } from '@/lib/image'
 import { supabase } from '@/lib/supabase/client'
 import { formatLagos, metres } from '@/lib/utils'
@@ -38,6 +38,9 @@ export interface VisitRow {
   arrived_distance_m: number | null
   arrived_label: string | null
 }
+
+/** Older than this and the fix is read again before it is submitted. */
+const STALE_FIX_MS = 90_000
 
 function uuid() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
@@ -73,9 +76,13 @@ export function StoreVisits({
   const done = visits.filter((v) => v.status !== 'open')
 
   const [picking, setPicking] = useState(false)
-  const [target, setTarget] = useState<VisitOutlet | null>(null)
-  // The camera is open for a check-in whose store has not been named.
-  const [capturing, setCapturing] = useState(false)
+  // Set once the location is in hand; that is what opens the camera. The
+  // outlet is null when they let Xtend work out which store they are at.
+  const [pending, setPending] = useState<{
+    outlet: VisitOutlet | null
+    fix: Fix
+    place: { name: string | null; address: string | null }
+  } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -106,17 +113,48 @@ export function StoreVisits({
     )
   }, [sorted, currentFix])
 
+  /**
+   * Location first, camera second: there is no point taking a selfie to
+   * find out afterwards that the fix was refused, and a location read
+   * after the photo is a location read from wherever they were by then.
+   */
+  const beginCheckIn = useCallback(async (outlet: VisitOutlet | null) => {
+    setError(null)
+    setNotice(null)
+    try {
+      setBusy('Getting your location')
+      const fix = await requireFix()
+
+      setBusy('Naming the place')
+      const place = await namePlace(fix.lat, fix.lng)
+
+      setPending({ outlet, fix, place })
+      setPicking(false)
+    } catch (err) {
+      if (err instanceof GeoBlocked) setError(err.message)
+      else setError(err instanceof Error ? err.message : 'Could not read your location.')
+    } finally {
+      setBusy(null)
+    }
+  }, [])
+
   const checkIn = useCallback(
     async (photo: Blob) => {
-      const outlet = target
-      setCapturing(false)
-      setTarget(null)
+      const started = pending
+      setPending(null)
+      if (!started) return
+      const outlet = started.outlet
 
       setError(null)
       setNotice(null)
       try {
-        setBusy('Checking your location')
-        const fix = await requireFix()
+        let fix = started.fix
+        let place = started.place
+        if (Date.now() - Date.parse(fix.captured_at) > STALE_FIX_MS) {
+          setBusy('Checking your location again')
+          fix = await requireFix()
+          place = await namePlace(fix.lat, fix.lng)
+        }
 
         setBusy('Compressing your selfie')
         const { full, thumb } = await processSelfie(photo)
@@ -139,9 +177,6 @@ export function StoreVisits({
           .from('selfies')
           .upload(thumb_path, thumb, { contentType: 'image/jpeg', upsert: true })
         if (up2.error) throw new Error(up2.error.message)
-
-        setBusy('Naming the place')
-        const place = await namePlace(fix.lat, fix.lng)
 
         setBusy('Checking in')
         const res = await fetch('/api/visits', {
@@ -175,7 +210,6 @@ export function StoreVisits({
             ? `Checked in at ${where}. You were ${metres(distance)} from the door.`
             : `Checked in, but you are ${metres(distance)} from ${where}. This is recorded and your admin has been notified.`,
         )
-        setPicking(false)
         router.refresh()
       } catch (err) {
         if (err instanceof GeoBlocked) setError(err.message)
@@ -184,7 +218,7 @@ export function StoreVisits({
         setBusy(null)
       }
     },
-    [router, target],
+    [router, pending],
   )
 
   const checkOut = useCallback(async () => {
@@ -285,7 +319,7 @@ export function StoreVisits({
                   key={outlet.id}
                   type="button"
                   disabled={Boolean(busy)}
-                  onClick={() => setTarget(outlet)}
+                  onClick={() => void beginCheckIn(outlet)}
                   className="flex w-full items-center gap-3 rounded-2xl border border-border p-3 text-left transition-colors hover:bg-tint"
                 >
                   <span className={`icon-tile ${near ? '' : 'bg-muted text-muted-foreground'}`}>
@@ -312,7 +346,7 @@ export function StoreVisits({
             size="xl"
             className="w-full"
             disabled={Boolean(busy)}
-            onClick={() => setCapturing(true)}
+            onClick={() => void beginCheckIn(null)}
           >
             <Camera className="h-5 w-5" />
             {busy ?? 'Check in here'}
@@ -338,19 +372,17 @@ export function StoreVisits({
       )}
 
       <CameraCapture
-        open={target !== null || capturing}
+        open={pending !== null}
         title={
-          target
-            ? `Check in at ${target.name}`
+          pending?.outlet
+            ? `Check in at ${pending.outlet.name}`
             : here
               ? `Check in at ${here.name}`
               : 'Check in'
         }
+        subtitle={pending?.place.name ?? pending?.place.address ?? null}
         onCapture={(photo) => void checkIn(photo)}
-        onClose={() => {
-          setTarget(null)
-          setCapturing(false)
-        }}
+        onClose={() => setPending(null)}
       />
 
       {done.map((visit) => (

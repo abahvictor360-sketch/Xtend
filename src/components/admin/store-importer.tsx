@@ -181,11 +181,17 @@ export function StoreImporter() {
       const rows = (data.rows as { query: string; visitable: boolean }[]).filter(
         (row) => !skipTraders || row.visitable,
       )
-      setText(rows.map((row) => row.query).join('\n'))
+      const queries = rows.map((row) => row.query)
+      setText(queries.join('\n'))
       setLoadedList({ total: data.total as number, visitable: data.visitable as number })
       setPreview(null)
       setDrafts(null)
       setCreated(null)
+      setBusy(null)
+
+      // Straight on to the lookup: loading the list on its own is not a
+      // step anyone wants to stop at.
+      await send(parseText(queries.join('\n')), false)
     } finally {
       setBusy(null)
     }
@@ -205,7 +211,7 @@ export function StoreImporter() {
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-card p-3">
         <Button variant="outline" size="sm" disabled={Boolean(busy)} onClick={() => void loadSuppliedList()}>
           <ListPlus className="h-3.5 w-3.5" />
-          {busy === 'Loading the list' ? busy : 'Load the July stockist list'}
+          {busy === 'Loading the list' ? busy : 'Find the July stockist list on the map'}
         </Button>
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
           <input
