@@ -1,5 +1,7 @@
+import Link from 'next/link'
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { buttonVariants } from '@/components/ui/button'
 import { OutletManager } from '@/components/admin/outlet-manager'
 import type { Outlet } from '@/lib/types'
 
@@ -20,11 +22,16 @@ export default async function OutletsPage() {
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold">Outlets</h1>
-        <p className="text-sm text-muted-foreground">
-          The geofence radius is per outlet: a mall kiosk is not a standalone store.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-semibold">Outlets</h1>
+          <p className="text-sm text-muted-foreground">
+            The geofence radius is per outlet: a mall kiosk is not a standalone store.
+          </p>
+        </div>
+        <Link href="/admin/outlets/import" className={buttonVariants({ variant: 'outline' })}>
+          Add stores in bulk
+        </Link>
       </div>
 
       <OutletManager

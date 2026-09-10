@@ -1,11 +1,13 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { purgeExpiredSelfies } from '@/lib/retention-server'
 
 export const maxDuration = 60
 
 /**
- * Nightly retention. After 90 days the full-size selfie is deleted and the
- * 200x200 thumbnail becomes the permanent audit record. Roughly 900MB a
- * month at 100 staff, so this is not optional.
+ * Nightly backstop for the 24-hour photo rule. Clock and store-visit
+ * selfies are normally swept by ordinary traffic within minutes of
+ * expiring; this catches the ones that expired overnight, when nobody was
+ * using the app.
  *
  * Vercel Cron sends `Authorization: Bearer $CRON_SECRET`.
  */
@@ -18,15 +20,24 @@ export async function GET(request: Request) {
 
   const supabase = createAdminSupabase()
 
-  const { data, error } = await supabase.rpc('purge_old_selfies')
-  if (error) return Response.json({ error: error.message }, { status: 500 })
+  let purge
+  try {
+    purge = await purgeExpiredSelfies(supabase)
+  } catch (error) {
+    return Response.json(
+      { error: error instanceof Error ? error.message : 'Purge failed' },
+      { status: 500 },
+    )
+  }
 
   // A marketer who forgot to check out should not still read as "in store"
   // tomorrow morning, so yesterday's open visits are marked abandoned.
   const { data: abandoned } = await supabase.rpc('close_abandoned_visits')
 
   return Response.json({
-    purged: data ?? 0,
+    photos_deleted: purge.photos_deleted,
+    records_cleared: purge.records_cleared,
+    failed: purge.failed,
     visits_abandoned: abandoned ?? 0,
     ran_at: new Date().toISOString(),
   })

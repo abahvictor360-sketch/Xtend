@@ -95,7 +95,7 @@ export async function toExportRows(
   const signed = await signSelfies(supabase, rows.map((r) => r.selfie_path))
 
   return rows.map((r) => {
-    const url = signed.get(r.selfie_path) ?? null
+    const url = r.selfie_path ? (signed.get(r.selfie_path) ?? null) : null
     return {
       link: url,
       values: [
@@ -108,7 +108,7 @@ export async function toExportRows(
         metres(r.distance_m),
         `${Math.round(r.accuracy_m)} m`,
         r.status ?? '—',
-        url ?? 'expired',
+        url ?? 'deleted after 24h',
       ],
     }
   })
@@ -117,7 +117,9 @@ export async function toExportRows(
 export function attendanceSheet(rows: ExportRow[]): Sheet {
   return {
     title: 'Xtend attendance export',
-    subtitle: `${rows.length} record(s). Times are Africa/Lagos. Selfie links expire one hour after generation.`,
+    subtitle:
+      `${rows.length} record(s). Times are Africa/Lagos. Clock photos are deleted 24 hours ` +
+      'after capture; links to the ones still held expire an hour after this file was made.',
     sheetName: 'Attendance',
     columns: EXPORT_COLUMNS,
     rows,

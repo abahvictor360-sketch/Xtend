@@ -47,6 +47,7 @@ export default async function AdminOverview() {
     { data: coverage },
     { data: live },
     { data: alerts },
+    { data: retention },
   ] = await Promise.all([
     supabase.rpc('admin_overview'),
     supabase.rpc('absentees_today'),
@@ -58,11 +59,18 @@ export default async function AdminOverview() {
       .eq('is_resolved', false)
       .order('created_at', { ascending: false })
       .limit(20),
+    supabase.rpc('selfie_retention_status'),
   ])
 
   const stats = (overview ?? {}) as Partial<Overview>
   const away = (absentees ?? []) as Absentee[]
   const tracked = (coverage ?? []) as CoverageRow[]
+  const photos = retention as {
+    last_run_at: string | null
+    last_result: { photos_deleted?: number; at?: string } | null
+    photos_held: number
+    overdue: number
+  } | null
 
   return (
     <div className="space-y-6">
@@ -157,6 +165,19 @@ export default async function AdminOverview() {
           </CardContent>
         </Card>
       </div>
+
+      {photos && (
+        <p className="text-xs text-muted-foreground">
+          Clock photos are deleted 24 hours after they are taken — {photos.photos_held} held
+          right now
+          {photos.overdue > 0 && `, ${photos.overdue} due to go on the next sweep`}
+          {photos.last_run_at &&
+            ` · last swept ${formatLagos(photos.last_run_at, false)}, ${
+              photos.last_result?.photos_deleted ?? 0
+            } removed`}
+          .
+        </p>
+      )}
     </div>
   )
 }

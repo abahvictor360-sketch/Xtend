@@ -56,6 +56,24 @@ create table storage.objects (
   name      text not null
 );
 
+-- Supabase rejects a direct DELETE on storage.objects and tells you to use
+-- the Storage API. Without this guard the harness happily accepts SQL that
+-- fails in production, which is exactly how the old retention job shipped
+-- broken. Deletes made by the Storage API arrive as the storage owner, so
+-- the stub lets a superuser through the same way.
+create or replace function storage.protect_delete() returns trigger
+language plpgsql as $$
+begin
+  if coalesce(current_setting('storage.api', true), 'off') <> 'on' then
+    raise exception 'Direct deletion from storage tables is not allowed. Use the Storage API instead.';
+  end if;
+  return old;
+end;
+$$;
+
+create trigger protect_delete before delete on storage.objects
+  for each row execute function storage.protect_delete();
+
 create or replace function storage.foldername(name text) returns text[]
 language sql immutable as $$
   select (string_to_array(name, '/'))[1:array_length(string_to_array(name, '/'), 1) - 1];

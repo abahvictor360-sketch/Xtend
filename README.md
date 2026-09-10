@@ -75,6 +75,7 @@ src/app/admin/…        Dashboard: overview, attendance, store visits,
                        staff, outlets, audit log
 src/app/api/…          Thin route handlers (validate → call Postgres → map errors)
 src/lib/export/…       One renderer, two datasets: attendance and store visits
+src/lib/retention*     The 24-hour rule for clock photos, and the sweep
 src/lib/offline/…      IndexedDB outbox and the flush loop
 src/lib/geo.ts         Location gate: accuracy ceiling, block reasons
 src/lib/image.ts       On-device resize to 640px/150kb plus a 200×200 thumbnail
@@ -198,8 +199,9 @@ Supabase publishes every function in `public` at `/rest/v1/rpc/<name>`, so a
 `EXECUTE` is revoked. Migration 0003 closes that. Two of the seventeen actually
 mattered:
 
-- `purge_old_selfies()` — anyone could have triggered the 90-day image
-  deletion. Now service-role only, which is what the cron route uses.
+- `purge_old_selfies()` — anyone could have triggered the image deletion.
+  Now service-role only (and since migration 0012 it is
+  `purge_expired_selfies()`, on a 24-hour rule).
 - `write_audit(...)` — any signed-in user could have written an audit row
   naming themselves as the actor of anything. Now guarded by `is_admin()`.
 
@@ -220,6 +222,8 @@ you want passwords checked against HaveIBeenPwned.
 | 2 — daily reports with photos, XLSX/DOCX/PDF (and CSV) export, IndexedDB offline queue, retention cron | Built |
 | 3 — heartbeat pings, geofence alerts, realtime dashboard, punctuality and coverage analytics, map view | Built |
 | Store rounds — multi-store allocation, per-store check in and out, store visit reports in PDF/Word/Excel/CSV | Built |
+| Stores in bulk — paste a stockist list, addresses geocoded server-side, reviewed before saving | Built |
+| Photo retention — clock and store-visit selfies deleted 24 hours after capture | Built |
 | 4 — Expo wrapper, background tracking, mock-location detection | Not started; the backend is designed to be reused unchanged |
 
 ## Things worth knowing
@@ -278,10 +282,10 @@ PGURL=postgres://postgres@localhost:5432/postgres ./scripts/test-sql.sh
 ```
 
 `scripts/test-sql.sh` stubs the Supabase-specific schemas and roles, applies
-all three migrations and runs 41 assertions covering distance and status computation,
+every migration and runs its assertions covering distance and status computation,
 the one-per-day constraint, timestamp rejection, geofence alerts and their
-throttles, report rules, the read models, admin-only alert resolution with its
-audit row, and the 90-day retention swap. It does not exercise RLS: a superuser
+throttles, report rules, store visits and store allocation, the read models,
+admin-only alert resolution with its audit row, and the 24-hour photo purge. It does not exercise RLS: a superuser
 session bypasses policies, so those are verified against the project itself.
 
 RLS was verified on the live project by running the same query while

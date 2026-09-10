@@ -24,17 +24,18 @@ export function AttendanceTable({ rows }: { rows: AttendanceDetail[] }) {
         return
       }
       setExpanded(row.id)
-      if (selfies[row.id]) return
+      if (selfies[row.id] || !row.selfie_path) return
 
+      const path = row.selfie_path
       setLoading(row.id)
       try {
         const res = await fetch('/api/signed-url', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bucket: 'selfies', paths: [row.selfie_path], expires_in: 300 }),
+          body: JSON.stringify({ bucket: 'selfies', paths: [path], expires_in: 300 }),
         })
         const { urls } = (await res.json()) as { urls: Record<string, string> }
-        const url = urls?.[row.selfie_path]
+        const url = urls?.[path]
         if (url) setSelfies((current) => ({ ...current, [row.id]: url }))
       } finally {
         setLoading(null)
@@ -123,7 +124,9 @@ export function AttendanceTable({ rows }: { rows: AttendanceDetail[] }) {
                       className="w-32 rounded-2xl border border-border"
                     />
                   ) : (
-                    <p className="text-xs text-muted-foreground">Selfie unavailable.</p>
+                    <p className="text-xs text-muted-foreground">
+                      Photo deleted — clock photos are kept for 24 hours.
+                    </p>
                   )}
                   <dl className="grid gap-x-4 gap-y-1 text-sm">
                     <Detail label="Location" value={row.location_label} />
@@ -203,8 +206,8 @@ export function AttendanceTable({ rows }: { rows: AttendanceDetail[] }) {
                               />
                             ) : (
                               <p className="text-xs text-muted-foreground">
-                                Selfie unavailable. Full images are purged after 90 days; the
-                                thumbnail is the permanent record.
+                                Photo deleted. Clock photos are kept for 24 hours; the time,
+                                place and distance below are the permanent record.
                               </p>
                             )}
                           </div>

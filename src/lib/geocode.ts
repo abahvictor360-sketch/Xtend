@@ -237,3 +237,133 @@ export async function resolvePlace(
     }
   )
 }
+
+// ---------------------------------------------------------------------------
+// Forward geocoding: a store name and address in, coordinates out.
+//
+// This is what turns the stockist list into outlets. A geofence is useless
+// without a point to measure from, and nobody is going to look up sixty sets
+// of coordinates by hand.
+// ---------------------------------------------------------------------------
+
+export interface LocatedPlace {
+  /** The premises as the provider names it, when it recognised one. */
+  name: string | null
+  /** The formatted address the provider settled on. */
+  address: string | null
+  lat: number
+  lng: number
+  source: 'google_places' | 'google_geocode' | 'osm'
+}
+
+interface GoogleTextSearch {
+  places?: {
+    displayName?: { text?: string }
+    formattedAddress?: string
+    location?: { latitude?: number; longitude?: number }
+  }[]
+}
+
+interface GoogleForwardGeocode {
+  results?: {
+    formatted_address?: string
+    geometry?: { location?: { lat?: number; lng?: number } }
+  }[]
+}
+
+interface NominatimSearchResult {
+  lat?: string
+  lon?: string
+  display_name?: string
+  name?: string
+}
+
+/**
+ * Text search first: "Justrite Superstore Bariga" is a business, and Places
+ * pins the shop door. Plain geocoding only knows streets, so it lands on the
+ * middle of the road — good enough to start a geofence from, but second best.
+ */
+async function locateWithGoogle(query: string): Promise<LocatedPlace | null> {
+  const key = process.env.GOOGLE_MAPS_API_KEY
+  if (!key) return null
+
+  const search = await getJson<GoogleTextSearch>(
+    'https://places.googleapis.com/v1/places:searchText',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': key,
+        'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location',
+      },
+      body: JSON.stringify({
+        textQuery: query,
+        maxResultCount: 1,
+        // Nigeria, so a bare "Ikeja City Mall" does not match Ikeja, Texas.
+        regionCode: 'NG',
+      }),
+    },
+  )
+
+  const place = search?.places?.[0]
+  const lat = place?.location?.latitude
+  const lng = place?.location?.longitude
+  if (typeof lat === 'number' && typeof lng === 'number') {
+    return {
+      name: place?.displayName?.text ?? null,
+      address: place?.formattedAddress ?? null,
+      lat,
+      lng,
+      source: 'google_places',
+    }
+  }
+
+  const geocode = await getJson<GoogleForwardGeocode>(
+    `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&region=ng&key=${key}`,
+  )
+  const first = geocode?.results?.[0]
+  const gLat = first?.geometry?.location?.lat
+  const gLng = first?.geometry?.location?.lng
+  if (typeof gLat === 'number' && typeof gLng === 'number') {
+    return {
+      name: null,
+      address: first?.formatted_address ?? null,
+      lat: gLat,
+      lng: gLng,
+      source: 'google_geocode',
+    }
+  }
+
+  return null
+}
+
+async function locateWithOsm(query: string): Promise<LocatedPlace | null> {
+  const results = await getJson<NominatimSearchResult[]>(
+    `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ng&q=${encodeURIComponent(query)}`,
+    { headers: { 'User-Agent': 'Xtend/1.0 (field attendance)' } },
+  )
+  const first = results?.[0]
+  if (!first?.lat || !first?.lon) return null
+
+  return {
+    name: first.name ?? null,
+    address: first.display_name ?? null,
+    lat: Number(first.lat),
+    lng: Number(first.lon),
+    source: 'osm',
+  }
+}
+
+/**
+ * Looks up one store. The name is searched together with the address,
+ * because "Justrite Superstore, Bariga" finds the shop where "Bariga" alone
+ * finds a suburb.
+ */
+export async function locateAddress(
+  name: string,
+  address?: string | null,
+): Promise<LocatedPlace | null> {
+  const query = [name, address].filter(Boolean).join(', ').trim()
+  if (!query) return null
+  return (await locateWithGoogle(query)) ?? (await locateWithOsm(query))
+}

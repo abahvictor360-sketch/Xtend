@@ -113,7 +113,7 @@ export async function toVisitRows(
         v.departed_status ?? '—',
         v.departed_at ? metres(v.departed_distance_m) : '—',
         v.arrived_label ?? '—',
-        url ?? 'expired',
+        url ?? 'deleted after 24h',
       ],
     }
   })
@@ -135,7 +135,8 @@ export function visitSheet(visits: VisitExportRow[], rows: ExportRow[]): Sheet {
     subtitle:
       `${visits.length} visit(s) · ${s.people} staff · ${s.stores} store(s) · ` +
       `${s.minutes} minutes in store · ${s.offSite} arrived away from the store. ` +
-      'Times are Africa/Lagos. Selfie links expire one hour after generation.',
+      'Times are Africa/Lagos. Clock photos are deleted 24 hours after capture; links to ' +
+      'the ones still held expire an hour after this file was made.',
     sheetName: 'Store visits',
     columns: VISIT_COLUMNS,
     rows,

@@ -56,7 +56,8 @@ export interface AttendanceDetail {
   outlet_lng: number | null
   outlet_radius_m: number | null
   status: AttendanceStatus | null
-  selfie_path: string
+  /** Null once the 24-hour retention sweep has deleted the photo. */
+  selfie_path: string | null
   thumb_path: string | null
   device_info: Record<string, unknown>
   client_captured_at: string
@@ -121,7 +122,8 @@ export interface ClockPayload {
   accuracy_m: number
   address: string | null
   place_name: string | null
-  selfie_path: string
+  /** Null once the 24-hour retention sweep has deleted the photo. */
+  selfie_path: string | null
   thumb_path: string | null
   device_info: Record<string, unknown>
   client_captured_at: string

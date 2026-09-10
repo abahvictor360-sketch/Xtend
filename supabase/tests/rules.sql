@@ -530,22 +530,88 @@ begin
     'a merchandiser resolves no targets at all');
 
   -- ---------------------------------------------------------------
-  -- Retention keeps the thumbnail and drops the full image.
+  -- Retention: both images go 24 hours after the photo was taken.
+  --
+  -- The objects themselves are removed by the server through the Storage
+  -- API, because Supabase refuses a direct DELETE. What is tested here is
+  -- the database's half: which paths have expired, forgetting them, and
+  -- the throttle that lets ordinary traffic drive the sweep.
   -- ---------------------------------------------------------------
   perform act_as(bala);
-  insert into storage.objects (bucket_id, name) values ('selfies', 'old/full.jpg');
   insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, thumb_path, client_captured_at)
-  values ('closing', 9.0765, 7.3986, 10, 'old/full.jpg', 'old/thumb.jpg', now());
-  update public.attendance set created_at = now() - interval '100 days'
-   where selfie_path = 'old/full.jpg';
+  values ('closing', 9.0765, 7.3986, 10, 'old/full.jpg', 'old/thumb.jpg', now())
+  returning id into attendance_id;
+  update public.attendance set created_at = now() - interval '25 hours'
+   where id = attendance_id;
 
-  perform assert(public.purge_old_selfies() = 1, 'the purge deletes one expired full image');
+  perform act_as(grace);
+  -- Close whatever round she is still on, so a new visit can open.
+  perform public.end_store_visit(v.id, 9.0765, 7.3986, 12, null, null)
+  from public.store_visits v where v.user_id = grace and v.status = 'open';
+
+  insert into public.store_visits
+    (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at,
+     selfie_path, thumb_path)
+  values (kiosk_id, 9.0765, 7.3986, 12, now(), 'fresh/full.jpg', 'fresh/thumb.jpg')
+  returning id into visit_id;
+
   perform assert(
-    (select count(*) from storage.objects where name = 'old/full.jpg') = 0,
-    'the full-size object is gone');
+    (select count(*) from public.expired_selfie_paths(24)) = 2,
+    'both images of an expired clock event are listed for deletion');
   perform assert(
-    (select selfie_path from public.attendance where thumb_path = 'old/thumb.jpg') = 'old/thumb.jpg',
-    'the thumbnail becomes the permanent record');
+    exists (select 1 from public.expired_selfie_paths(24) where path = 'old/thumb.jpg'),
+    'the thumbnail expires with the full frame, not after it');
+  perform assert(
+    not exists (select 1 from public.expired_selfie_paths(24) where path like 'fresh/%'),
+    'a photo taken today is left alone');
+
+  perform assert(public.forget_expired_selfies(24) = 1, 'one record forgets its photo');
+  perform assert(
+    (select selfie_path is null and thumb_path is null
+     from public.attendance where id = attendance_id),
+    'the attendance row no longer points at an image');
+  perform assert(
+    (select count(*) from public.attendance where id = attendance_id) = 1,
+    'but the attendance record itself survives');
+  perform assert(
+    (select count(*) from public.expired_selfie_paths(24)) = 0,
+    'and nothing is listed for deletion twice');
+
+  -- A store visit photo expires on exactly the same rule.
+  update public.store_visits set created_at = now() - interval '30 hours' where id = visit_id;
+  perform assert(
+    (select count(*) from public.expired_selfie_paths(24)) = 2,
+    'a store visit photo expires on the same rule');
+  perform assert(public.forget_expired_selfies(24) = 1, 'and the visit forgets it too');
+  perform assert(
+    (select status from public.store_visits where id = visit_id) = 'open',
+    'while the visit itself is untouched');
+
+  -- The throttle hands the work to one caller and turns the rest away.
+  perform assert(public.claim_selfie_sweep(10), 'the first sweep of the period is allowed');
+  perform assert(not public.claim_selfie_sweep(10), 'a second one straight away is not');
+  update public.job_runs set last_run_at = now() - interval '20 minutes'
+   where job = 'purge_selfies';
+  perform assert(public.claim_selfie_sweep(10), 'and it is allowed again once the period is up');
+
+  -- An admin can see whether the rule is running; nobody else can.
+  perform act_as(boss);
+  perform assert(
+    (public.selfie_retention_status() ->> 'photos_held') is not null,
+    'an admin can see how many photos are still held');
+  perform act_as(bala);
+  perform assert(public.selfie_retention_status() is null,
+    'a merchandiser cannot see the retention status');
+
+  -- Supabase refuses a SQL delete on storage; the server must use the API.
+  insert into storage.objects (bucket_id, name) values ('selfies', 'guard/1.jpg');
+  begin
+    delete from storage.objects where name = 'guard/1.jpg';
+    raise exception 'NOT REFUSED';
+  exception when others then
+    perform assert(sqlerrm like '%Storage API%',
+      'deleting from storage.objects in SQL is refused, as it is on Supabase');
+  end;
 
   -- ---------------------------------------------------------------
   -- Allocating several stores to one person.
