@@ -12,19 +12,21 @@ export default async function FieldPage() {
   await requireSession(FIELD_ROLES)
   const supabase = await createServerSupabase()
 
-  // The day itself, how much of it the heartbeat saw, and — for marketers —
-  // today's store visits and the stores they can visit.
-  const [{ data, error }, { data: coverage }, { data: visits }, { data: outlets }] =
-    await Promise.all([
-      supabase.rpc('my_day'),
-      supabase.rpc('my_coverage'),
-      supabase.rpc('my_store_visits'),
-      supabase
-        .from('outlets')
-        .select('id, name, address, lat, lng, geofence_radius_m')
-        .eq('is_active', true)
-        .order('name'),
-    ])
+  // The day itself, how much of it the heartbeat saw, today's store visits,
+  // and the stores this person has actually been allocated.
+  const [
+    { data, error },
+    { data: coverage },
+    { data: visits },
+    { data: outlets },
+    { data: canVisitStores },
+  ] = await Promise.all([
+    supabase.rpc('my_day'),
+    supabase.rpc('my_coverage'),
+    supabase.rpc('my_store_visits'),
+    supabase.rpc('my_outlets'),
+    supabase.rpc('can_visit_stores'),
+  ])
 
   if (error || !data) {
     return <Alert variant="destructive">Could not load today. Pull down to retry.</Alert>
@@ -36,6 +38,7 @@ export default async function FieldPage() {
       coverage={(coverage as Coverage) ?? null}
       visits={(visits ?? []) as VisitRow[]}
       outlets={(outlets ?? []) as VisitOutlet[]}
+      canVisitStores={canVisitStores === true}
     />
   )
 }

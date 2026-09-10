@@ -13,6 +13,7 @@ const LINKS = [
   { href: '/admin/alerts', label: 'Alerts', adminOnly: false },
   { href: '/admin/analytics', label: 'Analytics', adminOnly: false },
   { href: '/admin/notifications', label: 'Notifications', adminOnly: false },
+  { href: '/admin/assignments', label: 'Store allocation', adminOnly: false },
   { href: '/admin/users', label: 'Staff', adminOnly: true },
   { href: '/admin/outlets', label: 'Outlets', adminOnly: true },
   { href: '/admin/audit', label: 'Audit log', adminOnly: true },

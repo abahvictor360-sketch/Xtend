@@ -36,6 +36,9 @@ declare
   report_id  uuid;
   visit_id   uuid;
   payload    jsonb;
+  tunde      uuid := gen_random_uuid();
+  depot_id   uuid;
+  alloc      integer;
 begin
   insert into auth.users (id, email) values
     (ada, 'ada@xpel.ng'), (bala, 'bala@xpel.ng'), (boss, 'boss@xpel.ng'),
@@ -373,6 +376,10 @@ begin
   -- ---------------------------------------------------------------
   -- Store visits: a marketer's day is a sequence of them (migration 010).
   -- ---------------------------------------------------------------
+  -- Grace's round covers the kiosk as well as her home store.
+  perform act_as(boss);
+  perform set_staff_outlets(grace, array[kiosk_id]);
+
   perform act_as(grace);
   perform assert(public.can_visit_stores(), 'a marketer records store visits');
 
@@ -539,6 +546,132 @@ begin
   perform assert(
     (select selfie_path from public.attendance where thumb_path = 'old/thumb.jpg') = 'old/thumb.jpg',
     'the thumbnail becomes the permanent record');
+
+  -- ---------------------------------------------------------------
+  -- Allocating several stores to one person.
+  -- ---------------------------------------------------------------
+  insert into auth.users (id, email) values (tunde, 'tunde@xpel.ng');
+  insert into public.outlets (name, lat, lng, geofence_radius_m)
+  values ('Bariga Depot', 6.5390, 3.3841, 120) returning id into depot_id;
+  insert into public.profiles (id, full_name, email, role, outlet_id)
+  values (tunde, 'Tunde Bello', 'tunde@xpel.ng', 'supervisor', depot_id);
+
+  -- Before anything is allocated, a person has exactly their home store.
+  perform assert(
+    (select count(*) from public.outlets_for_user(bala)) = 1,
+    'with no allocation a person has only their home store');
+
+  perform act_as(boss);
+  perform assert(public.can_allocate_outlets(grace), 'an admin allocates stores to a marketer');
+  perform set_staff_outlets(grace, array[kiosk_id, depot_id]);
+
+  perform assert(
+    (select count(*) from public.outlets_for_user(grace)) = 3,
+    'the allocated stores are added to the home store');
+  perform assert(
+    (select count(*) from public.staff_outlets where user_id = grace) = 2,
+    'both allocations are recorded');
+  perform assert(
+    (select assigned_by from public.staff_outlets where user_id = grace and outlet_id = kiosk_id)
+      = boss,
+    'the allocation records who made it');
+
+  -- Sending a shorter list drops what is missing, in one statement.
+  perform set_staff_outlets(grace, array[kiosk_id]);
+  perform assert(
+    (select count(*) from public.staff_outlets where user_id = grace) = 1,
+    'a store left off the list is unallocated');
+  perform assert(
+    not exists (select 1 from public.staff_outlets
+                where user_id = grace and outlet_id = depot_id),
+    'and it is the right one that went');
+
+  perform assert(
+    (select count(*) from public.audit_log
+      where action = 'staff.allocate_outlets' and target_id = grace) = 3,
+    'every allocation leaves an audit row');
+
+  -- A store that does not exist is refused rather than half-saved.
+  begin
+    perform set_staff_outlets(grace, array[gen_random_uuid()]);
+    perform assert(false, 'an unknown store is refused');
+  exception when others then
+    perform assert(
+      (select count(*) from public.staff_outlets where user_id = grace) = 1,
+      'a refused allocation changes nothing');
+  end;
+
+  -- ---------------------------------------------------------------
+  -- The daily clock measures against the nearest allocated store.
+  -- ---------------------------------------------------------------
+  perform act_as(grace);
+  insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+  values ('opening', 9.0766, 7.3987, 10, 'g/1.jpg', now())
+  returning id, status, distance_m into attendance_id, row_status, row_dist;
+
+  perform assert(row_status = 'on_site',
+    'clocking in at an allocated store that is not the home store is on_site');
+  perform assert(
+    (select outlet_id from public.attendance where id = attendance_id) = kiosk_id,
+    'the clock event is attributed to the store they were actually at');
+  perform assert(row_dist < 40, 'and measured against that store');
+
+  -- ---------------------------------------------------------------
+  -- A merchandiser with a second store has to say which one they are in.
+  -- ---------------------------------------------------------------
+  perform act_as(ada);
+  perform assert(not public.can_visit_stores(),
+    'a merchandiser with one store uses the daily clock');
+  perform act_as(boss);
+  perform set_staff_outlets(ada, array[kiosk_id]);
+  perform act_as(ada);
+  perform assert(public.can_visit_stores(),
+    'a merchandiser covering two stores records store visits');
+
+  -- ---------------------------------------------------------------
+  -- A supervisor reaches whoever is allocated to their outlet.
+  -- ---------------------------------------------------------------
+  perform act_as(tunde);
+  perform assert(not public.supervises_user(grace),
+    'a marketer allocated elsewhere is not on the supervisor''s team');
+  perform assert(not public.can_allocate_outlets(bala),
+    'a supervisor cannot allocate to someone outside their team');
+
+  perform act_as(boss);
+  perform set_staff_outlets(grace, array[kiosk_id, depot_id]);
+
+  perform act_as(tunde);
+  perform assert(public.supervises_user(grace),
+    'allocating someone to the supervisor''s outlet puts them on the team');
+  perform assert(public.can_allocate_outlets(grace),
+    'and the supervisor can then change their stores');
+  perform assert(not public.can_allocate_outlets(boss),
+    'a supervisor never allocates stores to an admin');
+
+  perform set_staff_outlets(grace, array[depot_id]);
+  perform assert(
+    (select count(*) from public.staff_outlets where user_id = grace) = 1,
+    'a supervisor''s allocation is saved');
+  perform assert(
+    exists (select 1 from public.audit_log
+            where action = 'staff.allocate_outlets'
+              and target_id = grace and actor_id = tunde),
+    'and audited against the supervisor who made it');
+
+  perform act_as(grace);
+  select count(*) into alloc from public.my_outlets();
+  perform assert(alloc = 2, 'the marketer sees their home store and the allocated one');
+
+  -- Checking into a store nobody gave them is refused outright.
+  begin
+    insert into public.store_visits
+      (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
+    values (kiosk_id, 9.0765, 7.3986, 12, now());
+    perform assert(false, 'an unallocated store must be refused');
+  exception when others then
+    perform assert(sqlerrm like '%not one of yours%',
+      'a marketer cannot check into a store they were never allocated');
+  end;
 
   raise notice 'ALL RULES PASSED';
 end $$;

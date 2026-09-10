@@ -29,4 +29,5 @@ run supabase/migrations/0007_watchers_and_no_show.sql
 run supabase/migrations/0008_place_name.sql
 run supabase/migrations/0009_live_locations.sql
 run supabase/migrations/0010_store_visits.sql
+run supabase/migrations/0011_store_allocation.sql
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rules.sql 2>&1 | grep -E 'NOTICE|ERROR' | sed 's/^psql:[^ ]*: //'

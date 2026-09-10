@@ -1,6 +1,7 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AttendanceDetail } from '@/lib/types'
+import type { ExportRow, Sheet } from '@/lib/export/render'
 import { formatLagos, metres } from '@/lib/utils'
 
 export interface AttendanceFilter {
@@ -66,34 +67,37 @@ export const EXPORT_COLUMNS = [
   'Selfie link',
 ] as const
 
-export interface ExportRow {
-  values: string[]
-  selfieUrl: string | null
-}
-
 /**
  * Signed selfie links expire in an hour: long enough to open the export and
  * check a face, short enough that a leaked spreadsheet is not a photo dump.
  */
-export async function toExportRows(
+export async function signSelfies(
   supabase: SupabaseClient,
-  rows: AttendanceDetail[],
-): Promise<ExportRow[]> {
-  const paths = rows.map((r) => r.selfie_path).filter(Boolean)
+  paths: (string | null | undefined)[],
+): Promise<Map<string, string>> {
+  const wanted = paths.filter((p): p is string => Boolean(p))
   const signed = new Map<string, string>()
 
-  for (let i = 0; i < paths.length; i += 100) {
-    const batch = paths.slice(i, i + 100)
+  for (let i = 0; i < wanted.length; i += 100) {
+    const batch = wanted.slice(i, i + 100)
     const { data } = await supabase.storage.from('selfies').createSignedUrls(batch, 3600)
     for (const item of data ?? []) {
       if (item.path && item.signedUrl) signed.set(item.path, item.signedUrl)
     }
   }
+  return signed
+}
+
+export async function toExportRows(
+  supabase: SupabaseClient,
+  rows: AttendanceDetail[],
+): Promise<ExportRow[]> {
+  const signed = await signSelfies(supabase, rows.map((r) => r.selfie_path))
 
   return rows.map((r) => {
     const url = signed.get(r.selfie_path) ?? null
     return {
-      selfieUrl: url,
+      link: url,
       values: [
         r.staff_name,
         r.attendance_date,
@@ -110,7 +114,19 @@ export async function toExportRows(
   })
 }
 
-export function exportFileName(ext: string) {
-  const stamp = new Date().toISOString().slice(0, 10)
-  return `xtend-attendance-${stamp}.${ext}`
+export function attendanceSheet(rows: ExportRow[]): Sheet {
+  return {
+    title: 'Xtend attendance export',
+    subtitle: `${rows.length} record(s). Times are Africa/Lagos. Selfie links expire one hour after generation.`,
+    sheetName: 'Attendance',
+    columns: EXPORT_COLUMNS,
+    rows,
+    widths: {
+      xlsx: [24, 12, 10, 18, 22, 42, 18, 12, 12, 16],
+      pdf: [98, 58, 48, 66, 96, 190, 60, 48, 54, 58],
+    },
+    linkColumn: EXPORT_COLUMNS.length - 1,
+    statusColumn: 8,
+    fileBase: 'xtend-attendance',
+  }
 }

@@ -71,6 +71,12 @@ export async function POST(request: Request) {
       if (error.message.includes('Only marketers')) {
         return Response.json({ error: 'Only marketers record store visits.' }, { status: 403 })
       }
+      if (error.message.includes('not one of yours')) {
+        return Response.json(
+          { error: 'That store is not allocated to you. Ask your supervisor to add it.' },
+          { status: 403 },
+        )
+      }
       if (error.message.includes('Invalid capture timestamp')) {
         return Response.json(
           { error: 'That capture is too old or your phone clock is wrong. Try again now.' },

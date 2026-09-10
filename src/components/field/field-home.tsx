@@ -29,16 +29,18 @@ export function FieldHome({
   coverage,
   visits,
   outlets,
+  canVisitStores,
 }: {
   day: DayState
   coverage: Coverage | null
   visits: VisitRow[]
   outlets: VisitOutlet[]
+  canVisitStores: boolean
 }) {
   const router = useRouter()
   const gate = useLocationGate()
   // Marketers work store to store, so that is their first screen.
-  const visitsStore = day.can_file_report
+  const visitsStore = canVisitStores
   const [tab, setTab] = useState<Tab>(visitsStore ? 'stores' : 'day')
 
   const tabs: { id: Tab; label: string }[] = [

@@ -70,16 +70,19 @@ refuses anything without the matching bearer token.
 
 ```
 src/app/field/…        Mobile PWA: clock, history, daily report, account
-src/app/admin/…        Dashboard: overview, attendance, alerts, analytics,
+src/app/admin/…        Dashboard: overview, attendance, store visits,
+                       alerts, analytics, notifications, store allocation,
                        staff, outlets, audit log
 src/app/api/…          Thin route handlers (validate → call Postgres → map errors)
+src/lib/export/…       One renderer, two datasets: attendance and store visits
 src/lib/offline/…      IndexedDB outbox and the flush loop
 src/lib/geo.ts         Location gate: accuracy ceiling, block reasons
 src/lib/image.ts       On-device resize to 640px/150kb plus a 200×200 thumbnail
 src/components/brand/  The Xpel mark and lockup
 public/brand/          The supplied logo, background removed
 supabase/migrations/…  The whole of the business logic
-supabase/tests/…       Local Postgres harness and 40 rule assertions
+supabase/tests/…       Local Postgres harness and 110 rule assertions
+scripts/check-exports  Renders every export format and checks the bytes
 ```
 
 ## Roles
@@ -216,6 +219,7 @@ you want passwords checked against HaveIBeenPwned.
 | 1 — auth, forced password change, location gate, clock in/out with selfie and server-side distance, staff management, CSV import, outlets, attendance table | Built |
 | 2 — daily reports with photos, XLSX/DOCX/PDF (and CSV) export, IndexedDB offline queue, retention cron | Built |
 | 3 — heartbeat pings, geofence alerts, realtime dashboard, punctuality and coverage analytics, map view | Built |
+| Store rounds — multi-store allocation, per-store check in and out, store visit reports in PDF/Word/Excel/CSV | Built |
 | 4 — Expo wrapper, background tracking, mock-location detection | Not started; the backend is designed to be reused unchanged |
 
 ## Things worth knowing
