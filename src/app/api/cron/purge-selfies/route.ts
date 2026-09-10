@@ -17,8 +17,17 @@ export async function GET(request: Request) {
   }
 
   const supabase = createAdminSupabase()
+
   const { data, error } = await supabase.rpc('purge_old_selfies')
   if (error) return Response.json({ error: error.message }, { status: 500 })
 
-  return Response.json({ purged: data ?? 0, ran_at: new Date().toISOString() })
+  // A marketer who forgot to check out should not still read as "in store"
+  // tomorrow morning, so yesterday's open visits are marked abandoned.
+  const { data: abandoned } = await supabase.rpc('close_abandoned_visits')
+
+  return Response.json({
+    purged: data ?? 0,
+    visits_abandoned: abandoned ?? 0,
+    ran_at: new Date().toISOString(),
+  })
 }

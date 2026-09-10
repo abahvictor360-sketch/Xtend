@@ -12,6 +12,7 @@ import { usePlace } from '@/components/field/use-place'
 import { OutboxBanner } from '@/components/field/outbox-banner'
 import { ClockPanel } from '@/components/field/clock-panel'
 import { TrackingPanel } from '@/components/field/tracking-panel'
+import { StoreVisits, type VisitOutlet, type VisitRow } from '@/components/field/store-visits'
 import { TaskRow } from '@/components/field/task-row'
 import { SectionHeader } from '@/components/field/screen'
 import { Chip } from '@/components/ui/chip'
@@ -21,18 +22,31 @@ import { haversineMetres } from '@/lib/geo'
 import { formatLagos, metres } from '@/lib/utils'
 import type { ClockSummary, Coverage, DayState } from '@/lib/types'
 
-type Tab = 'day' | 'outlet' | 'tracking'
+type Tab = 'stores' | 'day' | 'outlet' | 'tracking'
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'day', label: 'My day' },
-  { id: 'outlet', label: 'Outlet' },
-  { id: 'tracking', label: 'Tracking' },
-]
-
-export function FieldHome({ day, coverage }: { day: DayState; coverage: Coverage | null }) {
+export function FieldHome({
+  day,
+  coverage,
+  visits,
+  outlets,
+}: {
+  day: DayState
+  coverage: Coverage | null
+  visits: VisitRow[]
+  outlets: VisitOutlet[]
+}) {
   const router = useRouter()
   const gate = useLocationGate()
-  const [tab, setTab] = useState<Tab>('day')
+  // Marketers work store to store, so that is their first screen.
+  const visitsStore = day.can_file_report
+  const [tab, setTab] = useState<Tab>(visitsStore ? 'stores' : 'day')
+
+  const tabs: { id: Tab; label: string }[] = [
+    ...(visitsStore ? [{ id: 'stores' as Tab, label: 'Stores' }] : []),
+    { id: 'day', label: 'My day' },
+    { id: 'outlet', label: visitsStore ? 'Base' : 'Outlet' },
+    { id: 'tracking', label: 'Tracking' },
+  ]
 
   const onShift = Boolean(day.opening) && !day.closing
   const heartbeat = useHeartbeat(onShift && gate.status === 'ready')
@@ -70,7 +84,7 @@ export function FieldHome({ day, coverage }: { day: DayState; coverage: Coverage
       <OutboxBanner onFlushed={() => router.refresh()} />
 
       <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
-        {TABS.map((item) => (
+        {tabs.map((item) => (
           <Chip key={item.id} active={tab === item.id} onClick={() => setTab(item.id)}>
             {item.label}
           </Chip>
@@ -124,6 +138,14 @@ export function FieldHome({ day, coverage }: { day: DayState; coverage: Coverage
       >
         <ClockPanel day={day} />
       </LocationGate>
+
+      {tab === 'stores' && visitsStore && (
+        <StoreVisits
+          outlets={outlets}
+          visits={visits}
+          currentFix={gate.fix ? { lat: gate.fix.lat, lng: gate.fix.lng } : null}
+        />
+      )}
 
       {tab === 'day' && (
         <section className="space-y-3">

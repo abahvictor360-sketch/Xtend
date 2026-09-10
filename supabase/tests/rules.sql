@@ -34,6 +34,7 @@ declare
   alert_count integer;
   attendance_id uuid;
   report_id  uuid;
+  visit_id   uuid;
   payload    jsonb;
 begin
   insert into auth.users (id, email) values
@@ -368,6 +369,87 @@ begin
   -- Put it back so later assertions see the original arrangement.
   update public.profiles set outlet_id = mall_id where id = grace;
   update public.outlets set shift_start = '09:00' where id = kiosk_id;
+
+  -- ---------------------------------------------------------------
+  -- Store visits: a marketer's day is a sequence of them (migration 010).
+  -- ---------------------------------------------------------------
+  perform act_as(grace);
+  perform assert(public.can_visit_stores(), 'a marketer records store visits');
+
+  -- Arrive at the mall, inside its fence.
+  insert into public.store_visits
+    (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at,
+     selfie_path, arrived_place_name)
+  values (mall_id, 6.6019, 3.3516, 12, now(), 'grace/v1.jpg', 'Ikeja City Mall')
+  returning id into visit_id;
+
+  perform assert(
+    (select arrived_status from public.store_visits where id = visit_id) = 'on_site',
+    'arriving inside the store fence is on_site');
+  perform assert(
+    (select round(arrived_distance_m) from public.store_visits where id = visit_id) < 30,
+    'the distance is measured against the store being visited');
+  perform assert(
+    (select status from public.store_visits where id = visit_id) = 'open',
+    'the visit is open until they check out');
+
+  -- A second check-in without checking out is a mistake, not a visit.
+  begin
+    insert into public.store_visits
+      (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
+    values (kiosk_id, 9.0765, 7.3986, 12, now());
+    perform assert(false, 'two open visits must be impossible');
+  exception when unique_violation then
+    perform assert(true, 'a marketer cannot be in two stores at once');
+  end;
+
+  -- Check out, then move to the next store.
+  payload := public.end_store_visit(visit_id, 6.6019, 3.3516, 12, 'Ikeja City Mall', null);
+  perform assert(payload ->> 'status' = 'on_site', 'checking out at the store is on_site');
+  perform assert(
+    (select status from public.store_visits where id = visit_id) = 'closed',
+    'the visit closes');
+  begin
+    perform public.end_store_visit(visit_id, 6.6019, 3.3516, 12, null, null);
+    perform assert(false, 'a closed visit must not close twice');
+  exception when others then
+    perform assert(sqlerrm like '%already closed%', 'a visit cannot be closed twice');
+  end;
+
+  -- Second store of the day, and this one is nowhere near.
+  insert into public.store_visits
+    (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at, selfie_path)
+  values (kiosk_id, 9.0900, 7.4100, 15, now(), 'grace/v2.jpg')
+  returning id into visit_id;
+  perform assert(
+    (select arrived_status from public.store_visits where id = visit_id) = 'off_site',
+    'arriving away from the store is off_site');
+
+  perform assert(
+    (select count(*) from public.my_store_visits()) = 2,
+    'the marketer sees both of today''s visits');
+
+  -- A merchandiser has one fixed outlet and does not do this.
+  perform act_as(ada);
+  perform assert(not public.can_visit_stores(), 'a merchandiser does not record store visits');
+  begin
+    insert into public.store_visits
+      (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
+    values (mall_id, 6.6019, 3.3516, 12, now());
+    perform assert(false, 'a merchandiser must not record a store visit');
+  exception when others then
+    perform assert(true, 'a merchandiser cannot record a store visit');
+  end;
+
+  -- The office sees the visits.
+  perform act_as(boss);
+  perform assert(
+    (select count(*) from public.store_visits_today()) = 2,
+    'the office sees today''s store visits');
+  perform assert(
+    (select outlet_name from public.store_visits_today() order by arrived_at limit 1)
+      = 'Ikeja City Mall',
+    'and which store each one was');
 
   -- ---------------------------------------------------------------
   -- The office can see where people are (migration 009).
