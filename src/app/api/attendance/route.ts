@@ -14,6 +14,8 @@ const schema = z.object({
   lng: z.number().min(-180).max(180),
   accuracy_m: z.number().nonnegative(),
   address: z.string().max(500).nullable().optional(),
+  place_name: z.string().max(200).nullable().optional(),
+  place_source: z.enum(['outlet', 'google', 'osm', 'coordinates']).nullable().optional(),
   selfie_path: z.string().min(1).max(300),
   thumb_path: z.string().min(1).max(300).nullable().optional(),
   device_info: z.record(z.unknown()).default({}),
@@ -47,6 +49,8 @@ export async function POST(request: Request) {
         lng: input.lng,
         accuracy_m: input.accuracy_m,
         address: input.address ?? null,
+        place_name: input.place_name ?? null,
+        place_source: input.place_source ?? null,
         selfie_path: input.selfie_path,
         thumb_path: input.thumb_path ?? null,
         device_info: input.device_info,
@@ -88,7 +92,11 @@ export async function POST(request: Request) {
         data.distance_m === null
           ? 'an unverified location'
           : `${Math.round(data.distance_m)} m from the outlet`
-      const where = input.address ? ` at ${input.address.split(',').slice(0, 2).join(',')}` : ''
+      const where = input.place_name
+        ? ` at ${input.place_name}`
+        : input.address
+          ? ` at ${input.address.split(',').slice(0, 2).join(',')}`
+          : ''
 
       await notifyWatchers({
         subjectId: session.userId,

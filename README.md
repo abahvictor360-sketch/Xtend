@@ -98,6 +98,30 @@ the route handler rejects the request first for a readable error. The field
 app hides the Report tab for merchandisers by asking Postgres the same
 question rather than guessing from the role name.
 
+## Naming the exact place
+
+Clock-in records the premises, not just coordinates:
+`Justrite Superstore Bariga, 56/58 Jagun Molu St, Bariga, Lagos 23401, Lagos`.
+`src/lib/geocode.ts` resolves it from three sources, best first:
+
+1. **The assigned outlet**, when the fix is inside its geofence. If someone
+   is standing in their own store, that store's record is the most accurate
+   answer available and it costs no API call. This covers the normal case
+   exactly, with no key and no network dependency.
+2. **Google** — Places (New) `searchNearby` for the business name, Geocoding
+   for the street address. This is the only source that reliably names
+   Nigerian retail premises, and it is what produces the format above.
+   Set `GOOGLE_MAPS_API_KEY` with *Places API (New)* and *Geocoding API*
+   enabled.
+3. **OpenStreetMap** — Nominatim for the address, Overpass for a named
+   business within 80 m. Free, no key, but Nigerian POI coverage is thin, so
+   it usually names the street rather than the shop.
+
+Whatever answers, `attendance.place_name` and `attendance.address` are stored
+separately along with `place_source`, so the record says where the reading
+came from. The `location_label` column in `attendance_detail` joins them for
+display and can never be empty — coordinates are the floor.
+
 ## Telling the office nobody is in the store
 
 Three things reach an admin or supervisor without anyone opening the

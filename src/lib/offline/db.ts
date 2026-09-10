@@ -12,6 +12,8 @@ export interface ClockJob {
   lng: number
   accuracy_m: number
   address: string | null
+  place_name: string | null
+  place_source: string | null
   device_info: Record<string, unknown>
   /** The moment of capture, never the moment of sync. */
   client_captured_at: string

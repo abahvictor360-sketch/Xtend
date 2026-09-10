@@ -19,13 +19,20 @@ interface Outcome {
   detail: string
 }
 
-async function reverseGeocode(lat: number, lng: number) {
+interface ResolvedPlace {
+  name: string | null
+  address: string | null
+  label: string | null
+  source: 'outlet' | 'google' | 'osm' | 'coordinates' | null
+}
+
+async function reverseGeocode(lat: number, lng: number): Promise<ResolvedPlace> {
   try {
     const res = await fetch(`/api/geocode?lat=${lat}&lng=${lng}`)
-    if (!res.ok) return { address: null, place: null }
-    return (await res.json()) as { address: string | null; place: string | null }
+    if (!res.ok) return { name: null, address: null, label: null, source: null }
+    return (await res.json()) as ResolvedPlace
   } catch {
-    return { address: null, place: null }
+    return { name: null, address: null, label: null, source: null }
   }
 }
 
@@ -60,8 +67,8 @@ export function ClockPanel({ day }: { day: DayState }) {
         const { full, thumb } = await processSelfie(photo)
 
         setBusyStep('Naming the place')
-        const { address, place } = await reverseGeocode(fix.lat, fix.lng)
-        const where = place ?? address ?? `${fix.lat.toFixed(5)}, ${fix.lng.toFixed(5)}`
+        const resolved = await reverseGeocode(fix.lat, fix.lng)
+        const where = resolved.label ?? `${fix.lat.toFixed(5)}, ${fix.lng.toFixed(5)}`
 
         setBusyStep('Sending')
         const result = await submitOrQueue({
@@ -70,7 +77,9 @@ export function ClockPanel({ day }: { day: DayState }) {
           lat: fix.lat,
           lng: fix.lng,
           accuracy_m: fix.accuracy_m,
-          address,
+          address: resolved.address,
+          place_name: resolved.name,
+          place_source: resolved.source,
           // Recorded so an auditor can see the image came from the live
           // camera rather than a file chosen on the device.
           device_info: { ...deviceInfo(), selfie_source: 'in_app_camera' },

@@ -100,6 +100,9 @@ export function AttendanceTable({ rows }: { rows: AttendanceDetail[] }) {
                     {row.outlet_name ?? 'No outlet'} · {metres(row.distance_m)} · ±
                     {Math.round(row.accuracy_m)} m
                   </span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {row.location_label}
+                  </span>
                 </span>
                 <ChevronDown
                   className={`mt-1 h-4 w-4 shrink-0 transition-transform ${
@@ -123,7 +126,7 @@ export function AttendanceTable({ rows }: { rows: AttendanceDetail[] }) {
                     <p className="text-xs text-muted-foreground">Selfie unavailable.</p>
                   )}
                   <dl className="grid gap-x-4 gap-y-1 text-sm">
-                    <Detail label="Captured address" value={row.address ?? '—'} />
+                    <Detail label="Location" value={row.location_label} />
                     <Detail
                       label="Coordinates"
                       value={`${row.lat.toFixed(6)}, ${row.lng.toFixed(6)}`}
@@ -207,6 +210,11 @@ export function AttendanceTable({ rows }: { rows: AttendanceDetail[] }) {
                           </div>
 
                           <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+                            <Detail label="Location" value={row.location_label} />
+                            <Detail
+                              label="Premises"
+                              value={row.place_name ?? 'Not identified'}
+                            />
                             <Detail label="Captured address" value={row.address ?? '—'} />
                             <Detail
                               label="Coordinates"

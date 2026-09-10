@@ -100,7 +100,7 @@ export default async function HistoryPage({
                   {Math.round(event.accuracy_m)} m
                   <span className="mt-0.5 flex items-center gap-1 truncate">
                     <MapPin className="h-3 w-3 shrink-0" />
-                    {event.address ?? `${event.lat.toFixed(5)}, ${event.lng.toFixed(5)}`}
+                    {event.location_label}
                   </span>
                 </>
               }

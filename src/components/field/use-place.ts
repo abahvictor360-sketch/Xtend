@@ -4,8 +4,12 @@ import { useEffect, useState } from 'react'
 import type { Fix } from '@/lib/geo'
 
 export interface Place {
+  /** The premises, when one could be named. */
+  name: string | null
   address: string | null
-  place: string | null
+  /** Name and street joined, or the best available. Never empty. */
+  label: string | null
+  source: 'outlet' | 'google' | 'osm' | 'coordinates' | null
 }
 
 /**

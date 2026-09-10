@@ -44,6 +44,10 @@ export interface AttendanceDetail {
   shift_start: string | null
   shift_end: string | null
   address: string | null
+  place_name: string | null
+  place_source: string | null
+  /** Premises name and street, or the coordinates. Never empty. */
+  location_label: string
   lat: number
   lng: number
   accuracy_m: number
@@ -109,6 +113,7 @@ export interface ClockPayload {
   lng: number
   accuracy_m: number
   address: string | null
+  place_name: string | null
   selfie_path: string
   thumb_path: string | null
   device_info: Record<string, unknown>

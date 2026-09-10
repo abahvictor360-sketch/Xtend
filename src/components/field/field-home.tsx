@@ -38,7 +38,7 @@ export function FieldHome({ day, coverage }: { day: DayState; coverage: Coverage
   const heartbeat = useHeartbeat(onShift && gate.status === 'ready')
 
   const { place, loading: placeLoading } = usePlace(gate.fix)
-  const whereIAm = place?.place ?? place?.address ?? null
+  const whereIAm = place?.label ?? place?.address ?? null
 
   const liveDistance =
     gate.fix && day.outlet
@@ -102,6 +102,9 @@ export function FieldHome({ day, coverage }: { day: DayState; coverage: Coverage
           <p className="text-xs leading-snug">
             <span className="font-semibold">You are at </span>
             {whereIAm ?? (placeLoading ? 'finding the place name…' : 'an unnamed spot')}
+            {place?.source === 'outlet' && (
+              <span className="ml-1 font-semibold">(your assigned store)</span>
+            )}
             {gate.fix && (
               <span className="block text-[11px] opacity-80">
                 {gate.fix.lat.toFixed(5)}, {gate.fix.lng.toFixed(5)} · accurate to ±

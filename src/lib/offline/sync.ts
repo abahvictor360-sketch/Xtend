@@ -81,6 +81,8 @@ async function runClock(job: ClockJob) {
     lng: job.lng,
     accuracy_m: job.accuracy_m,
     address: job.address,
+    place_name: job.place_name,
+    place_source: job.place_source,
     selfie_path,
     thumb_path,
     device_info: job.device_info,

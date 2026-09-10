@@ -280,6 +280,28 @@ begin
     (select count(*) from public.attendance_detail where staff_name = 'Ada Okafor') = 2,
     'the detail view joins staff names');
 
+  -- The location label leads with the premises name and never comes back
+  -- empty: coordinates are the floor (migration 008).
+  perform act_as(ada);
+  update public.attendance set place_name = 'Justrite Superstore Bariga',
+                               address = '56/58 Jagun Molu St, Bariga, Lagos'
+   where user_id = ada and type = 'opening';
+  perform assert(
+    (select location_label from public.attendance_detail
+      where user_id = ada and type = 'opening')
+      = 'Justrite Superstore Bariga, 56/58 Jagun Molu St, Bariga, Lagos',
+    'the label reads as name then street');
+
+  update public.attendance set place_name = null, address = null
+   where user_id = ada and type = 'opening';
+  perform assert(
+    (select location_label from public.attendance_detail
+      where user_id = ada and type = 'opening') like '%.%,%',
+    'with no name or address the label falls back to coordinates');
+
+  -- Back to the admin: the assertions that follow read admin-only views.
+  perform act_as(boss);
+
   perform assert(
     (select days_present from public.staff_analytics(
         (now() at time zone 'Africa/Lagos')::date - 7,
