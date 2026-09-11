@@ -15,9 +15,11 @@ export default async function UsersPage() {
 
   // my_staff() is the whole list for an admin and the supervisor's own
   // team for a supervisor, decided in Postgres rather than here.
-  const [{ data: staff }, { data: outlets }] = await Promise.all([
+  const [{ data: staff }, { data: outlets }, { data: supervisors }] = await Promise.all([
     supabase.rpc('my_staff'),
     supabase.from('outlets').select('*').order('name'),
+    // Empty for a supervisor: only an admin assigns a reporting line.
+    supabase.rpc('available_supervisors'),
   ])
 
   return (
@@ -42,6 +44,7 @@ export default async function UsersPage() {
         staff={(staff ?? []) as Profile[]}
         outlets={(outlets ?? []) as Outlet[]}
         isAdmin={isAdmin}
+        supervisors={(supervisors ?? []) as { id: string; full_name: string; role: string }[]}
       />
     </div>
   )

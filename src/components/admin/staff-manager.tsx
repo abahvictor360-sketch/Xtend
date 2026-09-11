@@ -19,19 +19,36 @@ interface Draft {
   phone: string
   role: UserRole
   outlet_id: string
+  supervisor_id: string
 }
 
-const EMPTY: Draft = { full_name: '', email: '', phone: '', role: 'merchandiser', outlet_id: '' }
+const EMPTY: Draft = {
+  full_name: '',
+  email: '',
+  phone: '',
+  role: 'merchandiser',
+  outlet_id: '',
+  supervisor_id: '',
+}
+
+export interface SupervisorOption {
+  id: string
+  full_name: string
+  role: string
+}
 
 export function StaffManager({
   staff,
   outlets,
   isAdmin = true,
+  supervisors = [],
 }: {
   staff: Profile[]
   outlets: Outlet[]
   /** Supervisors staff their own team but never hand out roles or stores. */
   isAdmin?: boolean
+  /** Who an admin may name as somebody's supervisor. */
+  supervisors?: SupervisorOption[]
 }) {
   const router = useRouter()
   const [draft, setDraft] = useState<Draft>(EMPTY)
@@ -44,6 +61,11 @@ export function StaffManager({
   const outletName = useMemo(
     () => new Map(outlets.map((outlet) => [outlet.id, outlet.name])),
     [outlets],
+  )
+
+  const supervisorName = useMemo(
+    () => new Map(supervisors.map((s) => [s.id, s.full_name])),
+    [supervisors],
   )
 
   const visible = staff.filter((person) => {
@@ -70,6 +92,7 @@ export function StaffManager({
           phone: draft.phone || null,
           role: draft.role,
           outlet_id: draft.outlet_id || null,
+          supervisor_id: draft.supervisor_id || null,
         }),
       })
       const data = await res.json()
@@ -194,6 +217,21 @@ export function StaffManager({
                   ))}
                 </Select>
               </div>
+              <div className="space-y-1">
+                <Label className="field-label">Reports to</Label>
+                <Select
+                  value={draft.supervisor_id}
+                  onChange={(e) => setDraft({ ...draft, supervisor_id: e.target.value })}
+                  disabled={!isAdmin}
+                >
+                  <option value="">{isAdmin ? 'Nobody' : 'You'}</option>
+                  {supervisors.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.full_name}
+                    </option>
+                  ))}
+                </Select>
+              </div>
               <div className="sm:col-span-2 lg:col-span-5">
                 <Button type="submit" disabled={busy}>
                   {busy ? 'Creating…' : 'Create account'}
@@ -213,6 +251,7 @@ export function StaffManager({
               <TableHead>Contact</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Outlet</TableHead>
+              <TableHead>Reports to</TableHead>
               <TableHead>Status</TableHead>
               <TableHead />
             </TableRow>
@@ -258,6 +297,30 @@ export function StaffManager({
                   </Select>
                   ) : (
                     <span className="text-sm text-muted-foreground">{outletName.get(person.outlet_id ?? '') ?? 'No store'}</span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  {isAdmin && supervisors.length > 0 ? (
+                    <Select
+                      className="h-9 w-40"
+                      value={person.supervisor_id ?? ''}
+                      onChange={(e) =>
+                        void patch(person.id, { supervisor_id: e.target.value || null })
+                      }
+                    >
+                      <option value="">Nobody</option>
+                      {supervisors
+                        .filter((s) => s.id !== person.id)
+                        .map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.full_name}
+                          </option>
+                        ))}
+                    </Select>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">
+                      {supervisorName.get(person.supervisor_id ?? '') ?? '—'}
+                    </span>
                   )}
                 </TableCell>
                 <TableCell>
@@ -352,6 +415,31 @@ export function StaffManager({
                   </Select>
                   ) : (
                     <span className="text-sm text-muted-foreground">{outletName.get(person.outlet_id ?? '') ?? 'No store'}</span>
+                  )}
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <Label className="field-label">Reports to</Label>
+                  {isAdmin && supervisors.length > 0 ? (
+                    <Select
+                      className="h-10"
+                      value={person.supervisor_id ?? ''}
+                      onChange={(e) =>
+                        void patch(person.id, { supervisor_id: e.target.value || null })
+                      }
+                    >
+                      <option value="">Nobody</option>
+                      {supervisors
+                        .filter((s) => s.id !== person.id)
+                        .map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.full_name}
+                          </option>
+                        ))}
+                    </Select>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">
+                      {supervisorName.get(person.supervisor_id ?? '') ?? '—'}
+                    </span>
                   )}
                 </div>
               </div>

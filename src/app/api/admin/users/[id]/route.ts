@@ -10,6 +10,7 @@ const patchSchema = z.object({
   phone: z.string().min(7).max(20).nullable().optional(),
   role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).optional(),
   outlet_id: z.string().uuid().nullable().optional(),
+  supervisor_id: z.string().uuid().nullable().optional(),
   is_active: z.boolean().optional(),
   reset_password: z.boolean().optional(),
 })
@@ -44,16 +45,27 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       if (!allowed) {
         return Response.json({ error: 'That person is not on your team.' }, { status: 403 })
       }
-      if (input.role !== undefined || input.outlet_id !== undefined) {
+      if (
+        input.role !== undefined ||
+        input.outlet_id !== undefined ||
+        input.supervisor_id !== undefined
+      ) {
         return Response.json(
-          { error: "Only an admin can change somebody's role or store." },
+          { error: "Only an admin can change somebody's role, store or supervisor." },
           { status: 403 },
         )
       }
     }
 
     const changes: Record<string, unknown> = {}
-    for (const key of ['full_name', 'phone', 'role', 'outlet_id', 'is_active'] as const) {
+    for (const key of [
+      'full_name',
+      'phone',
+      'role',
+      'outlet_id',
+      'supervisor_id',
+      'is_active',
+    ] as const) {
       if (input[key] !== undefined) changes[key] = input[key]
     }
 

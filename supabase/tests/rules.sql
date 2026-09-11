@@ -964,5 +964,42 @@ begin
       'nobody supervises themselves');
   end;
 
+  -- ---------------------------------------------------------------
+  -- Promoting and demoting (migration 018).
+  -- ---------------------------------------------------------------
+  perform act_as(boss);
+  update public.profiles set supervisor_id = tunde where id = grace;
+  perform assert(
+    (select supervisor_id from public.profiles where id = grace) = tunde,
+    'the marketer reports to the supervisor');
+
+  -- An admin may make anybody a supervisor, or an admin.
+  update public.profiles set role = 'supervisor'::user_role where id = ada;
+  perform assert(
+    (select role from public.profiles where id = ada) = 'supervisor',
+    'an admin promotes a merchandiser to supervisor');
+  update public.profiles set role = 'admin'::user_role where id = ada;
+  perform assert(
+    (select role from public.profiles where id = ada) = 'admin',
+    'and on to admin');
+  perform assert(
+    (select count(*) from public.available_supervisors()) >= 3,
+    'and they are then offered as somebody to report to');
+
+  -- Demote the supervisor: whoever reported to them is released.
+  update public.profiles set role = 'marketer'::user_role where id = tunde;
+  perform assert(
+    (select supervisor_id from public.profiles where id = grace) is null,
+    'demoting a supervisor releases the people who reported to them');
+
+  -- Put it all back.
+  update public.profiles set role = 'supervisor'::user_role where id = tunde;
+  update public.profiles set role = 'merchandiser'::user_role where id = ada;
+
+  perform act_as(tunde);
+  perform assert(
+    (select count(*) from public.available_supervisors()) = 0,
+    'a supervisor is not offered the list of supervisors to assign');
+
   raise notice 'ALL RULES PASSED';
 end $$;
