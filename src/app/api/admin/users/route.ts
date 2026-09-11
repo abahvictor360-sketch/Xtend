@@ -11,11 +11,12 @@ const createUserSchema = z.object({
   phone: z.string().min(7).max(20).nullable().optional(),
   role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).default('merchandiser'),
   outlet_id: z.string().uuid().nullable().optional(),
+  supervisor_id: z.string().uuid().nullable().optional(),
 })
 
 export async function POST(request: Request) {
   try {
-    await requireApiSession(['admin'])
+    const session = await requireApiSession(['admin', 'supervisor'])
     const parsed = createUserSchema.safeParse(await request.json())
     if (!parsed.success) {
       return Response.json(
@@ -24,6 +25,22 @@ export async function POST(request: Request) {
       )
     }
     const input = parsed.data
+
+    // A supervisor staffs their own team: field roles only, reporting to
+    // them. Role is the one field that grants power, so it stays with
+    // admins.
+    const isSupervisor = session.profile.role === 'supervisor'
+    if (isSupervisor && input.role !== 'merchandiser' && input.role !== 'marketer') {
+      return Response.json(
+        { error: 'Supervisors can create merchandisers and marketers only.' },
+        { status: 403 },
+      )
+    }
+    const supervisor_id = isSupervisor ? session.userId : (input.supervisor_id ?? null)
+    const outlet_id = isSupervisor
+      ? (input.outlet_id ?? session.profile.outlet_id ?? null)
+      : (input.outlet_id ?? null)
+
     const email = input.email.toLowerCase().trim()
     const temp_password = generateTempPassword()
 
@@ -47,7 +64,8 @@ export async function POST(request: Request) {
       email,
       phone: input.phone || null,
       role: input.role,
-      outlet_id: input.outlet_id || null,
+      outlet_id: outlet_id || null,
+      supervisor_id,
       must_change_password: true,
     })
 
@@ -65,12 +83,21 @@ export async function POST(request: Request) {
       temp_password,
     })
 
-    const supabase = await createServerSupabase()
-    await audit(supabase, 'user.create', 'profiles', created.user.id, {
-      email,
-      role: input.role,
-      delivery,
-    })
+    // Supervisors may create staff but may not call write_audit, so their
+    // row is written with the service role rather than skipped.
+    const meta = { email, role: input.role, delivery, created_by_role: session.profile.role }
+    if (isSupervisor) {
+      await admin.from('audit_log').insert({
+        actor_id: session.userId,
+        action: 'user.create',
+        target_table: 'profiles',
+        target_id: created.user.id,
+        meta,
+      })
+    } else {
+      const supabase = await createServerSupabase()
+      await audit(supabase, 'user.create', 'profiles', created.user.id, meta)
+    }
 
     return Response.json(
       { user_id: created.user.id, temp_password, delivery },

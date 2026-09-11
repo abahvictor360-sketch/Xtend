@@ -35,4 +35,5 @@ run supabase/migrations/0013_harden_triggers.sql
 run supabase/migrations/0014_check_in_without_picking.sql
 run supabase/migrations/0015_store_name_from_map.sql
 run supabase/migrations/0016_visits_without_allocation.sql
+run supabase/migrations/0017_supervisor_manages_staff.sql
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rules.sql 2>&1 | grep -E 'NOTICE|ERROR' | sed 's/^psql:[^ ]*: //'

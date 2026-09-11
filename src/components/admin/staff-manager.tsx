@@ -23,7 +23,16 @@ interface Draft {
 
 const EMPTY: Draft = { full_name: '', email: '', phone: '', role: 'merchandiser', outlet_id: '' }
 
-export function StaffManager({ staff, outlets }: { staff: Profile[]; outlets: Outlet[] }) {
+export function StaffManager({
+  staff,
+  outlets,
+  isAdmin = true,
+}: {
+  staff: Profile[]
+  outlets: Outlet[]
+  /** Supervisors staff their own team but never hand out roles or stores. */
+  isAdmin?: boolean
+}) {
   const router = useRouter()
   const [draft, setDraft] = useState<Draft>(EMPTY)
   const [creating, setCreating] = useState(false)
@@ -167,8 +176,8 @@ export function StaffManager({ staff, outlets }: { staff: Profile[]; outlets: Ou
                 >
                   <option value="merchandiser">Merchandiser</option>
                   <option value="marketer">Marketer</option>
-                  <option value="supervisor">Supervisor</option>
-                  <option value="admin">Admin</option>
+                  {isAdmin && <option value="supervisor">Supervisor</option>}
+                  {isAdmin && <option value="admin">Admin</option>}
                 </Select>
               </div>
               <div className="space-y-1">
@@ -218,7 +227,8 @@ export function StaffManager({ staff, outlets }: { staff: Profile[]; outlets: Ou
                   {person.phone ?? '—'}
                 </TableCell>
                 <TableCell>
-                  <Select
+                  {isAdmin ? (
+<Select
                     className="h-9 w-36"
                     value={person.role}
                     onChange={(e) => void patch(person.id, { role: e.target.value })}
@@ -228,9 +238,13 @@ export function StaffManager({ staff, outlets }: { staff: Profile[]; outlets: Ou
                     <option value="supervisor">Supervisor</option>
                     <option value="admin">Admin</option>
                   </Select>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">{person.role}</span>
+                  )}
                 </TableCell>
                 <TableCell>
-                  <Select
+                  {isAdmin ? (
+<Select
                     className="h-9 w-44"
                     value={person.outlet_id ?? ''}
                     onChange={(e) => void patch(person.id, { outlet_id: e.target.value || null })}
@@ -242,6 +256,9 @@ export function StaffManager({ staff, outlets }: { staff: Profile[]; outlets: Ou
                       </option>
                     ))}
                   </Select>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">{outletName.get(person.outlet_id ?? '') ?? 'No store'}</span>
+                  )}
                 </TableCell>
                 <TableCell>
                   {person.is_active ? (
@@ -303,7 +320,8 @@ export function StaffManager({ staff, outlets }: { staff: Profile[]; outlets: Ou
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1">
                   <Label className="field-label">Role</Label>
-                  <Select
+                  {isAdmin ? (
+<Select
                     className="h-10"
                     value={person.role}
                     onChange={(e) => void patch(person.id, { role: e.target.value })}
@@ -313,10 +331,14 @@ export function StaffManager({ staff, outlets }: { staff: Profile[]; outlets: Ou
                     <option value="supervisor">Supervisor</option>
                     <option value="admin">Admin</option>
                   </Select>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">{person.role}</span>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <Label className="field-label">Outlet</Label>
-                  <Select
+                  {isAdmin ? (
+<Select
                     className="h-10"
                     value={person.outlet_id ?? ''}
                     onChange={(e) => void patch(person.id, { outlet_id: e.target.value || null })}
@@ -328,6 +350,9 @@ export function StaffManager({ staff, outlets }: { staff: Profile[]; outlets: Ou
                       </option>
                     ))}
                   </Select>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">{outletName.get(person.outlet_id ?? '') ?? 'No store'}</span>
+                  )}
                 </div>
               </div>
 

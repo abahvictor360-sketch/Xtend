@@ -9,14 +9,14 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Staff — Xtend' }
 
 export default async function UsersPage() {
-  await requireSession(['admin'])
+  const session = await requireSession(['admin', 'supervisor'])
+  const isAdmin = session.profile.role === 'admin'
   const supabase = await createServerSupabase()
 
+  // my_staff() is the whole list for an admin and the supervisor's own
+  // team for a supervisor, decided in Postgres rather than here.
   const [{ data: staff }, { data: outlets }] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('id, full_name, email, phone, role, outlet_id, is_active, must_change_password, created_at, updated_at, avatar_path')
-      .order('full_name'),
+    supabase.rpc('my_staff'),
     supabase.from('outlets').select('*').order('name'),
   ])
 
@@ -26,16 +26,23 @@ export default async function UsersPage() {
         <div>
           <h1 className="text-xl font-semibold">Staff</h1>
           <p className="text-sm text-muted-foreground">
-            Accounts are created here. Deactivation is a soft delete: attendance history is never
-            destroyed.
+            {isAdmin
+              ? 'Accounts are created here. Deactivation is a soft delete: attendance history is never destroyed.'
+              : 'Your team. People you add here report to you, and you can reset a password or deactivate an account.'}
           </p>
         </div>
-        <Link href="/admin/users/import" className={buttonVariants({ variant: 'outline' })}>
-          Bulk import CSV
-        </Link>
+        {isAdmin && (
+          <Link href="/admin/users/import" className={buttonVariants({ variant: 'outline' })}>
+            Bulk import CSV
+          </Link>
+        )}
       </div>
 
-      <StaffManager staff={(staff ?? []) as Profile[]} outlets={(outlets ?? []) as Outlet[]} />
+      <StaffManager
+        staff={(staff ?? []) as Profile[]}
+        outlets={(outlets ?? []) as Outlet[]}
+        isAdmin={isAdmin}
+      />
     </div>
   )
 }

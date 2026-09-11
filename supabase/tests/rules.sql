@@ -894,5 +894,75 @@ begin
     'with nothing from the map and no outlet, the place is simply unnamed');
   perform public.end_store_visit(visit_id, 6.45, 3.40, 10, null, null);
 
+  -- ---------------------------------------------------------------
+  -- A supervisor's team, and what they may do to it (migration 017).
+  -- ---------------------------------------------------------------
+  -- Grace has no outlet and no allocation, so only reporting can link her.
+  perform act_as(boss);
+  update public.profiles set outlet_id = null, supervisor_id = null where id = grace;
+
+  perform act_as(tunde);
+  perform assert(not public.supervises_user(grace),
+    'with no outlet and no reporting line, she is on nobody''s team');
+
+  perform act_as(boss);
+  update public.profiles set supervisor_id = tunde where id = grace;
+
+  perform act_as(tunde);
+  perform assert(public.supervises_user(grace),
+    'naming the supervisor puts her on their team');
+  perform assert(public.can_edit_staff(grace), 'and they may edit her account');
+  perform assert(not public.can_edit_staff(boss), 'but not the admin''s');
+  -- An admin who happens to sit at the supervisor's own outlet is still
+  -- not theirs to touch.
+  perform act_as(boss);
+  update public.profiles set outlet_id = (select outlet_id from public.profiles where id = tunde)
+   where id = boss;
+  perform act_as(tunde);
+  perform assert(not public.supervises_user(boss),
+    'sharing an outlet with an admin does not make them your staff');
+  perform assert(not public.can_edit_staff(boss), 'nor editable');
+  perform act_as(boss);
+  update public.profiles set outlet_id = null where id = boss;
+  perform act_as(tunde);
+  perform assert(public.can_create_staff('marketer'::user_role),
+    'a supervisor creates marketers');
+  perform assert(public.can_create_staff('merchandiser'::user_role),
+    'and merchandisers');
+  perform assert(not public.can_create_staff('supervisor'::user_role),
+    'but never another supervisor');
+  perform assert(not public.can_create_staff('admin'::user_role),
+    'and never an admin');
+  perform assert(
+    (select count(*) from public.my_staff()) = 2,
+    'their staff list is their team and themselves');
+
+  perform act_as(boss);
+  perform assert(public.can_create_staff('admin'::user_role), 'an admin creates anyone');
+  perform assert(
+    (select count(*) from public.my_staff()) = (select count(*) from public.profiles),
+    'and sees everybody');
+
+  perform act_as(ada);
+  perform assert(not public.can_create_staff('merchandiser'::user_role),
+    'a merchandiser creates nobody');
+
+  -- Nonsense reporting lines are refused.
+  perform act_as(boss);
+  begin
+    update public.profiles set supervisor_id = grace where id = ada;
+    perform assert(false, 'a marketer must not be a supervisor');
+  exception when others then
+    perform assert(sqlerrm like '%not a supervisor%',
+      'somebody who is not a supervisor cannot be named as one');
+  end;
+  begin
+    update public.profiles set supervisor_id = tunde where id = tunde;
+    perform assert(false, 'self-supervision must be refused');
+  exception when others then
+    perform assert(sqlerrm like '%supervise themselves%',
+      'nobody supervises themselves');
+  end;
+
   raise notice 'ALL RULES PASSED';
 end $$;

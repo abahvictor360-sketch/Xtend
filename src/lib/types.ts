@@ -23,6 +23,8 @@ export interface Profile {
   email: string | null
   role: UserRole
   outlet_id: string | null
+  /** Who this person reports to, independent of any store. */
+  supervisor_id?: string | null
   avatar_path: string | null
   is_active: boolean
   must_change_password: boolean

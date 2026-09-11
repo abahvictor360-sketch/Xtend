@@ -16,7 +16,7 @@ const patchSchema = z.object({
 
 export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireApiSession(['admin'])
+    const session = await requireApiSession(['admin', 'supervisor'])
     const { id } = await ctx.params
     const parsed = patchSchema.safeParse(await request.json())
     if (!parsed.success) return Response.json({ error: 'Invalid change' }, { status: 400 })
@@ -30,6 +30,28 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
     }
 
     const admin = createAdminSupabase()
+
+    // A supervisor edits their own team, and only the details that do not
+    // grant anybody anything: name, phone, active, a new password.
+    const isSupervisor = session.profile.role === 'supervisor'
+    if (isSupervisor) {
+      const { data: allowed } = await admin
+        .from('profiles')
+        .select('id')
+        .eq('id', id)
+        .eq('supervisor_id', session.userId)
+        .maybeSingle<{ id: string }>()
+      if (!allowed) {
+        return Response.json({ error: 'That person is not on your team.' }, { status: 403 })
+      }
+      if (input.role !== undefined || input.outlet_id !== undefined) {
+        return Response.json(
+          { error: "Only an admin can change somebody's role or store." },
+          { status: 403 },
+        )
+      }
+    }
+
     const changes: Record<string, unknown> = {}
     for (const key of ['full_name', 'phone', 'role', 'outlet_id', 'is_active'] as const) {
       if (input[key] !== undefined) changes[key] = input[key]
@@ -50,8 +72,19 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
 
     // Deactivation is a soft delete. Attendance rows are never destroyed;
     // the foreign key is on delete restrict to make that structural.
-    const supabase = await createServerSupabase()
-    await audit(supabase, input.reset_password ? 'user.reset_password' : 'user.update', 'profiles', id, changes)
+    const action = input.reset_password ? 'user.reset_password' : 'user.update'
+    if (isSupervisor) {
+      await admin.from('audit_log').insert({
+        actor_id: session.userId,
+        action,
+        target_table: 'profiles',
+        target_id: id,
+        meta: changes,
+      })
+    } else {
+      const supabase = await createServerSupabase()
+      await audit(supabase, action, 'profiles', id, changes)
+    }
 
     return Response.json({ ok: true, temp_password })
   } catch (error) {
