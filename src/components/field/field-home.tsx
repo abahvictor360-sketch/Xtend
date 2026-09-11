@@ -138,7 +138,7 @@ export function FieldHome({
         message={gate.message}
         onRetry={() => void gate.retry()}
       >
-        <ClockPanel day={day} outletCount={outlets.length} />
+        <ClockPanel day={day} />
       </LocationGate>
 
       {tab === 'stores' && visitsStore && (

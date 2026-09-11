@@ -21,9 +21,9 @@ export default async function AssignmentsPage() {
       <div>
         <h1 className="text-xl font-semibold">Store allocation</h1>
         <p className="text-sm text-muted-foreground">
-          Give a marketer or merchandiser the stores they are responsible for. Allocated stores
-          are the ones they can check into, and the daily clock measures against whichever of
-          them they are nearest.
+          Optional. Marketers do not need this: they check in wherever they are and Xtend
+          records the store from the map. Allocate stores when you want a merchandiser measured
+          against a particular shop, or to put someone on a supervisor&rsquo;s team.
         </p>
       </div>
 

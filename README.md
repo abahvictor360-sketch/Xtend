@@ -224,7 +224,7 @@ you want passwords checked against HaveIBeenPwned.
 | 1 — auth, forced password change, location gate, clock in/out with selfie and server-side distance, staff management, CSV import, outlets, attendance table | Built |
 | 2 — daily reports with photos, XLSX/DOCX/PDF (and CSV) export, IndexedDB offline queue, retention cron | Built |
 | 3 — heartbeat pings, geofence alerts, realtime dashboard, punctuality and coverage analytics, map view | Built |
-| Store rounds — multi-store allocation, check in without naming the store, store visit reports in PDF/Word/Excel/CSV | Built |
+| Store rounds — check in anywhere with no allocation, the day as in/stores/out, reports in PDF/Word/Excel/CSV | Built |
 | Stores in bulk — load the supplied customer list or paste your own, geocoded server-side in chunks, reviewed before saving | Built |
 | Location help — per-device instructions for turning location back on, clearing itself when the permission changes | Built |
 | Photo retention — clock and store-visit selfies deleted 24 hours after capture | Built |

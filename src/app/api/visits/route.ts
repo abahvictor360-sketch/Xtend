@@ -42,7 +42,8 @@ export async function POST(request: Request) {
     const { data, error } = await supabase
       .from('store_visits')
       .insert({
-        // Null lets the trigger choose; it is never left null on the row.
+        // Null lets the trigger attribute it to a known store if they are
+        // standing in one, and otherwise leave the visit standing alone.
         outlet_id: input.outlet_id ?? null,
         arrived_lat: input.lat,
         arrived_lng: input.lng,
@@ -57,9 +58,9 @@ export async function POST(request: Request) {
       .select('id, outlet_id, arrived_at, arrived_status, arrived_distance_m, outlet_radius_m')
       .single<{
         id: string
-        outlet_id: string
+        outlet_id: string | null
         arrived_at: string
-        arrived_status: string
+        arrived_status: string | null
         arrived_distance_m: number | null
         outlet_radius_m: number | null
       }>()
@@ -74,18 +75,6 @@ export async function POST(request: Request) {
       if (error.message.includes('Only marketers')) {
         return Response.json({ error: 'Only marketers record store visits.' }, { status: 403 })
       }
-      if (error.message.includes('no stores allocated')) {
-        return Response.json(
-          { error: 'You have no stores allocated. Ask your supervisor to add some.' },
-          { status: 400 },
-        )
-      }
-      if (error.message.includes('not one of yours')) {
-        return Response.json(
-          { error: 'That store is not allocated to you. Ask your supervisor to add it.' },
-          { status: 403 },
-        )
-      }
       if (error.message.includes('Invalid capture timestamp')) {
         return Response.json(
           { error: 'That capture is too old or your phone clock is wrong. Try again now.' },
@@ -95,32 +84,30 @@ export async function POST(request: Request) {
       return Response.json({ error: error.message }, { status: 400 })
     }
 
-    // The store may have been chosen by the database, and when they are
-    // not inside one of their own the map names the premises instead, so
-    // both come from the row that was written rather than the request.
+    // The store is whatever the row ended up with: a known outlet if they
+    // were standing in one, otherwise the name the map gave the building.
     const { data: detail } = await supabase
       .from('store_visit_detail')
       .select('outlet_name, store_label, store_label_source')
       .eq('id', data.id)
       .maybeSingle<{
-        outlet_name: string
+        outlet_name: string | null
         store_label: string
         store_label_source: 'outlet' | 'map'
       }>()
     const outlet = detail ? { name: detail.outlet_name } : null
 
-    if (data.arrived_status !== 'on_site') {
+    // A shop Xtend has never heard of is a normal visit, not an exception.
+    // Only a named store they were not at is worth interrupting anyone for.
+    if (data.arrived_status === 'off_site' || data.arrived_status === 'flagged') {
       await notifyWatchers({
         subjectId: session.userId,
-        title:
-          detail?.store_label_source === 'map'
-            ? `${session.profile.full_name} checked in at ${detail.store_label}`
-            : `${session.profile.full_name} checked in away from ${outlet?.name ?? 'the store'}`,
+        title: `${session.profile.full_name} checked in away from ${outlet?.name ?? 'the store'}`,
         body:
           data.arrived_distance_m === null
             ? 'The location could not be verified.'
-            : `${Math.round(data.arrived_distance_m)} m from ${outlet?.name ?? 'the store'}` +
-              (detail?.store_label_source === 'map' ? ', which is not one of their stores.' : '.'),
+            : `${Math.round(data.arrived_distance_m)} m from ${outlet?.name ?? 'the store'}, ` +
+              `at ${detail?.store_label ?? 'an unnamed place'}.`,
         url: '/admin/visits',
         detail: { kind: 'store_visit_off_site', visit_id: data.id },
       })

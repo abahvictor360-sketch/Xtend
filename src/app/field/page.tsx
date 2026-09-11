@@ -13,7 +13,8 @@ export default async function FieldPage() {
   const supabase = await createServerSupabase()
 
   // The day itself, how much of it the heartbeat saw, today's store visits,
-  // and the stores this person has actually been allocated.
+  // and every store Xtend knows, so the picker can name one without anybody
+  // having had to allocate it first.
   const [
     { data, error },
     { data: coverage },
@@ -24,7 +25,11 @@ export default async function FieldPage() {
     supabase.rpc('my_day'),
     supabase.rpc('my_coverage'),
     supabase.rpc('my_store_visits'),
-    supabase.rpc('my_outlets'),
+    supabase
+      .from('outlets')
+      .select('id, name, address, lat, lng, geofence_radius_m')
+      .eq('is_active', true)
+      .order('name'),
     supabase.rpc('can_visit_stores'),
   ])
 

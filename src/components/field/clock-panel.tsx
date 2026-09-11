@@ -39,14 +39,7 @@ async function reverseGeocode(lat: number, lng: number): Promise<ResolvedPlace> 
   }
 }
 
-export function ClockPanel({
-  day,
-  outletCount = 0,
-}: {
-  day: DayState
-  /** How many stores they have altogether, home outlet included. */
-  outletCount?: number
-}) {
+export function ClockPanel({ day }: { day: DayState }) {
   const router = useRouter()
   // Set once the location is in hand; that is what opens the camera.
   const [pending, setPending] = useState<{
@@ -247,19 +240,9 @@ export function ClockPanel({
         </Alert>
       )}
 
-      {outletCount === 0 && (
-        <Alert variant="warning">
-          You have no store assigned, so distance cannot be checked and every clock event will be
-          flagged. Ask your admin to assign one.
-        </Alert>
-      )}
-
-      {outletCount > 1 && (
-        <p className="text-xs text-muted-foreground">
-          You cover {outletCount} stores. You do not have to choose one — Xtend measures against
-          whichever you are closest to when you clock.
-        </p>
-      )}
+      <p className="text-xs text-muted-foreground">
+        Your clock-in records the time and where you were. You do not have to choose a store.
+      </p>
     </div>
   )
 }

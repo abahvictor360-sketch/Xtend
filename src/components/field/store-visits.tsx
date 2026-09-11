@@ -212,9 +212,9 @@ export function StoreVisits({
         setNotice(
           data.visit?.arrived_status === 'on_site'
             ? `Checked in at ${label}. You were ${metres(distance)} from the door.`
-            : data.visit?.store_label_source === 'map'
-              ? `Checked in at ${label}. That is not one of your stores — the nearest, ${nearest}, is ${metres(distance)} away. This is recorded and your admin has been notified.`
-              : `Checked in, but you are ${metres(distance)} from ${nearest}. This is recorded and your admin has been notified.`,
+            : data.visit?.arrived_status === 'off_site'
+              ? `Checked in, but you are ${metres(distance)} from ${nearest}. This is recorded and your admin has been notified.`
+              : `Checked in at ${label}.`,
         )
         router.refresh()
       } catch (err) {
@@ -313,7 +313,7 @@ export function StoreVisits({
           <CardContent className="space-y-2 pt-5">
             <p className="text-sm font-semibold">Which store are you at?</p>
             <p className="text-xs text-muted-foreground">
-              Only needed if Xtend picked the wrong one.
+              Only needed if Xtend did not recognise the shop you are in.
             </p>
             {sorted.map((outlet) => {
               const away = currentFix
@@ -359,9 +359,7 @@ export function StoreVisits({
           </Button>
 
           <p className="text-center text-xs text-muted-foreground">
-            {here
-              ? `You are at ${here.name}.`
-              : 'Xtend works out which of your stores you are at.'}
+            {here ? `You are at ${here.name}.` : 'Xtend will work out where you are.'}
           </p>
 
           {outlets.length > 1 && (

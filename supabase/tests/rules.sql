@@ -728,59 +728,125 @@ begin
   select count(*) into alloc from public.my_outlets();
   perform assert(alloc = 2, 'the marketer sees their home store and the allocated one');
 
-  -- Checking into a store nobody gave them is refused outright.
-  begin
-    insert into public.store_visits
-      (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
-    values (kiosk_id, 9.0765, 7.3986, 12, now());
-    perform assert(false, 'an unallocated store must be refused');
-  exception when others then
-    perform assert(sqlerrm like '%not one of yours%',
-      'a marketer cannot check into a store they were never allocated');
-  end;
-
   -- ---------------------------------------------------------------
-  -- Checking in without naming the store (migration 014).
+  -- A marketer's round needs no allocation at all (migration 016).
   -- ---------------------------------------------------------------
   perform act_as(boss);
-  perform set_staff_outlets(grace, array[kiosk_id, depot_id]);
+  perform set_staff_outlets(grace, array[]::uuid[]);
 
   perform act_as(grace);
   perform public.end_store_visit(v.id, 9.0765, 7.3986, 12, null, null)
   from public.store_visits v where v.user_id = grace and v.status = 'open';
 
-  -- Standing at the kiosk, saying nothing about which store it is.
+  perform assert(
+    (select count(*) from public.staff_outlets where user_id = grace) = 0,
+    'the marketer has no allocated stores');
+
+  -- Standing inside a store Xtend knows, allocated to nobody.
   insert into public.store_visits
     (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at, selfie_path)
   values (9.0766, 7.3987, 10, now(), 'auto/1.jpg')
   returning id into visit_id;
-
   perform assert(
     (select outlet_id from public.store_visits where id = visit_id) = kiosk_id,
-    'an unnamed check-in lands at the store they are standing in');
+    'standing in a known store attributes the visit to it, with no allocation');
   perform assert(
     (select arrived_status from public.store_visits where id = visit_id) = 'on_site',
-    'and is on_site, measured against that store');
-
+    'and reads on_site');
   perform public.end_store_visit(visit_id, 9.0766, 7.3987, 10, null, null);
 
-  -- Nowhere near any of their stores: still recorded, against the nearest,
-  -- off site, rather than refused and lost.
+  -- A shop Xtend has never heard of is a perfectly good visit.
+  select count(*) into alert_count from public.location_alerts where user_id = grace;
   insert into public.store_visits
-    (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
-  values (6.5390, 3.3841, 10, now())
+    (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at, arrived_place_name)
+  values (6.4500, 3.4000, 10, now(), 'Justrite Superstore Bariga')
   returning id into visit_id;
   perform assert(
-    (select outlet_id from public.store_visits where id = visit_id) = depot_id,
-    'far from everything, the nearest of their own stores is chosen');
+    (select outlet_id from public.store_visits where id = visit_id) is null,
+    'a shop Xtend does not know is recorded against no outlet');
   perform assert(
-    (select arrived_status from public.store_visits where id = visit_id) = 'on_site',
-    'standing at the depot is on_site there');
-  perform public.end_store_visit(visit_id, 6.5390, 3.3841, 10, null, null);
+    (select arrived_status from public.store_visits where id = visit_id) is null,
+    'and is neither on_site nor off_site, because there is nowhere they were due');
+  perform assert(
+    (select store_label from public.store_visit_detail where id = visit_id)
+      = 'Justrite Superstore Bariga',
+    'the map names it');
+  perform assert(
+    (select count(*) from public.location_alerts where user_id = grace) = alert_count,
+    'and visiting it raises no alert');
+  perform public.end_store_visit(visit_id, 6.45, 3.40, 10, null, null);
+  perform assert(
+    (select departed_status from public.store_visits where id = visit_id) is null,
+    'checking out of it is just a time, too');
 
+  -- Naming a store and not being at it still means something.
+  insert into public.store_visits
+    (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
+  values (kiosk_id, 6.4500, 3.4000, 10, now())
+  returning id into visit_id;
   perform assert(
-    public.nearest_outlet_for_user(grace, 9.0766, 7.3987) = kiosk_id,
-    'the nearest-store helper agrees');
+    (select arrived_status from public.store_visits where id = visit_id) = 'off_site',
+    'naming a store you are not at is still off_site');
+  perform assert(
+    (select count(*) from public.location_alerts where user_id = grace) > alert_count,
+    'and that one does raise an alert');
+  perform public.end_store_visit(visit_id, 6.45, 3.40, 10, null, null);
+
+  -- ---------------------------------------------------------------
+  -- The day, per person: in, stores, out.
+  -- ---------------------------------------------------------------
+  perform act_as(boss);
+  select stores_visited into alloc from public.staff_day() where user_id = grace;
+  perform assert(
+    alloc = (select count(*) from public.store_visits
+             where user_id = grace and visit_date = public.business_date()),
+    'the day names how many stores were visited');
+  perform assert(
+    (select clocked_in_at from public.staff_day() where user_id = grace) is not null,
+    'and when they clocked in');
+  perform assert(
+    (select minutes_in_store from public.staff_day() where user_id = grace) >= 0,
+    'and how long they spent in store');
+  perform assert(
+    (select still_in_store from public.staff_day() where user_id = grace) is null,
+    'and that they are not in a store right now');
+
+  perform act_as(grace);
+  perform assert(
+    (select count(*) from public.staff_day()) = 1,
+    'a marketer sees only their own day');
+
+  -- The daily clock, for someone with no store of their own.
+  perform act_as(boss);
+  perform set_staff_outlets(grace, array[]::uuid[]);
+  update public.profiles set outlet_id = null where id = grace;
+  delete from public.attendance where user_id = grace;
+
+  perform act_as(grace);
+  select count(*) into alert_count from public.location_alerts where user_id = grace;
+  insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+  values ('opening', 9.0766, 7.3987, 10, 'g/clock.jpg', now())
+  returning id into attendance_id;
+  perform assert(
+    (select outlet_id from public.attendance where id = attendance_id) = kiosk_id,
+    'clocking in inside a known store attributes it, with no store of their own');
+  perform assert(
+    (select status from public.attendance where id = attendance_id) = 'on_site',
+    'and reads on_site');
+
+  delete from public.attendance where id = attendance_id;
+  insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+  values ('opening', 6.4500, 3.4000, 10, 'g/clock2.jpg', now())
+  returning id into attendance_id;
+  perform assert(
+    (select outlet_id from public.attendance where id = attendance_id) is null,
+    'clocking in nowhere known records the time and no store');
+  perform assert(
+    (select status from public.attendance where id = attendance_id) is null,
+    'with no status, because there is nowhere they were due');
+  perform assert(
+    (select count(*) from public.location_alerts where user_id = grace) = alert_count,
+    'and nobody is interrupted about it');
 
   -- ---------------------------------------------------------------
   -- The map names the store when they are not in one of their own
@@ -812,11 +878,11 @@ begin
     (select store_label_source from public.store_visit_detail where id = visit_id) = 'map',
     'and it is marked as coming from the map');
   perform assert(
-    (select arrived_status from public.store_visit_detail where id = visit_id) = 'off_site',
+    (select arrived_status from public.store_visit_detail where id = visit_id) is null,
     'naming it does not make it on_site');
   perform assert(
-    (select outlet_name from public.store_visit_detail where id = visit_id) is not null,
-    'and the store it was measured against is still there');
+    (select outlet_name from public.store_visit_detail where id = visit_id) is null,
+    'and there is no outlet, because they were not in one');
   perform public.end_store_visit(visit_id, 6.45, 3.40, 10, null, null);
 
   insert into public.store_visits
@@ -824,8 +890,8 @@ begin
   values (6.4500, 3.4000, 10, now())
   returning id into visit_id;
   perform assert(
-    (select store_label from public.store_visit_detail where id = visit_id) is not null,
-    'with nothing from the map it falls back to the outlet');
+    (select store_label from public.store_visit_detail where id = visit_id) = 'Unnamed place',
+    'with nothing from the map and no outlet, the place is simply unnamed');
   perform public.end_store_visit(visit_id, 6.45, 3.40, 10, null, null);
 
   raise notice 'ALL RULES PASSED';

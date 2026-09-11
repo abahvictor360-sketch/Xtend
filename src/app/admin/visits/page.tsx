@@ -18,6 +18,45 @@ function one(search: Search, key: string) {
   return single && single !== 'all' ? single : null
 }
 
+/** In, stores, out: the shape of one person's day, in one line. */
+function DayStrip({
+  day,
+  stores,
+  minutes,
+}: {
+  day?: {
+    clocked_in_at: string | null
+    clocked_out_at: string | null
+    still_in_store: string | null
+  }
+  stores: number
+  minutes: number
+}) {
+  const item = (label: string, value: string) => (
+    <span key={label} className="flex flex-col">
+      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
+      <span className="text-sm font-semibold tabular-nums">{value}</span>
+    </span>
+  )
+  return (
+    <div className="mt-2 flex flex-wrap items-start gap-x-7 gap-y-2">
+      {item('Clocked in', day?.clocked_in_at ? formatLagos(day.clocked_in_at, false) : '—')}
+      {item('Stores', String(stores))}
+      {item('In store', `${minutes} min`)}
+      {item(
+        'Clocked out',
+        day?.clocked_out_at ? formatLagos(day.clocked_out_at, false) : day?.still_in_store ? 'still out' : '—',
+      )}
+      {day?.still_in_store && (
+        <span className="flex flex-col">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Now in</span>
+          <Badge variant="brand">{day.still_in_store}</Badge>
+        </span>
+      )}
+    </div>
+  )
+}
+
 function StatusBadge({ status }: { status: string | null }) {
   if (status === 'on_site') return <Badge variant="success">On site</Badge>
   if (status === 'off_site') return <Badge variant="destructive">Off site</Badge>
@@ -44,11 +83,28 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
     limit: 1000,
   }
 
-  const [visits, { data: staff }, { data: outletList }] = await Promise.all([
+  const [visits, { data: staff }, { data: outletList }, { data: dayRows }] = await Promise.all([
     fetchVisits(supabase, filter),
     supabase.from('profiles').select('id, full_name').order('full_name'),
     supabase.from('outlets').select('id, name').order('name'),
+    // The bookends of the day. Only meaningful for a single date.
+    from === to ? supabase.rpc('staff_day', { p_date: from }) : Promise.resolve({ data: null }),
   ])
+
+  interface Day {
+    user_id: string
+    staff_name: string
+    clocked_in_at: string | null
+    clocked_in_at_place: string | null
+    clocked_out_at: string | null
+    clocked_out_at_place: string | null
+    stores_visited: number
+    minutes_in_store: number
+    still_in_store: string | null
+  }
+  const days = new Map<string, Day>(
+    ((dayRows ?? []) as Day[]).map((d) => [d.staff_name, d]),
+  )
 
   const summary = visitSummary(visits)
   const ranged = from !== to
@@ -65,9 +121,9 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
       <div>
         <h1 className="text-xl font-semibold">Store visits</h1>
         <p className="text-sm text-muted-foreground">
-          {ranged ? `${from} to ${to}` : 'Today'}, Africa/Lagos. A marketer checks in at a store,
-          works, and checks out before moving on — each row is one visit. Download the same rounds
-          as PDF, Word or Excel.
+          {ranged ? `${from} to ${to}` : 'Today'}, Africa/Lagos. When each person clocked in,
+          the stores they worked and for how long, and when they clocked out. Download the same
+          rounds as PDF, Word or Excel.
         </p>
       </div>
 
@@ -124,13 +180,12 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
         Array.from(byPerson.entries()).map(([name, rows]) => (
           <Card key={name}>
             <CardHeader>
-              <CardTitle>
-                {name}{' '}
-                <span className="text-sm font-normal text-muted-foreground">
-                  — {rows.length} store{rows.length === 1 ? '' : 's'},{' '}
-                  {rows.reduce((total, r) => total + r.minutes, 0)} min in store
-                </span>
-              </CardTitle>
+              <CardTitle>{name}</CardTitle>
+              <DayStrip
+                day={days.get(name)}
+                stores={rows.length}
+                minutes={rows.reduce((total, r) => total + r.minutes, 0)}
+              />
             </CardHeader>
             <CardContent>
               {/* Desktop */}
