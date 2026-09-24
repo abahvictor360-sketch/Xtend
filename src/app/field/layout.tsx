@@ -1,6 +1,7 @@
 import { FIELD_ROLES, requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { FieldNav } from '@/components/field/field-nav'
+import { getCountStatus } from '@/lib/store-count-status'
 
 export const dynamic = 'force-dynamic'
 
@@ -13,15 +14,16 @@ export default async function FieldLayout({ children }: { children: React.ReactN
 
   // Postgres is the authority on who may file a report; the nav just asks it.
   const supabase = await createServerSupabase()
-  const [{ data: canFileReport }, { data: canCountStock }] = await Promise.all([
+  // The Count tab only appears while a count is due: asked for, or month end.
+  const [{ data: canFileReport }, countStatus] = await Promise.all([
     supabase.rpc('can_file_report'),
-    supabase.rpc('can_count_stock'),
+    getCountStatus(supabase),
   ])
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col overflow-x-hidden">
       <main className="flex-1 px-4 pb-8 pt-4">{children}</main>
-      <FieldNav canFileReport={canFileReport === true} canCountStock={canCountStock === true} />
+      <FieldNav canFileReport={canFileReport === true} canCountStock={countStatus.open} />
     </div>
   )
 }

@@ -38,7 +38,7 @@ const whole = (value: string) => /^\d{1,7}$/.test(value.trim())
 
 /**
  * One row per product: how many are in the store now, and how many sold
- * today. Only the rows with a number in them are sent; a blank beside a
+ * since the last count. Only the rows with a number in them are sent; a blank beside a
  * filled-in box counts as zero.
  */
 export function StoreCountForm({
@@ -129,7 +129,7 @@ export function StoreCountForm({
       const json = (await res.json().catch(() => ({}))) as { saved?: number; error?: string }
       if (!res.ok) throw new Error(json.error ?? 'The count could not be saved.')
       setNotice(
-        `Saved ${json.saved ?? filled.length} product${filled.length === 1 ? '' : 's'}. You can correct today's count until midnight.`,
+        `Saved ${json.saved ?? filled.length} product${filled.length === 1 ? '' : 's'}. You can correct it until midnight.`,
       )
       router.refresh()
     } catch (e) {
@@ -179,7 +179,7 @@ export function StoreCountForm({
       <div className="grid grid-cols-[1fr_72px_72px] items-end gap-2 px-1 text-xs font-semibold text-muted-foreground">
         <span>Product</span>
         <span className="text-center">In store</span>
-        <span className="text-center">Sold today</span>
+        <span className="text-center leading-tight">Sold since last count</span>
       </div>
 
       <ul className="space-y-2">
@@ -210,7 +210,7 @@ export function StoreCountForm({
                   pattern="[0-9]*"
                   value={entry[field]}
                   onChange={(e) => update(product.id, field, e.target.value.replace(/[^\d]/g, ''))}
-                  aria-label={`${product.name}: ${field === 'in_store' ? 'in store' : 'sold today'}`}
+                  aria-label={`${product.name}: ${field === 'in_store' ? 'in store' : 'sold since last count'}`}
                   className="h-11 px-2 text-center"
                   placeholder="–"
                 />

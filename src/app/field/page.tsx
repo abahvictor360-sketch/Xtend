@@ -2,6 +2,8 @@ import { FIELD_ROLES, requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { FieldHome } from '@/components/field/field-home'
 import { Alert } from '@/components/ui/alert'
+import { CountDueBanner } from '@/components/field/count-due-banner'
+import { getCountStatus } from '@/lib/store-count-status'
 import type { Coverage, DayState } from '@/lib/types'
 import type { VisitOutlet, VisitRow } from '@/components/field/store-visits'
 
@@ -21,6 +23,7 @@ export default async function FieldPage() {
     { data: visits },
     { data: outlets },
     { data: canVisitStores },
+    countStatus,
   ] = await Promise.all([
     supabase.rpc('my_day'),
     supabase.rpc('my_coverage'),
@@ -31,6 +34,7 @@ export default async function FieldPage() {
       .eq('is_active', true)
       .order('name'),
     supabase.rpc('can_visit_stores'),
+    getCountStatus(supabase),
   ])
 
   if (error || !data) {
@@ -38,12 +42,15 @@ export default async function FieldPage() {
   }
 
   return (
-    <FieldHome
-      day={data as DayState}
-      coverage={(coverage as Coverage) ?? null}
-      visits={(visits ?? []) as VisitRow[]}
-      outlets={(outlets ?? []) as VisitOutlet[]}
-      canVisitStores={canVisitStores === true}
-    />
+    <>
+      {countStatus.open && <CountDueBanner status={countStatus} />}
+      <FieldHome
+        day={data as DayState}
+        coverage={(coverage as Coverage) ?? null}
+        visits={(visits ?? []) as VisitRow[]}
+        outlets={(outlets ?? []) as VisitOutlet[]}
+        canVisitStores={canVisitStores === true}
+      />
+    </>
   )
 }

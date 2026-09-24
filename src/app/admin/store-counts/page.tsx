@@ -3,6 +3,12 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { storeCounts, type StoreCountRow } from '@/lib/assistant-data'
 import { REPORT_FORMATS, reportDownloadUrl } from '@/lib/assistant-report-spec'
 import { ProductManager, type ManagedProduct } from '@/components/admin/product-manager'
+import {
+  CountRequests,
+  type CountPerson,
+  type CountRequestRow,
+} from '@/components/admin/count-requests'
+import type { Profile } from '@/lib/types'
 import { Alert } from '@/components/ui/alert'
 import { buttonVariants } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -16,7 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { lagosDateString, longDate } from '@/lib/utils'
+import { addDays, lagosDateString, longDate } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Store counts — Xtend' }
@@ -69,9 +75,30 @@ export default async function StoreCountsPage({
     problem = e instanceof Error ? e.message : 'The counts could not be loaded.'
   }
 
-  const { data: products } = isAdmin
-    ? await supabase.from('products').select('id, name, sku, is_active').order('name')
-    : { data: [] }
+  const [{ data: products }, { data: staff }, { data: requests }] = await Promise.all([
+    isAdmin
+      ? supabase.from('products').select('id, name, sku, is_active').order('name')
+      : Promise.resolve({ data: [] }),
+    // Everyone for an admin, the supervisor's own team for a supervisor.
+    supabase.rpc('my_staff'),
+    supabase
+      .from('count_request_progress')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(15),
+  ])
+
+  const people: CountPerson[] = ((staff ?? []) as Profile[])
+    .filter(
+      (p) =>
+        p.is_active && p.id !== session.userId && (p.role === 'merchandiser' || p.role === 'marketer'),
+    )
+    .map((p) => ({ id: p.id, full_name: p.full_name, role: p.role }))
+
+  // The month-end window: the last three days of the month.
+  const nextMonth = new Date(`${today.slice(0, 7)}-01T12:00:00Z`)
+  nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1)
+  const monthEndFrom = addDays(nextMonth.toISOString().slice(0, 10), -3)
 
   const totals = totalsByProduct(rows)
   const title = from === to ? `Store counts, ${longDate(from)}` : `Store counts, ${longDate(from)} to ${longDate(to)}`
@@ -82,11 +109,20 @@ export default async function StoreCountsPage({
       <div>
         <h1 className="text-xl font-semibold">Store counts</h1>
         <p className="text-sm text-muted-foreground">
-          What merchandisers count in their stores: units on hand and units sold, product by
-          product.
+          What merchandisers count in their stores: units on hand, and units sold since their
+          last count. They count when a supervisor asks, and at the end of every month.
           {isAdmin ? ' The product list they count against is below.' : ''}
         </p>
       </div>
+
+      <CountRequests
+        people={people}
+        requests={(requests ?? []) as CountRequestRow[]}
+        today={today}
+        monthEndFrom={monthEndFrom}
+        myId={session.userId}
+        isAdmin={isAdmin}
+      />
 
       <form className="flex flex-wrap items-end gap-3" method="get">
         <div className="space-y-1.5">
@@ -130,7 +166,7 @@ export default async function StoreCountsPage({
               <TableHeader>
                 <TableRow>
                   <TableHead>Product</TableHead>
-                  <TableHead className="text-right">Sold</TableHead>
+                  <TableHead className="text-right">Sold (since last count)</TableHead>
                   <TableHead className="text-right">In store (latest)</TableHead>
                   <TableHead className="text-right">Stores</TableHead>
                 </TableRow>

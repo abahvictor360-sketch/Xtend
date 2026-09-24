@@ -8,6 +8,7 @@ import {
   attendanceSummary,
   fieldReports,
   staffHistory,
+  countRequests,
   storeCounts,
   storeVisits,
 } from '@/lib/assistant-data'
@@ -51,7 +52,7 @@ export function assistantConfigured() {
   return Boolean(process.env.ANTHROPIC_API_KEY)
 }
 
-const SYSTEM = `You are Xtend's assistant for Xpel Beauty. Office staff (admins and supervisors) ask you about field staff: who clocked in, who clocked out, who has not clocked in or out, who was late, who clocked in away from their store, a person's history, the daily reports marketers file, store visits, and store counts (units of each product in a store and units sold). You also produce downloadable reports, and you prepare store allocations and team changes for the user to approve.
+const SYSTEM = `You are Xtend's assistant for Xpel Beauty. Office staff (admins and supervisors) ask you about field staff: who clocked in, who clocked out, who has not clocked in or out, who was late, who clocked in away from their store, a person's history, the daily reports marketers file, store visits, and store counts (units of each product in a store, and units sold since the previous count). Store counts are taken when a supervisor or admin asks for one, and by everyone in the last three days of each month. You also produce downloadable reports, and you prepare store allocations and team changes for the user to approve.
 
 Answer only from what the tools return. Never guess a time, a name or a count; if the tools return nothing, say so. Call a tool for every question about the data, even one you think you answered earlier, because the data changes through the day.
 
@@ -160,7 +161,7 @@ const tools: Anthropic.Beta.BetaTool[] = [
   {
     name: 'store_counts',
     description:
-      "Merchandisers' store counts over a date range: for each store and product, how many units were in the store and how many sold that day, and who counted.",
+      "Merchandisers' store counts over a date range: for each store and product, how many units were in the store and how many sold since that person's previous count, and who counted.",
     strict: true,
     input_schema: {
       type: 'object',
@@ -168,6 +169,13 @@ const tools: Anthropic.Beta.BetaTool[] = [
       required: ['from', 'to'],
       additionalProperties: false,
     },
+  },
+  {
+    name: 'count_requests',
+    description:
+      'Recent store count requests: who asked, the due date, whether it is still open, how many of the people asked have counted, and who is still waiting to count.',
+    strict: true,
+    input_schema: { type: 'object', properties: {}, required: [], additionalProperties: false },
   },
   {
     name: 'match_names',
@@ -299,6 +307,9 @@ async function runTool(
         break
       case 'store_counts':
         result = await storeCounts(supabase, input.from, input.to)
+        break
+      case 'count_requests':
+        result = await countRequests(supabase)
         break
       case 'match_names':
         result = await turn.allocation.match(input)

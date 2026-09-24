@@ -369,7 +369,10 @@ export interface StoreCountRow {
   sold: number
 }
 
-/** Merchandisers' product counts: units in the store and units sold, per day. */
+/**
+ * Merchandisers' product counts: units in the store, and units sold since
+ * their previous count. Counts are taken when asked for, and at month end.
+ */
 export async function storeCounts(
   supabase: SupabaseClient,
   fromDate: unknown,
@@ -403,6 +406,30 @@ export async function storeCounts(
       sku: (c.sku as string | null) ?? null,
       in_store: c.in_store as number,
       sold: c.sold as number,
+    })),
+  }
+}
+
+/** Store count requests: who asked, by when, and who has not counted yet. */
+export async function countRequests(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from('count_request_progress')
+    .select('requested_by_name, due_date, note, created_at, is_open, people, counted, waiting_on')
+    .order('created_at', { ascending: false })
+    .limit(20)
+  if (error) throw new Error(error.message)
+  return {
+    how_counts_work:
+      'Store counts are taken when a supervisor or admin asks for one, and by everyone in the last three days of each month.',
+    requests: (data ?? []).map((r) => ({
+      asked_by: r.requested_by_name,
+      asked_on: formatLagos(r.created_at as string),
+      due: r.due_date,
+      note: r.note,
+      open: r.is_open,
+      people: r.people,
+      counted: r.counted,
+      waiting_on: r.waiting_on,
     })),
   }
 }

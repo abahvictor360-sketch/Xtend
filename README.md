@@ -36,7 +36,8 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0002_logic.sql   # heartbeat, supervisors, views, audit
    supabase/migrations/0003_harden.sql  # RPC grants: see "The RPC surface" below
    …and every later file in the folder, in number order, through
-   supabase/migrations/0019_store_counts.sql  # products and store counts
+   supabase/migrations/0019_store_counts.sql    # products and store counts
+   supabase/migrations/0020_count_requests.sql  # counts on request or at month end
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
