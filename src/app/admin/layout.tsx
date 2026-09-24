@@ -3,6 +3,8 @@ import { requireSession } from '@/lib/auth'
 import { SignOutButton } from '@/components/sign-out-button'
 import { AdminNav } from '@/components/admin/admin-nav'
 import { XpelMark } from '@/components/brand/logo'
+import { AssistantLauncher } from '@/components/admin/assistant-launcher'
+import { assistantConfigured } from '@/lib/assistant'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +32,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <AdminNav readOnly={readOnly} />
       </header>
 
-      <main className="mx-auto w-full max-w-7xl px-4 py-6">{children}</main>
+      <main className="mx-auto w-full max-w-7xl px-4 py-6 pb-24">{children}</main>
+
+      {assistantConfigured() && <AssistantLauncher />}
     </div>
   )
 }

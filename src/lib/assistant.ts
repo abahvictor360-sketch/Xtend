@@ -1,13 +1,21 @@
 import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { AttendanceDetail, Profile } from '@/lib/types'
-import { FIELD_ROLES } from '@/lib/auth'
-import { addDays, formatLagos, lagosDateString, longDate } from '@/lib/utils'
+import { lagosDateString, longDate } from '@/lib/utils'
+import {
+  MAX_RANGE_DAYS,
+  attendanceOnDay,
+  attendanceSummary,
+  fieldReports,
+  staffHistory,
+  storeVisits,
+} from '@/lib/assistant-data'
+import { buildReportSheet } from '@/lib/assistant-report'
+import { REPORT_KINDS, reportSpecSchema, type ReportSpec } from '@/lib/assistant-report-spec'
 
 /**
  * "Ask Xtend": an admin or supervisor types a question ("who hasn't clocked
- * in?", "when did Tunde clock out yesterday?") and Claude answers it by
+ * in?", "give me this week's attendance report") and Claude answers it by
  * calling the read-only tools below.
  *
  * Every tool queries through the caller's own Supabase client, so RLS decides
@@ -16,21 +24,26 @@ import { addDays, formatLagos, lagosDateString, longDate } from '@/lib/utils'
  */
 
 const MODEL = 'claude-opus-5'
-const MAX_TOOL_ROUNDS = 6
-const MAX_RANGE_DAYS = 62
+const MAX_TOOL_ROUNDS = 8
 
 export interface ChatTurn {
   role: 'user' | 'assistant'
   content: string
 }
 
+export interface AssistantReply {
+  answer: string
+  /** Reports created this turn; the chat shows download buttons for each. */
+  reports: ReportSpec[]
+}
+
 export function assistantConfigured() {
   return Boolean(process.env.ANTHROPIC_API_KEY)
 }
 
-const SYSTEM = `You are Xtend's attendance assistant for Xpel Beauty. Office staff (admins and supervisors) ask you about field staff attendance: who clocked in, who clocked out, who has not clocked in or out, who was late, who clocked in away from their store, and a person's history.
+const SYSTEM = `You are Xtend's assistant for Xpel Beauty. Office staff (admins and supervisors) ask you about field staff: who clocked in, who clocked out, who has not clocked in or out, who was late, who clocked in away from their store, a person's history, the daily reports marketers file, and store visits. You also produce downloadable reports.
 
-Answer only from what the tools return. Never guess a time, a name or a count; if the tools return nothing, say so. Call a tool for every question about attendance, even one you think you answered earlier, because the data changes through the day.
+Answer only from what the tools return. Never guess a time, a name or a count; if the tools return nothing, say so. Call a tool for every question about the data, even one you think you answered earlier, because the data changes through the day.
 
 How attendance works:
 - A "clock in" is an opening record; a "clock out" is a closing record. Each has a time, a location and a status: on_site (inside the store's radius), off_site (outside it) or flagged.
@@ -38,9 +51,22 @@ How attendance works:
 - A person is "not clocked in" when they have no opening record that day, and "still on shift" when they clocked in but have not clocked out.
 - All times and dates are Africa/Lagos.
 
-Resolve relative dates ("today", "yesterday", "last Monday", "this week") against today's date, given below, and pass them as YYYY-MM-DD.
+Reports: when the user asks for a report, a summary to share, an export or a download, first read the data with the lookup tools, then call create_report with the matching kind and a short written summary: the headline numbers, who stands out (absent, late, off site, missing clock-outs, issues raised in field reports) and anything that needs follow-up. The report's table is filled in from the database automatically, so do not repeat the rows in your reply. After create_report, reply with two or three sentences giving the key findings and saying the download buttons are below. Pick the kind:
+- daily_attendance: one day, everyone's clock in and out (use "from" for the day).
+- attendance_summary: per-person totals over a range.
+- staff_history: one person day by day (set "name").
+- field_reports: the marketers' daily reports over a range.
+- store_visits: store visits over a range.
+Ranges are at most ${MAX_RANGE_DAYS} days.
+
+Resolve relative dates ("today", "yesterday", "last Monday", "this week", "last month") against today's date, given below, and pass them as YYYY-MM-DD. A week runs Monday to Sunday.
 
 Write for someone reading on a phone: lead with the direct answer and the count, then a short list of names (with store and time where useful). Use plain text with simple "- " bullets. No tables, no headings, no markdown bold.`
+
+const range = {
+  from: { type: ['string', 'null'], description: 'YYYY-MM-DD. Null for 7 days ago.' },
+  to: { type: ['string', 'null'], description: 'YYYY-MM-DD. Null for today.' },
+}
 
 const tools: Anthropic.Beta.BetaTool[] = [
   {
@@ -69,8 +95,7 @@ const tools: Anthropic.Beta.BetaTool[] = [
       type: 'object',
       properties: {
         name: { type: 'string', description: 'Full or partial staff name, e.g. "Ngozi".' },
-        from: { type: ['string', 'null'], description: 'YYYY-MM-DD. Null for 7 days ago.' },
-        to: { type: ['string', 'null'], description: 'YYYY-MM-DD. Null for today.' },
+        ...range,
       },
       required: ['name', 'from', 'to'],
       additionalProperties: false,
@@ -82,257 +107,115 @@ const tools: Anthropic.Beta.BetaTool[] = [
     strict: true,
     input_schema: {
       type: 'object',
-      properties: {
-        from: { type: 'string', description: 'YYYY-MM-DD, inclusive.' },
-        to: { type: 'string', description: 'YYYY-MM-DD, inclusive.' },
-      },
+      properties: range,
       required: ['from', 'to'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'field_reports',
+    description:
+      'The daily reports marketers file from the field over a date range: sales, stock status, competitor activity, issues and notes, with who filed each and for which store. Long text is shortened.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: range,
+      required: ['from', 'to'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'store_visits',
+    description:
+      'Store visits over a date range: who visited which store, when they arrived and left, how many minutes they stayed, and whether they arrived on site.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: range,
+      required: ['from', 'to'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'create_report',
+    description:
+      'Creates a downloadable report (PDF, Excel, Word and CSV) for the user. The table is filled in from the database; you supply the kind, the dates, a title and a written summary. Read the data with the other tools first so the summary is accurate.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', enum: [...REPORT_KINDS] },
+        from: {
+          type: 'string',
+          description: 'YYYY-MM-DD. The day, for daily_attendance; otherwise the first day.',
+        },
+        to: {
+          type: ['string', 'null'],
+          description: 'YYYY-MM-DD, the last day. Null for daily_attendance.',
+        },
+        name: {
+          type: ['string', 'null'],
+          description: 'The staff name, for staff_history only. Otherwise null.',
+        },
+        title: { type: 'string', description: 'e.g. "Attendance report, 15 to 21 September 2026".' },
+        summary: {
+          type: 'string',
+          description:
+            'Plain-text summary printed above the table, at most about 150 words. Separate paragraphs with a newline.',
+        },
+      },
+      required: ['kind', 'from', 'to', 'name', 'title', 'summary'],
       additionalProperties: false,
     },
   },
 ]
 
-type Roster = Pick<Profile, 'id' | 'full_name' | 'role'> & { outlet_name: string | null }
-
-const DATE = /^\d{4}-\d{2}-\d{2}$/
-
-function checkDate(value: unknown, fallback: string) {
-  if (value === null || value === undefined || value === '') return fallback
-  if (typeof value !== 'string' || !DATE.test(value)) {
-    throw new Error(`"${String(value)}" is not a YYYY-MM-DD date`)
-  }
-  return value
-}
-
-function daysBetween(from: string, to: string) {
-  return Math.round((Date.parse(`${to}T12:00:00Z`) - Date.parse(`${from}T12:00:00Z`)) / 86_400_000)
-}
-
-async function fetchRoster(supabase: SupabaseClient): Promise<Roster[]> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, full_name, role, outlets(name)')
-    .eq('is_active', true)
-    .in('role', FIELD_ROLES)
-    .order('full_name')
-  if (error) throw new Error(error.message)
-
-  return (data ?? []).map((row) => {
-    const outlet = (row as { outlets: { name: string } | { name: string }[] | null }).outlets
-    const name = Array.isArray(outlet) ? outlet[0]?.name : outlet?.name
-    return { id: row.id, full_name: row.full_name, role: row.role, outlet_name: name ?? null }
-  })
-}
-
-async function fetchRecords(
-  supabase: SupabaseClient,
-  from: string,
-  to: string,
-  userIds?: string[],
-): Promise<AttendanceDetail[]> {
-  let query = supabase
-    .from('attendance_detail')
-    .select('*')
-    .gte('attendance_date', from)
-    .lte('attendance_date', to)
-    .order('created_at', { ascending: true })
-    .limit(5000)
-  if (userIds) query = query.in('user_id', userIds)
-
-  const { data, error } = await query
-  if (error) throw new Error(error.message)
-  return (data ?? []) as AttendanceDetail[]
-}
-
-function describeClock(record: AttendanceDetail | undefined) {
-  if (!record) return null
-  return {
-    time: formatLagos(record.created_at, false),
-    status: record.status,
-    late: record.type === 'opening' ? record.is_late : undefined,
-    location: record.location_label,
-    store: record.outlet_name,
-  }
-}
-
-/** The first opening and last closing per person per day. */
-function firstAndLast(records: AttendanceDetail[]) {
-  const byKey = new Map<string, { opening?: AttendanceDetail; closing?: AttendanceDetail }>()
-  for (const r of records) {
-    const key = `${r.user_id}|${r.attendance_date}`
-    const entry = byKey.get(key) ?? {}
-    if (r.type === 'opening' && !entry.opening) entry.opening = r
-    if (r.type === 'closing') entry.closing = r
-    byKey.set(key, entry)
-  }
-  return byKey
-}
-
-async function attendanceOnDay(supabase: SupabaseClient, input: Record<string, unknown>) {
-  const today = lagosDateString()
-  const date = checkDate(input.date, today)
-  const [roster, records] = await Promise.all([
-    fetchRoster(supabase),
-    fetchRecords(supabase, date, date),
-  ])
-  const days = firstAndLast(records)
-
-  const clockedInAndOut = []
-  const stillOnShift = []
-  const notClockedIn = []
-
-  for (const person of roster) {
-    const day = days.get(`${person.id}|${date}`)
-    const base = { name: person.full_name, role: person.role, store: person.outlet_name }
-    if (!day?.opening) {
-      notClockedIn.push({
-        ...base,
-        // A clock-out with no clock-in is worth pointing out.
-        ...(day?.closing ? { clocked_out_without_clocking_in: describeClock(day.closing) } : {}),
-      })
-    } else if (!day.closing) {
-      stillOnShift.push({ ...base, clock_in: describeClock(day.opening) })
-    } else {
-      clockedInAndOut.push({
-        ...base,
-        clock_in: describeClock(day.opening),
-        clock_out: describeClock(day.closing),
-      })
-    }
-  }
-
-  return {
-    date,
-    day: longDate(date),
-    is_today: date === today,
-    staff_total: roster.length,
-    counts: {
-      clocked_in: clockedInAndOut.length + stillOnShift.length,
-      clocked_out: clockedInAndOut.length,
-      still_on_shift_not_clocked_out: stillOnShift.length,
-      not_clocked_in: notClockedIn.length,
-    },
-    clocked_in_and_out: clockedInAndOut,
-    still_on_shift_not_clocked_out: stillOnShift,
-    not_clocked_in: notClockedIn,
-  }
-}
-
-async function staffHistory(supabase: SupabaseClient, input: Record<string, unknown>) {
-  const name = typeof input.name === 'string' ? input.name.trim() : ''
-  if (!name) throw new Error('A name is required')
-  const to = checkDate(input.to, lagosDateString())
-  const from = checkDate(input.from, addDays(to, -7))
-  if (daysBetween(from, to) > MAX_RANGE_DAYS) {
-    throw new Error(`Ask for at most ${MAX_RANGE_DAYS} days at a time`)
-  }
-
-  const roster = await fetchRoster(supabase)
-  const needle = name.toLowerCase()
-  const people = roster.filter((p) => p.full_name.toLowerCase().includes(needle))
-  if (people.length === 0) {
-    return { from, to, matches: [], note: `No staff you can see match "${name}".` }
-  }
-  if (people.length > 10) {
-    return {
-      from,
-      to,
-      note: `"${name}" matches ${people.length} people; ask the user which one.`,
-      matches: people.map((p) => ({ name: p.full_name, store: p.outlet_name })),
-    }
-  }
-
-  const records = await fetchRecords(
-    supabase,
-    from,
-    to,
-    people.map((p) => p.id),
-  )
-  const days = firstAndLast(records)
-
-  return {
-    from,
-    to,
-    matches: people.map((person) => {
-      const history = []
-      for (let d = from; d <= to; d = addDays(d, 1)) {
-        const day = days.get(`${person.id}|${d}`)
-        history.push({
-          date: d,
-          clock_in: describeClock(day?.opening) ?? 'none',
-          clock_out: describeClock(day?.closing) ?? 'none',
-        })
-      }
-      return { name: person.full_name, role: person.role, store: person.outlet_name, history }
-    }),
-  }
-}
-
-async function attendanceSummary(supabase: SupabaseClient, input: Record<string, unknown>) {
-  const from = checkDate(input.from, lagosDateString())
-  const to = checkDate(input.to, lagosDateString())
-  if (to < from) throw new Error('"to" is before "from"')
-  if (daysBetween(from, to) > MAX_RANGE_DAYS) {
-    throw new Error(`Ask for at most ${MAX_RANGE_DAYS} days at a time`)
-  }
-
-  const [roster, records] = await Promise.all([
-    fetchRoster(supabase),
-    fetchRecords(supabase, from, to),
-  ])
-  const days = firstAndLast(records)
-
-  return {
-    from,
-    to,
-    calendar_days: daysBetween(from, to) + 1,
-    people: roster.map((person) => {
-      let clockedIn = 0
-      let clockedOut = 0
-      let neverOut = 0
-      let late = 0
-      let offSite = 0
-      for (let d = from; d <= to; d = addDays(d, 1)) {
-        const day = days.get(`${person.id}|${d}`)
-        if (day?.opening) {
-          clockedIn++
-          if (!day.closing) neverOut++
-          if (day.opening.is_late) late++
-          if (day.opening.status && day.opening.status !== 'on_site') offSite++
-        }
-        if (day?.closing) clockedOut++
-      }
-      return {
-        name: person.full_name,
-        role: person.role,
-        store: person.outlet_name,
-        days_clocked_in: clockedIn,
-        days_clocked_out: clockedOut,
-        days_clocked_in_but_not_out: neverOut,
-        late_days: late,
-        off_site_clock_ins: offSite,
-      }
-    }),
-  }
-}
-
-const HANDLERS: Record<
-  string,
-  (supabase: SupabaseClient, input: Record<string, unknown>) => Promise<unknown>
-> = {
-  attendance_on_day: attendanceOnDay,
-  staff_history: staffHistory,
-  attendance_summary: attendanceSummary,
-}
+type Input = Record<string, unknown>
 
 async function runTool(
   supabase: SupabaseClient,
   block: Anthropic.Beta.BetaToolUseBlock,
+  reports: ReportSpec[],
 ): Promise<Anthropic.Beta.BetaToolResultBlockParam> {
-  const handler = HANDLERS[block.name]
+  const input = (block.input ?? {}) as Input
   try {
-    if (!handler) throw new Error(`Unknown tool ${block.name}`)
-    const result = await handler(supabase, (block.input ?? {}) as Record<string, unknown>)
+    let result: unknown
+    switch (block.name) {
+      case 'attendance_on_day':
+        result = await attendanceOnDay(supabase, input.date)
+        break
+      case 'staff_history':
+        result = await staffHistory(supabase, input.name, input.from, input.to)
+        break
+      case 'attendance_summary':
+        result = await attendanceSummary(supabase, input.from, input.to)
+        break
+      case 'field_reports':
+        result = await fieldReports(supabase, input.from, input.to)
+        break
+      case 'store_visits':
+        result = await storeVisits(supabase, input.from, input.to)
+        break
+      case 'create_report': {
+        const parsed = reportSpecSchema.safeParse({
+          ...input,
+          summary: typeof input.summary === 'string' ? input.summary.slice(0, 2000) : '',
+        })
+        if (!parsed.success) {
+          throw new Error(parsed.error.issues[0]?.message ?? 'Invalid report')
+        }
+        if (parsed.data.kind === 'staff_history' && !parsed.data.name) {
+          throw new Error('staff_history needs a name')
+        }
+        // Build it once now, so a bad range fails here rather than on download.
+        const sheet = await buildReportSheet(supabase, parsed.data)
+        reports.push(parsed.data)
+        result = { created: true, rows: sheet.rows.length, shown_to_user_as: 'download buttons' }
+        break
+      }
+      default:
+        throw new Error(`Unknown tool ${block.name}`)
+    }
     return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) }
   } catch (error) {
     return {
@@ -349,9 +232,10 @@ export async function askAssistant(
   supabase: SupabaseClient,
   history: ChatTurn[],
   askedBy: string,
-): Promise<string> {
+): Promise<AssistantReply> {
   const client = new Anthropic()
   const today = lagosDateString()
+  const reports: ReportSpec[] = []
 
   const messages: Anthropic.Beta.BetaMessageParam[] = history.map((turn) => ({
     role: turn.role,
@@ -377,7 +261,10 @@ export async function askAssistant(
     })
 
     if (response.stop_reason === 'refusal') {
-      return "I can't help with that one. Try asking about who clocked in or out."
+      return {
+        answer: "I can't help with that one. Try asking about who clocked in or out.",
+        reports,
+      }
     }
 
     const toolUses = response.content.filter(
@@ -389,13 +276,21 @@ export async function askAssistant(
         .map((b) => b.text)
         .join('\n')
         .trim()
-      return text || "I couldn't find an answer to that."
+      return {
+        answer: text || (reports.length ? 'Your report is ready.' : "I couldn't find an answer to that."),
+        reports,
+      }
     }
 
     messages.push({ role: 'assistant', content: response.content })
-    const results = await Promise.all(toolUses.map((block) => runTool(supabase, block)))
+    const results = await Promise.all(toolUses.map((block) => runTool(supabase, block, reports)))
     messages.push({ role: 'user', content: results })
   }
 
-  return 'That took too many lookups. Try a narrower question, such as one day or one person.'
+  return {
+    answer: reports.length
+      ? 'Your report is ready.'
+      : 'That took too many lookups. Try a narrower question, such as one day or one person.',
+    reports,
+  }
 }
