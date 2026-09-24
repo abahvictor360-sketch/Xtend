@@ -15,6 +15,15 @@
 -- apart rather than a day.
 -- =====================================================================
 
+-- 020 builds on 019. Say so plainly rather than fail halfway with
+-- "relation store_counts does not exist".
+do $$
+begin
+  if to_regclass('public.store_counts') is null then
+    raise exception 'Run 0019_store_counts.sql first, then this file';
+  end if;
+end $$;
+
 -- How many days at the end of each month counting is open for everyone.
 create or replace function public.month_end_count_days()
 returns integer language sql immutable as $$ select 3 $$;
