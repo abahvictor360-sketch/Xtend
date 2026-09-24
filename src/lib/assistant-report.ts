@@ -7,6 +7,7 @@ import {
   attendanceSummary,
   fieldReports,
   staffHistory,
+  storeCounts,
   storeVisits,
   type Clock,
 } from '@/lib/assistant-data'
@@ -130,6 +131,23 @@ async function build(supabase: SupabaseClient, spec: ReportSpec): Promise<Built>
           x.minutes === null ? '—' : String(x.minutes),
           x.arrived_status ?? '—',
           x.visit_status,
+        ]),
+      }
+    }
+    case 'store_counts': {
+      const c = await storeCounts(supabase, spec.from, spec.to)
+      return {
+        period: period(c.from, c.to),
+        columns: ['Date', 'Staff', 'Store', 'Product', 'SKU', 'In store', 'Sold since last count'],
+        weights: [2, 4, 5, 5, 2, 1.6, 2.4],
+        rows: c.counts.map((x) => [
+          x.date,
+          x.name,
+          x.store,
+          x.product,
+          x.sku ?? '—',
+          String(x.in_store),
+          String(x.sold),
         ]),
       }
     }

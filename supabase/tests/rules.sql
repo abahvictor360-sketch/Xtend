@@ -39,6 +39,11 @@ declare
   tunde      uuid := gen_random_uuid();
   depot_id   uuid;
   alloc      integer;
+  soap       uuid;
+  cream      uuid;
+  counted    integer;
+  req        uuid;
+  req2       uuid;
 begin
   insert into auth.users (id, email) values
     (ada, 'ada@xpel.ng'), (bala, 'bala@xpel.ng'), (boss, 'boss@xpel.ng'),
@@ -1000,6 +1005,185 @@ begin
   perform assert(
     (select count(*) from public.available_supervisors()) = 0,
     'a supervisor is not offered the list of supervisors to assign');
+
+  -- ---------------------------------------------------------------
+  -- Store counts (migration 019).
+  -- ---------------------------------------------------------------
+  perform act_as(boss);
+  insert into public.products (name) values ('Xpel Soap 100g') returning id into soap;
+  insert into public.products (name) values ('Xpel Cream 400ml') returning id into cream;
+
+  begin
+    insert into public.products (name) values ('  xpel soap 100G ');
+    perform assert(false, 'the same product name twice is refused');
+  exception when unique_violation then
+    perform assert(true, 'the same product name twice is refused');
+  end;
+
+  -- Counting is open in the last three days of a month, whatever its length.
+  perform assert(public.is_month_end_window(date '2026-09-28'), 'the 28th of September is month end');
+  perform assert(public.is_month_end_window(date '2026-09-30'), 'so is the 30th');
+  perform assert(not public.is_month_end_window(date '2026-09-27'), 'the 27th is not');
+  perform assert(public.is_month_end_window(date '2026-02-26'), 'in a 28-day February the 26th is');
+  perform assert(not public.is_month_end_window(date '2026-02-25'), 'and the 25th is not');
+  perform assert(public.is_month_end_window(date '2026-12-31'), 'the year end is month end too');
+
+  -- Outside month end, nobody counts until somebody asks.
+  perform act_as(ada);
+  if not public.is_month_end_window() then
+    perform assert((public.store_count_status()->>'open')::boolean = false,
+      'with no request and no month end, counting is closed');
+    begin
+      perform public.submit_store_count(mall_id, jsonb_build_array(
+        jsonb_build_object('product_id', soap, 'in_store', 1, 'sold', 1)));
+      perform assert(false, 'a count nobody asked for is refused');
+    exception when others then
+      perform assert(sqlerrm like '%No store count is due%', 'a count nobody asked for is refused');
+    end;
+  end if;
+
+  -- Asking for a count.
+  begin
+    perform public.request_store_count(array[bala], public.business_date() + 1, null);
+    perform assert(false, 'a merchandiser cannot ask for a count');
+  exception when others then
+    perform assert(sqlerrm like '%Only a supervisor or an admin%', 'a merchandiser cannot ask for a count');
+  end;
+
+  perform act_as(tunde);
+  begin
+    perform public.request_store_count(array[ada], public.business_date() + 1, null);
+    perform assert(false, 'a supervisor cannot ask somebody outside their team');
+  exception when others then
+    perform assert(sqlerrm like '%your own%', 'a supervisor cannot ask somebody outside their team');
+  end;
+
+  perform act_as(boss);
+  begin
+    perform public.request_store_count(array[ada], public.business_date() - 1, null);
+    perform assert(false, 'a due date in the past is refused');
+  exception when others then
+    perform assert(sqlerrm like '%past%', 'a due date in the past is refused');
+  end;
+  begin
+    perform public.request_store_count(array[tunde], public.business_date() + 1, null);
+    perform assert(false, 'a supervisor is not asked to count');
+  exception when others then
+    perform assert(sqlerrm like '%merchandisers and marketers%', 'a supervisor is not asked to count');
+  end;
+
+  req := public.request_store_count(array[ada, ada], public.business_date() + 2, 'Month-end stock take');
+  perform assert(
+    (select count(*) from public.count_request_targets where request_id = req) = 1,
+    'an admin asks a merchandiser to count, once however often they are named');
+
+  update public.profiles set supervisor_id = tunde where id = grace;
+  perform act_as(tunde);
+  req2 := public.request_store_count(array[grace], public.business_date(), null);
+  perform assert(req2 is not null, 'a supervisor asks their own team to count');
+  begin
+    perform public.close_count_request(req);
+    perform assert(false, 'a supervisor cannot close somebody else''s request');
+  exception when others then
+    perform assert(sqlerrm like '%not yours%', 'a supervisor cannot close somebody else''s request');
+  end;
+
+  perform act_as(ada);
+  perform assert(public.store_count_status()->>'reason' = 'request'
+                   and public.store_count_status()->>'request_id' = req::text,
+    'the person asked sees the request as their reason to count');
+
+  counted := public.submit_store_count(mall_id, jsonb_build_array(
+    jsonb_build_object('product_id', soap, 'in_store', 40, 'sold', 12),
+    jsonb_build_object('product_id', cream, 'in_store', 0, 'sold', 3)));
+  perform assert(counted = 2, 'a merchandiser counts two products in their store');
+  perform assert(
+    (select count(*) from public.store_counts
+     where user_id = ada and outlet_id = mall_id
+       and count_date = (now() at time zone 'Africa/Lagos')::date) = 2,
+    'the count is stored against them, their store and the Lagos business date');
+  perform assert(
+    (select bool_and(request_id = req) from public.store_counts where user_id = ada),
+    'and against the request that asked for it');
+  perform assert(
+    (select p.counted from public.count_request_progress p where p.id = req) = 1
+      and (select p.people from public.count_request_progress p where p.id = req) = 1,
+    'the request shows who has counted');
+
+  counted := public.submit_store_count(mall_id, jsonb_build_array(
+    jsonb_build_object('product_id', soap, 'in_store', 38, 'sold', 14)));
+  perform assert(
+    (select in_store from public.store_counts where user_id = ada and product_id = soap) = 38
+      and (select count(*) from public.store_counts where user_id = ada) = 2,
+    'counting a product again the same day replaces the figures');
+
+  begin
+    perform public.submit_store_count(depot_id, jsonb_build_array(
+      jsonb_build_object('product_id', soap, 'in_store', 1, 'sold', 1)));
+    perform assert(false, 'a store that is not theirs is refused');
+  exception when others then
+    perform assert(sqlerrm like '%not one of yours%', 'a store that is not theirs is refused');
+  end;
+
+  begin
+    perform public.submit_store_count(mall_id, jsonb_build_array(
+      jsonb_build_object('product_id', soap, 'in_store', -1, 'sold', 1)));
+    perform assert(false, 'a negative count is refused');
+  exception when others then
+    perform assert(sqlerrm like '%whole numbers%', 'a negative count is refused');
+  end;
+
+  begin
+    perform public.submit_store_count(mall_id, jsonb_build_array(
+      jsonb_build_object('product_id', soap, 'in_store', 2.5, 'sold', 1)));
+    perform assert(false, 'a fractional count is refused');
+  exception when others then
+    perform assert(sqlerrm like '%whole numbers%', 'a fractional count is refused');
+  end;
+
+  begin
+    perform public.submit_store_count(mall_id, jsonb_build_array(
+      jsonb_build_object('product_id', gen_random_uuid(), 'in_store', 1, 'sold', 1)));
+    perform assert(false, 'a product that is not on the list is refused');
+  exception when others then
+    perform assert(sqlerrm like '%not on the list%', 'a product that is not on the list is refused');
+  end;
+
+  begin
+    perform public.submit_store_count(mall_id, jsonb_build_array(
+      jsonb_build_object('product_id', soap, 'in_store', 1, 'sold', 1),
+      jsonb_build_object('product_id', soap, 'in_store', 2, 'sold', 2)));
+    perform assert(false, 'the same product twice in one count is refused');
+  exception when others then
+    perform assert(sqlerrm like '%twice%', 'the same product twice in one count is refused');
+  end;
+
+  update public.products set is_active = false where id = cream;
+  begin
+    perform public.submit_store_count(mall_id, jsonb_build_array(
+      jsonb_build_object('product_id', cream, 'in_store', 1, 'sold', 1)));
+    perform assert(false, 'a retired product cannot be counted');
+  exception when others then
+    perform assert(sqlerrm like '%not on the list%', 'a retired product cannot be counted');
+  end;
+
+  perform act_as(tunde);
+  begin
+    perform public.submit_store_count(mall_id, jsonb_build_array(
+      jsonb_build_object('product_id', soap, 'in_store', 1, 'sold', 1)));
+    perform assert(false, 'a supervisor does not submit counts');
+  exception when others then
+    perform assert(sqlerrm like '%cannot submit%', 'a supervisor does not submit counts');
+  end;
+
+  -- Closing the request closes counting for the people it asked.
+  perform act_as(boss);
+  perform public.close_count_request(req);
+  perform act_as(ada);
+  if not public.is_month_end_window() then
+    perform assert((public.store_count_status()->>'open')::boolean = false,
+      'once the request is closed, counting is closed again');
+  end if;
 
   raise notice 'ALL RULES PASSED';
 end $$;

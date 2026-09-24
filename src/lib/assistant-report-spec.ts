@@ -12,6 +12,7 @@ export const REPORT_KINDS = [
   'staff_history',
   'field_reports',
   'store_visits',
+  'store_counts',
 ] as const
 
 export type ReportKind = (typeof REPORT_KINDS)[number]

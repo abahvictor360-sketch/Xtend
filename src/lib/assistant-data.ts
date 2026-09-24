@@ -358,3 +358,78 @@ export async function storeVisits(
     })),
   }
 }
+
+export interface StoreCountRow {
+  date: string
+  name: string
+  store: string
+  product: string
+  sku: string | null
+  in_store: number
+  sold: number
+}
+
+/**
+ * Merchandisers' product counts: units in the store, and units sold since
+ * their previous count. Counts are taken when asked for, and at month end.
+ */
+export async function storeCounts(
+  supabase: SupabaseClient,
+  fromDate: unknown,
+  toDate: unknown,
+  filter: { outletId?: string | null; userId?: string | null } = {},
+): Promise<{ from: string; to: string; counts: StoreCountRow[] }> {
+  const { from, to } = checkRange(fromDate, toDate, 0)
+  let query = supabase
+    .from('store_count_detail')
+    .select('count_date, staff_name, outlet_name, product_name, sku, in_store, sold')
+    .gte('count_date', from)
+    .lte('count_date', to)
+    .order('count_date', { ascending: false })
+    .order('outlet_name')
+    .order('product_name')
+    .limit(5000)
+  if (filter.outletId) query = query.eq('outlet_id', filter.outletId)
+  if (filter.userId) query = query.eq('user_id', filter.userId)
+
+  const { data, error } = await query
+  if (error) throw new Error(error.message)
+
+  return {
+    from,
+    to,
+    counts: (data ?? []).map((c) => ({
+      date: c.count_date as string,
+      name: c.staff_name as string,
+      store: c.outlet_name as string,
+      product: c.product_name as string,
+      sku: (c.sku as string | null) ?? null,
+      in_store: c.in_store as number,
+      sold: c.sold as number,
+    })),
+  }
+}
+
+/** Store count requests: who asked, by when, and who has not counted yet. */
+export async function countRequests(supabase: SupabaseClient) {
+  const { data, error } = await supabase
+    .from('count_request_progress')
+    .select('requested_by_name, due_date, note, created_at, is_open, people, counted, waiting_on')
+    .order('created_at', { ascending: false })
+    .limit(20)
+  if (error) throw new Error(error.message)
+  return {
+    how_counts_work:
+      'Store counts are taken when a supervisor or admin asks for one, and by everyone in the last three days of each month.',
+    requests: (data ?? []).map((r) => ({
+      asked_by: r.requested_by_name,
+      asked_on: formatLagos(r.created_at as string),
+      due: r.due_date,
+      note: r.note,
+      open: r.is_open,
+      people: r.people,
+      counted: r.counted,
+      waiting_on: r.waiting_on,
+    })),
+  }
+}

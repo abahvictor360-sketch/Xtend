@@ -2,20 +2,27 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CalendarDays, FileText, Home, User } from 'lucide-react'
+import { CalendarDays, ClipboardList, FileText, Home, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /**
  * Floating bottom bar. Thumb-reachable, and the Report tab only exists for
  * the people who file reports.
  */
-export function FieldNav({ canFileReport }: { canFileReport: boolean }) {
+export function FieldNav({
+  canFileReport,
+  canCountStock,
+}: {
+  canFileReport: boolean
+  canCountStock: boolean
+}) {
   const pathname = usePathname()
 
   const links = [
     { href: '/field', label: 'Home', icon: Home },
     { href: '/field/history', label: 'History', icon: CalendarDays },
     ...(canFileReport ? [{ href: '/field/report', label: 'Report', icon: FileText }] : []),
+    ...(canCountStock ? [{ href: '/field/count', label: 'Count', icon: ClipboardList }] : []),
     { href: '/field/account', label: 'You', icon: User },
   ]
 
@@ -31,7 +38,7 @@ export function FieldNav({ canFileReport }: { canFileReport: boolean }) {
               aria-label={label}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'flex min-w-[64px] flex-col items-center gap-1 rounded-2xl px-3 py-2 text-[10px] font-semibold transition-colors',
+                'flex min-w-[56px] flex-col items-center gap-1 rounded-2xl px-3 py-2 text-[10px] font-semibold transition-colors',
                 active ? 'bg-tint text-brand' : 'text-muted-foreground',
               )}
             >

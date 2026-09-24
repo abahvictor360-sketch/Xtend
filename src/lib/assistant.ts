@@ -8,8 +8,12 @@ import {
   attendanceSummary,
   fieldReports,
   staffHistory,
+  countRequests,
+  storeCounts,
   storeVisits,
 } from '@/lib/assistant-data'
+import { AllocationContext } from '@/lib/assistant-allocate'
+import type { ChangePlan } from '@/lib/assistant-plan'
 import { buildReportSheet } from '@/lib/assistant-report'
 import { REPORT_KINDS, reportSpecSchema, type ReportSpec } from '@/lib/assistant-report-spec'
 
@@ -24,7 +28,7 @@ import { REPORT_KINDS, reportSpecSchema, type ReportSpec } from '@/lib/assistant
  */
 
 const MODEL = 'claude-opus-5'
-const MAX_TOOL_ROUNDS = 8
+const MAX_TOOL_ROUNDS = 10
 
 export interface ChatTurn {
   role: 'user' | 'assistant'
@@ -35,13 +39,20 @@ export interface AssistantReply {
   answer: string
   /** Reports created this turn; the chat shows download buttons for each. */
   reports: ReportSpec[]
+  /** Changes proposed this turn; the chat shows each with an Apply button. */
+  plans: ChangePlan[]
+}
+
+export interface Asker {
+  name: string
+  role: 'admin' | 'supervisor'
 }
 
 export function assistantConfigured() {
   return Boolean(process.env.ANTHROPIC_API_KEY)
 }
 
-const SYSTEM = `You are Xtend's assistant for Xpel Beauty. Office staff (admins and supervisors) ask you about field staff: who clocked in, who clocked out, who has not clocked in or out, who was late, who clocked in away from their store, a person's history, the daily reports marketers file, and store visits. You also produce downloadable reports.
+const SYSTEM = `You are Xtend's assistant for Xpel Beauty. Office staff (admins and supervisors) ask you about field staff: who clocked in, who clocked out, who has not clocked in or out, who was late, who clocked in away from their store, a person's history, the daily reports marketers file, store visits, and store counts (units of each product in a store, and units sold since the previous count). Store counts are taken when a supervisor or admin asks for one, and by everyone in the last three days of each month. You also produce downloadable reports, and you prepare store allocations and team changes for the user to approve.
 
 Answer only from what the tools return. Never guess a time, a name or a count; if the tools return nothing, say so. Call a tool for every question about the data, even one you think you answered earlier, because the data changes through the day.
 
@@ -57,7 +68,16 @@ Reports: when the user asks for a report, a summary to share, an export or a dow
 - staff_history: one person day by day (set "name").
 - field_reports: the marketers' daily reports over a range.
 - store_visits: store visits over a range.
+- store_counts: merchandisers' product counts (in store and sold) over a range.
 Ranges are at most ${MAX_RANGE_DAYS} days.
+
+Allocations and teams: the user may paste a list or attach a file (CSV, Excel, PDF, a photo of a sheet) saying which stores go to which merchandisers, or which people report to which supervisor. To prepare it:
+1. Read every line. Collect each distinct person, store and supervisor name exactly as written.
+2. Call match_names once with all of them. Each candidate has a reference (P…, S…, V…) and a score from 0 to 1.
+3. Pick the right candidate for each name. Take a clear best match (score about 0.8 or more, well ahead of the rest). When two candidates are close, or nothing is close, do not guess: leave that line out and list it in "unmatched".
+4. Call propose_changes once with every change. Use mode "add" (keep the stores they already have) unless the user says the list replaces what people have, then "replace".
+5. Reply in two or three sentences: how many people and stores are in the plan, anything unmatched and why, and that nothing changes until they press Apply below. Never say the changes are made: only the Apply button makes them.
+Only admins can change who somebody reports to; for a supervisor, say so and prepare only store allocations. If the user just asks for an allocation in words ("give Ada Ikeja Mall"), follow the same steps.
 
 Resolve relative dates ("today", "yesterday", "last Monday", "this week", "last month") against today's date, given below, and pass them as YYYY-MM-DD. A week runs Monday to Sunday.
 
@@ -67,6 +87,8 @@ const range = {
   from: { type: ['string', 'null'], description: 'YYYY-MM-DD. Null for 7 days ago.' },
   to: { type: ['string', 'null'], description: 'YYYY-MM-DD. Null for today.' },
 }
+
+const nameList = { type: 'array', items: { type: 'string' } }
 
 const tools: Anthropic.Beta.BetaTool[] = [
   {
@@ -137,6 +159,86 @@ const tools: Anthropic.Beta.BetaTool[] = [
     },
   },
   {
+    name: 'store_counts',
+    description:
+      "Merchandisers' store counts over a date range: for each store and product, how many units were in the store and how many sold since that person's previous count, and who counted.",
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: range,
+      required: ['from', 'to'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'count_requests',
+    description:
+      'Recent store count requests: who asked, the due date, whether it is still open, how many of the people asked have counted, and who is still waiting to count.',
+    strict: true,
+    input_schema: { type: 'object', properties: {}, required: [], additionalProperties: false },
+  },
+  {
+    name: 'match_names',
+    description:
+      'Looks up people, stores and supervisors by name, as written in a file or message, and returns up to three likely matches for each with a reference to use in propose_changes. People come with their current stores and supervisor.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        people: { ...nameList, description: 'Merchandiser or marketer names.' },
+        stores: { ...nameList, description: 'Store names, as written.' },
+        supervisors: { ...nameList, description: 'Supervisor names. Empty if none.' },
+      },
+      required: ['people', 'stores', 'supervisors'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_changes',
+    description:
+      'Shows the user a plan of store allocations and supervisor assignments, with an Apply button. Nothing is changed until they press it. Use only references returned by match_names.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        store_allocations: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              person: { type: 'string', description: 'A P… reference.' },
+              stores: { ...nameList, description: 'S… references.' },
+              mode: { type: 'string', enum: ['add', 'replace'] },
+            },
+            required: ['person', 'stores', 'mode'],
+            additionalProperties: false,
+          },
+        },
+        supervisor_assignments: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              person: { type: 'string', description: 'A P… reference.' },
+              supervisor: {
+                type: ['string', 'null'],
+                description: 'A V… reference, or null to take them off their supervisor.',
+              },
+            },
+            required: ['person', 'supervisor'],
+            additionalProperties: false,
+          },
+        },
+        unmatched: {
+          ...nameList,
+          description: 'Lines or names that could not be matched confidently, with a few words on why.',
+        },
+      },
+      required: ['store_allocations', 'supervisor_assignments', 'unmatched'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'create_report',
     description:
       'Creates a downloadable report (PDF, Excel, Word and CSV) for the user. The table is filled in from the database; you supply the kind, the dates, a title and a written summary. Read the data with the other tools first so the summary is accurate.',
@@ -172,11 +274,18 @@ const tools: Anthropic.Beta.BetaTool[] = [
 
 type Input = Record<string, unknown>
 
+interface Turn {
+  supabase: SupabaseClient
+  allocation: AllocationContext
+  reports: ReportSpec[]
+  plans: ChangePlan[]
+}
+
 async function runTool(
-  supabase: SupabaseClient,
+  turn: Turn,
   block: Anthropic.Beta.BetaToolUseBlock,
-  reports: ReportSpec[],
 ): Promise<Anthropic.Beta.BetaToolResultBlockParam> {
+  const { supabase, reports } = turn
   const input = (block.input ?? {}) as Input
   try {
     let result: unknown
@@ -196,6 +305,27 @@ async function runTool(
       case 'store_visits':
         result = await storeVisits(supabase, input.from, input.to)
         break
+      case 'store_counts':
+        result = await storeCounts(supabase, input.from, input.to)
+        break
+      case 'count_requests':
+        result = await countRequests(supabase)
+        break
+      case 'match_names':
+        result = await turn.allocation.match(input)
+        break
+      case 'propose_changes': {
+        const plan = await turn.allocation.plan(input)
+        turn.plans.push(plan)
+        result = {
+          shown_to_user: true,
+          store_allocations: plan.stores.length,
+          supervisor_assignments: plan.supervisors.length,
+          unmatched: plan.unmatched.length,
+          note: 'Nothing is changed until the user presses Apply.',
+        }
+        break
+      }
       case 'create_report': {
         const parsed = reportSpecSchema.safeParse({
           ...input,
@@ -231,16 +361,25 @@ async function runTool(
 export async function askAssistant(
   supabase: SupabaseClient,
   history: ChatTurn[],
-  askedBy: string,
+  asker: Asker,
+  attachment: Anthropic.Beta.BetaContentBlockParam[] = [],
 ): Promise<AssistantReply> {
   const client = new Anthropic()
   const today = lagosDateString()
-  const reports: ReportSpec[] = []
+  const turn: Turn = {
+    supabase,
+    allocation: new AllocationContext(supabase, asker.role === 'admin'),
+    reports: [],
+    plans: [],
+  }
+  const { reports, plans } = turn
 
-  const messages: Anthropic.Beta.BetaMessageParam[] = history.map((turn) => ({
-    role: turn.role,
-    content: turn.content,
-  }))
+  const messages: Anthropic.Beta.BetaMessageParam[] = history.map((t, i) =>
+    // A file rides with the question it was attached to, the last one.
+    i === history.length - 1 && attachment.length
+      ? { role: t.role, content: [...attachment, { type: 'text', text: t.content }] }
+      : { role: t.role, content: t.content },
+  )
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     const response = await client.beta.messages.create({
@@ -253,7 +392,7 @@ export async function askAssistant(
         { type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } },
         {
           type: 'text',
-          text: `Today is ${longDate(today)} (${today}). You are talking to ${askedBy}.`,
+          text: `Today is ${longDate(today)} (${today}). You are talking to ${asker.name} (${asker.role}).`,
         },
       ],
       tools,
@@ -264,6 +403,7 @@ export async function askAssistant(
       return {
         answer: "I can't help with that one. Try asking about who clocked in or out.",
         reports,
+        plans,
       }
     }
 
@@ -277,13 +417,20 @@ export async function askAssistant(
         .join('\n')
         .trim()
       return {
-        answer: text || (reports.length ? 'Your report is ready.' : "I couldn't find an answer to that."),
+        answer:
+          text ||
+          (plans.length
+            ? 'Review the changes below and press Apply to make them.'
+            : reports.length
+              ? 'Your report is ready.'
+              : "I couldn't find an answer to that."),
         reports,
+        plans,
       }
     }
 
     messages.push({ role: 'assistant', content: response.content })
-    const results = await Promise.all(toolUses.map((block) => runTool(supabase, block, reports)))
+    const results = await Promise.all(toolUses.map((block) => runTool(turn, block)))
     messages.push({ role: 'user', content: results })
   }
 
@@ -292,5 +439,6 @@ export async function askAssistant(
       ? 'Your report is ready.'
       : 'That took too many lookups. Try a narrower question, such as one day or one person.',
     reports,
+    plans,
   }
 }
