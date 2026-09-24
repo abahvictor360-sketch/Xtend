@@ -12,6 +12,7 @@
     "bootstrap:admin": "tsx scripts/create-admin.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.47.10",
     "class-variance-authority": "^0.7.1",

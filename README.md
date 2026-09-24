@@ -47,6 +47,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    | `CRON_SECRET` | Shared secret for the nightly retention job |
    | `GEOCODER_USER_AGENT` | Contact string for Nominatim's usage policy |
    | `CREDENTIALS_WEBHOOK_URL` | Optional: relay that SMS/emails temporary passwords |
+   | `ANTHROPIC_API_KEY` | Optional: turns on **Ask Xtend**, the attendance assistant |
 
 3. **Bootstrap the first admin.** There is no public signup:
 
@@ -74,6 +75,8 @@ src/app/admin/…        Dashboard: overview, attendance, store visits,
                        alerts, analytics, notifications, store allocation,
                        staff, outlets, audit log
 src/app/api/…          Thin route handlers (validate → call Postgres → map errors)
+src/lib/assistant.ts   Ask Xtend: Claude answers attendance questions via
+                       read-only tools that query as the signed-in user
 src/lib/export/…       One renderer, two datasets: attendance and store visits
 src/lib/retention*     The 24-hour rule for clock photos, and the sweep
 src/lib/platform.ts    Device detection, purely to pick the right help text
