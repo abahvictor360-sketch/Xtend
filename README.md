@@ -35,6 +35,8 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0001_init.sql    # tables, RLS, storage, retention
    supabase/migrations/0002_logic.sql   # heartbeat, supervisors, views, audit
    supabase/migrations/0003_harden.sql  # RPC grants: see "The RPC surface" below
+   …and every later file in the folder, in number order, through
+   supabase/migrations/0019_store_counts.sql  # products and store counts
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
@@ -70,14 +72,19 @@ refuses anything without the matching bearer token.
 ## What is where
 
 ```
-src/app/field/…        Mobile PWA: clock, history, daily report, account
-src/app/admin/…        Dashboard: overview, attendance, store visits,
-                       alerts, analytics, notifications, store allocation,
-                       staff, outlets, audit log
+src/app/field/…        Mobile PWA: clock, history, daily report, store
+                       count, account
+src/app/admin/…        Dashboard: overview, Ask Xtend, attendance, store
+                       visits, store counts and products, alerts,
+                       analytics, notifications, store allocation, staff,
+                       teams, outlets, audit log
 src/app/api/…          Thin route handlers (validate → call Postgres → map errors)
 src/lib/assistant*     Ask Xtend: Claude answers attendance questions and
                        writes reports via read-only tools that query as the
-                       signed-in user; report rows come from the database
+                       signed-in user; report rows come from the database.
+                       It prepares store allocations and team changes from
+                       a pasted list or an attached file, as a plan the
+                       person applies; it never writes on its own
 src/lib/export/…       One renderer, two datasets: attendance and store visits
 src/lib/retention*     The 24-hour rule for clock photos, and the sweep
 src/lib/platform.ts    Device detection, purely to pick the right help text

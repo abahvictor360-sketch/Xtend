@@ -358,3 +358,51 @@ export async function storeVisits(
     })),
   }
 }
+
+export interface StoreCountRow {
+  date: string
+  name: string
+  store: string
+  product: string
+  sku: string | null
+  in_store: number
+  sold: number
+}
+
+/** Merchandisers' product counts: units in the store and units sold, per day. */
+export async function storeCounts(
+  supabase: SupabaseClient,
+  fromDate: unknown,
+  toDate: unknown,
+  filter: { outletId?: string | null; userId?: string | null } = {},
+): Promise<{ from: string; to: string; counts: StoreCountRow[] }> {
+  const { from, to } = checkRange(fromDate, toDate, 0)
+  let query = supabase
+    .from('store_count_detail')
+    .select('count_date, staff_name, outlet_name, product_name, sku, in_store, sold')
+    .gte('count_date', from)
+    .lte('count_date', to)
+    .order('count_date', { ascending: false })
+    .order('outlet_name')
+    .order('product_name')
+    .limit(5000)
+  if (filter.outletId) query = query.eq('outlet_id', filter.outletId)
+  if (filter.userId) query = query.eq('user_id', filter.userId)
+
+  const { data, error } = await query
+  if (error) throw new Error(error.message)
+
+  return {
+    from,
+    to,
+    counts: (data ?? []).map((c) => ({
+      date: c.count_date as string,
+      name: c.staff_name as string,
+      store: c.outlet_name as string,
+      product: c.product_name as string,
+      sku: (c.sku as string | null) ?? null,
+      in_store: c.in_store as number,
+      sold: c.sold as number,
+    })),
+  }
+}

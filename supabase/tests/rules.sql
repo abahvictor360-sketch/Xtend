@@ -39,6 +39,9 @@ declare
   tunde      uuid := gen_random_uuid();
   depot_id   uuid;
   alloc      integer;
+  soap       uuid;
+  cream      uuid;
+  counted    integer;
 begin
   insert into auth.users (id, email) values
     (ada, 'ada@xpel.ng'), (bala, 'bala@xpel.ng'), (boss, 'boss@xpel.ng'),
@@ -1000,6 +1003,97 @@ begin
   perform assert(
     (select count(*) from public.available_supervisors()) = 0,
     'a supervisor is not offered the list of supervisors to assign');
+
+  -- ---------------------------------------------------------------
+  -- Store counts (migration 019).
+  -- ---------------------------------------------------------------
+  perform act_as(boss);
+  insert into public.products (name) values ('Xpel Soap 100g') returning id into soap;
+  insert into public.products (name) values ('Xpel Cream 400ml') returning id into cream;
+
+  begin
+    insert into public.products (name) values ('  xpel soap 100G ');
+    perform assert(false, 'the same product name twice is refused');
+  exception when unique_violation then
+    perform assert(true, 'the same product name twice is refused');
+  end;
+
+  perform act_as(ada);
+  counted := public.submit_store_count(mall_id, jsonb_build_array(
+    jsonb_build_object('product_id', soap, 'in_store', 40, 'sold', 12),
+    jsonb_build_object('product_id', cream, 'in_store', 0, 'sold', 3)));
+  perform assert(counted = 2, 'a merchandiser counts two products in their store');
+  perform assert(
+    (select count(*) from public.store_counts
+     where user_id = ada and outlet_id = mall_id
+       and count_date = (now() at time zone 'Africa/Lagos')::date) = 2,
+    'the count is stored against them, their store and the Lagos business date');
+
+  counted := public.submit_store_count(mall_id, jsonb_build_array(
+    jsonb_build_object('product_id', soap, 'in_store', 38, 'sold', 14)));
+  perform assert(
+    (select in_store from public.store_counts where user_id = ada and product_id = soap) = 38
+      and (select count(*) from public.store_counts where user_id = ada) = 2,
+    'counting a product again the same day replaces the figures');
+
+  begin
+    perform public.submit_store_count(depot_id, jsonb_build_array(
+      jsonb_build_object('product_id', soap, 'in_store', 1, 'sold', 1)));
+    perform assert(false, 'a store that is not theirs is refused');
+  exception when others then
+    perform assert(sqlerrm like '%not one of yours%', 'a store that is not theirs is refused');
+  end;
+
+  begin
+    perform public.submit_store_count(mall_id, jsonb_build_array(
+      jsonb_build_object('product_id', soap, 'in_store', -1, 'sold', 1)));
+    perform assert(false, 'a negative count is refused');
+  exception when others then
+    perform assert(sqlerrm like '%whole numbers%', 'a negative count is refused');
+  end;
+
+  begin
+    perform public.submit_store_count(mall_id, jsonb_build_array(
+      jsonb_build_object('product_id', soap, 'in_store', 2.5, 'sold', 1)));
+    perform assert(false, 'a fractional count is refused');
+  exception when others then
+    perform assert(sqlerrm like '%whole numbers%', 'a fractional count is refused');
+  end;
+
+  begin
+    perform public.submit_store_count(mall_id, jsonb_build_array(
+      jsonb_build_object('product_id', gen_random_uuid(), 'in_store', 1, 'sold', 1)));
+    perform assert(false, 'a product that is not on the list is refused');
+  exception when others then
+    perform assert(sqlerrm like '%not on the list%', 'a product that is not on the list is refused');
+  end;
+
+  begin
+    perform public.submit_store_count(mall_id, jsonb_build_array(
+      jsonb_build_object('product_id', soap, 'in_store', 1, 'sold', 1),
+      jsonb_build_object('product_id', soap, 'in_store', 2, 'sold', 2)));
+    perform assert(false, 'the same product twice in one count is refused');
+  exception when others then
+    perform assert(sqlerrm like '%twice%', 'the same product twice in one count is refused');
+  end;
+
+  update public.products set is_active = false where id = cream;
+  begin
+    perform public.submit_store_count(mall_id, jsonb_build_array(
+      jsonb_build_object('product_id', cream, 'in_store', 1, 'sold', 1)));
+    perform assert(false, 'a retired product cannot be counted');
+  exception when others then
+    perform assert(sqlerrm like '%not on the list%', 'a retired product cannot be counted');
+  end;
+
+  perform act_as(tunde);
+  begin
+    perform public.submit_store_count(mall_id, jsonb_build_array(
+      jsonb_build_object('product_id', soap, 'in_store', 1, 'sold', 1)));
+    perform assert(false, 'a supervisor does not submit counts');
+  exception when others then
+    perform assert(sqlerrm like '%cannot submit%', 'a supervisor does not submit counts');
+  end;
 
   raise notice 'ALL RULES PASSED';
 end $$;
