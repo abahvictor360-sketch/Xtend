@@ -7,7 +7,7 @@ const schema = z.object({
   lines: z
     .array(
       z.object({
-        product_id: z.string().uuid(),
+        product_name: z.string().trim().min(1, 'Every product needs a name').max(120),
         in_store: z.number().int().min(0).max(1_000_000),
         sold: z.number().int().min(0).max(1_000_000),
       }),
@@ -17,8 +17,9 @@ const schema = z.object({
 })
 
 /**
- * Today's store count. Whether the store is theirs, which day it is, and
- * who counted are all decided by submit_store_count() in Postgres.
+ * A store count: product names as the merchandiser typed them, how many are
+ * left, how many sold. Whether a count is due, whether the store is theirs,
+ * which day it is and who counted are all decided by submit_store_count().
  */
 export async function POST(request: Request) {
   try {

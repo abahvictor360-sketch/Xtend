@@ -1011,7 +1011,6 @@ begin
   -- ---------------------------------------------------------------
   perform act_as(boss);
   insert into public.products (name) values ('Xpel Soap 100g') returning id into soap;
-  insert into public.products (name) values ('Xpel Cream 400ml') returning id into cream;
 
   begin
     insert into public.products (name) values ('  xpel soap 100G ');
@@ -1035,7 +1034,7 @@ begin
       'with no request and no month end, counting is closed');
     begin
       perform public.submit_store_count(mall_id, jsonb_build_array(
-        jsonb_build_object('product_id', soap, 'in_store', 1, 'sold', 1)));
+        jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 1, 'sold', 1)));
       perform assert(false, 'a count nobody asked for is refused');
     exception when others then
       perform assert(sqlerrm like '%No store count is due%', 'a count nobody asked for is refused');
@@ -1094,9 +1093,13 @@ begin
     'the person asked sees the request as their reason to count');
 
   counted := public.submit_store_count(mall_id, jsonb_build_array(
-    jsonb_build_object('product_id', soap, 'in_store', 40, 'sold', 12),
-    jsonb_build_object('product_id', cream, 'in_store', 0, 'sold', 3)));
+    jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 40, 'sold', 12),
+    jsonb_build_object('product_name', '  Xpel   Cream 400ml ', 'in_store', 0, 'sold', 3)));
   perform assert(counted = 2, 'a merchandiser counts two products in their store');
+  select id into cream from public.products where name = 'Xpel Cream 400ml';
+  perform assert(cream is not null, 'a product typed for the first time is added, tidied up');
+  perform assert((select count(*) from public.products) = 2,
+    'a product already known is reused, not added again');
   perform assert(
     (select count(*) from public.store_counts
      where user_id = ada and outlet_id = mall_id
@@ -1111,15 +1114,15 @@ begin
     'the request shows who has counted');
 
   counted := public.submit_store_count(mall_id, jsonb_build_array(
-    jsonb_build_object('product_id', soap, 'in_store', 38, 'sold', 14)));
+    jsonb_build_object('product_name', 'XPEL SOAP 100G', 'in_store', 38, 'sold', 14)));
   perform assert(
     (select in_store from public.store_counts where user_id = ada and product_id = soap) = 38
       and (select count(*) from public.store_counts where user_id = ada) = 2,
-    'counting a product again the same day replaces the figures');
+    'counting a product again the same day, however it is typed, replaces the figures');
 
   begin
     perform public.submit_store_count(depot_id, jsonb_build_array(
-      jsonb_build_object('product_id', soap, 'in_store', 1, 'sold', 1)));
+      jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 1, 'sold', 1)));
     perform assert(false, 'a store that is not theirs is refused');
   exception when others then
     perform assert(sqlerrm like '%not one of yours%', 'a store that is not theirs is refused');
@@ -1127,7 +1130,7 @@ begin
 
   begin
     perform public.submit_store_count(mall_id, jsonb_build_array(
-      jsonb_build_object('product_id', soap, 'in_store', -1, 'sold', 1)));
+      jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', -1, 'sold', 1)));
     perform assert(false, 'a negative count is refused');
   exception when others then
     perform assert(sqlerrm like '%whole numbers%', 'a negative count is refused');
@@ -1135,7 +1138,7 @@ begin
 
   begin
     perform public.submit_store_count(mall_id, jsonb_build_array(
-      jsonb_build_object('product_id', soap, 'in_store', 2.5, 'sold', 1)));
+      jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 2.5, 'sold', 1)));
     perform assert(false, 'a fractional count is refused');
   exception when others then
     perform assert(sqlerrm like '%whole numbers%', 'a fractional count is refused');
@@ -1143,34 +1146,29 @@ begin
 
   begin
     perform public.submit_store_count(mall_id, jsonb_build_array(
-      jsonb_build_object('product_id', gen_random_uuid(), 'in_store', 1, 'sold', 1)));
-    perform assert(false, 'a product that is not on the list is refused');
+      jsonb_build_object('product_name', '   ', 'in_store', 1, 'sold', 1)));
+    perform assert(false, 'a product with no name is refused');
   exception when others then
-    perform assert(sqlerrm like '%not on the list%', 'a product that is not on the list is refused');
+    perform assert(sqlerrm like '%needs a name%', 'a product with no name is refused');
   end;
 
   begin
     perform public.submit_store_count(mall_id, jsonb_build_array(
-      jsonb_build_object('product_id', soap, 'in_store', 1, 'sold', 1),
-      jsonb_build_object('product_id', soap, 'in_store', 2, 'sold', 2)));
+      jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 1, 'sold', 1),
+      jsonb_build_object('product_name', 'xpel soap 100g', 'in_store', 2, 'sold', 2)));
     perform assert(false, 'the same product twice in one count is refused');
   exception when others then
     perform assert(sqlerrm like '%twice%', 'the same product twice in one count is refused');
   end;
 
-  update public.products set is_active = false where id = cream;
-  begin
-    perform public.submit_store_count(mall_id, jsonb_build_array(
-      jsonb_build_object('product_id', cream, 'in_store', 1, 'sold', 1)));
-    perform assert(false, 'a retired product cannot be counted');
-  exception when others then
-    perform assert(sqlerrm like '%not on the list%', 'a retired product cannot be counted');
-  end;
+  perform assert(
+    (select count(*) from public.counted_product_names()) = 2,
+    'the names counted so far are offered as suggestions');
 
   perform act_as(tunde);
   begin
     perform public.submit_store_count(mall_id, jsonb_build_array(
-      jsonb_build_object('product_id', soap, 'in_store', 1, 'sold', 1)));
+      jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 1, 'sold', 1)));
     perform assert(false, 'a supervisor does not submit counts');
   exception when others then
     perform assert(sqlerrm like '%cannot submit%', 'a supervisor does not submit counts');

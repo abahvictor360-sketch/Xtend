@@ -38,6 +38,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    …and every later file in the folder, in number order, through
    supabase/migrations/0019_store_counts.sql    # products and store counts
    supabase/migrations/0020_count_requests.sql  # counts on request or at month end
+   supabase/migrations/0021_counted_product_names.sql  # products typed while counting
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

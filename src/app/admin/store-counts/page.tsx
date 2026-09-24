@@ -2,7 +2,6 @@ import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { storeCounts, type StoreCountRow } from '@/lib/assistant-data'
 import { REPORT_FORMATS, reportDownloadUrl } from '@/lib/assistant-report-spec'
-import { ProductManager, type ManagedProduct } from '@/components/admin/product-manager'
 import {
   CountRequests,
   type CountPerson,
@@ -75,10 +74,7 @@ export default async function StoreCountsPage({
     problem = e instanceof Error ? e.message : 'The counts could not be loaded.'
   }
 
-  const [{ data: products }, { data: staff }, { data: requests }] = await Promise.all([
-    isAdmin
-      ? supabase.from('products').select('id, name, sku, is_active').order('name')
-      : Promise.resolve({ data: [] }),
+  const [{ data: staff }, { data: requests }] = await Promise.all([
     // Everyone for an admin, the supervisor's own team for a supervisor.
     supabase.rpc('my_staff'),
     supabase
@@ -109,9 +105,9 @@ export default async function StoreCountsPage({
       <div>
         <h1 className="text-xl font-semibold">Store counts</h1>
         <p className="text-sm text-muted-foreground">
-          What merchandisers count in their stores: units on hand, and units sold since their
-          last count. They count when a supervisor asks, and at the end of every month.
-          {isAdmin ? ' The product list they count against is below.' : ''}
+          Merchandisers count the products physically in their store and report how many are
+          left and how many were sold since their last count. They count when a supervisor
+          asks, and at the end of every month.
         </p>
       </div>
 
@@ -167,7 +163,7 @@ export default async function StoreCountsPage({
                 <TableRow>
                   <TableHead>Product</TableHead>
                   <TableHead className="text-right">Sold (since last count)</TableHead>
-                  <TableHead className="text-right">In store (latest)</TableHead>
+                  <TableHead className="text-right">Left (latest count)</TableHead>
                   <TableHead className="text-right">Stores</TableHead>
                 </TableRow>
               </TableHeader>
@@ -199,7 +195,7 @@ export default async function StoreCountsPage({
                   <TableHead>Staff</TableHead>
                   <TableHead>Store</TableHead>
                   <TableHead>Product</TableHead>
-                  <TableHead className="text-right">In store</TableHead>
+                  <TableHead className="text-right">Left</TableHead>
                   <TableHead className="text-right">Sold</TableHead>
                 </TableRow>
               </TableHeader>
@@ -220,7 +216,6 @@ export default async function StoreCountsPage({
         </Card>
       )}
 
-      {isAdmin && <ProductManager products={(products ?? []) as ManagedProduct[]} />}
     </div>
   )
 }
