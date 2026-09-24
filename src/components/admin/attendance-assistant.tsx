@@ -25,7 +25,18 @@ const SUGGESTIONS = [
 /** Only the most recent turns go back to the server; older ones add cost, not answers. */
 const HISTORY_SENT = 12
 
-export function AttendanceAssistant({ configured }: { configured: boolean }) {
+/**
+ * The chat itself. On the Ask Xtend page it flows with the page; inside the
+ * floating panel (`compact`) the conversation scrolls and the question box
+ * stays pinned to the bottom.
+ */
+export function AttendanceAssistant({
+  configured,
+  compact = false,
+}: {
+  configured: boolean
+  compact?: boolean
+}) {
   const [turns, setTurns] = useState<Turn[]>([])
   const [draft, setDraft] = useState('')
   const [busy, setBusy] = useState(false)
@@ -73,52 +84,54 @@ export function AttendanceAssistant({ configured }: { configured: boolean }) {
   }
 
   return (
-    <div className="space-y-4">
-      {turns.length === 0 && (
-        <div className="surface space-y-3 p-4">
-          <p className="flex items-center gap-2 text-sm font-semibold">
-            <Sparkles className="h-4 w-4 text-brand" />
-            Try one of these
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {SUGGESTIONS.map((s) => (
-              <Chip key={s} onClick={() => ask(s)} disabled={busy}>
-                {s}
-              </Chip>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-3" aria-live="polite">
-        {turns.map((turn, i) => (
-          <div
-            key={i}
-            className={cn('flex', turn.role === 'user' ? 'justify-end' : 'justify-start')}
-          >
-            <div
-              className={cn(
-                'max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-4 py-3 text-sm',
-                turn.role === 'user'
-                  ? 'bg-brand text-primary-foreground'
-                  : 'border border-border bg-card text-foreground shadow-soft',
-              )}
-            >
-              {turn.content}
-            </div>
-          </div>
-        ))}
-        {busy && (
-          <div className="flex justify-start">
-            <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground shadow-soft">
-              Checking attendance…
+    <div className={cn(compact ? 'flex h-full min-h-0 flex-col gap-3' : 'space-y-4')}>
+      <div className={cn(compact ? 'min-h-0 flex-1 space-y-3 overflow-y-auto pr-1' : 'space-y-4')}>
+        {turns.length === 0 && (
+          <div className={cn('space-y-3', compact ? 'rounded-2xl bg-tint/60 p-3' : 'surface p-4')}>
+            <p className="flex items-center gap-2 text-sm font-semibold">
+              <Sparkles className="h-4 w-4 text-brand" />
+              Try one of these
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {SUGGESTIONS.map((s) => (
+                <Chip key={s} onClick={() => ask(s)} disabled={busy}>
+                  {s}
+                </Chip>
+              ))}
             </div>
           </div>
         )}
-        <div ref={end} />
-      </div>
 
-      {error && <Alert variant="destructive">{error}</Alert>}
+        <div className="space-y-3" aria-live="polite">
+          {turns.map((turn, i) => (
+            <div
+              key={i}
+              className={cn('flex', turn.role === 'user' ? 'justify-end' : 'justify-start')}
+            >
+              <div
+                className={cn(
+                  'max-w-[85%] whitespace-pre-wrap break-words rounded-2xl px-4 py-3 text-sm',
+                  turn.role === 'user'
+                    ? 'bg-brand text-primary-foreground'
+                    : 'border border-border bg-card text-foreground shadow-soft',
+                )}
+              >
+                {turn.content}
+              </div>
+            </div>
+          ))}
+          {busy && (
+            <div className="flex justify-start">
+              <div className="rounded-2xl border border-border bg-card px-4 py-3 text-sm text-muted-foreground shadow-soft">
+                Checking attendance…
+              </div>
+            </div>
+          )}
+          <div ref={end} />
+        </div>
+
+        {error && <Alert variant="destructive">{error}</Alert>}
+      </div>
 
       <form
         className="flex items-end gap-2"
