@@ -43,7 +43,10 @@ export async function GET(request: Request) {
       }
     }
 
-    const place = await resolvePlace(lat, lng, outlet)
+    // A preview is only shown, never stored, so it is named with the free
+    // provider; clock-ins and store visits ask without it and get Google.
+    const preview = url.searchParams.get('purpose') === 'preview'
+    const place = await resolvePlace(lat, lng, outlet, { google: !preview })
 
     return Response.json({
       name: place.name,

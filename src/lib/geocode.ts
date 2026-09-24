@@ -1,4 +1,5 @@
 import 'server-only'
+import { unstable_cache } from 'next/cache'
 
 /**
  * Resolving "where is this person standing" into something a human reads as
@@ -72,7 +73,40 @@ interface GoogleGeocode {
   results?: { formatted_address?: string; types?: string[] }[]
 }
 
+/**
+ * Google bills per lookup, and the same shops come up day after day. Answers
+ * are kept for 30 days per spot, rounded to four decimals (about 11 m), in
+ * the platform's shared data cache, so a store visited every day is paid
+ * for once a month rather than every time.
+ */
+const GOOGLE_CACHE_SECONDS = 60 * 60 * 24 * 30
+
+class NothingFound extends Error {}
+
+const cachedGoogle = unstable_cache(
+  async (lat: number, lng: number) => {
+    const place = await askGoogle(lat, lng)
+    // Throwing keeps a timeout or an empty answer out of the cache, so the
+    // next lookup tries Google again instead of repeating a miss for a month.
+    if (!place) throw new NothingFound()
+    return place
+  },
+  ['google-place-v1'],
+  { revalidate: GOOGLE_CACHE_SECONDS },
+)
+
 async function fromGoogle(lat: number, lng: number): Promise<ResolvedPlace | null> {
+  if (!process.env.GOOGLE_MAPS_API_KEY) return null
+  const round = (v: number) => Math.round(v * 1e4) / 1e4
+  try {
+    return await cachedGoogle(round(lat), round(lng))
+  } catch (error) {
+    if (!(error instanceof NothingFound)) console.error('google place lookup failed', error)
+    return null
+  }
+}
+
+async function askGoogle(lat: number, lng: number): Promise<ResolvedPlace | null> {
   const key = process.env.GOOGLE_MAPS_API_KEY
   if (!key) return null
 
@@ -101,10 +135,13 @@ async function fromGoogle(lat: number, lng: number): Promise<ResolvedPlace | nul
   const name = place?.displayName?.text ?? null
   const placeAddress = place?.formattedAddress ?? null
 
-  // The street address, independent of whether a business was found.
-  const geocode = await getJson<GoogleGeocode>(
-    `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${key}`,
-  )
+  // The street address. Places already gives one with the business, so the
+  // separately billed Geocoding call is only made when it did not.
+  const geocode = placeAddress
+    ? null
+    : await getJson<GoogleGeocode>(
+        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${key}`,
+      )
   const address = placeAddress ?? geocode?.results?.[0]?.formatted_address ?? null
 
   if (!name && !address) return null
@@ -209,12 +246,18 @@ function metresBetween(lat1: number, lng1: number, lat2: number, lng2: number) {
  * Names the spot. `outlet` is the caller's assigned store, if they have one:
  * standing inside it is answered from the store's own record rather than
  * from a guess by a mapping service.
+ *
+ * `google: false` is for names nobody keeps, like the home screen's "you are
+ * at…" line: it goes to OpenStreetMap, which is free, and leaves the paid
+ * Google lookups for clock-ins, store visits and alerts, which are recorded.
  */
 export async function resolvePlace(
   lat: number,
   lng: number,
   outlet?: OutletAnchor | null,
+  options: { google?: boolean } = {},
 ): Promise<ResolvedPlace> {
+  const useGoogle = options.google ?? true
   if (outlet) {
     const distance = metresBetween(lat, lng, outlet.lat, outlet.lng)
     if (distance <= outlet.radius_m) {
@@ -228,7 +271,7 @@ export async function resolvePlace(
   }
 
   return (
-    (await fromGoogle(lat, lng)) ??
+    (useGoogle ? await fromGoogle(lat, lng) : null) ??
     (await fromOsm(lat, lng)) ?? {
       name: null,
       address: null,

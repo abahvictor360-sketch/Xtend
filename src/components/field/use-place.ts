@@ -34,7 +34,9 @@ export function usePlace(fix: Fix | null) {
     const [lat, lng] = key.split(',')
 
     setLoading(true)
-    fetch(`/api/geocode?lat=${lat}&lng=${lng}`)
+    // purpose=preview: this line is only shown, never saved, so the server
+    // names it with the free map rather than the paid one.
+    fetch(`/api/geocode?lat=${lat}&lng=${lng}&purpose=preview`)
       .then((res) => (res.ok ? res.json() : null))
       .then((data: Place | null) => {
         if (!cancelled) setPlace(data ?? null)
