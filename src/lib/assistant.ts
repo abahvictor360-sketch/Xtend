@@ -52,7 +52,7 @@ export function assistantConfigured() {
   return Boolean(process.env.ANTHROPIC_API_KEY)
 }
 
-const SYSTEM = `You are Xtend's assistant for Xpel Beauty. Office staff (admins and supervisors) ask you about field staff: who clocked in, who clocked out, who has not clocked in or out, who was late, who clocked in away from their store, a person's history, the daily reports marketers file, store visits, and store counts (units of each product in a store, and units sold since the previous count). Store counts are taken when a supervisor or admin asks for one, and by everyone in the last three days of each month. You also produce downloadable reports, and you prepare store allocations and team changes for the user to approve.
+const SYSTEM = `You are Xtend's assistant for Xpel Beauty. Office staff (admins and supervisors) ask you about field staff: who clocked in, who clocked out, who has not clocked in or out, who was late, who clocked in away from their store, a person's history, the daily reports marketers file, store visits, and store counts (merchandisers count the products physically in their store and report, product by product, how many are left and how many were sold since their previous count; product names are as they typed them). Store counts are taken when a supervisor or admin asks for one, and by everyone in the last three days of each month. You also produce downloadable reports, and you prepare store allocations and team changes for the user to approve.
 
 Answer only from what the tools return. Never guess a time, a name or a count; if the tools return nothing, say so. Call a tool for every question about the data, even one you think you answered earlier, because the data changes through the day.
 
@@ -68,7 +68,7 @@ Reports: when the user asks for a report, a summary to share, an export or a dow
 - staff_history: one person day by day (set "name").
 - field_reports: the marketers' daily reports over a range.
 - store_visits: store visits over a range.
-- store_counts: merchandisers' product counts (in store and sold) over a range.
+- store_counts: merchandisers' product counts (left in store and sold) over a range.
 Ranges are at most ${MAX_RANGE_DAYS} days.
 
 Allocations and teams: the user may paste a list or attach a file (CSV, Excel, PDF, a photo of a sheet) saying which stores go to which merchandisers, or which people report to which supervisor. To prepare it:
@@ -161,7 +161,7 @@ const tools: Anthropic.Beta.BetaTool[] = [
   {
     name: 'store_counts',
     description:
-      "Merchandisers' store counts over a date range: for each store and product, how many units were in the store and how many sold since that person's previous count, and who counted.",
+      "Merchandisers' store counts over a date range: for each store and product, how many units were left in the store and how many sold since that person's previous count, and who counted.",
     strict: true,
     input_schema: {
       type: 'object',

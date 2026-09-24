@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { SheetScreen, HeaderField } from '@/components/field/screen'
-import { StoreCountForm, type CountLine, type CountProduct } from '@/components/field/store-count-form'
+import { StoreCountForm, type CountLine } from '@/components/field/store-count-form'
 import { Alert } from '@/components/ui/alert'
 import { getCountStatus } from '@/lib/store-count-status'
 import { longDate } from '@/lib/utils'
@@ -31,15 +31,40 @@ export default async function StoreCountPage() {
   const { data: today } = await supabase.rpc('business_date')
   const businessDate = (today as string) ?? ''
 
-  const [{ data: outlets }, { data: products }, { data: counted }] = await Promise.all([
+  // Today's figures, the products from their last count at each store, and
+  // every name counted so far, for suggestions while typing.
+  const [{ data: outlets }, { data: mine }, { data: names }] = await Promise.all([
     supabase.rpc('my_outlets'),
-    supabase.from('products').select('id, name, sku').eq('is_active', true).order('name'),
     supabase
-      .from('store_counts')
-      .select('outlet_id, product_id, in_store, sold')
+      .from('store_count_detail')
+      .select('outlet_id, product_name, in_store, sold, count_date')
       .eq('user_id', session.userId)
-      .eq('count_date', businessDate),
+      .order('count_date', { ascending: false })
+      .order('product_name')
+      .limit(1000),
+    supabase.rpc('counted_product_names'),
   ])
+
+  const rows = (mine ?? []) as {
+    outlet_id: string
+    product_name: string
+    in_store: number
+    sold: number
+    count_date: string
+  }[]
+  const todays: CountLine[] = rows
+    .filter((r) => r.count_date === businessDate)
+    .map((r) => ({ outlet_id: r.outlet_id, product: r.product_name, in_store: r.in_store, sold: r.sold }))
+  const previous: Record<string, string[]> = {}
+  const lastDate: Record<string, string> = {}
+  for (const r of rows) {
+    if (r.count_date === businessDate) continue
+    // Rows come newest first: the first date seen per store is its last count.
+    lastDate[r.outlet_id] ??= r.count_date
+    if (r.count_date === lastDate[r.outlet_id]) {
+      ;(previous[r.outlet_id] ??= []).push(r.product_name)
+    }
+  }
 
   const stores = ((outlets ?? []) as { id: string; name: string }[]).map((o) => ({
     id: o.id,
@@ -64,8 +89,9 @@ export default async function StoreCountPage() {
     >
       <StoreCountForm
         stores={stores}
-        products={(products ?? []) as CountProduct[]}
-        counted={(counted ?? []) as CountLine[]}
+        today={todays}
+        previous={previous}
+        suggestions={((names ?? []) as { name: string }[]).map((n) => n.name)}
       />
     </SheetScreen>
   )
