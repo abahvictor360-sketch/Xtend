@@ -15,6 +15,10 @@ export interface ExportRow {
 export interface Sheet {
   title: string
   subtitle: string
+  /** Optional prose above the table: a written summary of what it shows. */
+  notes?: string
+  /** Wrap long cells over several lines in the PDF instead of cutting them. */
+  wrap?: boolean
   sheetName: string
   columns: readonly string[]
   rows: ExportRow[]
@@ -75,6 +79,16 @@ async function xlsx(sheet: Sheet) {
   const wb = new ExcelJS.Workbook()
   wb.creator = 'Xtend'
   wb.created = new Date()
+  if (sheet.notes) {
+    const summary = wb.addWorksheet('Summary')
+    summary.getColumn(1).width = 110
+    summary.addRow([sheet.title]).font = { bold: true, size: 14 }
+    summary.addRow([sheet.subtitle]).font = { italic: true, color: { argb: 'FF6B6B72' } }
+    summary.addRow([])
+    for (const line of sheet.notes.split('\n')) {
+      summary.addRow([line]).alignment = { wrapText: true, vertical: 'top' }
+    }
+  }
   const ws = wb.addWorksheet(sheet.sheetName, { views: [{ state: 'frozen', ySplit: 1 }] })
 
   ws.addRow([...sheet.columns])
@@ -165,6 +179,16 @@ async function docx(sheet: Sheet) {
           new Paragraph({
             children: [new TextRun({ text: sheet.subtitle, italics: true, size: 16 })],
           }),
+          ...(sheet.notes ?? '')
+            .split('\n')
+            .filter((line) => line.trim())
+            .map(
+              (line) =>
+                new Paragraph({
+                  spacing: { after: 120 },
+                  children: [new TextRun({ text: line, size: 20 })],
+                }),
+            ),
           new Table({
             width: { size: 100, type: WidthType.PERCENTAGE },
             rows: [headerRow, ...bodyRows],
@@ -216,12 +240,66 @@ async function pdf(sheet: Sheet) {
     }
   }
 
+  /**
+   * The standard PDF fonts only encode WinAnsi; anything else (a naira sign,
+   * an emoji in a report) would throw, so it is spelled out or dropped.
+   */
+  const safe = (text: string) =>
+    text
+      .replace(/\u20A6/g, 'NGN ')
+      .replace(/[^\s\x20-\x7E\u00A0-\u00FF\u2013\u2014\u2018\u2019\u201C\u201D\u2022\u2026\u20AC]/g, '')
+      .replace(/\s+/g, ' ')
+
+  type Font = typeof font
+
+  /** Greedy word wrap, breaking words that are wider than the line on their own. */
+  const wrap = (text: string, width: number, f: Font, sz: number) => {
+    const lines: string[] = []
+    let line = ''
+    for (const word of safe(text).split(' ')) {
+      const next = line ? `${line} ${word}` : word
+      if (f.widthOfTextAtSize(next, sz) <= width) {
+        line = next
+        continue
+      }
+      if (line) lines.push(line)
+      line = word
+      while (f.widthOfTextAtSize(line, sz) > width && line.length > 1) {
+        let cut = line.length - 1
+        while (cut > 1 && f.widthOfTextAtSize(line.slice(0, cut), sz) > width) cut--
+        lines.push(line.slice(0, cut))
+        line = line.slice(cut)
+      }
+    }
+    if (line) lines.push(line)
+    return lines.length ? lines : ['']
+  }
+
+  const MAX_CELL_LINES = 8
+
+  /** The lines each cell of a row prints as. */
+  const cellLines = (values: readonly string[], isHeader: boolean) =>
+    values.map((value, i) => {
+      const width = widths[i] ?? 60
+      if (!sheet.wrap || isHeader || i === sheet.linkColumn) {
+        const max = Math.max(1, Math.floor((width - 4) / (size * 0.5)))
+        const text = safe(value)
+        return [text.length > max ? `${text.slice(0, max - 1)}…` : text]
+      }
+      const lines = wrap(value, width - 4, font, size)
+      if (lines.length <= MAX_CELL_LINES) return lines
+      const kept = lines.slice(0, MAX_CELL_LINES)
+      kept[MAX_CELL_LINES - 1] = `${kept[MAX_CELL_LINES - 1].slice(0, -1)}…`
+      return kept
+    })
+
   const drawRow = (
     page: Page,
     y: number,
     values: readonly string[],
     isHeader: boolean,
     link: string | null,
+    cells = cellLines(values, isHeader),
   ) => {
     let x = margin
     values.forEach((value, i) => {
@@ -237,43 +315,69 @@ async function pdf(sheet: Sheet) {
         return
       }
 
-      const max = Math.max(1, Math.floor((width - 4) / (size * 0.5)))
-      const text = value.length > max ? `${value.slice(0, max - 1)}…` : value
       const flagged = !isHeader && i === sheet.statusColumn && value !== 'on_site'
-      page.drawText(text, {
-        x: x + 2,
-        y,
-        size,
-        font: isHeader ? bold : font,
-        color: flagged ? rgb(0.7, 0.1, 0.1) : rgb(0.1, 0.1, 0.12),
+      cells[i].forEach((text, line) => {
+        page.drawText(text, {
+          x: x + 2,
+          y: y - line * lineHeight,
+          size,
+          font: isHeader ? bold : font,
+          color: flagged ? rgb(0.7, 0.1, 0.1) : rgb(0.1, 0.1, 0.12),
+        })
       })
       x += width
     })
   }
 
-  const startPage = () => {
+  const startPage = (first: boolean) => {
     const page = doc.addPage([pageWidth, pageHeight])
-    page.drawText(sheet.title, { x: margin, y: pageHeight - margin - 4, size: 12, font: bold })
-    page.drawText(sheet.subtitle, {
+    page.drawText(safe(sheet.title), {
+      x: margin,
+      y: pageHeight - margin - 4,
+      size: 12,
+      font: bold,
+    })
+    page.drawText(safe(sheet.subtitle), {
       x: margin,
       y: pageHeight - margin - 17,
       size: 7,
       font,
       color: rgb(0.4, 0.4, 0.45),
     })
-    const headerY = pageHeight - margin - 32
+    let headerY = pageHeight - margin - 32
+
+    // The written summary goes on the first page only, above the table.
+    if (first && sheet.notes) {
+      const noteSize = 9
+      const noteLine = 12
+      let noteY = headerY - 2
+      for (const paragraph of sheet.notes.split('\n')) {
+        if (!paragraph.trim()) {
+          noteY -= noteLine / 2
+          continue
+        }
+        for (const line of wrap(paragraph, pageWidth - margin * 2, font, noteSize)) {
+          page.drawText(line, { x: margin, y: noteY, size: noteSize, font })
+          noteY -= noteLine
+        }
+      }
+      headerY = noteY - 10
+    }
+
     drawRow(page, headerY, sheet.columns, true, null)
-    return { page, y: headerY - lineHeight }
+    return { page, y: headerY - lineHeight - (sheet.wrap ? 3 : 0) }
   }
 
-  let { page, y } = startPage()
+  let { page, y } = startPage(true)
 
   for (const row of sheet.rows) {
-    if (y < margin + lineHeight) {
-      ;({ page, y } = startPage())
+    const cells = cellLines(row.values, false)
+    const height = Math.max(...cells.map((c) => c.length)) * lineHeight
+    if (y - height + lineHeight < margin + lineHeight) {
+      ;({ page, y } = startPage(false))
     }
-    drawRow(page, y, row.values, false, row.link ?? null)
-    y -= lineHeight
+    drawRow(page, y, row.values, false, row.link ?? null, cells)
+    y -= height + (sheet.wrap ? 3 : 0)
   }
 
   const bytes = await doc.save()

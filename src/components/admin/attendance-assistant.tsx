@@ -1,16 +1,18 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { Send, Sparkles } from 'lucide-react'
+import { Download, FileText, Send, Sparkles } from 'lucide-react'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
+import { REPORT_FORMATS, reportDownloadUrl, type ReportSpec } from '@/lib/assistant-report-spec'
 
 interface Turn {
   role: 'user' | 'assistant'
   content: string
+  reports?: ReportSpec[]
 }
 
 const SUGGESTIONS = [
@@ -20,6 +22,9 @@ const SUGGESTIONS = [
   'Who clocked in away from their store today?',
   'Who forgot to clock out yesterday?',
   'Who was late most often this week?',
+  "Make today's attendance report",
+  'Weekly attendance report for this week',
+  "Summarise this week's field reports",
 ]
 
 /** Only the most recent turns go back to the server; older ones add cost, not answers. */
@@ -59,11 +64,17 @@ export function AttendanceAssistant({
       const res = await fetch('/api/admin/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: next.slice(-HISTORY_SENT) }),
+        body: JSON.stringify({
+          messages: next.slice(-HISTORY_SENT).map(({ role, content }) => ({ role, content })),
+        }),
       })
-      const json = (await res.json().catch(() => ({}))) as { answer?: string; error?: string }
+      const json = (await res.json().catch(() => ({}))) as {
+        answer?: string
+        reports?: ReportSpec[]
+        error?: string
+      }
       if (!res.ok || !json.answer) throw new Error(json.error ?? 'The assistant did not answer.')
-      setTurns([...next, { role: 'assistant', content: json.answer }])
+      setTurns([...next, { role: 'assistant', content: json.answer, reports: json.reports }])
     } catch (e) {
       // Drop the unanswered question back into the box so it can be resent.
       setTurns(turns)
@@ -117,6 +128,7 @@ export function AttendanceAssistant({
                 )}
               >
                 {turn.content}
+                {turn.reports?.map((report, r) => <ReportCard key={r} report={report} />)}
               </div>
             </div>
           ))}
@@ -173,6 +185,30 @@ export function AttendanceAssistant({
           Start a new conversation
         </button>
       )}
+    </div>
+  )
+}
+
+function ReportCard({ report }: { report: ReportSpec }) {
+  return (
+    <div className="mt-3 whitespace-normal rounded-xl border border-border bg-tint/50 p-3">
+      <p className="flex items-start gap-2 text-sm font-semibold">
+        <FileText className="mt-0.5 h-4 w-4 shrink-0 text-brand" />
+        {report.title}
+      </p>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {REPORT_FORMATS.map((format) => (
+          <a
+            key={format.id}
+            href={reportDownloadUrl(report, format.id)}
+            download
+            className="inline-flex h-8 items-center gap-1.5 rounded-full bg-brand px-3 text-xs font-semibold text-primary-foreground hover:bg-brand-deep"
+          >
+            <Download className="h-3.5 w-3.5" />
+            {format.label}
+          </a>
+        ))}
+      </div>
     </div>
   )
 }

@@ -41,8 +41,8 @@ export async function POST(request: Request) {
 
     const supabase = await createServerSupabase()
     const who = `${session.profile.full_name} (${session.profile.role})`
-    const answer = await askAssistant(supabase, history, who)
-    return Response.json({ answer })
+    const reply = await askAssistant(supabase, history, who)
+    return Response.json(reply)
   } catch (error) {
     if (error instanceof Anthropic.RateLimitError) {
       return Response.json({ error: 'The assistant is busy. Try again in a moment.' }, { status: 429 })
