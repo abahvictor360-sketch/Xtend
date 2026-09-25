@@ -6,7 +6,7 @@
  * gone. Writes are NOT replayed here: they live in the IndexedDB outbox and
  * are flushed by the page, which owns the auth session.
  */
-const VERSION = 'xtend-v2'
+const VERSION = 'xtend-v3'
 const SHELL = ['/offline', '/manifest.webmanifest', '/icons/icon-192.png']
 
 self.addEventListener('install', (event) => {
@@ -71,22 +71,40 @@ self.addEventListener('push', (event) => {
   }
 
   const title = payload.title || 'Xtend'
+  const check = payload.check && payload.check.id && payload.check.token ? payload.check : null
   const options = {
     body: payload.body || '',
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-64.png',
     tag: payload.notificationId || undefined,
     renotify: Boolean(payload.notificationId),
-    data: { url: payload.url || '/field' },
+    data: { url: payload.url || '/field', check },
     vibrate: [80, 40, 80],
   }
 
-  event.waitUntil(self.registration.showNotification(title, options))
+  // A supervisor's "check the phone now": say that it arrived. Arriving at
+  // all proves the phone is on and has network (migration 026).
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(title, options),
+      check ? answerCheck(check, 'delivered') : Promise.resolve(),
+    ]),
+  )
 })
+
+function answerCheck(check, stage) {
+  return fetch('/api/phone-check/ack', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: check.id, token: check.token, stage }),
+  }).catch(() => {})
+}
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
   const target = (event.notification.data && event.notification.data.url) || '/field'
+  const check = event.notification.data && event.notification.data.check
+  if (check) event.waitUntil(answerCheck(check, 'opened'))
 
   event.waitUntil(
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {

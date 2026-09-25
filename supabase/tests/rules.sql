@@ -29,7 +29,20 @@ declare path text := auth.uid()::text || '/' || gen_random_uuid()::text || '-' |
 begin
   insert into storage.buckets (id, name) values (p_bucket, p_bucket) on conflict do nothing;
   insert into storage.objects (bucket_id, name) values (p_bucket, path);
+  -- And the server looked at it and passed it (migration 023).
+  insert into public.photo_checks (path, bucket, user_id, kind, verdict)
+  values (path, p_bucket, auth.uid(), case p_bucket when 'selfies' then 'selfie' else 'shelf' end, 'pass');
   return path;
+end;
+$$;
+
+-- A photo of a shop front, checked and passed, for naming a place (025).
+create or replace function place_photo(p_label text) returns text
+language plpgsql as $$
+declare taken text := fresh_photo('reports', p_label);
+begin
+  update public.photo_checks set kind = 'storefront' where path = taken;
+  return taken;
 end;
 $$;
 
@@ -66,6 +79,8 @@ declare
   req2       uuid;
   used_path  text;
   flagged    integer;
+  place_id   uuid;
+  i          integer;
 begin
   insert into auth.users (id, email) values
     (ada, 'ada@xpel.ng'), (bala, 'bala@xpel.ng'), (boss, 'boss@xpel.ng'),
@@ -1209,6 +1224,10 @@ begin
   -- F. Selfies are taken in the app, now, by the person (migration 022).
   -- ---------------------------------------------------------------
   perform act_as(bala);
+  -- These photos passed the check (023), so what is tested is the rest.
+  insert into public.photo_checks (path, bucket, user_id, kind, verdict)
+  values (bala::text || '/never-uploaded.jpg', 'selfies', bala, 'selfie', 'pass'),
+         (bala::text || '/yesterday.jpg', 'selfies', bala, 'selfie', 'pass');
   begin
     insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
     values ('closing', 9.0765, 7.3986, 10, bala::text || '/never-uploaded.jpg', now());
@@ -1401,6 +1420,301 @@ begin
             where user_id = ada and kind = 'impossible_journey'
               and reviewed_by = boss and review_note like 'Checked%'),
     'an admin reviews a flag with a note');
+
+  -- ---------------------------------------------------------------
+  -- Photos are checked before they count (migration 023).
+  -- ---------------------------------------------------------------
+  perform act_as(bala);
+  used_path := fresh_photo('selfies', 'phone-screen.jpg');
+  update public.photo_checks set verdict = 'reject', problem = 'screen' where path = used_path;
+  begin
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+    values ('closing', 9.0765, 7.3986, 10, used_path, now());
+    perform assert(false, 'a selfie rejected by the check is refused');
+  exception when others then
+    perform assert(sqlerrm like '%was rejected%', 'a selfie rejected by the check is refused');
+  end;
+
+  used_path := fresh_photo('selfies', 'skipped-check.jpg');
+  delete from public.photo_checks where path = used_path;
+  begin
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+    values ('closing', 9.0765, 7.3986, 10, used_path, now());
+    perform assert(false, 'a selfie that skipped the check is refused');
+  exception when others then
+    perform assert(sqlerrm like '%not been checked%', 'a selfie that skipped the check is refused');
+  end;
+
+  perform act_as(ada);
+  used_path := fresh_photo('reports', 'screen-shelf.jpg');
+  update public.photo_checks set verdict = 'reject', problem = 'screen' where path = used_path;
+  begin
+    perform public.submit_store_count(kiosk_id,
+      jsonb_build_array(jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 40, 'sold', 10)),
+      9.0765, 7.3986, 12, used_path);
+    perform assert(false, 'a rejected shelf photo is refused');
+  exception when others then
+    perform assert(sqlerrm like '%shelf photo%', 'a rejected shelf photo is refused');
+  end;
+
+  -- The checking service was down: allowed, so nobody is stuck.
+  perform act_as(grace);
+  used_path := fresh_photo('selfies', 'service-down.jpg');
+  update public.photo_checks set verdict = 'unchecked' where path = used_path;
+  perform public.end_store_visit(v.id, 9.0765, 7.3986, 12, null, null)
+  from public.store_visits v where v.user_id = grace and v.status = 'open';
+  insert into public.store_visits
+    (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at, selfie_path)
+  values (kiosk_id, 9.0765, 7.3986, 12, now(), used_path);
+  perform assert(
+    exists (select 1 from public.store_visits where selfie_path = used_path),
+    'a photo that could not be checked is still accepted');
+
+  -- ---------------------------------------------------------------
+  -- Xtend learns places (migration 024).
+  -- ---------------------------------------------------------------
+  perform act_as(grace);
+  place_id := public.learn_place(6.5000, 3.3000, '  Mama   Nkechi Provisions  ', null, 'staff',
+                                 place_photo('front.jpg'));
+  perform assert(place_id is not null, 'a person names a place the maps did not know');
+  perform assert(
+    (select name from public.known_place_at(6.50010, 3.30010)) = 'Mama Nkechi Provisions',
+    'the next person 15 m away is told its name, tidied up');
+  perform assert(
+    not exists (select 1 from public.known_place_at(6.5100, 3.3000)),
+    'a kilometre away it is not that place');
+
+  perform act_as(bala);
+  perform assert(
+    public.learn_place(6.50005, 3.30005, 'Some Other Name', null, 'google') = place_id,
+    'the same spot is recognised, whatever name a map gives it');
+  perform assert(
+    (select times_seen from public.known_places where id = place_id) = 2
+      and (select count(*) from public.known_places) = 1,
+    'it is counted as seen again, not added twice');
+  perform assert(
+    (select visitors from public.known_places where id = place_id) = array[grace, bala],
+    'and who was there is remembered');
+
+  perform assert(
+    public.learn_place(6.6018, 3.3515, 'Not a new place', null, 'staff') is null,
+    'inside one of the stores nothing is learned: the store names it');
+
+  begin
+    perform public.learn_place(6.4000, 3.4000, 'x', null, 'staff', place_photo('x.jpg'));
+    perform assert(false, 'a one-letter name is refused');
+  exception when others then
+    perform assert(sqlerrm like '%2 to 120%', 'a one-letter name is refused');
+  end;
+
+  -- ---------------------------------------------------------------
+  -- Nobody passes their house off as a shop (migration 025).
+  -- ---------------------------------------------------------------
+  perform act_as(grace);
+  begin
+    perform public.learn_place(6.4500, 3.4500, 'ikeja city-mall', null, 'staff', place_photo('home.jpg'));
+    perform assert(false, 'a store''s name, 17 km from the store, is refused');
+  exception when others then
+    perform assert(sqlerrm like '%does not match where you are standing%',
+      'a store''s name, 17 km from the store, is refused');
+  end;
+  begin
+    perform public.learn_place(6.4500, 3.4500, 'Ikeja City Mall Annex', null, 'staff', place_photo('home2.jpg'));
+    perform assert(false, 'nor a name that contains a store''s name');
+  exception when others then
+    perform assert(sqlerrm like '%does not match%', 'nor a name that contains a store''s name');
+  end;
+  perform assert(
+    public.learn_place(6.6050, 3.3530, 'Ikeja City Mall Car Park', null, 'staff',
+                       place_photo('carpark.jpg')) is not null,
+    'next to the store itself, its name may be used');
+  perform assert(
+    public.learn_place(6.4600, 3.4600, 'Mall Road Pharmacy', null, 'staff',
+                       place_photo('pharmacy.jpg')) is not null,
+    'a common word ("mall") on its own is not a clash');
+
+  begin
+    perform public.learn_place(6.4700, 3.4700, 'Blessing Stores', null, 'staff', null);
+    perform assert(false, 'naming a place needs a photo of it');
+  exception when others then
+    perform assert(sqlerrm like '%photo of the shop front%', 'naming a place needs a photo of it');
+  end;
+  begin
+    perform public.learn_place(6.4700, 3.4700, 'Blessing Stores', null, 'staff',
+                               fresh_photo('reports', 'shelf-as-front.jpg'));
+    perform assert(false, 'a shelf photo does not count as a shop front');
+  exception when others then
+    perform assert(sqlerrm like '%photo of the shop front%', 'a shelf photo does not count as a shop front');
+  end;
+  used_path := place_photo('a-house.jpg');
+  update public.photo_checks set verdict = 'reject', problem = 'not_a_business' where path = used_path;
+  begin
+    perform public.learn_place(6.4700, 3.4700, 'Blessing Stores', null, 'staff', used_path);
+    perform assert(false, 'a photo the check said shows a house is refused');
+  exception when others then
+    perform assert(sqlerrm like '%photo of the shop front%', 'a photo the check said shows a house is refused');
+  end;
+  used_path := place_photo('once.jpg');
+  perform public.learn_place(6.4700, 3.4700, 'Blessing Stores', null, 'staff', used_path);
+  begin
+    perform public.learn_place(6.4800, 3.4800, 'Another Shop', null, 'staff', used_path);
+    perform assert(false, 'one photo names one place');
+  exception when others then
+    perform assert(sqlerrm like '%new photo here%', 'one photo names one place');
+  end;
+
+  -- A place only its namer ever uses is flagged, once, on the third visit.
+  place_id := (select id from public.known_places where name = 'Blessing Stores');
+  perform public.note_place_visit(place_id);
+  perform assert(
+    not exists (select 1 from public.integrity_flags where kind = 'own_named_place'),
+    'two visits are nothing yet');
+  perform public.note_place_visit(place_id);
+  perform public.note_place_visit(place_id);
+  perform assert(
+    (select count(*) from public.integrity_flags
+     where kind = 'own_named_place' and user_id = grace and detail->>'place_id' = place_id::text) = 1,
+    'a self-named place nobody else visits is flagged once');
+  perform assert(
+    (select only_namer_visits and visitor_count = 1 from public.known_place_detail where id = place_id),
+    'and the Places page shows why');
+
+  place_id := (select id from public.known_places where name = 'Mall Road Pharmacy');
+  perform act_as(bala);
+  perform public.note_place_visit(place_id);
+  perform act_as(grace);
+  perform public.note_place_visit(place_id);
+  perform public.note_place_visit(place_id);
+  perform public.note_place_visit(place_id);
+  perform assert(
+    not exists (select 1 from public.integrity_flags
+                where kind = 'own_named_place' and detail->>'place_id' = place_id::text),
+    'a place other staff visit too is not flagged');
+
+  -- The daily limit still holds (4 staff names so far today).
+  for i in 1..6 loop
+    perform public.learn_place(6.40 + i * 0.01, 3.40, format('Shop %s', i), null, 'staff',
+                               place_photo(format('shop-%s.jpg', i)));
+  end loop;
+  begin
+    perform public.learn_place(6.30, 3.40, 'One too many', null, 'staff', place_photo('extra.jpg'));
+    perform assert(false, 'nobody names more than 10 new places a day');
+  exception when others then
+    perform assert(sqlerrm like '%No more place names%', 'nobody names more than 10 new places a day');
+  end;
+  perform assert(
+    public.learn_place(6.31, 3.40, 'Found by the map', null, 'google') is not null,
+    'places named by a map are not limited, and need no photo');
+
+  -- ---------------------------------------------------------------
+  -- "My network was bad", "my phone was off" (migration 026).
+  -- ---------------------------------------------------------------
+  declare
+    femi uuid := gen_random_uuid();
+    got jsonb;
+    again jsonb;
+    anchor uuid;
+    stamp text;
+  begin
+    insert into auth.users (id, email) values (femi, 'femi@xpel.ng');
+    insert into public.profiles (id, full_name, email, role, outlet_id, supervisor_id)
+    values (femi, 'Femi Ade', 'femi@xpel.ng', 'merchandiser', mall_id, tunde);
+
+    perform act_as(femi);
+    got := public.record_beacon(jsonb_build_object('reason', 'open', 'battery_pct', 81,
+      'charging', false, 'outbox_count', 0, 'device_time', now(), 'lat', 6.6019, 'lng', 3.3516,
+      'connection', '4g'));
+    perform assert(got->>'id' is not null and got->>'server_time' is not null,
+      'the phone reports in and is given the server''s time');
+    again := public.record_beacon(jsonb_build_object('reason', 'open', 'battery_pct', 'rubbish'));
+    perform assert(again->>'id' = got->>'id', 'a burst of reports is one report');
+    perform assert(
+      (select battery_pct = 81 and lat is not null and connection = '4g'
+       from public.device_beacons where id = (got->>'id')::uuid),
+      'battery, place and network are recorded');
+
+    -- Judging times, with the server's "now" fixed.
+    delete from public.device_beacons where user_id = femi;
+    perform assert(
+      public.clock_timing(femi, now() - interval '20 seconds',
+        jsonb_build_object('sent_at', now()), now())->>'verdict' = 'live',
+      'sent as it was taken: live');
+    perform assert(
+      public.clock_timing(femi, now() + interval '2 hours',
+        jsonb_build_object('sent_at', now() + interval '2 hours 10 seconds'), now())->>'verdict'
+        = 'phone_clock_wrong',
+      'a phone clock two hours out is caught');
+    perform assert(
+      public.clock_timing(femi, now() - interval '2 hours',
+        jsonb_build_object('sent_at', now()), now())->>'verdict' = 'offline_unproven',
+      'offline, with nothing heard from the phone at all: unproven');
+
+    insert into public.device_beacons (user_id, received_at, reason, outbox_count)
+    values (femi, now() - interval '3 hours', 'interval', 0) returning id into anchor;
+    perform assert(
+      public.clock_timing(femi, now() - interval '2 hours',
+        jsonb_build_object('sent_at', now(), 'anchor_beacon', anchor), now())->>'verdict'
+        = 'offline_confirmed',
+      'last heard at 3 hours ago, taken 2 hours ago, silent since: a real network gap');
+
+    insert into public.device_beacons (user_id, received_at, reason, outbox_count)
+    values (femi, now() - interval '1 hour', 'visible', 1) returning id into anchor;
+    got := public.clock_timing(femi, now() - interval '2 hours',
+      jsonb_build_object('sent_at', now(), 'anchor_beacon', anchor), now());
+    perform assert(got->>'verdict' = 'backdated' and got->>'how' = 'anchor',
+      'claimed 2 hours ago, but the phone had been in touch an hour ago before taking it: faked time');
+    perform assert(
+      public.clock_timing(femi, now() - interval '2 hours',
+        jsonb_build_object('sent_at', now()), now())->>'verdict' = 'network_was_available',
+      'the phone had network an hour ago, with the clock-in waiting: sent late on purpose');
+
+    insert into public.device_beacons (user_id, received_at, reason, outbox_count)
+    values (femi, now() - interval '30 minutes', 'visible', 0);
+    got := public.clock_timing(femi, now() - interval '2 hours',
+      jsonb_build_object('sent_at', now()), now());
+    perform assert(got->>'verdict' = 'backdated' and got->>'how' = 'nothing_waiting',
+      'the phone said nothing was waiting half an hour ago: the clock-in was made later');
+
+    -- The real thing: the verdict is stored and flagged.
+    -- The phone's clock set 3 hours back (ahead is refused outright).
+    stamp := (now() - interval '3 hours')::text;
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, device_info)
+    values ('opening', 6.6019, 3.3516, 12, fresh_photo('selfies', 'femi.jpg'), now() - interval '3 hours',
+            jsonb_build_object('sent_at', stamp))
+    returning id into attendance_id;
+    perform assert(
+      (select time_verdict from public.attendance where id = attendance_id) = 'phone_clock_wrong',
+      'a clock-in from a phone with its clock changed is marked');
+    perform assert(
+      (select summary like '%180 minutes behind%' from public.integrity_flags
+       where kind = 'phone_clock_wrong' and user_id = femi),
+      'and flagged, saying by how much');
+
+    -- A supervisor checks "my phone was off" for the last two hours.
+    perform act_as(tunde);
+    got := public.check_excuse(femi, now() - interval '2 hours 30 minutes', now() + interval '1 minute');
+    perform assert(jsonb_array_length(got->'contacts') >= 3,
+      'the check lists every time the phone was heard from');
+    perform assert(got->'before'->>'at' is not null and (got->>'has_push')::boolean = false,
+      'with the last report before the gap, and whether the phone can be pushed');
+    perform act_as(ada);
+    begin
+      perform public.check_excuse(femi, now() - interval '1 hour', now());
+      perform assert(false, 'staff cannot check each other');
+    exception when others then
+      perform assert(sqlerrm like '%own team%', 'staff cannot check each other');
+    end;
+    begin
+      perform public.request_phone_check(femi);
+      perform assert(false, 'nor push each other''s phones');
+    exception when others then
+      perform assert(sqlerrm like '%own team%', 'nor push each other''s phones');
+    end;
+    perform act_as(tunde);
+    anchor := public.request_phone_check(femi);
+    perform assert(anchor is not null and public.request_phone_check(femi) = anchor,
+      'a supervisor checks a team member''s phone, once at a time');
+  end;
 
   raise notice 'ALL RULES PASSED';
 end $$;

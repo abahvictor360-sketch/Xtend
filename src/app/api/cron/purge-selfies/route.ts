@@ -34,6 +34,12 @@ export async function GET(request: Request) {
   // tomorrow morning, so yesterday's open visits are marked abandoned.
   const { data: abandoned } = await supabase.rpc('close_abandoned_visits')
 
+  // What phones reported about themselves (migration 026) is evidence for
+  // settling an excuse, which nobody raises two months later.
+  const cutoff = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString()
+  await supabase.from('device_beacons').delete().lt('received_at', cutoff)
+  await supabase.from('phone_checks').delete().lt('created_at', cutoff)
+
   return Response.json({
     photos_deleted: purge.photos_deleted,
     records_cleared: purge.records_cleared,

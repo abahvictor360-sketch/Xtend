@@ -26,4 +26,38 @@ export const FLAG_KINDS: Record<string, { label: string; meaning: string }> = {
     label: 'Round numbers',
     meaning: 'Every number is a multiple of 10, which real counts rarely are.',
   },
+  photo_rejected: {
+    label: 'Photo rejected',
+    meaning:
+      'A photo was refused by the server check: a picture of a screen or a printed photo, no face, or too poor to use.',
+  },
+  photo_unchecked: {
+    label: 'Photo not checked',
+    meaning: 'The photo check was unavailable, so the photo was allowed without being looked at.',
+  },
+  own_named_place: {
+    label: 'Self-named place',
+    meaning:
+      'Keeps clocking in, checking in or being found off-site at a place they named themselves that nobody else has visited. It could be their house given a shop name: look at the photo on the Places page.',
+  },
+  selfie_at_home: {
+    label: 'Selfie at home',
+    meaning:
+      'The clock-in selfie looks like it was taken inside a home (bed, sofa, curtains). With a store GPS reading, that suggests a faked location.',
+  },
+  backdated_clock: {
+    label: 'Faked clock-in time',
+    meaning:
+      'A clock event saved "offline" claims a time before the phone was last in touch with Xtend. The time on the phone was changed to make it look earlier.',
+  },
+  phone_clock_wrong: {
+    label: 'Phone clock changed',
+    meaning:
+      "The phone's clock was more than 5 minutes out at a clock event. Phones set their own time from the network, so someone changed it.",
+  },
+  late_sync_with_network: {
+    label: 'Sent late with network',
+    meaning:
+      'A clock event was taken offline and sent much later, although the phone had network well before it was sent.',
+  },
 }

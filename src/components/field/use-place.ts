@@ -9,7 +9,7 @@ export interface Place {
   address: string | null
   /** Name and street joined, or the best available. Never empty. */
   label: string | null
-  source: 'outlet' | 'google' | 'osm' | 'coordinates' | null
+  source: 'outlet' | 'known' | 'google' | 'osm' | 'coordinates' | null
 }
 
 /**

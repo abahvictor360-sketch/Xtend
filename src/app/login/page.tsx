@@ -5,7 +5,19 @@ import { XpelLockup, XpelTile } from '@/components/brand/logo'
 
 export const metadata = { title: 'Sign in — Xtend' }
 
-export default function LoginPage() {
+const REASONS: Record<string, string> = {
+  'clocked-out': 'You have clocked out for today. Log in again when you next start work.',
+  'new-day': 'A new day has started. Log in again to clock in.',
+}
+
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
+  const reason = (await searchParams).reason
+  const notice = typeof reason === 'string' ? REASONS[reason] : undefined
+
   return (
     <main className="relative flex min-h-dvh flex-col overflow-hidden">
       {/* Brand block up top, white sheet over it: the same shape as the
@@ -26,6 +38,9 @@ export default function LoginPage() {
           <p className="mb-6 mt-1 text-sm text-muted-foreground">
             Use the email or phone number your admin registered.
           </p>
+          {notice && (
+            <p className="mb-5 rounded-2xl bg-tint px-4 py-3 text-sm text-tint-foreground">{notice}</p>
+          )}
 
           <Suspense fallback={<Skeleton className="h-64 w-full" />}>
             <LoginForm />

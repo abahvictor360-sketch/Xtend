@@ -10,6 +10,14 @@ grant usage on schema public, auth to authenticated;
 grant select on all tables in schema public to authenticated;
 grant execute on function auth.uid() to authenticated;
 grant execute on function assert(boolean, text) to authenticated;
+-- Supabase also grants writes on public tables and relies on RLS; do the
+-- same here for learned places, so the test proves the policy stops staff.
+grant update, delete on public.known_places to authenticated;
+-- On Supabase those defaults are granted when a table is made, and a
+-- migration's own revokes come after. Replay 026's in that order.
+revoke select on public.phone_checks from authenticated;
+grant select (id, user_id, requested_by, devices, created_at, delivered_at, opened_at)
+  on public.phone_checks to authenticated;
 
 select id as ada   from auth.users where email = 'ada@xpel.ng'   \gset
 select id as bala  from auth.users where email = 'bala@xpel.ng'  \gset
@@ -31,6 +39,17 @@ select assert((select count(*) from public.store_counts) > 0,
 
 select assert((select count(*) from public.integrity_flags) = 0,
   'rls: nobody sees the flags raised about them');
+select assert((select count(*) from public.device_beacons) = 0
+                and (select count(*) from public.phone_checks) = 0,
+  'rls: staff see nothing their phone reports, and no phone checks');
+
+update public.known_places set name = 'Renamed by staff' where name = 'Mama Nkechi Provisions';
+delete from public.known_places where name = 'Mama Nkechi Provisions';
+select assert((select count(*) from public.known_places) = 0
+                and (select count(*) from public.known_place_detail) = 0,
+  'rls: staff cannot read the list of learned places, and who was where');
+select assert((select name from public.known_place_at(6.5001, 3.3001)) = 'Mama Nkechi Provisions',
+  'rls: but are told the name of the place they are standing in');
 
 select set_config('request.jwt.claim.sub', :'bala', false);
 select assert((select count(*) from public.count_requests) = 0,
@@ -53,6 +72,20 @@ select assert((select count(*) from public.integrity_flag_detail) > 0,
   'rls: an admin sees the integrity flags');
 select assert((select count(*) from public.store_counts) = (select count(*) from public.store_count_detail),
   'rls: and every count');
+select assert((select count(*) from public.known_places where name = 'Mama Nkechi Provisions') = 1,
+  'rls: staff could not rename or delete a learned place');
+select assert((select count(*) from public.known_place_detail) = (select count(*) from public.known_places),
+  'rls: an admin sees every learned place');
+select assert((select count(*) from public.device_beacons) > 0
+                and (select count(*) from public.phone_checks) > 0,
+  'rls: an admin sees phone reports and checks');
+do $$
+begin
+  perform token from public.phone_checks limit 1;
+  perform assert(false, 'rls: nobody reads the token that proves a phone answered');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: nobody reads the token that proves a phone answered');
+end $$;
 
 do $$
 begin

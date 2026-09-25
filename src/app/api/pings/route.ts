@@ -47,7 +47,10 @@ export async function POST(request: Request) {
       if (raised && raised.length > 0) {
         // Name the spot once, here, rather than geocoding every ping: this
         // runs at most once per person per 30 minutes, when a breach fires.
-        const place = await resolvePlace(parsed.data.lat, parsed.data.lng, null)
+        const place = await resolvePlace(parsed.data.lat, parsed.data.lng, null, {
+          supabase,
+          learn: true,
+        })
         if (place.label) {
           await admin
             .from('location_pings')

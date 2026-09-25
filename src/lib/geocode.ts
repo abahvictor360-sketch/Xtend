@@ -1,5 +1,6 @@
 import 'server-only'
 import { unstable_cache } from 'next/cache'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**
  * Resolving "where is this person standing" into something a human reads as
@@ -20,7 +21,7 @@ import { unstable_cache } from 'next/cache'
  *     coverage is thin, so it often names the street rather than the shop.
  */
 
-export type PlaceSource = 'outlet' | 'google' | 'osm' | 'coordinates'
+export type PlaceSource = 'outlet' | 'known' | 'google' | 'osm' | 'coordinates'
 
 export interface ResolvedPlace {
   /** The business or landmark, when one could be identified. */
@@ -255,9 +256,19 @@ export async function resolvePlace(
   lat: number,
   lng: number,
   outlet?: OutletAnchor | null,
-  options: { google?: boolean } = {},
+  options: {
+    google?: boolean
+    /**
+     * The caller's own client. With it, any store the person is standing in
+     * and Xtend's own list of learned places are tried before any map.
+     */
+    supabase?: SupabaseClient
+    /** Record what a map finds, so the next person there needs no map. */
+    learn?: boolean
+  } = {},
 ): Promise<ResolvedPlace> {
   const useGoogle = options.google ?? true
+  const db = options.supabase
   if (outlet) {
     const distance = metresBetween(lat, lng, outlet.lat, outlet.lng)
     if (distance <= outlet.radius_m) {
@@ -270,15 +281,87 @@ export async function resolvePlace(
     }
   }
 
+  if (db) {
+    const store = await fromStores(db, lat, lng)
+    if (store) return store
+    const known = await fromKnownPlaces(db, lat, lng)
+    if (known) {
+      // Counts who is seen where, so a place only its namer ever uses is
+      // noticed (migration 025). Not for a preview before the clock-in.
+      if (options.learn) {
+        await db.rpc('note_place_visit', { p_id: known.id }).then(
+          () => undefined,
+          () => undefined,
+        )
+      }
+      return known.place
+    }
+  }
+
+  const mapped = (useGoogle ? await fromGoogle(lat, lng) : null) ?? (await fromOsm(lat, lng))
+  if (mapped?.name && db && options.learn) {
+    // Remembered, so the next person here is named from Xtend's own list.
+    await db
+      .rpc('learn_place', {
+        p_lat: lat,
+        p_lng: lng,
+        p_name: mapped.name,
+        p_address: mapped.address,
+        p_source: mapped.source,
+      })
+      .then(
+        () => undefined,
+        () => undefined,
+      )
+  }
+
   return (
-    (useGoogle ? await fromGoogle(lat, lng) : null) ??
-    (await fromOsm(lat, lng)) ?? {
+    mapped ?? {
       name: null,
       address: null,
       label: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
       source: 'coordinates',
     }
   )
+}
+
+// ---------------------------------------------------------------------------
+// Xtend's own knowledge: its stores, and the places it has learned.
+// ---------------------------------------------------------------------------
+
+/** Standing inside any store Xtend knows, whoever it is allocated to. */
+async function fromStores(db: SupabaseClient, lat: number, lng: number): Promise<ResolvedPlace | null> {
+  const { data: id, error } = await db.rpc('outlet_containing', { p_lat: lat, p_lng: lng })
+  if (error || !id) return null
+  const { data } = await db
+    .from('outlets')
+    .select('name, address')
+    .eq('id', id as string)
+    .maybeSingle<{ name: string; address: string | null }>()
+  if (!data) return null
+  return { name: data.name, address: data.address, label: join(data.name, data.address, data.name), source: 'outlet' }
+}
+
+/** A place somebody was at before, named then by a map or by a person. */
+async function fromKnownPlaces(
+  db: SupabaseClient,
+  lat: number,
+  lng: number,
+): Promise<{ id: string; place: ResolvedPlace } | null> {
+  const { data, error } = await db.rpc('known_place_at', { p_lat: lat, p_lng: lng })
+  // Before migration 024 the function does not exist: fall through to the maps.
+  if (error) return null
+  const place = (
+    data as { id: string; name: string; address: string | null }[] | null
+  )?.[0]
+  if (!place) return null
+  // Shown as it is: staff are not told that Xtend learned it, or that an
+  // admin has yet to check it. Admins see that on the Places page.
+  const name = place.name
+  return {
+    id: place.id,
+    place: { name, address: place.address, label: join(name, place.address, name), source: 'known' },
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -14,12 +14,14 @@ const LINKS = [
   { href: '/admin/store-counts', label: 'Store counts', adminOnly: false },
   { href: '/admin/alerts', label: 'Alerts', adminOnly: false },
   { href: '/admin/integrity', label: 'Integrity', adminOnly: false },
+  { href: '/admin/excuses', label: 'Check an excuse', adminOnly: false },
   { href: '/admin/analytics', label: 'Analytics', adminOnly: false },
   { href: '/admin/notifications', label: 'Notifications', adminOnly: false },
   { href: '/admin/assignments', label: 'Store allocation', adminOnly: false },
   { href: '/admin/users', label: 'Staff', adminOnly: false },
   { href: '/admin/teams', label: 'Teams', adminOnly: true },
   { href: '/admin/outlets', label: 'Outlets', adminOnly: true },
+  { href: '/admin/places', label: 'Places', adminOnly: true },
   { href: '/admin/audit', label: 'Audit log', adminOnly: true },
 ]
 

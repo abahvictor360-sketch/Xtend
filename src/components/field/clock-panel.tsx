@@ -4,6 +4,7 @@ import { useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, Camera, CheckCircle2, CloudUpload, LogIn, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { NamePlace } from '@/components/field/name-place'
 import { CameraCapture } from '@/components/field/camera-capture'
 import { Alert } from '@/components/ui/alert'
 import { processSelfie } from '@/lib/image'
@@ -26,7 +27,7 @@ interface ResolvedPlace {
   name: string | null
   address: string | null
   label: string | null
-  source: 'outlet' | 'google' | 'osm' | 'coordinates' | null
+  source: 'outlet' | 'known' | 'google' | 'osm' | 'coordinates' | null
 }
 
 async function reverseGeocode(lat: number, lng: number): Promise<ResolvedPlace> {
@@ -50,6 +51,10 @@ export function ClockPanel({ day }: { day: DayState }) {
   const [busyStep, setBusyStep] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [outcome, setOutcome] = useState<Outcome | null>(null)
+  // Set after a clock-out: the day's login is over.
+  const [endsLogin, setEndsLogin] = useState(false)
+  // A spot no store, learned place or map could name: ask them to name it.
+  const [unnamed, setUnnamed] = useState<{ lat: number; lng: number } | null>(null)
 
   const nextType: AttendanceType | null = !day.opening ? 'opening' : !day.closing ? 'closing' : null
 
@@ -65,6 +70,7 @@ export function ClockPanel({ day }: { day: DayState }) {
   const start = useCallback(async (type: AttendanceType) => {
     setError(null)
     setOutcome(null)
+    setUnnamed(null)
     try {
       setBusyStep('Getting your location')
       const fix = await requireFix()
@@ -134,6 +140,8 @@ export function ClockPanel({ day }: { day: DayState }) {
             }, and will send itself when you get signal.`,
           })
         } else {
+          const signOut = (result.data as { sign_out?: boolean }).sign_out === true
+          if (!resolved.name) setUnnamed({ lat: fix.lat, lng: fix.lng })
           const record = (
             result.data as {
               attendance: {
@@ -166,6 +174,12 @@ export function ClockPanel({ day }: { day: DayState }) {
               title: 'Recorded, but flagged',
               detail: `Location: ${where}. It could not be verified against an outlet, or the fix was too rough. This is recorded and your admin has been notified.`,
             })
+          }
+
+          if (signOut) {
+            // Their login ends with the day: show the result, then sign out.
+            setEndsLogin(true)
+            return
           }
         }
 
@@ -201,6 +215,25 @@ export function ClockPanel({ day }: { day: DayState }) {
             {outcome.title}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">{outcome.detail}</p>
+        </Alert>
+      )}
+
+      {unnamed && <NamePlace lat={unnamed.lat} lng={unnamed.lng} />}
+
+      {endsLogin && (
+        <Alert variant="info" className="animate-fade-up">
+          <p className="font-bold">You are signed out for today</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Clocking out ends your login. Log in again next time you start work.
+          </p>
+          <Button
+            className="mt-3 w-full"
+            onClick={() => {
+              window.location.href = '/api/auth/expired?reason=clocked-out'
+            }}
+          >
+            OK
+          </Button>
         </Alert>
       )}
 

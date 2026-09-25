@@ -15,7 +15,7 @@ const schema = z.object({
   accuracy_m: z.number().nonnegative(),
   address: z.string().max(500).nullable().optional(),
   place_name: z.string().max(200).nullable().optional(),
-  place_source: z.enum(['outlet', 'google', 'osm', 'coordinates']).nullable().optional(),
+  place_source: z.enum(['outlet', 'known', 'google', 'osm', 'coordinates']).nullable().optional(),
   selfie_path: z.string().min(1).max(300),
   thumb_path: z.string().min(1).max(300).nullable().optional(),
   device_info: z.record(z.unknown()).default({}),
@@ -127,7 +127,13 @@ export async function POST(request: Request) {
       outlet_name = outlet?.name ?? null
     }
 
-    return Response.json({ attendance: { ...data, outlet_name } }, { status: 201 })
+    // Clocking out ends a merchandiser's or marketer's login for the day;
+    // the app shows the result, then signs them out.
+    const sign_out =
+      data?.type === 'closing' &&
+      (session.profile.role === 'merchandiser' || session.profile.role === 'marketer')
+
+    return Response.json({ attendance: { ...data, outlet_name }, sign_out }, { status: 201 })
   } catch (error) {
     return apiError(error)
   }

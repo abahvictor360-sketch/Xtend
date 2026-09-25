@@ -51,6 +51,8 @@ export interface PushPayload {
   body: string
   url?: string | null
   notificationId?: string
+  /** A phone check: the service worker reports back that it arrived. */
+  check?: { id: string; token: string }
 }
 
 /**

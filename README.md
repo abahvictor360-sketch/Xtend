@@ -40,6 +40,10 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0020_count_requests.sql  # counts on request or at month end
    supabase/migrations/0021_counted_product_names.sql  # products typed while counting
    supabase/migrations/0022_integrity_checks.sql  # counts in store, selfie checks, flags
+   supabase/migrations/0023_photo_checks.sql  # photos checked for screens, faces, shelves
+   supabase/migrations/0024_known_places.sql  # Xtend's own learned places
+   supabase/migrations/0025_place_safeguards.sql  # no houses passed off as shops
+   supabase/migrations/0026_phone_evidence.sql  # network and phone-off excuses
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
@@ -123,25 +127,113 @@ question rather than guessing from the role name.
 
 Clock-in records the premises, not just coordinates:
 `Justrite Superstore Bariga, 56/58 Jagun Molu St, Bariga, Lagos 23401, Lagos`.
-`src/lib/geocode.ts` resolves it from three sources, best first:
+`src/lib/geocode.ts` resolves it from these sources, best first:
 
 1. **The assigned outlet**, when the fix is inside its geofence. If someone
    is standing in their own store, that store's record is the most accurate
-   answer available and it costs no API call. This covers the normal case
-   exactly, with no key and no network dependency.
-2. **Google** — Places (New) `searchNearby` for the business name, Geocoding
-   for the street address. This is the only source that reliably names
-   Nigerian retail premises, and it is what produces the format above.
-   Set `GOOGLE_MAPS_API_KEY` with *Places API (New)* and *Geocoding API*
-   enabled.
-3. **OpenStreetMap** — Nominatim for the address, Overpass for a named
-   business within 80 m. Free, no key, but Nigerian POI coverage is thin, so
-   it usually names the street rather than the shop.
+   answer available and it costs no API call.
+2. **Any store Xtend knows** (`outlet_containing`), whoever it is allocated to.
+3. **Xtend's own learned places** (`known_places`, migration 024). See below.
+4. **Google**: Places (New) `searchNearby` for the business name, and
+   Geocoding for the street only when Places gave none. Answers are cached
+   for 30 days per ~11 m spot. Set `GOOGLE_MAPS_API_KEY` with *Places API
+   (New)* and *Geocoding API* enabled. The home screen's "you are at…"
+   preview never uses Google.
+5. **OpenStreetMap**: Nominatim for the address, Overpass for a named
+   business within 80 m. Free, no key, but thin Nigerian shop coverage.
 
 Whatever answers, `attendance.place_name` and `attendance.address` are stored
 separately along with `place_source`, so the record says where the reading
 came from. The `location_label` column in `attendance_detail` joins them for
 display and can never be empty — coordinates are the floor.
+
+### Xtend learns places for itself
+
+The business rule, as the owner asked for it: many Nigerian shops are on
+neither Google nor OpenStreetMap, so Xtend builds its own map as staff work.
+
+- The first time anyone clocks in, checks in, or trips a geofence alert
+  somewhere that is not a store, the GPS position and name are saved in
+  `known_places`. The name comes from Google or OpenStreetMap if either
+  knows it.
+- If no map knows the spot, the app asks the person *"This place is not on
+  the map. What is it called?"* and saves what they type (at most 10 new
+  names per person per day).
+- From then on, anyone within the place's radius (50 m by default) is told
+  that name straight from `known_places`, with no map lookup and no cost.
+  Example: once one merchandiser has clocked in at Ikeja City Mall, every
+  later clock-in there is named "Ikeja City Mall" from Xtend's own list.
+- A learned place only names where somebody is. Being on or off site is
+  still measured against the stores, so a wrong name misleads nobody about
+  attendance.
+- Admins check staff-typed names on **Places** (`/admin/places`): verify,
+  correct, change the radius, delete, or **Make it a store**, which turns
+  the learned spot into an outlet at the exact position staff stood. This
+  is the intended way to grow the store list from real visits.
+
+### Nobody passes their house off as a shop
+
+The trick this guards against: stand at home, name it "Ikeja City Mall", and
+let every later clock-in there read like the real mall. Migration 025 and the
+app stop it in five ways:
+
+1. **No borrowing a store's name.** A name that matches one of the stores,
+   or a verified place, is refused more than 500 m from it
+   (`names_overlap()`, whole words, so "Mall Road Pharmacy" is fine).
+2. **A shop-front photo is required.** Naming a place opens the back camera;
+   the photo is checked by `/api/photo-check` as a `storefront` and a house,
+   a room or no place at all is rejected. `learn_place()` refuses a name
+   without a fresh, passed storefront photo, and one photo names one place.
+3. **Staff are not told any of this.** The app only asks "What is the name
+   of this shop?" and says "Saved"; nothing says Xtend learns or knows
+   places, and a refused name gets a neutral message ("That name does not
+   match where you are standing"). Unverified names are marked for admins
+   on Places only (migration 026 rewords the messages).
+4. **Only-the-namer places are flagged.** Xtend records who is seen at each
+   learned place (`note_place_visit()`). A staff-named place visited by
+   nobody but the person who named it, three times over, raises an
+   `own_named_place` integrity flag, and Places shows the warning, the
+   visitor count and the photo. Staff can no longer read the place list
+   directly (who was where); they are only told the name where they stand.
+5. **Selfies at home are flagged.** The selfie check also reports the
+   setting; a selfie plainly taken inside a home raises `selfie_at_home`
+   (allowed, since GPS decides presence, but a supervisor sees it).
+
+## "My network was bad", "my phone was off"
+
+Migration 026. The two excuses for a late or missing clock-in, and how
+Xtend settles them. None of it is visible to staff.
+
+- **The phone reports on itself** (`PhoneBeacon` in the field layout,
+  `lib/phone-report.ts`, `/api/beacon`, table `device_beacons`): when the
+  app opens, comes back on screen, goes off screen, regains network, and
+  every 5 minutes while open. Each report carries the network type,
+  battery and charging, how many things are waiting to upload, the phone's
+  own clock, and a location if location is already allowed. Kept 60 days.
+- **Every clock event's time is judged** (`clock_timing()`, stored in
+  `attendance.time_verdict`). A clock-in carries the id of the last report
+  the server acknowledged and the phone's clock at sending, so:
+  - `backdated` (high flag): claims a time before the phone was last in
+    touch, or the phone later reported nothing waiting. The time on the
+    phone was changed to fake an earlier clock-in.
+  - `phone_clock_wrong` (medium flag): the phone's clock was more than 5
+    minutes out.
+  - `network_was_available` (low flag): taken offline but only sent long
+    after the phone had network again.
+  - `offline_confirmed` / `offline_unproven` / `live`: no flag.
+  Lateness is still measured from when the server received a clock-in.
+- **Check an excuse** (`/admin/excuses`, admins and supervisors, and the
+  `check_excuse` tool in Ask Xtend): pick who, when, and "no network" or
+  "phone off". `check_excuse()` gathers every time that phone reached
+  Xtend, clock events it saved offline, battery and place before and after,
+  and `lib/excuse.ts` words the verdict: *Not true*, *Doubtful*, *Fits*
+  or *No evidence*. Anything that reached Xtend in the window proves both
+  network and a working phone; a battery that did not run flat makes
+  "it died" doubtful.
+- **Check the phone now**: sends "Please open Xtend now" as a push; the
+  service worker reports when it arrives (`/api/phone-check/ack`, with a
+  one-time token). Arrived means on, with network, at that moment. It needs
+  the person to have Xtend notifications on.
 
 ## Telling the office nobody is in the store
 

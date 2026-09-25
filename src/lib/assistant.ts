@@ -10,6 +10,7 @@ import {
   staffHistory,
   countRequests,
   integrityFlags,
+  checkExcuse,
   storeCounts,
   storeVisits,
 } from '@/lib/assistant-data'
@@ -79,6 +80,8 @@ Allocations and teams: the user may paste a list or attach a file (CSV, Excel, P
 4. Call propose_changes once with every change. Use mode "add" (keep the stores they already have) unless the user says the list replaces what people have, then "replace".
 5. Reply in two or three sentences: how many people and stores are in the plan, anything unmatched and why, and that nothing changes until they press Apply below. Never say the changes are made: only the Apply button makes them.
 Only admins can change who somebody reports to; for a supervisor, say so and prepare only store allocations. If the user just asks for an allocation in words ("give Ada Ikeja Mall"), follow the same steps.
+
+Excuses: when someone says a person blames their network or their phone ("she said her network was bad", "he says his phone died"), call check_excuse with the claim and the time window, then give the headline first and the two or three strongest pieces of evidence, in plain words. Say "Xtend heard from the phone at…" rather than technical terms. Never tell the user this evidence is shown to staff: it is not.
 
 Resolve relative dates ("today", "yesterday", "last Monday", "this week", "last month") against today's date, given below, and pass them as YYYY-MM-DD. A week runs Monday to Sunday.
 
@@ -174,12 +177,30 @@ const tools: Anthropic.Beta.BetaTool[] = [
   {
     name: 'integrity_flags',
     description:
-      'Integrity flags over a date range (at most 62 days; null for the last 30): signs of a fake-location app (the same GPS point on different days, too-perfect accuracy, impossible journeys) and store counts that do not add up (units missing since the last count, a count identical to the last, only round numbers). Each has the person, store, date, and whether a supervisor has reviewed it. A flag is a reason to check, not proof.',
+      'Integrity flags over a date range (at most 62 days; null for the last 30): signs of a fake-location app (the same GPS point on different days, too-perfect accuracy, impossible journeys), rejected photos, selfies taken at home, self-named places, clock times faked on the phone or sent late despite network, and store counts that do not add up (units missing since the last count, a count identical to the last, only round numbers). Each has the person, store, date, and whether a supervisor has reviewed it. A flag is a reason to check, not proof.',
     strict: true,
     input_schema: {
       type: 'object',
       properties: range,
       required: ['from', 'to'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'check_excuse',
+    description:
+      'Checks an excuse such as "my network was bad" or "my phone was off" for one person over a time window on one day. Returns a verdict (false, doubtful, fits, unknown), a one-line headline, and the evidence: every time the phone reached Xtend (opening the app, network type, battery, location), clock events it saved offline and whether their time was faked, the phone clock being changed, battery before and after, and any live phone checks. Use it whenever someone blames their network or phone.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Full or partial staff name.' },
+        date: { type: ['string', 'null'], description: 'YYYY-MM-DD. Null for today.' },
+        from: { type: ['string', 'null'], description: 'HH:MM, Lagos time. Null for 06:00.' },
+        to: { type: ['string', 'null'], description: 'HH:MM, Lagos time. Null for now (today) or 20:00.' },
+        claim: { type: 'string', enum: ['no_network', 'phone_off'] },
+      },
+      required: ['name', 'date', 'from', 'to', 'claim'],
       additionalProperties: false,
     },
   },
@@ -326,6 +347,9 @@ async function runTool(
         break
       case 'count_requests':
         result = await countRequests(supabase)
+        break
+      case 'check_excuse':
+        result = await checkExcuse(supabase, input.name, input.date, input.from, input.to, input.claim)
         break
       case 'match_names':
         result = await turn.allocation.match(input)
