@@ -41,5 +41,6 @@ run supabase/migrations/0019_store_counts.sql
 run supabase/migrations/0020_count_requests.sql
 run supabase/migrations/0021_counted_product_names.sql
 run supabase/migrations/0022_integrity_checks.sql
+run supabase/migrations/0023_photo_checks.sql
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rules.sql 2>&1 | grep -E 'NOTICE|ERROR' | sed 's/^psql:[^ ]*: //'
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_counts.sql 2>&1 | grep -E 'NOTICE|ERROR|PASSED' | sed 's/^psql:[^ ]*: //'

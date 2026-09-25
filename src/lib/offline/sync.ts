@@ -26,6 +26,30 @@ function uuid() {
 
 export class PermanentJobError extends Error {}
 
+/**
+ * Asks the server to check a photo just uploaded: a live selfie, or a real
+ * shelf, not a picture of a screen. A rejection is final for that photo
+ * (retake it); a network failure is not, so it is thrown as an ordinary
+ * error that the offline queue retries.
+ */
+export async function checkPhoto(
+  bucket: 'selfies' | 'reports',
+  path: string,
+  thumbPath?: string | null,
+) {
+  const res = await fetch('/api/photo-check', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ bucket, path, thumb_path: thumbPath ?? null }),
+  })
+  const data = (await res.json().catch(() => ({}))) as { verdict?: string; error?: string }
+  if (res.ok) return data.verdict ?? 'pass'
+  if (res.status >= 400 && res.status < 500) {
+    throw new PermanentJobError(data.error ?? 'That photo cannot be used. Take it again.')
+  }
+  throw new Error(data.error ?? `The photo check failed (${res.status})`)
+}
+
 async function uploadSelfie(userId: string, full: Blob, thumb: Blob) {
   const client = supabase()
   const id = uuid()
@@ -55,6 +79,14 @@ async function postJson(url: string, body: unknown) {
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
+    // An expired daily login is not a bad payload: keep the job, and send
+    // the person to sign in. The queue retries it once they have.
+    if (res.status === 401) {
+      if (data.code === 'relogin' && typeof window !== 'undefined') {
+        window.location.href = '/api/auth/expired?reason=new-day'
+      }
+      throw new Error(data.error ?? 'Log in again')
+    }
     // 4xx means the server will never accept this payload. Do not retry it.
     if (res.status >= 400 && res.status < 500) {
       throw new PermanentJobError(data.error ?? `Rejected (${res.status})`)
@@ -75,6 +107,9 @@ async function currentUserId() {
 async function runClock(job: ClockJob) {
   const userId = await currentUserId()
   const { selfie_path, thumb_path } = await uploadSelfie(userId, job.selfie, job.thumb)
+  // A photo of a screen or of a printed photo is refused here, before the
+  // clock event is recorded; the database will not take an unchecked one.
+  await checkPhoto('selfies', selfie_path, thumb_path)
   return postJson('/api/attendance', {
     type: job.type,
     lat: job.lat,

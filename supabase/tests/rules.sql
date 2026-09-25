@@ -29,6 +29,9 @@ declare path text := auth.uid()::text || '/' || gen_random_uuid()::text || '-' |
 begin
   insert into storage.buckets (id, name) values (p_bucket, p_bucket) on conflict do nothing;
   insert into storage.objects (bucket_id, name) values (p_bucket, path);
+  -- And the server looked at it and passed it (migration 023).
+  insert into public.photo_checks (path, bucket, user_id, kind, verdict)
+  values (path, p_bucket, auth.uid(), case p_bucket when 'selfies' then 'selfie' else 'shelf' end, 'pass');
   return path;
 end;
 $$;
@@ -1209,6 +1212,10 @@ begin
   -- F. Selfies are taken in the app, now, by the person (migration 022).
   -- ---------------------------------------------------------------
   perform act_as(bala);
+  -- These photos passed the check (023), so what is tested is the rest.
+  insert into public.photo_checks (path, bucket, user_id, kind, verdict)
+  values (bala::text || '/never-uploaded.jpg', 'selfies', bala, 'selfie', 'pass'),
+         (bala::text || '/yesterday.jpg', 'selfies', bala, 'selfie', 'pass');
   begin
     insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
     values ('closing', 9.0765, 7.3986, 10, bala::text || '/never-uploaded.jpg', now());
@@ -1401,6 +1408,55 @@ begin
             where user_id = ada and kind = 'impossible_journey'
               and reviewed_by = boss and review_note like 'Checked%'),
     'an admin reviews a flag with a note');
+
+  -- ---------------------------------------------------------------
+  -- Photos are checked before they count (migration 023).
+  -- ---------------------------------------------------------------
+  perform act_as(bala);
+  used_path := fresh_photo('selfies', 'phone-screen.jpg');
+  update public.photo_checks set verdict = 'reject', problem = 'screen' where path = used_path;
+  begin
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+    values ('closing', 9.0765, 7.3986, 10, used_path, now());
+    perform assert(false, 'a selfie rejected by the check is refused');
+  exception when others then
+    perform assert(sqlerrm like '%was rejected%', 'a selfie rejected by the check is refused');
+  end;
+
+  used_path := fresh_photo('selfies', 'skipped-check.jpg');
+  delete from public.photo_checks where path = used_path;
+  begin
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+    values ('closing', 9.0765, 7.3986, 10, used_path, now());
+    perform assert(false, 'a selfie that skipped the check is refused');
+  exception when others then
+    perform assert(sqlerrm like '%not been checked%', 'a selfie that skipped the check is refused');
+  end;
+
+  perform act_as(ada);
+  used_path := fresh_photo('reports', 'screen-shelf.jpg');
+  update public.photo_checks set verdict = 'reject', problem = 'screen' where path = used_path;
+  begin
+    perform public.submit_store_count(kiosk_id,
+      jsonb_build_array(jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 40, 'sold', 10)),
+      9.0765, 7.3986, 12, used_path);
+    perform assert(false, 'a rejected shelf photo is refused');
+  exception when others then
+    perform assert(sqlerrm like '%shelf photo%', 'a rejected shelf photo is refused');
+  end;
+
+  -- The checking service was down: allowed, so nobody is stuck.
+  perform act_as(grace);
+  used_path := fresh_photo('selfies', 'service-down.jpg');
+  update public.photo_checks set verdict = 'unchecked' where path = used_path;
+  perform public.end_store_visit(v.id, 9.0765, 7.3986, 12, null, null)
+  from public.store_visits v where v.user_id = grace and v.status = 'open';
+  insert into public.store_visits
+    (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at, selfie_path)
+  values (kiosk_id, 9.0765, 7.3986, 12, now(), used_path);
+  perform assert(
+    exists (select 1 from public.store_visits where selfie_path = used_path),
+    'a photo that could not be checked is still accepted');
 
   raise notice 'ALL RULES PASSED';
 end $$;

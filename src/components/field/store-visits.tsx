@@ -14,6 +14,7 @@ import { deviceInfo } from '@/lib/device'
 import { GeoBlocked, haversineMetres, requireFix, type Fix } from '@/lib/geo'
 import { processSelfie } from '@/lib/image'
 import { supabase } from '@/lib/supabase/client'
+import { checkPhoto } from '@/lib/offline/sync'
 import { formatLagos, metres } from '@/lib/utils'
 
 export interface VisitOutlet {
@@ -180,6 +181,14 @@ export function StoreVisits({
           .from('selfies')
           .upload(thumb_path, thumb, { contentType: 'image/jpeg', upsert: true })
         if (up2.error) throw new Error(up2.error.message)
+
+        setBusy('Checking the photo')
+        try {
+          await checkPhoto('selfies', selfie_path, thumb_path)
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'That photo could not be checked.')
+          return
+        }
 
         setBusy('Checking in')
         const res = await fetch('/api/visits', {

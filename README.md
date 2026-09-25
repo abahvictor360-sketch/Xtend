@@ -40,6 +40,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0020_count_requests.sql  # counts on request or at month end
    supabase/migrations/0021_counted_product_names.sql  # products typed while counting
    supabase/migrations/0022_integrity_checks.sql  # counts in store, selfie checks, flags
+   supabase/migrations/0023_photo_checks.sql  # photos checked for screens, faces, shelves
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

@@ -13,6 +13,7 @@ import { CameraCapture } from '@/components/field/camera-capture'
 import { GeoBlocked, requireFix, type Fix } from '@/lib/geo'
 import { processReportPhoto } from '@/lib/image'
 import { supabase } from '@/lib/supabase/client'
+import { checkPhoto } from '@/lib/offline/sync'
 
 /** A product already counted today at a store: its figures are shown for correcting. */
 export interface CountLine {
@@ -166,6 +167,10 @@ export function StoreCountForm({
         .from('reports')
         .upload(photo_path, await processReportPhoto(photo), { contentType: 'image/jpeg' })
       if (upload.error) throw new Error(upload.error.message)
+
+      // A picture of a screen, or of no shelf at all, is refused here.
+      setStep('Checking the photo')
+      await checkPhoto('reports', photo_path)
 
       setStep('Saving the count')
       const res = await fetch('/api/store-counts', {

@@ -50,6 +50,8 @@ export function ClockPanel({ day }: { day: DayState }) {
   const [busyStep, setBusyStep] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [outcome, setOutcome] = useState<Outcome | null>(null)
+  // Set after a clock-out: the day's login is over.
+  const [endsLogin, setEndsLogin] = useState(false)
 
   const nextType: AttendanceType | null = !day.opening ? 'opening' : !day.closing ? 'closing' : null
 
@@ -134,6 +136,7 @@ export function ClockPanel({ day }: { day: DayState }) {
             }, and will send itself when you get signal.`,
           })
         } else {
+          const signOut = (result.data as { sign_out?: boolean }).sign_out === true
           const record = (
             result.data as {
               attendance: {
@@ -166,6 +169,12 @@ export function ClockPanel({ day }: { day: DayState }) {
               title: 'Recorded, but flagged',
               detail: `Location: ${where}. It could not be verified against an outlet, or the fix was too rough. This is recorded and your admin has been notified.`,
             })
+          }
+
+          if (signOut) {
+            // Their login ends with the day: show the result, then sign out.
+            setEndsLogin(true)
+            return
           }
         }
 
@@ -201,6 +210,23 @@ export function ClockPanel({ day }: { day: DayState }) {
             {outcome.title}
           </p>
           <p className="mt-1 text-sm text-muted-foreground">{outcome.detail}</p>
+        </Alert>
+      )}
+
+      {endsLogin && (
+        <Alert variant="info" className="animate-fade-up">
+          <p className="font-bold">You are signed out for today</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Clocking out ends your login. Log in again next time you start work.
+          </p>
+          <Button
+            className="mt-3 w-full"
+            onClick={() => {
+              window.location.href = '/api/auth/expired?reason=clocked-out'
+            }}
+          >
+            OK
+          </Button>
         </Alert>
       )}
 

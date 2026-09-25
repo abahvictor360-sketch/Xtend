@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Camera, MapPin, RefreshCw, SwitchCamera, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { assessFrame } from '@/lib/photo-quality'
 
 type Facing = 'user' | 'environment'
 
@@ -34,6 +35,8 @@ export function CameraCapture({
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // A photo that failed the instant quality check: the camera stays open.
+  const [hint, setHint] = useState<string | null>(null)
 
   const stop = useCallback(() => {
     stream.current?.getTracks().forEach((track) => track.stop())
@@ -43,6 +46,7 @@ export function CameraCapture({
 
   const start = useCallback(async () => {
     setError(null)
+    setHint(null)
     setReady(false)
 
     if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
@@ -99,6 +103,16 @@ export function CameraCapture({
       // so the admin sees the face the right way round.
       ctx.drawImage(el, 0, 0, canvas.width, canvas.height)
 
+      // Too dark, washed out, covered or blurred: say so and keep the camera
+      // open for another go, rather than send a photo that will be refused.
+      const quality = assessFrame(canvas, canvas.width, canvas.height)
+      if (!quality.ok) {
+        setBusy(false)
+        setHint(quality.problem)
+        return
+      }
+      setHint(null)
+
       canvas.toBlob(
         (blob) => {
           setBusy(false)
@@ -154,6 +168,12 @@ export function CameraCapture({
           className={`h-full w-full object-cover ${facing === 'user' ? 'scale-x-[-1]' : ''}`}
         />
 
+        {hint && ready && !error && (
+          <div className="absolute inset-x-4 bottom-4 rounded-2xl bg-black/75 px-4 py-3 text-center text-sm text-white">
+            {hint}
+          </div>
+        )}
+
         {!ready && !error && (
           <div className="absolute inset-0 flex items-center justify-center text-sm text-white/80">
             Starting the camera…
@@ -186,7 +206,8 @@ export function CameraCapture({
       </div>
 
       <p className="safe-bottom bg-black pb-4 text-center text-[11px] text-white/60">
-        Taken live in the app. Photos from your gallery cannot be used.
+        Taken live in the app. Photos from your gallery, or of a screen or a printed photo, are
+        rejected.
       </p>
     </div>
   )
