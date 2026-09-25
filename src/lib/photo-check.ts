@@ -66,7 +66,7 @@ Reject as "screen" when the photo shows another screen: a phone, tablet, laptop 
 Reject as "printed_photo" when it is a photograph of a printed photo or ID card: paper edges, flat look, print texture, glossy glare, fingers holding a picture.
 Reject as "blurry" or "too_dark" only when the subject cannot be made out at all.
 
-Write "message" to the worker in one or two short, plain sentences: what is wrong and what to do. For a pass, message is "OK".
+Write "message" to the worker in one or two short, plain sentences: what is wrong and what to do. For a pass, message is "OK". Never mention supervisors, admins, the office, reviews, checks, flags or anything being recorded; only say what is wrong with the photo and how to retake it.
 
 Also say in "setting" where the photo was taken, from the background: "shop" (inside a shop, pharmacy, supermarket or mall), "market" (a market stall or open market), "street" (outdoors by a road or building), "office", "home" (a bedroom, sitting room, kitchen or compound of a house: beds, sofas, curtains, wardrobes, home decor, family photos), or "unclear". Say "home" only when the signs are plain. The setting alone never decides the verdict.`
 

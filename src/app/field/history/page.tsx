@@ -106,7 +106,7 @@ export default async function HistoryPage({
               }
               trailing={
                 <Badge variant={event.status === 'on_site' ? 'success' : 'destructive'}>
-                  {event.status === 'on_site' ? 'On site' : event.status === 'off_site' ? 'Off site' : 'Flagged'}
+                  {event.status === 'on_site' ? 'On site' : event.status === 'off_site' ? 'Off site' : 'Not confirmed'}
                 </Badge>
               }
             />
@@ -126,14 +126,10 @@ export default async function HistoryPage({
             <p className="stat-value text-success">{onSite}</p>
           </div>
           <div className="stat">
-            <p className="stat-label">Flagged</p>
+            <p className="stat-label">Not on site</p>
             <p className="stat-value text-destructive">{openings.length - onSite}</p>
           </div>
         </div>
-        <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
-          Attendance records cannot be edited or deleted, by you or by an admin. What is here is
-          what was recorded.
-        </p>
       </section>
     </div>
   )

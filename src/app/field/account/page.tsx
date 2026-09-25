@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Bell, KeyRound, MapPin, Radio, ShieldCheck, Smartphone } from 'lucide-react'
+import { Bell, KeyRound, MapPin, Radio, Smartphone } from 'lucide-react'
 import { FIELD_ROLES, requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { SheetScreen, HeaderField, SectionHeader } from '@/components/field/screen'
@@ -103,19 +103,14 @@ export default async function AccountPage() {
               trailing={<span className="text-xs font-semibold text-brand">Change</span>}
             />
           </Link>
-          <TaskRow
-            icon={<ShieldCheck className="h-5 w-5" />}
-            title="Your attendance is append-only"
-            meta="Nobody can edit or delete a record once it is saved. Not you, not an admin."
-          />
         </section>
 
         <section className="space-y-3">
-          <SectionHeader title="How Xtend tracks you" />
+          <SectionHeader title="Tips" />
           <TaskRow
             icon={<Radio className="h-5 w-5" />}
-            title="Location checks every 5 minutes"
-            meta="While you are on shift, Xtend records where you are every 5 minutes and how far that is from your outlet. Going more than 300 m from where you clocked in notifies your admin."
+            title="Keep Xtend open on shift"
+            meta="Keep location on and Xtend open while you work, so it can see you are at your store."
           />
           <TaskRow
             icon={<Smartphone className="h-5 w-5" />}

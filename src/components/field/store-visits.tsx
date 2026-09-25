@@ -225,7 +225,7 @@ export function StoreVisits({
           data.visit?.arrived_status === 'on_site'
             ? `Checked in at ${label}. You were ${metres(distance)} from the door.`
             : data.visit?.arrived_status === 'off_site'
-              ? `Checked in, but you are ${metres(distance)} from ${nearest}. This is recorded and your admin has been notified.`
+              ? `Checked in, but you are ${metres(distance)} from ${nearest}.`
               : `Checked in at ${label}.`,
         )
         setUnnamed(place.name || data.visit?.outlet_name ? null : { lat: fix.lat, lng: fix.lng })

@@ -49,7 +49,7 @@ export function FieldHome({
     ...(visitsStore ? [{ id: 'stores' as Tab, label: 'Stores' }] : []),
     { id: 'day', label: 'My day' },
     { id: 'outlet', label: visitsStore ? 'Base' : 'Outlet' },
-    { id: 'tracking', label: 'Tracking' },
+    { id: 'tracking', label: 'Location' },
   ]
 
   const onShift = Boolean(day.opening) && !day.closing
@@ -258,7 +258,7 @@ export function FieldHome({
 
       {tab === 'tracking' && (
         <section className="space-y-3">
-          <SectionHeader title="Location tracking" />
+          <SectionHeader title="Location" />
           <TrackingPanel onShift={onShift} status={heartbeat} coverage={coverage} />
         </section>
       )}
@@ -294,7 +294,7 @@ function ClockCard({
         </span>
         {done ? (
           <Badge variant="onBrand">
-            {state!.status === 'on_site' ? 'On site' : state!.status === 'off_site' ? 'Off site' : 'Flagged'}
+            {state!.status === 'on_site' ? 'On site' : state!.status === 'off_site' ? 'Off site' : 'Not confirmed'}
           </Badge>
         ) : (
           <Badge variant="outline">Pending</Badge>

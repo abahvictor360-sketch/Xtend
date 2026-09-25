@@ -51,7 +51,7 @@ export function TrackingPanel({
                           : ''
                       }`
                     : 'Waiting for the first check…'
-                  : 'Tracking starts when you clock in.'}
+                  : 'Starts when you clock in.'}
               </p>
             </div>
             {onShift && (
@@ -84,7 +84,7 @@ export function TrackingPanel({
           {coverage && coverage.ping_count > 0 && (
             <div>
               <div className="flex items-center justify-between text-xs">
-                <span className="font-semibold">Tracked today</span>
+                <span className="font-semibold">Location today</span>
                 <span className="text-muted-foreground">
                   {minutes(coverage.tracked_seconds)} of {minutes(coverage.shift_seconds)}
                   {pct !== null && ` · ${pct}%`}
@@ -100,7 +100,7 @@ export function TrackingPanel({
               </div>
               <p className="mt-1.5 text-[11px] text-muted-foreground">
                 {coverage.ping_count} location check{coverage.ping_count === 1 ? '' : 's'} so far
-                today. Your admin sees this same figure.
+                today.
               </p>
             </div>
           )}
