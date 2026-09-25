@@ -1,5 +1,6 @@
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { storeCounts, type StoreCountRow } from '@/lib/assistant-data'
 import { REPORT_FORMATS, reportDownloadUrl } from '@/lib/assistant-report-spec'
 import {
@@ -21,7 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { addDays, lagosDateString, longDate } from '@/lib/utils'
+import { addDays, lagosDateString, longDate, metres } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Store counts — Xtend' }
@@ -97,6 +98,24 @@ export default async function StoreCountsPage({
   const monthEndFrom = addDays(nextMonth.toISOString().slice(0, 10), -3)
 
   const totals = totalsByProduct(rows)
+
+  // Shelf photos. The rows above are already narrowed to what this person
+  // may see, so their photos are signed with the service role: supervisors
+  // cannot read the reports bucket directly. Links last an hour.
+  const photoUrls = new Map<string, string>()
+  const paths = [...new Set(rows.map((r) => r.photo_path).filter((p): p is string => Boolean(p)))]
+  if (paths.length) {
+    try {
+      const { data } = await createAdminSupabase()
+        .storage.from('reports')
+        .createSignedUrls(paths.slice(0, 500), 3600)
+      for (const item of data ?? []) {
+        if (item.path && item.signedUrl) photoUrls.set(item.path, item.signedUrl)
+      }
+    } catch {
+      // Without the service key the table still shows, just without photos.
+    }
+  }
   const title = from === to ? `Store counts, ${longDate(from)}` : `Store counts, ${longDate(from)} to ${longDate(to)}`
   const spec = { kind: 'store_counts' as const, from, to, name: null, title, summary: '' }
 
@@ -197,6 +216,7 @@ export default async function StoreCountsPage({
                   <TableHead>Product</TableHead>
                   <TableHead className="text-right">Left</TableHead>
                   <TableHead className="text-right">Sold</TableHead>
+                  <TableHead>Taken</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -208,6 +228,23 @@ export default async function StoreCountsPage({
                     <TableCell>{r.product}</TableCell>
                     <TableCell className="text-right tabular-nums">{r.in_store}</TableCell>
                     <TableCell className="text-right tabular-nums">{r.sold}</TableCell>
+                    <TableCell className="whitespace-nowrap text-xs">
+                      {r.distance_m === null ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        <span>{metres(r.distance_m)} from store</span>
+                      )}
+                      {r.photo_path && photoUrls.get(r.photo_path) && (
+                        <a
+                          href={photoUrls.get(r.photo_path)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="ml-2 font-semibold text-brand underline-offset-2 hover:underline"
+                        >
+                          Shelf photo
+                        </a>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))}
               </TableBody>

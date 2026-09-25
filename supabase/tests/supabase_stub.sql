@@ -53,7 +53,8 @@ create table storage.buckets (
 create table storage.objects (
   id        uuid primary key default gen_random_uuid(),
   bucket_id text references storage.buckets(id),
-  name      text not null
+  name      text not null,
+  created_at timestamptz not null default now()
 );
 
 -- Supabase rejects a direct DELETE on storage.objects and tells you to use

@@ -367,6 +367,9 @@ export interface StoreCountRow {
   sku: string | null
   in_store: number
   sold: number
+  /** How far from the store it was submitted, and its shelf photo. Null before migration 022. */
+  distance_m: number | null
+  photo_path: string | null
 }
 
 /**
@@ -380,19 +383,27 @@ export async function storeCounts(
   filter: { outletId?: string | null; userId?: string | null } = {},
 ): Promise<{ from: string; to: string; counts: StoreCountRow[] }> {
   const { from, to } = checkRange(fromDate, toDate, 0)
-  let query = supabase
-    .from('store_count_detail')
-    .select('count_date, staff_name, outlet_name, product_name, sku, in_store, sold')
-    .gte('count_date', from)
-    .lte('count_date', to)
-    .order('count_date', { ascending: false })
-    .order('outlet_name')
-    .order('product_name')
-    .limit(5000)
-  if (filter.outletId) query = query.eq('outlet_id', filter.outletId)
-  if (filter.userId) query = query.eq('user_id', filter.userId)
+  const run = (columns: string) => {
+    let query = supabase
+      .from('store_count_detail')
+      .select(columns)
+      .gte('count_date', from)
+      .lte('count_date', to)
+      .order('count_date', { ascending: false })
+      .order('outlet_name')
+      .order('product_name')
+      .limit(5000)
+    if (filter.outletId) query = query.eq('outlet_id', filter.outletId)
+    if (filter.userId) query = query.eq('user_id', filter.userId)
+    return query
+  }
 
-  const { data, error } = await query
+  const base = 'count_date, staff_name, outlet_name, product_name, sku, in_store, sold'
+  let result = await run(`${base}, distance_m, photo_path`)
+  // Until migration 022 is run the view has no location or photo columns.
+  if (result.error?.code === '42703') result = await run(base)
+  const { error } = result
+  const data = result.data as unknown as Record<string, unknown>[] | null
   if (error) throw new Error(error.message)
 
   return {
@@ -406,6 +417,8 @@ export async function storeCounts(
       sku: (c.sku as string | null) ?? null,
       in_store: c.in_store as number,
       sold: c.sold as number,
+      distance_m: (c.distance_m as number | null) ?? null,
+      photo_path: (c.photo_path as string | null) ?? null,
     })),
   }
 }
@@ -430,6 +443,34 @@ export async function countRequests(supabase: SupabaseClient) {
       people: r.people,
       counted: r.counted,
       waiting_on: r.waiting_on,
+    })),
+  }
+}
+
+/** Integrity flags: signs of a faked location and store counts that do not add up. */
+export async function integrityFlags(supabase: SupabaseClient, fromDate: unknown, toDate: unknown) {
+  const { from, to } = checkRange(fromDate, toDate, 30)
+  const { data, error } = await supabase
+    .from('integrity_flag_detail')
+    .select('staff_name, kind, severity, summary, detail, outlet_name, flag_date, reviewed_at, review_note')
+    .gte('flag_date', from)
+    .lte('flag_date', to)
+    .order('created_at', { ascending: false })
+    .limit(300)
+  if (error) throw new Error(error.message)
+  return {
+    from,
+    to,
+    flags: (data ?? []).map((f) => ({
+      name: f.staff_name,
+      kind: f.kind,
+      severity: f.severity,
+      summary: f.summary,
+      store: f.outlet_name,
+      date: f.flag_date,
+      detail: f.detail,
+      reviewed: Boolean(f.reviewed_at),
+      review_note: f.review_note,
     })),
   }
 }

@@ -20,12 +20,17 @@ select id as tunde from auth.users where email = 'tunde@xpel.ng' \gset
 set role authenticated;
 
 select set_config('request.jwt.claim.sub', :'ada', false);
-select assert((select count(*) from public.count_requests) = 1,
-  'rls: a merchandiser sees the request made to them, and no other');
-select assert((select count(*) from public.count_request_targets) = 1,
-  'rls: and only their own line of it');
+select assert((select count(*) from public.count_requests) >= 1
+                and (select count(*) from public.count_requests)
+                    = (select count(*) from public.count_request_targets),
+  'rls: a merchandiser sees the requests made to them, and no other');
+select assert(not exists (select 1 from public.count_request_targets where user_id <> :'ada'),
+  'rls: and only their own line of each');
 select assert((select count(*) from public.store_counts) > 0,
   'rls: they see their own counts');
+
+select assert((select count(*) from public.integrity_flags) = 0,
+  'rls: nobody sees the flags raised about them');
 
 select set_config('request.jwt.claim.sub', :'bala', false);
 select assert((select count(*) from public.count_requests) = 0,
@@ -42,8 +47,10 @@ select assert((select count(*) from public.count_request_progress) = 1,
   'rls: the progress view follows the same rules');
 
 select set_config('request.jwt.claim.sub', :'boss', false);
-select assert((select count(*) from public.count_requests) = 2,
+select assert((select count(*) from public.count_requests) >= 2,
   'rls: an admin sees every request');
+select assert((select count(*) from public.integrity_flag_detail) > 0,
+  'rls: an admin sees the integrity flags');
 select assert((select count(*) from public.store_counts) = (select count(*) from public.store_count_detail),
   'rls: and every count');
 

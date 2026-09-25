@@ -9,6 +9,7 @@ import {
   fieldReports,
   staffHistory,
   countRequests,
+  integrityFlags,
   storeCounts,
   storeVisits,
 } from '@/lib/assistant-data'
@@ -171,6 +172,18 @@ const tools: Anthropic.Beta.BetaTool[] = [
     },
   },
   {
+    name: 'integrity_flags',
+    description:
+      'Integrity flags over a date range (at most 62 days; null for the last 30): signs of a fake-location app (the same GPS point on different days, too-perfect accuracy, impossible journeys) and store counts that do not add up (units missing since the last count, a count identical to the last, only round numbers). Each has the person, store, date, and whether a supervisor has reviewed it. A flag is a reason to check, not proof.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: range,
+      required: ['from', 'to'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'count_requests',
     description:
       'Recent store count requests: who asked, the due date, whether it is still open, how many of the people asked have counted, and who is still waiting to count.',
@@ -307,6 +320,9 @@ async function runTool(
         break
       case 'store_counts':
         result = await storeCounts(supabase, input.from, input.to)
+        break
+      case 'integrity_flags':
+        result = await integrityFlags(supabase, input.from, input.to)
         break
       case 'count_requests':
         result = await countRequests(supabase)
