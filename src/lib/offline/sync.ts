@@ -121,7 +121,9 @@ async function runClock(job: ClockJob) {
     place_source: job.place_source,
     selfie_path,
     thumb_path,
-    device_info: job.device_info,
+    // The phone's clock at sending, against the server's: a clock that was
+    // changed shows here, and the true time of an offline capture follows.
+    device_info: { ...job.device_info, sent_at: new Date().toISOString() },
     client_captured_at: job.client_captured_at,
   })
 }

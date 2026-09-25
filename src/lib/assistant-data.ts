@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AttendanceDetail, Profile } from '@/lib/types'
 import { FIELD_ROLES } from '@/lib/auth'
 import { addDays, formatLagos, lagosDateString, longDate } from '@/lib/utils'
+import { CLAIMS, judgeExcuse, lagosInstant, type Claim, type ExcuseEvidence } from '@/lib/excuse'
 
 /**
  * The lookups behind Ask Xtend: what the assistant reads to answer a
@@ -472,5 +473,57 @@ export async function integrityFlags(supabase: SupabaseClient, fromDate: unknown
       reviewed: Boolean(f.reviewed_at),
       review_note: f.review_note,
     })),
+  }
+}
+
+/**
+ * "She says her network was down this morning": everything Xtend heard
+ * from one person's phone in a window, and the verdict it points to
+ * (check_excuse(), migration 026; worded by lib/excuse.ts).
+ */
+export async function checkExcuse(
+  supabase: SupabaseClient,
+  name: unknown,
+  date: unknown,
+  fromTime: unknown,
+  toTime: unknown,
+  claim: unknown,
+) {
+  const needle = typeof name === 'string' ? name.trim().toLowerCase() : ''
+  if (!needle) throw new Error('A name is required')
+  const day = typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : lagosDateString()
+  const hm = (v: unknown, fallback: string) =>
+    typeof v === 'string' && /^\d{2}:\d{2}$/.test(v) ? v : fallback
+  const from = hm(fromTime, '06:00')
+  const to = hm(toTime, day === lagosDateString() ? formatLagos(new Date(), false) : '20:00')
+  const said: Claim = claim === 'phone_off' ? 'phone_off' : 'no_network'
+
+  const people = (await fetchRoster(supabase)).filter((p) => p.full_name.toLowerCase().includes(needle))
+  if (people.length !== 1) {
+    return {
+      note:
+        people.length === 0
+          ? `No staff you can see match "${name}".`
+          : `"${name}" matches ${people.map((p) => p.full_name).join(', ')}; ask which one.`,
+    }
+  }
+  const person = people[0]
+  const { data, error } = await supabase.rpc('check_excuse', {
+    p_user: person.id,
+    p_from: lagosInstant(day, from),
+    p_to: lagosInstant(day, to),
+  })
+  if (error) throw new Error(error.message)
+  const judged = judgeExcuse(data as ExcuseEvidence, said)
+  return {
+    name: person.full_name,
+    date: day,
+    from,
+    to,
+    claim: CLAIMS[said],
+    verdict: judged.verdict,
+    headline: judged.headline,
+    evidence: judged.points,
+    live_check: 'A supervisor can check whether the phone is on right now on the Check an excuse page.',
   }
 }

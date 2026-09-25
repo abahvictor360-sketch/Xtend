@@ -42,8 +42,8 @@ export default async function PlacesPage() {
           GPS position and name are saved here, from Google, OpenStreetMap, or the name the person
           typed when no map knew it. Next time anyone stands there, Xtend names it from this list,
           with no map lookup. Check the names staff typed against the photo they took of the place,
-          correct any that are wrong, or turn a place into one of your stores. Until you verify a
-          staff name it shows as &ldquo;(unverified)&rdquo; on clock-ins.
+          correct any that are wrong, or turn a place into one of your stores. Staff are not told
+          that Xtend learns places: to them, naming a place is only recording where they are.
         </p>
       </div>
       {error ? (

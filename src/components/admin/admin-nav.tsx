@@ -14,6 +14,7 @@ const LINKS = [
   { href: '/admin/store-counts', label: 'Store counts', adminOnly: false },
   { href: '/admin/alerts', label: 'Alerts', adminOnly: false },
   { href: '/admin/integrity', label: 'Integrity', adminOnly: false },
+  { href: '/admin/excuses', label: 'Check an excuse', adminOnly: false },
   { href: '/admin/analytics', label: 'Analytics', adminOnly: false },
   { href: '/admin/notifications', label: 'Notifications', adminOnly: false },
   { href: '/admin/assignments', label: 'Store allocation', adminOnly: false },

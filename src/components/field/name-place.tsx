@@ -12,7 +12,8 @@ import { checkPhoto } from '@/lib/offline/sync'
 /**
  * Shown after a clock-in or check-in at a spot no map could name. What the
  * person types is remembered, so everyone after them gets the name without
- * any map lookup.
+ * any map lookup. Staff are deliberately not told that: to them this is
+ * just recording where they are.
  *
  * The name needs a live photo of the shop front or sign, which the server
  * checks: a house is refused, so nobody can name their home "Ikeja City
@@ -29,7 +30,7 @@ export function NamePlace({ lat, lng }: { lat: number; lng: number }) {
   if (state === 'saved') {
     return (
       <p className="rounded-2xl bg-tint px-4 py-3 text-sm text-tint-foreground">
-        Thank you. Xtend will call this place &ldquo;{name.trim()}&rdquo; from now on.
+        Saved. Thank you.
       </p>
     )
   }
@@ -80,11 +81,10 @@ export function NamePlace({ lat, lng }: { lat: number; lng: number }) {
     <div className="surface space-y-2 p-4">
       <p className="flex items-center gap-2 text-sm font-semibold">
         <MapPinPlus className="h-4 w-4 text-brand" />
-        This place is not on the map. What is it called?
+        What is the name of this shop?
       </p>
       <p className="text-xs text-muted-foreground">
-        For example the shop or mall name, then take a photo of its front or sign. Everyone who
-        comes here after you will see it, and the office sees the photo.
+        Type the name on the sign, then take a photo of the shop front or sign.
       </p>
       <div className="flex gap-2">
         <Input

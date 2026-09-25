@@ -43,6 +43,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0023_photo_checks.sql  # photos checked for screens, faces, shelves
    supabase/migrations/0024_known_places.sql  # Xtend's own learned places
    supabase/migrations/0025_place_safeguards.sql  # no houses passed off as shops
+   supabase/migrations/0026_phone_evidence.sql  # network and phone-off excuses
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
@@ -183,8 +184,11 @@ app stop it in five ways:
    the photo is checked by `/api/photo-check` as a `storefront` and a house,
    a room or no place at all is rejected. `learn_place()` refuses a name
    without a fresh, passed storefront photo, and one photo names one place.
-3. **Unverified names say so.** Until an admin verifies it, a staff-typed
-   name is shown as "Name (unverified)" on clock-ins and check-ins.
+3. **Staff are not told any of this.** The app only asks "What is the name
+   of this shop?" and says "Saved"; nothing says Xtend learns or knows
+   places, and a refused name gets a neutral message ("That name does not
+   match where you are standing"). Unverified names are marked for admins
+   on Places only (migration 026 rewords the messages).
 4. **Only-the-namer places are flagged.** Xtend records who is seen at each
    learned place (`note_place_visit()`). A staff-named place visited by
    nobody but the person who named it, three times over, raises an
@@ -194,6 +198,42 @@ app stop it in five ways:
 5. **Selfies at home are flagged.** The selfie check also reports the
    setting; a selfie plainly taken inside a home raises `selfie_at_home`
    (allowed, since GPS decides presence, but a supervisor sees it).
+
+## "My network was bad", "my phone was off"
+
+Migration 026. The two excuses for a late or missing clock-in, and how
+Xtend settles them. None of it is visible to staff.
+
+- **The phone reports on itself** (`PhoneBeacon` in the field layout,
+  `lib/phone-report.ts`, `/api/beacon`, table `device_beacons`): when the
+  app opens, comes back on screen, goes off screen, regains network, and
+  every 5 minutes while open. Each report carries the network type,
+  battery and charging, how many things are waiting to upload, the phone's
+  own clock, and a location if location is already allowed. Kept 60 days.
+- **Every clock event's time is judged** (`clock_timing()`, stored in
+  `attendance.time_verdict`). A clock-in carries the id of the last report
+  the server acknowledged and the phone's clock at sending, so:
+  - `backdated` (high flag): claims a time before the phone was last in
+    touch, or the phone later reported nothing waiting. The time on the
+    phone was changed to fake an earlier clock-in.
+  - `phone_clock_wrong` (medium flag): the phone's clock was more than 5
+    minutes out.
+  - `network_was_available` (low flag): taken offline but only sent long
+    after the phone had network again.
+  - `offline_confirmed` / `offline_unproven` / `live`: no flag.
+  Lateness is still measured from when the server received a clock-in.
+- **Check an excuse** (`/admin/excuses`, admins and supervisors, and the
+  `check_excuse` tool in Ask Xtend): pick who, when, and "no network" or
+  "phone off". `check_excuse()` gathers every time that phone reached
+  Xtend, clock events it saved offline, battery and place before and after,
+  and `lib/excuse.ts` words the verdict: *Not true*, *Doubtful*, *Fits*
+  or *No evidence*. Anything that reached Xtend in the window proves both
+  network and a working phone; a battery that did not run flat makes
+  "it died" doubtful.
+- **Check the phone now**: sends "Please open Xtend now" as a push; the
+  service worker reports when it arrives (`/api/phone-check/ack`, with a
+  one-time token). Arrived means on, with network, at that moment. It needs
+  the person to have Xtend notifications on.
 
 ## Telling the office nobody is in the store
 

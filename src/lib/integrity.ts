@@ -45,4 +45,19 @@ export const FLAG_KINDS: Record<string, { label: string; meaning: string }> = {
     meaning:
       'The clock-in selfie looks like it was taken inside a home (bed, sofa, curtains). With a store GPS reading, that suggests a faked location.',
   },
+  backdated_clock: {
+    label: 'Faked clock-in time',
+    meaning:
+      'A clock event saved "offline" claims a time before the phone was last in touch with Xtend. The time on the phone was changed to make it look earlier.',
+  },
+  phone_clock_wrong: {
+    label: 'Phone clock changed',
+    meaning:
+      "The phone's clock was more than 5 minutes out at a clock event. Phones set their own time from the network, so someone changed it.",
+  },
+  late_sync_with_network: {
+    label: 'Sent late with network',
+    meaning:
+      'A clock event was taken offline and sent much later, although the phone had network well before it was sent.',
+  },
 }

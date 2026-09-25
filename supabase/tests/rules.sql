@@ -1515,14 +1515,14 @@ begin
     perform public.learn_place(6.4500, 3.4500, 'ikeja city-mall', null, 'staff', place_photo('home.jpg'));
     perform assert(false, 'a store''s name, 17 km from the store, is refused');
   exception when others then
-    perform assert(sqlerrm like '%Ikeja City Mall" is a known place%km from here%',
+    perform assert(sqlerrm like '%does not match where you are standing%',
       'a store''s name, 17 km from the store, is refused');
   end;
   begin
     perform public.learn_place(6.4500, 3.4500, 'Ikeja City Mall Annex', null, 'staff', place_photo('home2.jpg'));
     perform assert(false, 'nor a name that contains a store''s name');
   exception when others then
-    perform assert(sqlerrm like '%known place%', 'nor a name that contains a store''s name');
+    perform assert(sqlerrm like '%does not match%', 'nor a name that contains a store''s name');
   end;
   perform assert(
     public.learn_place(6.6050, 3.3530, 'Ikeja City Mall Car Park', null, 'staff',
@@ -1560,7 +1560,7 @@ begin
     perform public.learn_place(6.4800, 3.4800, 'Another Shop', null, 'staff', used_path);
     perform assert(false, 'one photo names one place');
   exception when others then
-    perform assert(sqlerrm like '%already named a place%', 'one photo names one place');
+    perform assert(sqlerrm like '%new photo here%', 'one photo names one place');
   end;
 
   -- A place only its namer ever uses is flagged, once, on the third visit.
@@ -1600,11 +1600,121 @@ begin
     perform public.learn_place(6.30, 3.40, 'One too many', null, 'staff', place_photo('extra.jpg'));
     perform assert(false, 'nobody names more than 10 new places a day');
   exception when others then
-    perform assert(sqlerrm like '%10 places today%', 'nobody names more than 10 new places a day');
+    perform assert(sqlerrm like '%No more place names%', 'nobody names more than 10 new places a day');
   end;
   perform assert(
     public.learn_place(6.31, 3.40, 'Found by the map', null, 'google') is not null,
     'places named by a map are not limited, and need no photo');
+
+  -- ---------------------------------------------------------------
+  -- "My network was bad", "my phone was off" (migration 026).
+  -- ---------------------------------------------------------------
+  declare
+    femi uuid := gen_random_uuid();
+    got jsonb;
+    again jsonb;
+    anchor uuid;
+    stamp text;
+  begin
+    insert into auth.users (id, email) values (femi, 'femi@xpel.ng');
+    insert into public.profiles (id, full_name, email, role, outlet_id, supervisor_id)
+    values (femi, 'Femi Ade', 'femi@xpel.ng', 'merchandiser', mall_id, tunde);
+
+    perform act_as(femi);
+    got := public.record_beacon(jsonb_build_object('reason', 'open', 'battery_pct', 81,
+      'charging', false, 'outbox_count', 0, 'device_time', now(), 'lat', 6.6019, 'lng', 3.3516,
+      'connection', '4g'));
+    perform assert(got->>'id' is not null and got->>'server_time' is not null,
+      'the phone reports in and is given the server''s time');
+    again := public.record_beacon(jsonb_build_object('reason', 'open', 'battery_pct', 'rubbish'));
+    perform assert(again->>'id' = got->>'id', 'a burst of reports is one report');
+    perform assert(
+      (select battery_pct = 81 and lat is not null and connection = '4g'
+       from public.device_beacons where id = (got->>'id')::uuid),
+      'battery, place and network are recorded');
+
+    -- Judging times, with the server's "now" fixed.
+    delete from public.device_beacons where user_id = femi;
+    perform assert(
+      public.clock_timing(femi, now() - interval '20 seconds',
+        jsonb_build_object('sent_at', now()), now())->>'verdict' = 'live',
+      'sent as it was taken: live');
+    perform assert(
+      public.clock_timing(femi, now() + interval '2 hours',
+        jsonb_build_object('sent_at', now() + interval '2 hours 10 seconds'), now())->>'verdict'
+        = 'phone_clock_wrong',
+      'a phone clock two hours out is caught');
+    perform assert(
+      public.clock_timing(femi, now() - interval '2 hours',
+        jsonb_build_object('sent_at', now()), now())->>'verdict' = 'offline_unproven',
+      'offline, with nothing heard from the phone at all: unproven');
+
+    insert into public.device_beacons (user_id, received_at, reason, outbox_count)
+    values (femi, now() - interval '3 hours', 'interval', 0) returning id into anchor;
+    perform assert(
+      public.clock_timing(femi, now() - interval '2 hours',
+        jsonb_build_object('sent_at', now(), 'anchor_beacon', anchor), now())->>'verdict'
+        = 'offline_confirmed',
+      'last heard at 3 hours ago, taken 2 hours ago, silent since: a real network gap');
+
+    insert into public.device_beacons (user_id, received_at, reason, outbox_count)
+    values (femi, now() - interval '1 hour', 'visible', 1) returning id into anchor;
+    got := public.clock_timing(femi, now() - interval '2 hours',
+      jsonb_build_object('sent_at', now(), 'anchor_beacon', anchor), now());
+    perform assert(got->>'verdict' = 'backdated' and got->>'how' = 'anchor',
+      'claimed 2 hours ago, but the phone had been in touch an hour ago before taking it: faked time');
+    perform assert(
+      public.clock_timing(femi, now() - interval '2 hours',
+        jsonb_build_object('sent_at', now()), now())->>'verdict' = 'network_was_available',
+      'the phone had network an hour ago, with the clock-in waiting: sent late on purpose');
+
+    insert into public.device_beacons (user_id, received_at, reason, outbox_count)
+    values (femi, now() - interval '30 minutes', 'visible', 0);
+    got := public.clock_timing(femi, now() - interval '2 hours',
+      jsonb_build_object('sent_at', now()), now());
+    perform assert(got->>'verdict' = 'backdated' and got->>'how' = 'nothing_waiting',
+      'the phone said nothing was waiting half an hour ago: the clock-in was made later');
+
+    -- The real thing: the verdict is stored and flagged.
+    -- The phone's clock set 3 hours back (ahead is refused outright).
+    stamp := (now() - interval '3 hours')::text;
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, device_info)
+    values ('opening', 6.6019, 3.3516, 12, fresh_photo('selfies', 'femi.jpg'), now() - interval '3 hours',
+            jsonb_build_object('sent_at', stamp))
+    returning id into attendance_id;
+    perform assert(
+      (select time_verdict from public.attendance where id = attendance_id) = 'phone_clock_wrong',
+      'a clock-in from a phone with its clock changed is marked');
+    perform assert(
+      (select summary like '%180 minutes behind%' from public.integrity_flags
+       where kind = 'phone_clock_wrong' and user_id = femi),
+      'and flagged, saying by how much');
+
+    -- A supervisor checks "my phone was off" for the last two hours.
+    perform act_as(tunde);
+    got := public.check_excuse(femi, now() - interval '2 hours 30 minutes', now() + interval '1 minute');
+    perform assert(jsonb_array_length(got->'contacts') >= 3,
+      'the check lists every time the phone was heard from');
+    perform assert(got->'before'->>'at' is not null and (got->>'has_push')::boolean = false,
+      'with the last report before the gap, and whether the phone can be pushed');
+    perform act_as(ada);
+    begin
+      perform public.check_excuse(femi, now() - interval '1 hour', now());
+      perform assert(false, 'staff cannot check each other');
+    exception when others then
+      perform assert(sqlerrm like '%own team%', 'staff cannot check each other');
+    end;
+    begin
+      perform public.request_phone_check(femi);
+      perform assert(false, 'nor push each other''s phones');
+    exception when others then
+      perform assert(sqlerrm like '%own team%', 'nor push each other''s phones');
+    end;
+    perform act_as(tunde);
+    anchor := public.request_phone_check(femi);
+    perform assert(anchor is not null and public.request_phone_check(femi) = anchor,
+      'a supervisor checks a team member''s phone, once at a time');
+  end;
 
   raise notice 'ALL RULES PASSED';
 end $$;
