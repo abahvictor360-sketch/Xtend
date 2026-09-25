@@ -35,9 +35,12 @@ const EMPTY: Draft = {
 export function OutletManager({
   outlets,
   staffCounts,
+  readOnly = false,
 }: {
   outlets: Outlet[]
   staffCounts: Record<string, number>
+  /** Supervisors see the stores but cannot add or change them. */
+  readOnly?: boolean
 }) {
   const router = useRouter()
   const [draft, setDraft] = useState<Draft>(EMPTY)
@@ -159,19 +162,21 @@ export function OutletManager({
     <div className="space-y-4">
       {error && <Alert variant="destructive">{error}</Alert>}
 
-      <Button
-        onClick={() => {
-          setAdding((a) => !a)
-          setEditing(null)
-          setDraft(EMPTY)
-        }}
-        variant={adding ? 'outline' : 'default'}
-      >
-        <Plus className="h-4 w-4" />
-        {adding ? 'Cancel' : 'Add outlet'}
-      </Button>
+      {!readOnly && (
+        <Button
+          onClick={() => {
+            setAdding((a) => !a)
+            setEditing(null)
+            setDraft(EMPTY)
+          }}
+          variant={adding ? 'outline' : 'default'}
+        >
+          <Plus className="h-4 w-4" />
+          {adding ? 'Cancel' : 'Add outlet'}
+        </Button>
+      )}
 
-      {adding && (
+      {adding && !readOnly && (
         <Card>
           <CardContent className="pt-4">
             <form onSubmit={save} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -279,14 +284,16 @@ export function OutletManager({
                 <div>Staff: {staffCounts[outlet.id] ?? 0}</div>
               </dl>
 
-              <div className="flex gap-1">
-                <Button size="sm" variant="outline" onClick={() => edit(outlet)}>
-                  Edit
-                </Button>
-                <Button size="sm" variant="ghost" disabled={busy} onClick={() => void toggleActive(outlet)}>
-                  {outlet.is_active ? 'Deactivate' : 'Reactivate'}
-                </Button>
-              </div>
+              {!readOnly && (
+                <div className="flex gap-1">
+                  <Button size="sm" variant="outline" onClick={() => edit(outlet)}>
+                    Edit
+                  </Button>
+                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => void toggleActive(outlet)}>
+                    {outlet.is_active ? 'Deactivate' : 'Reactivate'}
+                  </Button>
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}
