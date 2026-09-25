@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { CloudUpload, WifiOff } from 'lucide-react'
-import { countOutbox } from '@/lib/offline/db'
+import { listOutbox } from '@/lib/offline/db'
 import { flushOutbox } from '@/lib/offline/sync'
 import { Button } from '@/components/ui/button'
 
@@ -14,7 +14,9 @@ export function OutboxBanner({ onFlushed }: { onFlushed?: () => void }) {
 
   const refresh = useCallback(async () => {
     try {
-      setPending(await countOutbox())
+      // What the person saved themselves: clock-ins and reports. Positions
+      // kept while offline go quietly with them and are not counted.
+      setPending((await listOutbox()).filter((r) => r.kind !== 'ping').length)
     } catch {
       // IndexedDB unavailable (private mode). Nothing queued, nothing to show.
     }

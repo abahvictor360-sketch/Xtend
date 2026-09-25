@@ -69,11 +69,8 @@ export function useHeartbeat(active: boolean): HeartbeatStatus {
         // rest of the offline queue when the network is back (migration 029).
         const keep = async () => {
           await enqueue(captured)
-          const waiting = await countOutbox().catch(() => 0)
           setSavedOffline(
-            `No connection. Your position is saved on this phone and will be sent when you are back online${
-              waiting ? ` (${waiting} waiting)` : ''
-            }.`,
+            'No connection right now. Xtend will carry on when you are back online.',
           )
           setLastError(null)
         }

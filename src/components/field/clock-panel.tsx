@@ -176,19 +176,19 @@ export function ClockPanel({
             setOutcome({
               tone: 'success',
               title: type === 'opening' ? 'Clocked in' : 'Clocked out',
-              detail: `Location: ${where}. That is ${metres(record.distance_m)} from ${against} — inside the geofence, nothing flagged.`,
+              detail: `Location: ${where}. That is ${metres(record.distance_m)} from ${against} — inside the store area.`,
             })
           } else if (record.status === 'off_site') {
             setOutcome({
               tone: 'warning',
               title: `${type === 'opening' ? 'Clocked in' : 'Clocked out'} off site`,
-              detail: `Location: ${where}. That is ${metres(record.distance_m)} from ${against}, outside the ${record.outlet_radius_m ?? day.outlet?.radius_m ?? 150} m geofence. This is recorded and your admin has been notified.`,
+              detail: `Location: ${where}. That is ${metres(record.distance_m)} from ${against}, outside the ${record.outlet_radius_m ?? day.outlet?.radius_m ?? 150} m store area.`,
             })
           } else {
             setOutcome({
               tone: 'warning',
-              title: 'Recorded, but flagged',
-              detail: `Location: ${where}. It could not be verified against an outlet, or the fix was too rough. This is recorded and your admin has been notified.`,
+              title: type === 'opening' ? 'Clocked in' : 'Clocked out',
+              detail: `Location: ${where}. Your location was not clear enough to match to your store. Next time, wait a moment outside for a better signal.`,
             })
           }
 
@@ -292,7 +292,7 @@ export function ClockPanel({
       )}
 
       <p className="text-xs text-muted-foreground">
-        Your clock-in records the time and where you were. You do not have to choose a store.
+        You do not have to choose a store.
       </p>
     </div>
   )

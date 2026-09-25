@@ -11,8 +11,7 @@ export default function DeactivatedPage() {
       </span>
       <h1 className="text-xl font-extrabold">This account is deactivated</h1>
       <p className="text-sm text-muted-foreground">
-        Your attendance history is intact and still visible to your administrator. Speak to them if
-        you think this is a mistake.
+        Speak to your administrator if you think this is a mistake.
       </p>
       <SignOutButton />
     </main>

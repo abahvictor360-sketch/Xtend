@@ -81,9 +81,6 @@ export function LocationGate({
             onRetry={onRetry}
           />
 
-          <p className="text-[11px] text-muted-foreground">
-            This attempt was logged. Your admin can see that you opened Xtend without a location fix.
-          </p>
         </CardContent>
       </Card>
     )
