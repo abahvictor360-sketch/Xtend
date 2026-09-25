@@ -4,6 +4,10 @@ import { apiError, requireApiSession } from '@/lib/auth'
 
 const schema = z.object({
   outlet_id: z.string().uuid(),
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  accuracy_m: z.number().nonnegative(),
+  photo_path: z.string().min(1).max(300),
   lines: z
     .array(
       z.object({
@@ -23,7 +27,7 @@ const schema = z.object({
  */
 export async function POST(request: Request) {
   try {
-    await requireApiSession(['merchandiser', 'marketer', 'admin'])
+    const session = await requireApiSession(['merchandiser', 'marketer', 'admin'])
     const parsed = schema.safeParse(await request.json())
     if (!parsed.success) {
       return Response.json(
@@ -32,10 +36,19 @@ export async function POST(request: Request) {
       )
     }
 
+    if (!parsed.data.photo_path.startsWith(`${session.userId}/`)) {
+      return Response.json({ error: 'That photo does not belong to you' }, { status: 400 })
+    }
+
+    // Being in the store, and the photo being fresh, are checked in Postgres.
     const supabase = await createServerSupabase()
     const { data, error } = await supabase.rpc('submit_store_count', {
       p_outlet_id: parsed.data.outlet_id,
       p_lines: parsed.data.lines,
+      p_lat: parsed.data.lat,
+      p_lng: parsed.data.lng,
+      p_accuracy_m: parsed.data.accuracy_m,
+      p_photo_path: parsed.data.photo_path,
     })
     if (error) return Response.json({ error: error.message }, { status: 400 })
 

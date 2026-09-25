@@ -21,6 +21,26 @@ $$;
 create or replace function act_as(p uuid) returns void
 language sql as $$ select set_config('request.jwt.claim.sub', p::text, false); $$;
 
+-- Stands in for the app uploading a photo just now: the object exists in
+-- the signed-in person's folder, so the photo checks (migration 022) pass.
+create or replace function fresh_photo(p_bucket text, p_label text) returns text
+language plpgsql as $$
+declare path text := auth.uid()::text || '/' || gen_random_uuid()::text || '-' || p_label;
+begin
+  insert into storage.buckets (id, name) values (p_bucket, p_bucket) on conflict do nothing;
+  insert into storage.objects (bucket_id, name) values (p_bucket, path);
+  return path;
+end;
+$$;
+
+-- A store count taken standing in the store, with a shelf photo just taken.
+create or replace function count_here(p_outlet uuid, p_lines jsonb) returns integer
+language sql as $$
+  select public.submit_store_count(p_outlet, p_lines, o.lat, o.lng, 12,
+                                   fresh_photo('reports', 'shelf.jpg'))
+  from public.outlets o where o.id = p_outlet;
+$$;
+
 do $$
 declare
   mall_id    uuid;
@@ -44,6 +64,8 @@ declare
   counted    integer;
   req        uuid;
   req2       uuid;
+  used_path  text;
+  flagged    integer;
 begin
   insert into auth.users (id, email) values
     (ada, 'ada@xpel.ng'), (bala, 'bala@xpel.ng'), (boss, 'boss@xpel.ng'),
@@ -71,7 +93,7 @@ begin
   insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at,
                                  -- deliberately lying: the trigger must overwrite all of these
                                  user_id, distance_m, status, attendance_date)
-  values ('opening', 6.6019, 3.3516, 12, 'x/1.jpg', now(),
+  values ('opening', 6.6019, 3.3516, 12, fresh_photo('selfies', 'x-1.jpg'), now(),
           bala, 0, 'on_site', date '2000-01-01')
   returning id, status, distance_m into attendance_id, row_status, row_dist;
 
@@ -93,7 +115,7 @@ begin
   -- ---------------------------------------------------------------
   begin
     insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
-    values ('opening', 6.6019, 3.3516, 12, 'x/2.jpg', now());
+    values ('opening', 6.6019, 3.3516, 12, fresh_photo('selfies', 'x-2.jpg'), now());
     perform assert(false, 'a second opening must be rejected');
   exception when unique_violation then
     perform assert(true, 'a second opening the same day is rejected');
@@ -103,7 +125,7 @@ begin
   -- Off site clocking is recorded honestly and raises an alert.
   -- ---------------------------------------------------------------
   insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
-  values ('closing', 6.6100, 3.3600, 15, 'x/3.jpg', now())
+  values ('closing', 6.6100, 3.3600, 15, fresh_photo('selfies', 'x-3.jpg'), now())
   returning status, distance_m into row_status, row_dist;
 
   perform assert(row_status = 'off_site', 'a fix outside the fence is off_site');
@@ -118,7 +140,7 @@ begin
   -- ---------------------------------------------------------------
   perform act_as(bala);
   insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
-  values ('opening', 9.0765, 7.3986, 400, 'y/1.jpg', now())
+  values ('opening', 9.0765, 7.3986, 400, fresh_photo('selfies', 'y-1.jpg'), now())
   returning status into row_status;
   perform assert(row_status = 'flagged', 'accuracy worse than 100 m is flagged even at the outlet');
   perform assert(
@@ -132,7 +154,7 @@ begin
   perform act_as(boss);
   begin
     insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
-    values ('opening', 6.6, 3.35, 10, 'z/1.jpg', now() - interval '30 hours');
+    values ('opening', 6.6, 3.35, 10, fresh_photo('selfies', 'z-1.jpg'), now() - interval '30 hours');
     perform assert(false, 'a stale capture must be rejected');
   exception when others then
     perform assert(sqlerrm like '%Invalid capture timestamp%', 'a capture older than 24h is rejected');
@@ -140,7 +162,7 @@ begin
 
   begin
     insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
-    values ('opening', 6.6, 3.35, 10, 'z/2.jpg', now() + interval '10 minutes');
+    values ('opening', 6.6, 3.35, 10, fresh_photo('selfies', 'z-2.jpg'), now() + interval '10 minutes');
     perform assert(false, 'a future capture must be rejected');
   exception when others then
     perform assert(sqlerrm like '%Invalid capture timestamp%', 'a capture in the future is rejected');
@@ -392,7 +414,7 @@ begin
   insert into public.store_visits
     (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at,
      selfie_path, arrived_place_name)
-  values (mall_id, 6.6019, 3.3516, 12, now(), 'grace/v1.jpg', 'Ikeja City Mall')
+  values (mall_id, 6.6019, 3.3516, 12, now(), fresh_photo('selfies', 'grace-v1.jpg'), 'Ikeja City Mall')
   returning id into visit_id;
 
   perform assert(
@@ -431,7 +453,7 @@ begin
   -- Second store of the day, and this one is nowhere near.
   insert into public.store_visits
     (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at, selfie_path)
-  values (kiosk_id, 9.0900, 7.4100, 15, now(), 'grace/v2.jpg')
+  values (kiosk_id, 9.0900, 7.4100, 15, now(), fresh_photo('selfies', 'grace-v2.jpg'))
   returning id into visit_id;
   perform assert(
     (select arrived_status from public.store_visits where id = visit_id) = 'off_site',
@@ -544,7 +566,7 @@ begin
   -- ---------------------------------------------------------------
   perform act_as(bala);
   insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, thumb_path, client_captured_at)
-  values ('closing', 9.0765, 7.3986, 10, 'old/full.jpg', 'old/thumb.jpg', now())
+  values ('closing', 9.0765, 7.3986, 10, fresh_photo('selfies', 'old-full.jpg'), fresh_photo('selfies', 'old-thumb.jpg'), now())
   returning id into attendance_id;
   update public.attendance set created_at = now() - interval '25 hours'
    where id = attendance_id;
@@ -557,17 +579,17 @@ begin
   insert into public.store_visits
     (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at,
      selfie_path, thumb_path)
-  values (kiosk_id, 9.0765, 7.3986, 12, now(), 'fresh/full.jpg', 'fresh/thumb.jpg')
+  values (kiosk_id, 9.0765, 7.3986, 12, now(), fresh_photo('selfies', 'fresh-full.jpg'), fresh_photo('selfies', 'fresh-thumb.jpg'))
   returning id into visit_id;
 
   perform assert(
     (select count(*) from public.expired_selfie_paths(24)) = 2,
     'both images of an expired clock event are listed for deletion');
   perform assert(
-    exists (select 1 from public.expired_selfie_paths(24) where path = 'old/thumb.jpg'),
+    exists (select 1 from public.expired_selfie_paths(24) where path like '%-old-thumb.jpg'),
     'the thumbnail expires with the full frame, not after it');
   perform assert(
-    not exists (select 1 from public.expired_selfie_paths(24) where path like 'fresh/%'),
+    not exists (select 1 from public.expired_selfie_paths(24) where path like '%-fresh-%'),
     'a photo taken today is left alone');
 
   perform assert(public.forget_expired_selfies(24) = 1, 'one record forgets its photo');
@@ -677,7 +699,7 @@ begin
   -- ---------------------------------------------------------------
   perform act_as(grace);
   insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
-  values ('opening', 9.0766, 7.3987, 10, 'g/1.jpg', now())
+  values ('opening', 9.0766, 7.3987, 10, fresh_photo('selfies', 'g-1.jpg'), now())
   returning id, status, distance_m into attendance_id, row_status, row_dist;
 
   perform assert(row_status = 'on_site',
@@ -750,7 +772,7 @@ begin
   -- Standing inside a store Xtend knows, allocated to nobody.
   insert into public.store_visits
     (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at, selfie_path)
-  values (9.0766, 7.3987, 10, now(), 'auto/1.jpg')
+  values (9.0766, 7.3987, 10, now(), fresh_photo('selfies', 'auto-1.jpg'))
   returning id into visit_id;
   perform assert(
     (select outlet_id from public.store_visits where id = visit_id) = kiosk_id,
@@ -830,7 +852,7 @@ begin
   perform act_as(grace);
   select count(*) into alert_count from public.location_alerts where user_id = grace;
   insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
-  values ('opening', 9.0766, 7.3987, 10, 'g/clock.jpg', now())
+  values ('opening', 9.0766, 7.3987, 10, fresh_photo('selfies', 'g-clock.jpg'), now())
   returning id into attendance_id;
   perform assert(
     (select outlet_id from public.attendance where id = attendance_id) = kiosk_id,
@@ -841,7 +863,7 @@ begin
 
   delete from public.attendance where id = attendance_id;
   insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
-  values ('opening', 6.4500, 3.4000, 10, 'g/clock2.jpg', now())
+  values ('opening', 6.4500, 3.4000, 10, fresh_photo('selfies', 'g-clock2.jpg'), now())
   returning id into attendance_id;
   perform assert(
     (select outlet_id from public.attendance where id = attendance_id) is null,
@@ -1033,7 +1055,7 @@ begin
     perform assert((public.store_count_status()->>'open')::boolean = false,
       'with no request and no month end, counting is closed');
     begin
-      perform public.submit_store_count(mall_id, jsonb_build_array(
+      perform count_here(mall_id, jsonb_build_array(
         jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 1, 'sold', 1)));
       perform assert(false, 'a count nobody asked for is refused');
     exception when others then
@@ -1092,7 +1114,7 @@ begin
                    and public.store_count_status()->>'request_id' = req::text,
     'the person asked sees the request as their reason to count');
 
-  counted := public.submit_store_count(mall_id, jsonb_build_array(
+  counted := count_here(mall_id, jsonb_build_array(
     jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 40, 'sold', 12),
     jsonb_build_object('product_name', '  Xpel   Cream 400ml ', 'in_store', 0, 'sold', 3)));
   perform assert(counted = 2, 'a merchandiser counts two products in their store');
@@ -1113,7 +1135,7 @@ begin
       and (select p.people from public.count_request_progress p where p.id = req) = 1,
     'the request shows who has counted');
 
-  counted := public.submit_store_count(mall_id, jsonb_build_array(
+  counted := count_here(mall_id, jsonb_build_array(
     jsonb_build_object('product_name', 'XPEL SOAP 100G', 'in_store', 38, 'sold', 14)));
   perform assert(
     (select in_store from public.store_counts where user_id = ada and product_id = soap) = 38
@@ -1121,7 +1143,7 @@ begin
     'counting a product again the same day, however it is typed, replaces the figures');
 
   begin
-    perform public.submit_store_count(depot_id, jsonb_build_array(
+    perform count_here(depot_id, jsonb_build_array(
       jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 1, 'sold', 1)));
     perform assert(false, 'a store that is not theirs is refused');
   exception when others then
@@ -1129,7 +1151,7 @@ begin
   end;
 
   begin
-    perform public.submit_store_count(mall_id, jsonb_build_array(
+    perform count_here(mall_id, jsonb_build_array(
       jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', -1, 'sold', 1)));
     perform assert(false, 'a negative count is refused');
   exception when others then
@@ -1137,7 +1159,7 @@ begin
   end;
 
   begin
-    perform public.submit_store_count(mall_id, jsonb_build_array(
+    perform count_here(mall_id, jsonb_build_array(
       jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 2.5, 'sold', 1)));
     perform assert(false, 'a fractional count is refused');
   exception when others then
@@ -1145,7 +1167,7 @@ begin
   end;
 
   begin
-    perform public.submit_store_count(mall_id, jsonb_build_array(
+    perform count_here(mall_id, jsonb_build_array(
       jsonb_build_object('product_name', '   ', 'in_store', 1, 'sold', 1)));
     perform assert(false, 'a product with no name is refused');
   exception when others then
@@ -1153,7 +1175,7 @@ begin
   end;
 
   begin
-    perform public.submit_store_count(mall_id, jsonb_build_array(
+    perform count_here(mall_id, jsonb_build_array(
       jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 1, 'sold', 1),
       jsonb_build_object('product_name', 'xpel soap 100g', 'in_store', 2, 'sold', 2)));
     perform assert(false, 'the same product twice in one count is refused');
@@ -1167,7 +1189,7 @@ begin
 
   perform act_as(tunde);
   begin
-    perform public.submit_store_count(mall_id, jsonb_build_array(
+    perform count_here(mall_id, jsonb_build_array(
       jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 1, 'sold', 1)));
     perform assert(false, 'a supervisor does not submit counts');
   exception when others then
@@ -1182,6 +1204,203 @@ begin
     perform assert((public.store_count_status()->>'open')::boolean = false,
       'once the request is closed, counting is closed again');
   end if;
+
+  -- ---------------------------------------------------------------
+  -- F. Selfies are taken in the app, now, by the person (migration 022).
+  -- ---------------------------------------------------------------
+  perform act_as(bala);
+  begin
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+    values ('closing', 9.0765, 7.3986, 10, bala::text || '/never-uploaded.jpg', now());
+    perform assert(false, 'a selfie that was never uploaded is refused');
+  exception when others then
+    perform assert(sqlerrm like '%taken in the app just now%', 'a selfie that was never uploaded is refused');
+  end;
+
+  insert into storage.objects (bucket_id, name, created_at)
+  values ('selfies', bala::text || '/yesterday.jpg', now() - interval '2 hours');
+  begin
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+    values ('closing', 9.0765, 7.3986, 10, bala::text || '/yesterday.jpg', now());
+    perform assert(false, 'an old photo is refused');
+  exception when others then
+    perform assert(sqlerrm like '%taken in the app just now%', 'an old photo is refused');
+  end;
+
+  perform act_as(ada);
+  used_path := fresh_photo('selfies', 'ada-face.jpg');
+  perform act_as(bala);
+  begin
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+    values ('closing', 9.0765, 7.3986, 10, used_path, now());
+    perform assert(false, 'somebody else''s photo is refused');
+  exception when others then
+    perform assert(sqlerrm like '%taken in the app just now%', 'somebody else''s photo is refused');
+  end;
+
+  select a.selfie_path into used_path from public.attendance a
+  where a.user_id = bala and a.selfie_path is not null limit 1;
+  begin
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+    values ('closing', 9.0765, 7.3986, 10, used_path, now());
+    perform assert(false, 'a selfie cannot be used twice');
+  exception when others then
+    perform assert(sqlerrm like '%already been used%', 'a selfie cannot be used twice');
+  end;
+
+  begin
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+    values ('closing', 9.0765, 7.3986, 10, null, now());
+    perform assert(false, 'a clock-in without a selfie is refused');
+  exception when others then
+    perform assert(sqlerrm like '%needs a selfie%', 'a clock-in without a selfie is refused');
+  end;
+
+  -- ---------------------------------------------------------------
+  -- A. A store count is taken in the store, with a shelf photo.
+  -- ---------------------------------------------------------------
+  perform act_as(boss);
+  req := public.request_store_count(array[ada], public.business_date() + 1, 'Integrity checks');
+  perform act_as(ada);
+
+  begin
+    perform public.submit_store_count(mall_id,
+      jsonb_build_array(jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 1, 'sold', 1)),
+      6.4500, 3.4000, 12, fresh_photo('reports', 'shelf.jpg'));
+    perform assert(false, 'a count sent from away from the store is refused');
+  exception when others then
+    perform assert(sqlerrm like '%must be in the store%', 'a count sent from away from the store is refused');
+  end;
+
+  begin
+    perform public.submit_store_count(mall_id,
+      jsonb_build_array(jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 1, 'sold', 1)),
+      6.6018, 3.3515, 150, fresh_photo('reports', 'shelf.jpg'));
+    perform assert(false, 'a vague location is refused');
+  exception when others then
+    perform assert(sqlerrm like '%not accurate enough%', 'a vague location is refused');
+  end;
+
+  begin
+    perform public.submit_store_count(mall_id,
+      jsonb_build_array(jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 1, 'sold', 1)),
+      6.6018, 3.3515, 12, ada::text || '/no-photo.jpg');
+    perform assert(false, 'a count without a fresh shelf photo is refused');
+  exception when others then
+    perform assert(sqlerrm like '%shelf photo%', 'a count without a fresh shelf photo is refused');
+  end;
+
+  select c.photo_path into used_path from public.store_counts c
+  where c.user_id = ada and c.outlet_id = mall_id and c.photo_path is not null limit 1;
+  begin
+    perform public.submit_store_count(kiosk_id,
+      jsonb_build_array(jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 1, 'sold', 1)),
+      9.0765, 7.3986, 12, used_path);
+    perform assert(false, 'a shelf photo from another store cannot be reused');
+  exception when others then
+    perform assert(sqlerrm like '%already been used%', 'a shelf photo from another store cannot be reused');
+  end;
+
+  perform assert(
+    (select bool_and(distance_m < 30 and photo_path is not null)
+     from public.store_counts where user_id = ada and outlet_id = mall_id),
+    'a count records how far from the store it was taken, and its photo');
+
+  -- ---------------------------------------------------------------
+  -- B. Counts that do not add up are flagged, never refused.
+  -- ---------------------------------------------------------------
+  insert into public.store_counts (user_id, outlet_id, product_id, count_date, in_store, sold)
+  values (ada, kiosk_id, soap, public.business_date() - 10, 50, 5),
+         (ada, kiosk_id, cream, public.business_date() - 10, 20, 2);
+
+  perform count_here(kiosk_id, jsonb_build_array(
+    jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 30, 'sold', 10),
+    jsonb_build_object('product_name', 'Xpel Cream 400ml', 'in_store', 18, 'sold', 2)));
+  perform assert(
+    (select count(*) from public.integrity_flags
+     where user_id = ada and kind = 'count_units_missing'
+       and jsonb_array_length(detail->'products') = 1
+       and detail->'products'->0->>'missing' = '10') = 1,
+    'ten units unaccounted for since the last count are flagged, for that product only');
+
+  perform count_here(kiosk_id, jsonb_build_array(
+    jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 40, 'sold', 10),
+    jsonb_build_object('product_name', 'Xpel Cream 400ml', 'in_store', 18, 'sold', 2)));
+  perform assert(
+    (select count(*) from public.integrity_flags where user_id = ada and kind = 'count_units_missing') = 0,
+    'correcting the count the same day clears the flag');
+
+  perform count_here(kiosk_id, jsonb_build_array(
+    jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 50, 'sold', 5),
+    jsonb_build_object('product_name', 'Xpel Cream 400ml', 'in_store', 20, 'sold', 2)));
+  perform assert(
+    (select count(*) from public.integrity_flags where user_id = ada and kind = 'count_identical') = 1,
+    'a count identical to the last one is flagged');
+  perform assert(
+    (select count(*) from public.integrity_flags where user_id = ada and kind = 'count_units_missing') = 0,
+    'more units than before is a delivery, not a problem');
+
+  perform count_here(kiosk_id, jsonb_build_array(
+    jsonb_build_object('product_name', 'Xpel Soap 100g', 'in_store', 40, 'sold', 10),
+    jsonb_build_object('product_name', 'Xpel Cream 400ml', 'in_store', 20, 'sold', 0),
+    jsonb_build_object('product_name', 'Xpel Gel', 'in_store', 10, 'sold', 10),
+    jsonb_build_object('product_name', 'Xpel Oil', 'in_store', 30, 'sold', 20)));
+  perform assert(
+    (select count(*) from public.integrity_flags where user_id = ada and kind = 'count_round_numbers') = 1,
+    'a count made only of round numbers is flagged');
+
+  -- ---------------------------------------------------------------
+  -- C. Locations that look faked are flagged.
+  -- ---------------------------------------------------------------
+  update public.attendance set attendance_date = public.business_date() - 1
+  where user_id = ada and type = 'opening';
+  select count(*) into flagged from public.integrity_flags where user_id = ada;
+  insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+  values ('opening', 6.6019, 3.3516, 1, fresh_photo('selfies', 'again.jpg'), now());
+  perform assert(
+    exists (select 1 from public.integrity_flags
+            where user_id = ada and kind = 'repeated_exact_location' and outlet_id = mall_id),
+    'the exact same GPS point as on another day is flagged, against the store');
+  perform assert(
+    exists (select 1 from public.integrity_flags where user_id = ada and kind = 'perfect_accuracy'),
+    'a 1 m accuracy reading is flagged');
+
+  insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+  select 'closing', 6.6019 + 0.0001, 3.3516, 14, fresh_photo('selfies', 'close.jpg'), now()
+  where not exists (select 1 from public.attendance
+                    where user_id = ada and type = 'closing'
+                      and attendance_date = public.business_date());
+  perform assert(
+    not exists (select 1 from public.integrity_flags
+                where user_id = ada and kind = 'impossible_journey'),
+    'walking round the store is not a journey');
+
+  -- Everything here happens inside one transaction, at one now(); the ping
+  -- trigger stamps its own time, so the clock-in is moved two minutes back.
+  update public.attendance set created_at = now() - interval '2 minutes'
+  where user_id = ada and attendance_date = public.business_date();
+  insert into public.location_pings (lat, lng, accuracy_m) values (9.0765, 7.3986, 15);
+  perform assert(
+    exists (select 1 from public.integrity_flags where user_id = ada and kind = 'impossible_journey'),
+    'Lagos to Abuja in seconds is flagged');
+
+  -- Reviewing a flag.
+  begin
+    perform public.review_integrity_flag(
+      (select id from public.integrity_flags where user_id = ada limit 1), 'my own');
+    perform assert(false, 'nobody reviews their own flags');
+  exception when others then
+    perform assert(sqlerrm like '%not yours%', 'nobody reviews their own flags');
+  end;
+  perform act_as(boss);
+  perform public.review_integrity_flag(
+    (select id from public.integrity_flags where user_id = ada and kind = 'impossible_journey' limit 1),
+    'Checked with her: phone was on a fake-location app');
+  perform assert(
+    exists (select 1 from public.integrity_flags
+            where user_id = ada and kind = 'impossible_journey'
+              and reviewed_by = boss and review_note like 'Checked%'),
+    'an admin reviews a flag with a note');
 
   raise notice 'ALL RULES PASSED';
 end $$;

@@ -17,8 +17,11 @@ export function CameraCapture({
   subtitle,
   onCapture,
   onClose,
+  facing: startFacing = 'user',
 }: {
   open: boolean
+  /** Which lens to start on: the selfie camera, or the back one for a shelf. */
+  facing?: Facing
   title: string
   /** Where the location was read as, shown so it can be checked before the shot. */
   subtitle?: string | null
@@ -27,7 +30,7 @@ export function CameraCapture({
 }) {
   const video = useRef<HTMLVideoElement | null>(null)
   const stream = useRef<MediaStream | null>(null)
-  const [facing, setFacing] = useState<Facing>('user')
+  const [facing, setFacing] = useState<Facing>(startFacing)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)

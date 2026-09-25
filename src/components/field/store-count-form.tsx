@@ -2,13 +2,17 @@
 
 import { useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Package, Send, X } from 'lucide-react'
+import { Camera, MapPin, Package, Send, X } from 'lucide-react'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
+import { CameraCapture } from '@/components/field/camera-capture'
+import { GeoBlocked, requireFix, type Fix } from '@/lib/geo'
+import { processReportPhoto } from '@/lib/image'
+import { supabase } from '@/lib/supabase/client'
 
 /** A product already counted today at a store: its figures are shown for correcting. */
 export interface CountLine {
@@ -65,6 +69,9 @@ export function StoreCountForm({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [step, setStep] = useState<string | null>(null)
+  const [fix, setFix] = useState<Fix | null>(null)
+  const [camera, setCamera] = useState(false)
 
   if (stores.length === 0) {
     return (
@@ -117,18 +124,59 @@ export function StoreCountForm({
     setError(null)
   }
 
+  /**
+   * A count is proof of what is on the shelf, so it is taken in the store:
+   * first a live location, then a photo of the shelf with the in-app camera,
+   * then the numbers. The server refuses it from anywhere else.
+   */
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault()
     if (!filled.length || problem) return
     setBusy(true)
     setError(null)
     setNotice(null)
+    setStep('Checking you are in the store')
     try {
+      setFix(await requireFix())
+      setStep(null)
+      setCamera(true)
+    } catch (e) {
+      setStep(null)
+      setBusy(false)
+      setError(
+        e instanceof GeoBlocked
+          ? e.message
+          : 'Your location could not be read. Turn on location and try again.',
+      )
+    }
+  }
+
+  async function send(photo: Blob) {
+    setCamera(false)
+    if (!fix) return
+    try {
+      setStep('Uploading the shelf photo')
+      const client = supabase()
+      const {
+        data: { user },
+      } = await client.auth.getUser()
+      if (!user) throw new Error('You are signed out. Sign in and try again.')
+      const photo_path = `${user.id}/count-${crypto.randomUUID()}.jpg`
+      const upload = await client.storage
+        .from('reports')
+        .upload(photo_path, await processReportPhoto(photo), { contentType: 'image/jpeg' })
+      if (upload.error) throw new Error(upload.error.message)
+
+      setStep('Saving the count')
       const res = await fetch('/api/store-counts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           outlet_id: storeId,
+          lat: fix.lat,
+          lng: fix.lng,
+          accuracy_m: fix.accuracy_m,
+          photo_path,
           lines: filled.map((r) => ({
             product_name: r.product.trim().replace(/\s+/g, ' '),
             in_store: Number(r.in_store.trim() || 0),
@@ -149,6 +197,7 @@ export function StoreCountForm({
           : 'No connection. Your numbers are still on the screen; try again when you have signal.',
       )
     } finally {
+      setStep(null)
       setBusy(false)
     }
   }
@@ -176,6 +225,13 @@ export function StoreCountForm({
       <p className="text-sm text-muted-foreground">
         Count the products on the shelf and in the store room. For each one, write how many are
         left and how many were sold since the last count. A new empty line appears as you type.
+      </p>
+      <p className="flex items-start gap-2 rounded-xl bg-tint/60 p-2.5 text-xs text-tint-foreground">
+        <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <span>
+          Submit while you are in the store. Xtend checks your location and asks for a photo of
+          the shelf <Camera className="inline h-3 w-3" /> before saving.
+        </span>
       </p>
 
       <datalist id={listId}>
@@ -251,12 +307,25 @@ export function StoreCountForm({
         >
           <Send className="h-4 w-4" />
           {busy
-            ? 'Saving…'
+            ? (step ?? 'Take the shelf photo…')
             : filled.length
               ? `Submit count (${filled.length} product${filled.length === 1 ? '' : 's'})`
               : 'Enter a product and its numbers'}
         </Button>
       </div>
+
+      <CameraCapture
+        open={camera}
+        facing="environment"
+        title="Photo of the shelf"
+        subtitle="Show the products you counted"
+        onCapture={(photo) => void send(photo)}
+        onClose={() => {
+          setCamera(false)
+          setBusy(false)
+          setError('The count was not sent: it needs a photo of the shelf.')
+        }}
+      />
     </form>
   )
 }
