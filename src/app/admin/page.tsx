@@ -3,7 +3,16 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { LiveAlertFeed } from '@/components/admin/live-alert-feed'
 import { LiveLocations, type LiveLocation } from '@/components/admin/live-locations'
-import { formatLagos } from '@/lib/utils'
+import { WeekChart, TodaySplit, type DayCount } from '@/components/admin/overview-charts'
+import { addDays, cn, formatLagos, lagosDateString } from '@/lib/utils'
+import {
+  AlertTriangle,
+  Clock,
+  LogIn,
+  MapPinOff,
+  UserX,
+  type LucideIcon,
+} from 'lucide-react'
 import type { AlertDetail } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -62,6 +71,31 @@ export default async function AdminOverview() {
     supabase.rpc('selfie_retention_status'),
   ])
 
+  // The last seven days of clock-ins, on time and late, for the chart.
+  const today = lagosDateString()
+  const weekStart = addDays(today, -6)
+  const { data: openings } = await supabase
+    .from('attendance_detail')
+    .select('attendance_date, is_late')
+    .eq('type', 'opening')
+    .gte('attendance_date', weekStart)
+    .lte('attendance_date', today)
+    .limit(5000)
+  const week: DayCount[] = Array.from({ length: 7 }, (_, i) => {
+    const date = addDays(weekStart, i)
+    const rows = ((openings ?? []) as { attendance_date: string; is_late: boolean }[]).filter(
+      (r) => r.attendance_date === date,
+    )
+    return {
+      date,
+      label: new Date(`${date}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short' }),
+      onTime: rows.filter((r) => !r.is_late).length,
+      late: rows.filter((r) => r.is_late).length,
+    }
+  })
+  const weekTotal = week.reduce((s, d) => s + d.onTime + d.late, 0)
+  const weekLate = week.reduce((s, d) => s + d.late, 0)
+
   const stats = (overview ?? {}) as Partial<Overview>
   const away = (absentees ?? []) as Absentee[]
   const tracked = (coverage ?? []) as CoverageRow[]
@@ -72,22 +106,91 @@ export default async function AdminOverview() {
     overdue: number
   } | null
 
+  const total = stats.staff_total ?? 0
+  const pct = (n: number | undefined) => (total ? Math.round(((n ?? 0) / total) * 100) : 0)
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-semibold">Today</h1>
-        <p className="text-sm text-muted-foreground">
-          {stats.date ?? '—'} · Africa/Lagos · updated {formatLagos(new Date(), false)}
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight">Today&apos;s attendance</h1>
+          <p className="text-sm text-muted-foreground">
+            {stats.date ?? '—'} · Africa/Lagos · updated {formatLagos(new Date(), false)}
+          </p>
+        </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Stat label="Clocked in" value={stats.clocked_in} of={stats.staff_total} />
-        <Stat label="Still on shift" value={stats.still_on_shift} />
-        <Stat label="Clocked out" value={stats.clocked_out} />
-        <Stat label="Late" value={stats.late} tone={stats.late ? 'warn' : undefined} />
-        <Stat label="Absent" value={stats.absent} tone={stats.absent ? 'bad' : undefined} />
-        <Stat label="Not in store" value={stats.off_site} tone={stats.off_site ? 'bad' : undefined} />
+      <div className="grid gap-5 xl:grid-cols-3">
+        <div className="space-y-5 xl:col-span-2">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4">
+            <StatCard
+              featured
+              icon={LogIn}
+              label="Clocked in"
+              value={stats.clocked_in}
+              note={`of ${total} staff`}
+              badge={`${pct(stats.clocked_in)}%`}
+            />
+            <StatCard
+              icon={Clock}
+              label="Late"
+              value={stats.late}
+              note="after their shift start"
+              badge={stats.late ? `${pct(stats.late)}%` : 'None'}
+              tone={stats.late ? 'warn' : 'good'}
+            />
+            <StatCard
+              icon={UserX}
+              label="Not clocked in"
+              value={stats.absent}
+              note="assigned but no clock-in"
+              badge={stats.absent ? `${pct(stats.absent)}%` : 'None'}
+              tone={stats.absent ? 'bad' : 'good'}
+            />
+            <StatCard
+              icon={MapPinOff}
+              label="Not in store"
+              value={stats.off_site}
+              note="clocked in off site"
+              badge={stats.open_alerts ? `${stats.open_alerts} alerts` : 'No alerts'}
+              tone={stats.off_site ? 'bad' : 'good'}
+            />
+          </div>
+
+          <div className="surface p-5">
+            <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-lg font-bold">Clock-ins this week</h2>
+              <span className="text-xs text-muted-foreground">Last 7 days</span>
+            </div>
+            <p className="mb-4 text-sm text-muted-foreground">
+              {weekTotal} clock-ins, {weekLate} late
+              {weekTotal ? ` (${Math.round((weekLate / weekTotal) * 100)}%)` : ''}
+            </p>
+            <WeekChart days={week} />
+          </div>
+        </div>
+
+        <div className="surface bg-gradient-to-b from-tint to-card p-5">
+          <h2 className="text-lg font-bold">Where everyone is</h2>
+          <p className="mb-5 text-sm text-muted-foreground">Today, of {total} staff</p>
+          <TodaySplit
+            centreLabel="staff today"
+            parts={[
+              { label: 'On shift now', value: stats.still_on_shift ?? 0 },
+              { label: 'Clocked out', value: stats.clocked_out ?? 0 },
+              { label: 'Not clocked in', value: stats.absent ?? 0 },
+            ]}
+          />
+          {Boolean(stats.open_alerts) && (
+            <a
+              href="/admin/alerts"
+              className="mt-5 flex items-center gap-2 rounded-2xl bg-card px-4 py-3 text-sm font-semibold shadow-soft hover:bg-tint"
+            >
+              <AlertTriangle className="h-4 w-4 text-brand" />
+              {stats.open_alerts} open alert{stats.open_alerts === 1 ? '' : 's'} to look at
+            </a>
+          )}
+        </div>
       </div>
 
       <LiveLocations rows={(live ?? []) as LiveLocation[]} />
@@ -182,32 +285,56 @@ export default async function AdminOverview() {
   )
 }
 
-function Stat({
+function StatCard({
+  icon: Icon,
   label,
   value,
-  of,
+  note,
+  badge,
   tone,
+  featured,
 }: {
+  icon: LucideIcon
   label: string
   value: number | undefined
-  of?: number
-  tone?: 'warn' | 'bad'
+  note: string
+  badge: string
+  tone?: 'good' | 'warn' | 'bad'
+  featured?: boolean
 }) {
   return (
-    <div className="stat">
-      <p className="stat-label">{label}</p>
-      <p
-        className={
-          tone === 'bad'
-            ? 'stat-value text-destructive'
-            : tone === 'warn'
-              ? 'stat-value text-warning'
-              : 'stat-value'
-        }
-      >
-        {value ?? 0}
-        {of !== undefined && <span className="text-base font-normal text-muted-foreground">/{of}</span>}
+    <div className={cn('p-4 sm:p-5', featured ? 'brand-surface shadow-lift' : 'surface')}>
+      <div className="flex items-start justify-between gap-2">
+        <span
+          className={cn(
+            'flex h-10 w-10 items-center justify-center rounded-2xl sm:h-11 sm:w-11',
+            featured ? 'bg-white/20 text-white' : 'bg-tint text-brand',
+          )}
+        >
+          <Icon className="h-5 w-5" />
+        </span>
+        <span
+          className={cn(
+            'rounded-full px-2.5 py-1 text-xs font-bold',
+            featured
+              ? 'bg-white text-brand-deep'
+              : tone === 'bad'
+                ? 'bg-destructive/10 text-destructive'
+                : tone === 'warn'
+                  ? 'bg-warning/15 text-warning'
+                  : 'bg-success/15 text-success',
+          )}
+        >
+          {badge}
+        </span>
+      </div>
+      <p className={cn('mt-3 text-sm font-medium sm:mt-4', featured ? 'text-white/85' : 'text-muted-foreground')}>
+        {label}
       </p>
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <span className="text-3xl font-extrabold tabular-nums tracking-tight sm:text-4xl">{value ?? 0}</span>
+        <span className={cn('text-xs', featured ? 'text-white/80' : 'text-muted-foreground')}>{note}</span>
+      </div>
     </div>
   )
 }
