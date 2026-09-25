@@ -36,11 +36,12 @@ export async function checkPhoto(
   bucket: 'selfies' | 'reports',
   path: string,
   thumbPath?: string | null,
+  kind?: 'shelf' | 'storefront',
 ) {
   const res = await fetch('/api/photo-check', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ bucket, path, thumb_path: thumbPath ?? null }),
+    body: JSON.stringify({ bucket, path, thumb_path: thumbPath ?? null, kind }),
   })
   const data = (await res.json().catch(() => ({}))) as { verdict?: string; error?: string }
   if (res.ok) return data.verdict ?? 'pass'

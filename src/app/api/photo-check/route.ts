@@ -2,7 +2,7 @@ import { z } from 'zod'
 import Anthropic from '@anthropic-ai/sdk'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { apiError, requireApiSession, FIELD_ROLES } from '@/lib/auth'
-import { judgePhoto, photoCheckConfigured } from '@/lib/photo-check'
+import { judgePhoto, photoCheckConfigured, type PhotoKind, type PhotoSetting } from '@/lib/photo-check'
 
 export const maxDuration = 60
 
@@ -11,6 +11,8 @@ const schema = z.object({
   path: z.string().min(1).max(300),
   /** The selfie's thumbnail, which takes the same verdict. */
   thumb_path: z.string().min(1).max(300).nullable().optional(),
+  /** A photo in the reports bucket is a shelf photo unless it names a place. */
+  kind: z.enum(['shelf', 'storefront']).optional(),
 })
 
 /**
@@ -34,7 +36,7 @@ export async function POST(request: Request) {
         return Response.json({ error: 'That photo does not belong to you' }, { status: 400 })
       }
     }
-    const kind = bucket === 'selfies' ? 'selfie' : 'shelf'
+    const kind: PhotoKind = bucket === 'selfies' ? 'selfie' : (parsed.data.kind ?? 'shelf')
     const admin = createAdminSupabase()
 
     // Checked already (a retry after a dropped connection): same answer.
@@ -53,12 +55,14 @@ export async function POST(request: Request) {
     let verdict: 'pass' | 'reject' | 'unchecked' = 'unchecked'
     let problem: string | null = null
     let message: string | null = null
+    let setting: PhotoSetting = 'unclear'
     if (photoCheckConfigured()) {
       try {
         const judged = await judgePhoto(await file.arrayBuffer(), kind)
         verdict = judged.verdict
         problem = judged.problem
         message = judged.verdict === 'reject' ? judged.message : null
+        setting = judged.setting
       } catch (error) {
         if (!(error instanceof Anthropic.APIError) && !(error instanceof SyntaxError)) {
           console.error('photo check failed', error)
@@ -91,9 +95,23 @@ export async function POST(request: Request) {
         severity: verdict === 'reject' && (problem === 'screen' || problem === 'printed_photo') ? 'high' : 'low',
         summary:
           verdict === 'reject'
-            ? `A ${kind === 'selfie' ? 'selfie' : 'shelf photo'} was rejected: ${describe(problem)}`
-            : `A ${kind === 'selfie' ? 'selfie' : 'shelf photo'} could not be checked and was allowed`,
+            ? `A ${NOUN[kind]} was rejected: ${describe(problem)}`
+            : `A ${NOUN[kind]} could not be checked and was allowed`,
         detail: { bucket, path, problem },
+      })
+    }
+
+    // A selfie that passed but was plainly taken inside a house. Allowed,
+    // since the GPS decides where somebody is, but a supervisor should see
+    // it: at home with a store's GPS is exactly what a faked location looks
+    // like. (Before migration 025 this kind is refused; nothing is lost.)
+    if (verdict === 'pass' && kind === 'selfie' && setting === 'home') {
+      await admin.from('integrity_flags').insert({
+        user_id: session.userId,
+        kind: 'selfie_at_home',
+        severity: 'medium',
+        summary: 'The selfie looks like it was taken inside a home',
+        detail: { bucket, path, setting },
       })
     }
 
@@ -101,6 +119,12 @@ export async function POST(request: Request) {
   } catch (error) {
     return apiError(error)
   }
+}
+
+const NOUN: Record<PhotoKind, string> = {
+  selfie: 'selfie',
+  shelf: 'shelf photo',
+  storefront: 'photo of a place being named',
 }
 
 function describe(problem: string | null) {
@@ -115,6 +139,8 @@ function describe(problem: string | null) {
       return 'the face could not be seen clearly'
     case 'not_a_shelf':
       return 'no products in the shelf photo'
+    case 'not_a_business':
+      return 'it shows a home, not a business'
     case 'blurry':
       return 'too blurry'
     case 'too_dark':

@@ -35,10 +35,13 @@ select assert((select count(*) from public.store_counts) > 0,
 select assert((select count(*) from public.integrity_flags) = 0,
   'rls: nobody sees the flags raised about them');
 
-update public.known_places set name = 'Renamed by staff' where name = 'Ikeja City Mall';
-delete from public.known_places where name = 'Ikeja City Mall';
-select assert((select count(*) from public.known_places where name = 'Ikeja City Mall') = 1,
-  'rls: staff can read learned places but not rename or delete them');
+update public.known_places set name = 'Renamed by staff' where name = 'Mama Nkechi Provisions';
+delete from public.known_places where name = 'Mama Nkechi Provisions';
+select assert((select count(*) from public.known_places) = 0
+                and (select count(*) from public.known_place_detail) = 0,
+  'rls: staff cannot read the list of learned places, and who was where');
+select assert((select name from public.known_place_at(6.5001, 3.3001)) = 'Mama Nkechi Provisions',
+  'rls: but are told the name of the place they are standing in');
 
 select set_config('request.jwt.claim.sub', :'bala', false);
 select assert((select count(*) from public.count_requests) = 0,
@@ -61,6 +64,10 @@ select assert((select count(*) from public.integrity_flag_detail) > 0,
   'rls: an admin sees the integrity flags');
 select assert((select count(*) from public.store_counts) = (select count(*) from public.store_count_detail),
   'rls: and every count');
+select assert((select count(*) from public.known_places where name = 'Mama Nkechi Provisions') = 1,
+  'rls: staff could not rename or delete a learned place');
+select assert((select count(*) from public.known_place_detail) = (select count(*) from public.known_places),
+  'rls: an admin sees every learned place');
 
 do $$
 begin

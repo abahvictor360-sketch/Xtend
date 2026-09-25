@@ -6,6 +6,8 @@ const schema = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   name: z.string().trim().min(2, 'Type the name of the place').max(120),
+  /** The shop-front photo, already checked by /api/photo-check. */
+  photo_path: z.string().min(1).max(300),
 })
 
 /**
@@ -30,6 +32,7 @@ export async function POST(request: Request) {
       p_name: parsed.data.name,
       p_address: null,
       p_source: 'staff',
+      p_photo_path: parsed.data.photo_path,
     })
     if (error) return Response.json({ error: error.message }, { status: 400 })
     return Response.json({ id: data }, { status: 201 })

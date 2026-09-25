@@ -36,6 +36,16 @@ begin
 end;
 $$;
 
+-- A photo of a shop front, checked and passed, for naming a place (025).
+create or replace function place_photo(p_label text) returns text
+language plpgsql as $$
+declare taken text := fresh_photo('reports', p_label);
+begin
+  update public.photo_checks set kind = 'storefront' where path = taken;
+  return taken;
+end;
+$$;
+
 -- A store count taken standing in the store, with a shelf photo just taken.
 create or replace function count_here(p_outlet uuid, p_lines jsonb) returns integer
 language sql as $$
@@ -1464,10 +1474,11 @@ begin
   -- Xtend learns places (migration 024).
   -- ---------------------------------------------------------------
   perform act_as(grace);
-  place_id := public.learn_place(6.5000, 3.3000, '  Ikeja   City Mall  ', null, 'staff');
+  place_id := public.learn_place(6.5000, 3.3000, '  Mama   Nkechi Provisions  ', null, 'staff',
+                                 place_photo('front.jpg'));
   perform assert(place_id is not null, 'a person names a place the maps did not know');
   perform assert(
-    (select name from public.known_place_at(6.50010, 3.30010)) = 'Ikeja City Mall',
+    (select name from public.known_place_at(6.50010, 3.30010)) = 'Mama Nkechi Provisions',
     'the next person 15 m away is told its name, tidied up');
   perform assert(
     not exists (select 1 from public.known_place_at(6.5100, 3.3000)),
@@ -1481,31 +1492,119 @@ begin
     (select times_seen from public.known_places where id = place_id) = 2
       and (select count(*) from public.known_places) = 1,
     'it is counted as seen again, not added twice');
+  perform assert(
+    (select visitors from public.known_places where id = place_id) = array[grace, bala],
+    'and who was there is remembered');
 
   perform assert(
     public.learn_place(6.6018, 3.3515, 'Not a new place', null, 'staff') is null,
     'inside one of the stores nothing is learned: the store names it');
 
   begin
-    perform public.learn_place(6.4000, 3.4000, 'x', null, 'staff');
+    perform public.learn_place(6.4000, 3.4000, 'x', null, 'staff', place_photo('x.jpg'));
     perform assert(false, 'a one-letter name is refused');
   exception when others then
     perform assert(sqlerrm like '%2 to 120%', 'a one-letter name is refused');
   end;
 
+  -- ---------------------------------------------------------------
+  -- Nobody passes their house off as a shop (migration 025).
+  -- ---------------------------------------------------------------
   perform act_as(grace);
-  for i in 1..9 loop
-    perform public.learn_place(6.40 + i * 0.01, 3.40, format('Shop %s', i), null, 'staff');
+  begin
+    perform public.learn_place(6.4500, 3.4500, 'ikeja city-mall', null, 'staff', place_photo('home.jpg'));
+    perform assert(false, 'a store''s name, 17 km from the store, is refused');
+  exception when others then
+    perform assert(sqlerrm like '%Ikeja City Mall" is a known place%km from here%',
+      'a store''s name, 17 km from the store, is refused');
+  end;
+  begin
+    perform public.learn_place(6.4500, 3.4500, 'Ikeja City Mall Annex', null, 'staff', place_photo('home2.jpg'));
+    perform assert(false, 'nor a name that contains a store''s name');
+  exception when others then
+    perform assert(sqlerrm like '%known place%', 'nor a name that contains a store''s name');
+  end;
+  perform assert(
+    public.learn_place(6.6050, 3.3530, 'Ikeja City Mall Car Park', null, 'staff',
+                       place_photo('carpark.jpg')) is not null,
+    'next to the store itself, its name may be used');
+  perform assert(
+    public.learn_place(6.4600, 3.4600, 'Mall Road Pharmacy', null, 'staff',
+                       place_photo('pharmacy.jpg')) is not null,
+    'a common word ("mall") on its own is not a clash');
+
+  begin
+    perform public.learn_place(6.4700, 3.4700, 'Blessing Stores', null, 'staff', null);
+    perform assert(false, 'naming a place needs a photo of it');
+  exception when others then
+    perform assert(sqlerrm like '%photo of the shop front%', 'naming a place needs a photo of it');
+  end;
+  begin
+    perform public.learn_place(6.4700, 3.4700, 'Blessing Stores', null, 'staff',
+                               fresh_photo('reports', 'shelf-as-front.jpg'));
+    perform assert(false, 'a shelf photo does not count as a shop front');
+  exception when others then
+    perform assert(sqlerrm like '%photo of the shop front%', 'a shelf photo does not count as a shop front');
+  end;
+  used_path := place_photo('a-house.jpg');
+  update public.photo_checks set verdict = 'reject', problem = 'not_a_business' where path = used_path;
+  begin
+    perform public.learn_place(6.4700, 3.4700, 'Blessing Stores', null, 'staff', used_path);
+    perform assert(false, 'a photo the check said shows a house is refused');
+  exception when others then
+    perform assert(sqlerrm like '%photo of the shop front%', 'a photo the check said shows a house is refused');
+  end;
+  used_path := place_photo('once.jpg');
+  perform public.learn_place(6.4700, 3.4700, 'Blessing Stores', null, 'staff', used_path);
+  begin
+    perform public.learn_place(6.4800, 3.4800, 'Another Shop', null, 'staff', used_path);
+    perform assert(false, 'one photo names one place');
+  exception when others then
+    perform assert(sqlerrm like '%already named a place%', 'one photo names one place');
+  end;
+
+  -- A place only its namer ever uses is flagged, once, on the third visit.
+  place_id := (select id from public.known_places where name = 'Blessing Stores');
+  perform public.note_place_visit(place_id);
+  perform assert(
+    not exists (select 1 from public.integrity_flags where kind = 'own_named_place'),
+    'two visits are nothing yet');
+  perform public.note_place_visit(place_id);
+  perform public.note_place_visit(place_id);
+  perform assert(
+    (select count(*) from public.integrity_flags
+     where kind = 'own_named_place' and user_id = grace and detail->>'place_id' = place_id::text) = 1,
+    'a self-named place nobody else visits is flagged once');
+  perform assert(
+    (select only_namer_visits and visitor_count = 1 from public.known_place_detail where id = place_id),
+    'and the Places page shows why');
+
+  place_id := (select id from public.known_places where name = 'Mall Road Pharmacy');
+  perform act_as(bala);
+  perform public.note_place_visit(place_id);
+  perform act_as(grace);
+  perform public.note_place_visit(place_id);
+  perform public.note_place_visit(place_id);
+  perform public.note_place_visit(place_id);
+  perform assert(
+    not exists (select 1 from public.integrity_flags
+                where kind = 'own_named_place' and detail->>'place_id' = place_id::text),
+    'a place other staff visit too is not flagged');
+
+  -- The daily limit still holds (4 staff names so far today).
+  for i in 1..6 loop
+    perform public.learn_place(6.40 + i * 0.01, 3.40, format('Shop %s', i), null, 'staff',
+                               place_photo(format('shop-%s.jpg', i)));
   end loop;
   begin
-    perform public.learn_place(6.30, 3.40, 'One too many', null, 'staff');
+    perform public.learn_place(6.30, 3.40, 'One too many', null, 'staff', place_photo('extra.jpg'));
     perform assert(false, 'nobody names more than 10 new places a day');
   exception when others then
     perform assert(sqlerrm like '%10 places today%', 'nobody names more than 10 new places a day');
   end;
   perform assert(
     public.learn_place(6.31, 3.40, 'Found by the map', null, 'google') is not null,
-    'places named by a map are not limited');
+    'places named by a map are not limited, and need no photo');
 
   raise notice 'ALL RULES PASSED';
 end $$;

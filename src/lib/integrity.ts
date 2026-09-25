@@ -26,4 +26,23 @@ export const FLAG_KINDS: Record<string, { label: string; meaning: string }> = {
     label: 'Round numbers',
     meaning: 'Every number is a multiple of 10, which real counts rarely are.',
   },
+  photo_rejected: {
+    label: 'Photo rejected',
+    meaning:
+      'A photo was refused by the server check: a picture of a screen or a printed photo, no face, or too poor to use.',
+  },
+  photo_unchecked: {
+    label: 'Photo not checked',
+    meaning: 'The photo check was unavailable, so the photo was allowed without being looked at.',
+  },
+  own_named_place: {
+    label: 'Self-named place',
+    meaning:
+      'Keeps clocking in, checking in or being found off-site at a place they named themselves that nobody else has visited. It could be their house given a shop name: look at the photo on the Places page.',
+  },
+  selfie_at_home: {
+    label: 'Selfie at home',
+    meaning:
+      'The clock-in selfie looks like it was taken inside a home (bed, sofa, curtains). With a store GPS reading, that suggests a faked location.',
+  },
 }

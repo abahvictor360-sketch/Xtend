@@ -42,6 +42,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0022_integrity_checks.sql  # counts in store, selfie checks, flags
    supabase/migrations/0023_photo_checks.sql  # photos checked for screens, faces, shelves
    supabase/migrations/0024_known_places.sql  # Xtend's own learned places
+   supabase/migrations/0025_place_safeguards.sql  # no houses passed off as shops
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
@@ -168,6 +169,31 @@ neither Google nor OpenStreetMap, so Xtend builds its own map as staff work.
   correct, change the radius, delete, or **Make it a store**, which turns
   the learned spot into an outlet at the exact position staff stood. This
   is the intended way to grow the store list from real visits.
+
+### Nobody passes their house off as a shop
+
+The trick this guards against: stand at home, name it "Ikeja City Mall", and
+let every later clock-in there read like the real mall. Migration 025 and the
+app stop it in five ways:
+
+1. **No borrowing a store's name.** A name that matches one of the stores,
+   or a verified place, is refused more than 500 m from it
+   (`names_overlap()`, whole words, so "Mall Road Pharmacy" is fine).
+2. **A shop-front photo is required.** Naming a place opens the back camera;
+   the photo is checked by `/api/photo-check` as a `storefront` and a house,
+   a room or no place at all is rejected. `learn_place()` refuses a name
+   without a fresh, passed storefront photo, and one photo names one place.
+3. **Unverified names say so.** Until an admin verifies it, a staff-typed
+   name is shown as "Name (unverified)" on clock-ins and check-ins.
+4. **Only-the-namer places are flagged.** Xtend records who is seen at each
+   learned place (`note_place_visit()`). A staff-named place visited by
+   nobody but the person who named it, three times over, raises an
+   `own_named_place` integrity flag, and Places shows the warning, the
+   visitor count and the photo. Staff can no longer read the place list
+   directly (who was where); they are only told the name where they stand.
+5. **Selfies at home are flagged.** The selfie check also reports the
+   setting; a selfie plainly taken inside a home raises `selfie_at_home`
+   (allowed, since GPS decides presence, but a supervisor sees it).
 
 ## Telling the office nobody is in the store
 

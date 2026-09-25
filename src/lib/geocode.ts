@@ -282,8 +282,20 @@ export async function resolvePlace(
   }
 
   if (db) {
-    const ours = (await fromStores(db, lat, lng)) ?? (await fromKnownPlaces(db, lat, lng))
-    if (ours) return ours
+    const store = await fromStores(db, lat, lng)
+    if (store) return store
+    const known = await fromKnownPlaces(db, lat, lng)
+    if (known) {
+      // Counts who is seen where, so a place only its namer ever uses is
+      // noticed (migration 025). Not for a preview before the clock-in.
+      if (options.learn) {
+        await db.rpc('note_place_visit', { p_id: known.id }).then(
+          () => undefined,
+          () => undefined,
+        )
+      }
+      return known.place
+    }
   }
 
   const mapped = (useGoogle ? await fromGoogle(lat, lng) : null) ?? (await fromOsm(lat, lng))
@@ -331,17 +343,24 @@ async function fromStores(db: SupabaseClient, lat: number, lng: number): Promise
 }
 
 /** A place somebody was at before, named then by a map or by a person. */
-async function fromKnownPlaces(db: SupabaseClient, lat: number, lng: number): Promise<ResolvedPlace | null> {
+async function fromKnownPlaces(
+  db: SupabaseClient,
+  lat: number,
+  lng: number,
+): Promise<{ id: string; place: ResolvedPlace } | null> {
   const { data, error } = await db.rpc('known_place_at', { p_lat: lat, p_lng: lng })
   // Before migration 024 the function does not exist: fall through to the maps.
   if (error) return null
-  const place = (data as { name: string; address: string | null }[] | null)?.[0]
+  const place = (
+    data as { id: string; name: string; address: string | null; source: string; verified: boolean }[] | null
+  )?.[0]
   if (!place) return null
+  // A name staff typed says so until an admin has checked it, so nobody
+  // reads a self-named spot as the real thing.
+  const name = place.source === 'staff' && !place.verified ? `${place.name} (unverified)` : place.name
   return {
-    name: place.name,
-    address: place.address,
-    label: join(place.name, place.address, place.name),
-    source: 'known',
+    id: place.id,
+    place: { name, address: place.address, label: join(name, place.address, name), source: 'known' },
   }
 }
 
