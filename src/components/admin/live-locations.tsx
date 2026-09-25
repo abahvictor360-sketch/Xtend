@@ -1,6 +1,7 @@
 'use client'
 
-import { MapPin, Navigation, Phone, RefreshCw } from 'lucide-react'
+import { MapPin, Navigation, Phone, RefreshCw, Route } from 'lucide-react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -42,9 +43,19 @@ export function LiveLocations({ rows }: { rows: LiveLocation[] }) {
           <Navigation className="h-4 w-4" />
           Where everyone is ({rows.length} on shift)
         </CardTitle>
-        <Button size="iconSm" variant="ghost" aria-label="Refresh" onClick={() => router.refresh()}>
-          <RefreshCw className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Link href="/admin/tracking" className="text-xs font-semibold text-brand hover:underline">
+            Live map
+          </Link>
+          <Button
+            size="iconSm"
+            variant="ghost"
+            aria-label="Refresh"
+            onClick={() => router.refresh()}
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        </div>
       </CardHeader>
 
       <CardContent>
@@ -60,7 +71,10 @@ export function LiveLocations({ rows }: { rows: LiveLocation[] }) {
                   : null
 
               return (
-                <li key={row.user_id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between">
+                <li
+                  key={row.user_id}
+                  className="flex flex-col gap-2 py-3 sm:flex-row sm:items-start sm:justify-between"
+                >
                   <div className="min-w-0 flex-1">
                     <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">
                       {row.full_name}
@@ -84,10 +98,13 @@ export function LiveLocations({ rows }: { rows: LiveLocation[] }) {
                             {' · '}
                             <span
                               className={
-                                row.inside_geofence ? 'text-success' : 'font-semibold text-destructive'
+                                row.inside_geofence
+                                  ? 'text-success'
+                                  : 'font-semibold text-destructive'
                               }
                             >
-                              {metres(row.distance_from_outlet_m)} from {row.outlet_name ?? 'outlet'}
+                              {metres(row.distance_from_outlet_m)} from{' '}
+                              {row.outlet_name ?? 'outlet'}
                             </span>
                           </>
                         )}
@@ -100,7 +117,8 @@ export function LiveLocations({ rows }: { rows: LiveLocation[] }) {
                       {row.last_ping_at ? (
                         <span className={stale ? 'text-warning' : undefined}>
                           last seen {formatLagos(row.last_ping_at, false)}
-                          {row.minutes_since_ping !== null && ` (${row.minutes_since_ping} min ago)`}
+                          {row.minutes_since_ping !== null &&
+                            ` (${row.minutes_since_ping} min ago)`}
                         </span>
                       ) : (
                         <span className="text-warning">no location check since clock-in</span>
@@ -118,6 +136,13 @@ export function LiveLocations({ rows }: { rows: LiveLocation[] }) {
                         <Phone className="h-4 w-4" />
                       </a>
                     )}
+                    <Link
+                      href={`/admin/tracking?person=${row.user_id}`}
+                      aria-label={`Follow ${row.full_name}'s route today`}
+                      className="flex h-9 w-9 items-center justify-center rounded-xl bg-tint text-brand"
+                    >
+                      <Route className="h-4 w-4" />
+                    </Link>
                     {mapLink && (
                       <a
                         href={mapLink}

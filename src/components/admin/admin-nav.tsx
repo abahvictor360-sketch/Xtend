@@ -16,6 +16,7 @@ import {
   MessageSquareText,
   PackageSearch,
   PhoneOff,
+  Route,
   ShieldAlert,
   Siren,
   Store,
@@ -46,6 +47,7 @@ const GROUPS: { title: string | null; links: NavLink[] }[] = [
     title: 'Attendance',
     links: [
       { href: '/admin/attendance', label: 'Attendance', icon: ClipboardList, adminOnly: false },
+      { href: '/admin/tracking', label: 'Movement', icon: Route, adminOnly: false },
       { href: '/admin/visits', label: 'Store visits', icon: MapPin, adminOnly: false },
       { href: '/admin/alerts', label: 'Alerts', icon: Siren, adminOnly: false },
       { href: '/admin/analytics', label: 'Analytics', icon: BarChart3, adminOnly: false },

@@ -45,6 +45,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0025_place_safeguards.sql  # no houses passed off as shops
    supabase/migrations/0026_phone_evidence.sql  # network and phone-off excuses
    supabase/migrations/0027_notifications_required.sql  # no clock-in without notifications
+   supabase/migrations/0028_movement_trail.sql  # follow someone's day on a map
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
@@ -245,6 +246,27 @@ Xtend settles them. None of it is visible to staff.
   an admin can excuse one person whose phone cannot receive them
   (`profiles.push_exempt`); supervisors cannot. People cannot change their
   own store, supervisor, active status or exemption (`profiles_self_guard`).
+
+## Following movements on the map
+
+**Movement** (`/admin/tracking`, admins and supervisors) shows where staff
+are and where they have been since clocking in. It refreshes every minute
+for today.
+
+- **Live:** everyone on shift at their last position, orange inside a
+  store's geofence, dark brown outside, grey when not heard from for 15
+  minutes. Each pin links to that person's day.
+- **One person's day:** `movement_trail()` returns, in time order, the
+  clock-in and clock-out, every heartbeat position (every 5 minutes while
+  the app is open), store check-ins and check-outs, and positions the
+  phone reported about itself (026), with their stores' geofences. The map
+  draws the route (dashed where nothing was heard for 20+ minutes) and a
+  timeline lists each point; `lib/movement.ts` works out distance moved,
+  time outside their stores and the longest silence. Readings rougher
+  than 100 m are shown but not measured.
+- A browser cannot read GPS while the app is closed, so positions exist
+  only while Xtend is open on the phone; the silences are shown for what
+  they are and link to **Check an excuse**.
 
 ## Telling the office nobody is in the store
 

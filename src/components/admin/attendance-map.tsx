@@ -4,42 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatLagos, metres } from '@/lib/utils'
 import type { AttendanceDetail } from '@/lib/types'
-
-const LEAFLET_CSS = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css'
-const LEAFLET_JS = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js'
-
-declare global {
-  interface Window {
-    L?: any
-  }
-}
-
-function loadLeaflet(): Promise<any> {
-  if (typeof window === 'undefined') return Promise.reject(new Error('no window'))
-  if (window.L) return Promise.resolve(window.L)
-
-  if (!document.querySelector(`link[href="${LEAFLET_CSS}"]`)) {
-    const link = document.createElement('link')
-    link.rel = 'stylesheet'
-    link.href = LEAFLET_CSS
-    document.head.appendChild(link)
-  }
-
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector<HTMLScriptElement>(`script[src="${LEAFLET_JS}"]`)
-    if (existing) {
-      existing.addEventListener('load', () => resolve(window.L))
-      existing.addEventListener('error', () => reject(new Error('Leaflet failed to load')))
-      return
-    }
-    const script = document.createElement('script')
-    script.src = LEAFLET_JS
-    script.async = true
-    script.onload = () => resolve(window.L)
-    script.onerror = () => reject(new Error('Leaflet failed to load'))
-    document.head.appendChild(script)
-  })
-}
+import { loadLeaflet } from '@/lib/leaflet'
 
 /**
  * Pins for every event in the current filter, with each outlet's geofence

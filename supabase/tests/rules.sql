@@ -1748,6 +1748,34 @@ begin
     anchor := public.request_phone_check(femi);
     perform assert(anchor is not null and public.request_phone_check(femi) = anchor,
       'a supervisor checks a team member''s phone, once at a time');
+
+    -- Following Femi's day on a map (migration 028).
+    perform act_as(femi);
+    insert into public.location_pings (lat, lng, accuracy_m) values (6.6100, 3.3600, 15);
+    perform public.record_beacon(jsonb_build_object('reason', 'visible', 'lat', 6.6050, 'lng', 3.3550));
+    perform act_as(tunde);
+    got := public.movement_trail(femi, public.business_date());
+    perform assert(got->'person'->>'name' = 'Femi Ade'
+                   and jsonb_array_length(got->'points') >= 3,
+      'a supervisor sees a team member''s day: clock-in, location checks, phone reports');
+    perform assert(
+      (select bool_and(a <= b) from (
+         select (e->>'at')::timestamptz as a,
+                lead((e->>'at')::timestamptz) over (order by ord) as b
+         from jsonb_array_elements(got->'points') with ordinality x(e, ord)) t where b is not null),
+      'in time order');
+    perform assert(
+      exists (select 1 from jsonb_array_elements(got->'points') e where e->>'kind' = 'clock_in')
+      and exists (select 1 from jsonb_array_elements(got->'stores') s where s->>'name' = 'Ikeja City Mall'),
+      'with the clock-in and their store''s geofence');
+    perform act_as(ada);
+    begin
+      perform public.movement_trail(femi, public.business_date());
+      perform assert(false, 'staff cannot follow each other');
+    exception when others then
+      perform assert(sqlerrm like '%own team%', 'staff cannot follow each other');
+    end;
+    perform act_as(tunde);
   end;
 
   raise notice 'ALL RULES PASSED';
