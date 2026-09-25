@@ -14,28 +14,24 @@ export function XpelMark({
   className?: string
   tone?: 'brand' | 'light'
 }) {
-  const id = tone === 'brand' ? 'xpel-gradient' : 'xpel-light'
+  const id = 'xpel-gradient'
 
   return (
     <svg viewBox="0 0 100 100" role="img" aria-label="Xpel Beauty" className={cn('h-6 w-6', className)}>
-      <defs>
-        <linearGradient id={id} x1="0" y1="1" x2="1" y2="0">
-          {tone === 'brand' ? (
-            <>
-              <stop offset="0%" stopColor="#C1572A" />
-              <stop offset="100%" stopColor="#C49420" />
-            </>
-          ) : (
-            <>
-              <stop offset="0%" stopColor="#ffffff" />
-              <stop offset="100%" stopColor="#ffffff" />
-            </>
-          )}
-        </linearGradient>
-      </defs>
+      {/* Plain white needs no gradient. A gradient is looked up by id across
+          the whole page, and when the first copy of it sits inside a hidden
+          element (the desktop sidebar on a phone) it does not paint. */}
+      {tone === 'brand' && (
+        <defs>
+          <linearGradient id={id} x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0%" stopColor="#C1572A" />
+            <stop offset="100%" stopColor="#C49420" />
+          </linearGradient>
+        </defs>
+      )}
       <g
         fill="none"
-        stroke={`url(#${id})`}
+        stroke={tone === 'brand' ? `url(#${id})` : '#ffffff'}
         strokeWidth="15.5"
         strokeLinecap="round"
         strokeLinejoin="round"

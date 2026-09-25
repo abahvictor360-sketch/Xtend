@@ -11,6 +11,7 @@ export default {
         input: 'hsl(var(--input))',
         ring: 'hsl(var(--ring))',
         background: 'hsl(var(--background))',
+        canvas: 'hsl(var(--canvas))',
         foreground: 'hsl(var(--foreground))',
         brand: { DEFAULT: 'hsl(var(--brand))', deep: 'hsl(var(--brand-deep))', ink: 'hsl(var(--brand-ink))' },
         gold: 'hsl(var(--gold))',
