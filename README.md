@@ -45,6 +45,8 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0025_place_safeguards.sql  # no houses passed off as shops
    supabase/migrations/0026_phone_evidence.sql  # network and phone-off excuses
    supabase/migrations/0027_notifications_required.sql  # no clock-in without notifications
+   supabase/migrations/0028_movement_trail.sql  # follow someone's day on a map
+   supabase/migrations/0029_offline_positions.sql  # positions kept offline, sent on reconnect
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
@@ -245,6 +247,39 @@ Xtend settles them. None of it is visible to staff.
   an admin can excuse one person whose phone cannot receive them
   (`profiles.push_exempt`); supervisors cannot. People cannot change their
   own store, supervisor, active status or exemption (`profiles_self_guard`).
+
+## Following movements on the map
+
+**Movement** (`/admin/tracking`, admins and supervisors) shows where staff
+are and where they have been since clocking in. It refreshes every minute
+for today.
+
+- **Live:** everyone on shift at their last position, orange inside a
+  store's geofence, dark brown outside, grey when not heard from for 15
+  minutes. Each pin links to that person's day.
+- **One person's day:** `movement_trail()` returns, in time order, the
+  clock-in and clock-out, every heartbeat position (every 5 minutes while
+  the app is open), store check-ins and check-outs, and positions the
+  phone reported about itself (026), with their stores' geofences. The map
+  draws the route (dashed where nothing was heard for 20+ minutes) and a
+  timeline lists each point; `lib/movement.ts` works out distance moved,
+  time outside their stores and the longest silence. Readings rougher
+  than 100 m are shown but not measured.
+- **Offline positions** (migration 029): with no network the heartbeat keeps
+  each position on the phone (the same IndexedDB outbox clock-ins use) and
+  the outbox sends them as one batch to `/api/pings/offline` when the
+  network is back, from any field page. `record_offline_pings()` stores
+  each at the time it was taken, corrected for a wrong phone clock, marks
+  it `offline`, and refuses anything older than 24 hours, from the future,
+  a duplicate, or claimed from before the phone last reported nothing
+  waiting to upload (flagged `backdated_clock`). A position that arrives
+  late raises no "left the store" alert; the fake-location checks still
+  run. The map shows them as rings. For excuses they prove the phone was
+  on, never that it had network (`clock_timing` and `check_excuse` leave
+  them out of "the phone had network").
+- A browser cannot read GPS while the app is closed, so positions exist
+  only while Xtend is open on the phone; the silences are shown for what
+  they are and link to **Check an excuse**.
 
 ## Telling the office nobody is in the store
 

@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { HEARTBEAT_INTERVAL_MS } from '@/lib/geo'
+import { countOutbox, enqueue } from '@/lib/offline/db'
+import { flushOutbox } from '@/lib/offline/sync'
 
 /** Absent entirely on older Android WebViews, so it is read defensively. */
 type MaybeWakeLock = { request: (type: 'screen') => Promise<WakeLockSentinel> } | undefined
@@ -12,6 +14,8 @@ export interface HeartbeatStatus {
   lastPingAt: string | null
   lastDistanceM: number | null
   lastError: string | null
+  /** Set while positions are being kept on the phone for want of network. */
+  savedOffline: string | null
   sending: boolean
   wakeLock: WakeLockState
   keepAwake: boolean
@@ -42,6 +46,7 @@ export function useHeartbeat(active: boolean): HeartbeatStatus {
   const [lastPingAt, setLastPingAt] = useState<string | null>(null)
   const [lastDistanceM, setLastDistanceM] = useState<number | null>(null)
   const [lastError, setLastError] = useState<string | null>(null)
+  const [savedOffline, setSavedOffline] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
 
   const send = useCallback(() => {
@@ -53,6 +58,36 @@ export function useHeartbeat(active: boolean): HeartbeatStatus {
 
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
+        const captured = {
+          kind: 'ping' as const,
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          accuracy_m: pos.coords.accuracy,
+          client_captured_at: new Date().toISOString(),
+        }
+        // No network: keep the position on the phone; it is sent with the
+        // rest of the offline queue when the network is back (migration 029).
+        const keep = async () => {
+          await enqueue(captured)
+          const waiting = await countOutbox().catch(() => 0)
+          setSavedOffline(
+            `No connection. Your position is saved on this phone and will be sent when you are back online${
+              waiting ? ` (${waiting} waiting)` : ''
+            }.`,
+          )
+          setLastError(null)
+        }
+        if (navigator.onLine === false) {
+          try {
+            await keep()
+          } catch {
+            setLastError('No connection, and this phone could not save the position.')
+          } finally {
+            inFlight.current = false
+            setSending(false)
+          }
+          return
+        }
         try {
           const res = await fetch('/api/pings', {
             method: 'POST',
@@ -71,10 +106,18 @@ export function useHeartbeat(active: boolean): HeartbeatStatus {
           setLastPingAt(ping.created_at)
           setLastDistanceM(ping.distance_m)
           setLastError(null)
+          setSavedOffline(null)
+          // Back online: send anything kept while offline.
+          if ((await countOutbox().catch(() => 0)) > 0) void flushOutbox()
         } catch (error) {
-          // A missed ping is never queued: by the time it synced it would no
-          // longer describe where anyone is.
-          setLastError(error instanceof Error ? error.message : 'Ping failed')
+          // The request never reached the server (no signal, a dropped
+          // connection): keep the position like any other offline one. A
+          // refusal from the server is not a network problem, so it is shown.
+          if (error instanceof TypeError) {
+            await keep().catch(() => setLastError('This phone could not save the position.'))
+          } else {
+            setLastError(error instanceof Error ? error.message : 'Ping failed')
+          }
         } finally {
           inFlight.current = false
           setSending(false)
@@ -171,6 +214,7 @@ export function useHeartbeat(active: boolean): HeartbeatStatus {
     lastPingAt,
     lastDistanceM,
     lastError,
+    savedOffline,
     sending,
     wakeLock,
     keepAwake,

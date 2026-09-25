@@ -42,11 +42,18 @@ export interface ExcuseEvidence {
     lat: number
     lng: number
   }[]
+  /** Heartbeat positions the phone kept while offline (migration 029). */
+  offline_positions?: { at: string; received_at: string | null; lat: number; lng: number }[]
   before: Reading | null
   after: Reading | null
   place_before: Reading | null
   place_after: Reading | null
-  phone_checks: { sent_at: string; delivered_at: string | null; opened_at: string | null; devices: number }[]
+  phone_checks: {
+    sent_at: string
+    delivered_at: string | null
+    opened_at: string | null
+    devices: number
+  }[]
   has_push: boolean
   ever_reported: boolean
 }
@@ -79,7 +86,8 @@ function distance(a: Reading | null, b: Reading | null) {
   const dLat = (b.lat - a.lat) * rad
   const dLng = (b.lng - a.lng) * rad
   const h =
-    Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2
   return 2 * 6371000 * Math.asin(Math.sqrt(h))
 }
 
@@ -87,7 +95,8 @@ function describeContact(c: Contact) {
   const bits = [`${time(c.at)}: the phone ${WHAT[c.what] ?? c.what}`]
   const extra: string[] = []
   if (c.connection) extra.push(`on ${c.connection.toUpperCase()}`)
-  if (c.battery_pct != null) extra.push(`battery ${c.battery_pct}%${c.charging ? ', charging' : ''}`)
+  if (c.battery_pct != null)
+    extra.push(`battery ${c.battery_pct}%${c.charging ? ', charging' : ''}`)
   if (extra.length) bits.push(`(${extra.join(', ')})`)
   return bits.join(' ')
 }
@@ -117,9 +126,20 @@ export function judgeExcuse(e: ExcuseEvidence, claim: Claim): ExcuseVerdict {
         (r.verdict === 'backdated' ? ', but its time was faked on the phone.' : '.'),
     )
   }
+  const kept = e.offline_positions ?? []
+  if (kept.length) {
+    points.push(
+      `The phone recorded ${kept.length} position${kept.length === 1 ? '' : 's'} without network, from ${time(kept[0].at)} to ${time(kept[kept.length - 1].at)}` +
+        (kept[0].received_at
+          ? `, sent when it reconnected at ${time(kept[kept.length - 1].received_at!)}.`
+          : '.'),
+    )
+  }
   if (clockOff.length) {
     const worst = Math.max(...clockOff.map((c) => Math.abs(c.clock_off_s ?? 0)))
-    points.push(`The phone's clock was about ${Math.round(worst / 60)} minutes wrong: someone changed it.`)
+    points.push(
+      `The phone's clock was about ${Math.round(worst / 60)} minutes wrong: someone changed it.`,
+    )
   }
 
   const moved = distance(e.place_before, e.place_after)
@@ -129,10 +149,14 @@ export function judgeExcuse(e: ExcuseEvidence, claim: Claim): ExcuseVerdict {
     )
   }
   if (e.before?.battery_pct != null) {
-    points.push(`Battery before: ${e.before.battery_pct}% at ${time(e.before.at)}${e.before.charging ? ' (charging)' : ''}.`)
+    points.push(
+      `Battery before: ${e.before.battery_pct}% at ${time(e.before.at)}${e.before.charging ? ' (charging)' : ''}.`,
+    )
   }
   if (e.after?.battery_pct != null) {
-    points.push(`Battery after: ${e.after.battery_pct}% at ${time(e.after.at)}${e.after.charging ? ' (charging)' : ''}.`)
+    points.push(
+      `Battery after: ${e.after.battery_pct}% at ${time(e.after.at)}${e.after.charging ? ' (charging)' : ''}.`,
+    )
   }
   for (const c of e.phone_checks) {
     points.push(
@@ -163,22 +187,30 @@ export function judgeExcuse(e: ExcuseEvidence, claim: Claim): ExcuseVerdict {
         points,
       }
     }
-    if (offline.length) {
+    if (offline.length || kept.length) {
       return {
         verdict: 'fits',
         headline: 'It fits: the phone was on but had no network, and saved its work to send later.',
         points,
       }
     }
-    return noTrace(e, points, 'That fits no network, but equally the app being closed or the phone off.')
+    return noTrace(
+      e,
+      points,
+      'That fits no network, but equally the app being closed or the phone off.',
+    )
   }
 
   // phone_off
-  if (heard.length || offline.length) {
+  if (heard.length || offline.length || kept.length) {
     return {
       verdict: 'false',
       headline: `Not true: the phone was on. ${
-        heard.length ? `Xtend heard from it at ${time(heard[0].at)}` : `It recorded a clock event at ${time(offline[0].taken_at)}`
+        heard.length
+          ? `Xtend heard from it at ${time(heard[0].at)}`
+          : offline.length
+            ? `It recorded a clock event at ${time(offline[0].taken_at)}`
+            : `It recorded its position at ${time(kept[0].at)}, offline`
       }${heard.length > 1 ? ` and ${heard.length - 1} more time${heard.length === 2 ? '' : 's'}` : ''}.`,
       points,
     }
@@ -192,7 +224,13 @@ export function judgeExcuse(e: ExcuseEvidence, claim: Claim): ExcuseVerdict {
       points,
     }
   }
-  if (before != null && before >= 25 && after != null && !e.after?.charging && after >= before - 15) {
+  if (
+    before != null &&
+    before >= 25 &&
+    after != null &&
+    !e.after?.charging &&
+    after >= before - 15
+  ) {
     return {
       verdict: 'doubtful',
       headline: `Doubtful: the battery did not run flat (${before}% before, ${after}% after, not charging). If the phone was off, it was switched off.`,
@@ -204,10 +242,18 @@ export function judgeExcuse(e: ExcuseEvidence, claim: Claim): ExcuseVerdict {
 
 function noTrace(e: ExcuseEvidence, points: string[], tail: string): ExcuseVerdict {
   if (!e.ever_reported) {
-    points.push('This phone has not reported to Xtend yet. It will once the person opens the updated app.')
+    points.push(
+      'This phone has not reported to Xtend yet. It will once the person opens the updated app.',
+    )
   }
   if (!e.has_push) {
-    points.push('Notifications are off on this phone, so it cannot be checked live. Ask them to turn them on.')
+    points.push(
+      'Notifications are off on this phone, so it cannot be checked live. Ask them to turn them on.',
+    )
   }
-  return { verdict: 'unknown', headline: `Xtend heard nothing from the phone in this time. ${tail}`, points }
+  return {
+    verdict: 'unknown',
+    headline: `Xtend heard nothing from the phone in this time. ${tail}`,
+    points,
+  }
 }
