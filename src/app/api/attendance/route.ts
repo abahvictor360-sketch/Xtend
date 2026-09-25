@@ -82,11 +82,13 @@ export async function POST(request: Request) {
       return Response.json({ error: error.message }, { status: 400 })
     }
 
-    // An off-site or unverifiable clock event is worth interrupting someone
+    // An off-site or flagged clock event is worth interrupting someone
     // for, so the office hears about it now rather than when they next open
     // the dashboard. The database has already written the location_alerts
     // row; this only carries it to a phone.
-    if (data && data.status !== 'on_site') {
+    // Not measured at all (no store, or one waiting for its location) is
+    // not news; the database raises no alert for it either.
+    if (data && (data.status === 'off_site' || data.status === 'flagged')) {
       const event = data.type === 'opening' ? 'clocked in' : 'clocked out'
       const distance =
         data.distance_m === null

@@ -147,7 +147,9 @@ export function ClockPanel({
 
         if (result.queued) {
           const guess =
-            day.outlet && haversineMetres(fix.lat, fix.lng, day.outlet.lat, day.outlet.lng)
+            day.outlet?.lat != null &&
+            day.outlet.lng != null &&
+            haversineMetres(fix.lat, fix.lng, day.outlet.lat, day.outlet.lng)
           setOutcome({
             tone: 'info',
             title: 'Saved on your phone',
@@ -161,7 +163,8 @@ export function ClockPanel({
           const record = (
             result.data as {
               attendance: {
-                status: string
+                status: string | null
+                accuracy_m: number
                 distance_m: number | null
                 outlet_name: string | null
                 outlet_radius_m: number | null
@@ -183,6 +186,14 @@ export function ClockPanel({
               tone: 'warning',
               title: `${type === 'opening' ? 'Clocked in' : 'Clocked out'} off site`,
               detail: `Location: ${where}. That is ${metres(record.distance_m)} from ${against}, outside the ${record.outlet_radius_m ?? day.outlet?.radius_m ?? 150} m store area.`,
+            })
+          } else if (record.status === null && record.accuracy_m <= 100) {
+            // A good fix with nothing to measure it against: the store is
+            // not on the map yet, or there is no store at all.
+            setOutcome({
+              tone: 'success',
+              title: type === 'opening' ? 'Clocked in' : 'Clocked out',
+              detail: `Location: ${where}.`,
             })
           } else {
             setOutcome({

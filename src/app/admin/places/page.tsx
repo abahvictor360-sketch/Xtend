@@ -1,7 +1,7 @@
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { PlaceManager, type KnownPlace } from '@/components/admin/place-manager'
+import { PlaceManager, type KnownPlace, type WaitingStore } from '@/components/admin/place-manager'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Places — Xtend' }
@@ -15,6 +15,14 @@ export default async function PlacesPage() {
     .order('verified', { ascending: true })
     .order('last_seen_at', { ascending: false })
     .limit(1000)
+
+  // Stores with no location yet: a learned place can be confirmed as one (030).
+  const { data: waiting } = await supabase
+    .from('outlets')
+    .select('id, name, address')
+    .is('lat', null)
+    .eq('is_active', true)
+    .order('name')
 
   // The shop-front photos staff took when naming a place (migration 025).
   const places = (data ?? []) as KnownPlace[]
@@ -42,7 +50,9 @@ export default async function PlacesPage() {
           GPS position and name are saved here, from Google, OpenStreetMap, or the name the person
           typed when no map knew it. Next time anyone stands there, Xtend names it from this list,
           with no map lookup. Check the names staff typed against the photo they took of the place,
-          correct any that are wrong, or turn a place into one of your stores. Staff are not told
+          correct any that are wrong, or turn a place into one of your stores. Stores added without a
+          location get it here: when someone allocated to one clocks in away from their other
+          stores, the spot is listed with the stores it could be, and you confirm which. Staff are not told
           that Xtend learns places: to them, naming a place is only recording where they are.
         </p>
       </div>
@@ -51,7 +61,11 @@ export default async function PlacesPage() {
           Places could not be loaded. Has migration 024 been run in Supabase?
         </p>
       ) : (
-        <PlaceManager places={places} photoUrls={photoUrls} />
+        <PlaceManager
+          places={places}
+          photoUrls={photoUrls}
+          waitingStores={(waiting ?? []) as WaitingStore[]}
+        />
       )}
     </div>
   )

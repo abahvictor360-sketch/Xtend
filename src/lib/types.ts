@@ -7,8 +7,9 @@ export interface Outlet {
   id: string
   name: string
   address: string | null
-  lat: number
-  lng: number
+  /** Null while the store waits for its location (migration 030). */
+  lat: number | null
+  lng: number | null
   geofence_radius_m: number
   shift_start: string
   shift_end: string
@@ -99,8 +100,8 @@ export interface DayState {
     id: string
     name: string
     address: string | null
-    lat: number
-    lng: number
+    lat: number | null
+    lng: number | null
     radius_m: number
     shift_start: string
     shift_end: string

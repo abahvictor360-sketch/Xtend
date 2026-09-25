@@ -150,8 +150,8 @@ export function OutletManager({
     setDraft({
       name: outlet.name,
       address: outlet.address ?? '',
-      lat: String(outlet.lat),
-      lng: String(outlet.lng),
+      lat: outlet.lat?.toString() ?? '',
+      lng: outlet.lng?.toString() ?? '',
       geofence_radius_m: String(outlet.geofence_radius_m),
       shift_start: outlet.shift_start.slice(0, 5),
       shift_end: outlet.shift_end.slice(0, 5),
@@ -266,10 +266,12 @@ export function OutletManager({
                   <p className="truncate font-medium">{outlet.name}</p>
                   <p className="truncate text-xs text-muted-foreground">{outlet.address ?? '—'}</p>
                 </div>
-                {outlet.is_active ? (
-                  <Badge variant="success">Active</Badge>
-                ) : (
+                {!outlet.is_active ? (
                   <Badge variant="outline">Inactive</Badge>
+                ) : outlet.lat === null ? (
+                  <Badge variant="warning">No location yet</Badge>
+                ) : (
+                  <Badge variant="success">Active</Badge>
                 )}
               </div>
 
@@ -279,7 +281,9 @@ export function OutletManager({
                   Shift: {outlet.shift_start.slice(0, 5)}–{outlet.shift_end.slice(0, 5)}
                 </div>
                 <div>
-                  {outlet.lat.toFixed(5)}, {outlet.lng.toFixed(5)}
+                  {outlet.lat !== null && outlet.lng !== null
+                    ? `${outlet.lat.toFixed(5)}, ${outlet.lng.toFixed(5)}`
+                    : 'Pinned from a clock-in, on Places'}
                 </div>
                 <div>Staff: {staffCounts[outlet.id] ?? 0}</div>
               </dl>

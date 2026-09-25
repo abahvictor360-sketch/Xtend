@@ -58,8 +58,10 @@ export function FieldHome({
   const { place, loading: placeLoading } = usePlace(gate.fix)
   const whereIAm = place?.label ?? place?.address ?? null
 
+  // A store waiting for its location has nothing to measure against.
+  const outletPinned = day.outlet?.lat != null && day.outlet.lng != null
   const liveDistance =
-    gate.fix && day.outlet
+    gate.fix && day.outlet?.lat != null && day.outlet.lng != null
       ? haversineMetres(gate.fix.lat, gate.fix.lng, day.outlet.lat, day.outlet.lng)
       : null
   const inside = liveDistance !== null && day.outlet ? liveDistance <= day.outlet.radius_m : null
@@ -223,7 +225,13 @@ export function FieldHome({
                   <Detail label="Geofence" value={`${day.outlet.radius_m} m`} />
                   <Detail
                     label="You are"
-                    value={liveDistance === null ? 'Locating…' : `${metres(liveDistance)} away`}
+                    value={
+                      !outletPinned
+                        ? 'Not on the map yet'
+                        : liveDistance === null
+                          ? 'Locating…'
+                          : `${metres(liveDistance)} away`
+                    }
                     tone={inside === null ? undefined : inside ? 'good' : 'bad'}
                   />
                   <Detail label="Your location" value={whereIAm ?? 'Unnamed spot'} />
@@ -233,7 +241,7 @@ export function FieldHome({
                   />
                 </dl>
 
-                {gate.fix && (
+                {gate.fix && outletPinned && (
                   <a
                     className="flex items-center gap-1.5 text-xs font-semibold text-brand"
                     href={`https://www.openstreetmap.org/?mlat=${day.outlet.lat}&mlon=${day.outlet.lng}#map=17/${day.outlet.lat}/${day.outlet.lng}`}

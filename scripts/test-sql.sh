@@ -48,5 +48,6 @@ run supabase/migrations/0026_phone_evidence.sql
 run supabase/migrations/0027_notifications_required.sql
 run supabase/migrations/0028_movement_trail.sql
 run supabase/migrations/0029_offline_positions.sql
+run supabase/migrations/0030_stores_pinned_from_clock_in.sql
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rules.sql 2>&1 | grep -E 'NOTICE|ERROR' | sed 's/^psql:[^ ]*: //'
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_counts.sql 2>&1 | grep -E 'NOTICE|ERROR|PASSED' | sed 's/^psql:[^ ]*: //'
