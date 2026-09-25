@@ -36,6 +36,13 @@ begin
 end;
 $$;
 
+-- Notifications switched on for someone, on a real push service (027).
+create or replace function notifications_on(p uuid) returns void
+language sql as $$
+  insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)
+  values (p, 'https://fcm.googleapis.com/fcm/send/' || gen_random_uuid(), 'k', 'a');
+$$;
+
 -- A photo of a shop front, checked and passed, for naming a place (025).
 create or replace function place_photo(p_label text) returns text
 language plpgsql as $$
@@ -99,6 +106,9 @@ begin
     (bala, 'Bala Yusuf', 'bala@xpel.ng', 'merchandiser', kiosk_id),
     (boss, 'Ngozi Eze',  'boss@xpel.ng', 'admin',        null),
     (grace,'Grace Nnadi','grace@xpel.ng','marketer',     mall_id);
+  perform notifications_on(ada);
+  perform notifications_on(bala);
+  perform notifications_on(grace);
 
   -- ---------------------------------------------------------------
   -- The trigger owns distance and status.
@@ -1620,6 +1630,30 @@ begin
     insert into public.profiles (id, full_name, email, role, outlet_id, supervisor_id)
     values (femi, 'Femi Ade', 'femi@xpel.ng', 'merchandiser', mall_id, tunde);
 
+    -- No clock-in without notifications (027).
+    perform act_as(femi);
+    begin
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+      values ('opening', 6.6019, 3.3516, 12, fresh_photo('selfies', 'no-push.jpg'), now());
+      perform assert(false, 'no clock-in with notifications off');
+    exception when others then
+      perform assert(sqlerrm like '%Turn on Xtend notifications%', 'no clock-in with notifications off');
+    end;
+    insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)
+    values (femi, 'https://example.com/made-up', 'k', 'a');
+    perform assert(not public.has_live_push(femi), 'a made-up notification address does not count');
+    update public.profiles set push_exempt = true, outlet_id = null where id = femi;
+    perform assert(
+      (select not push_exempt and outlet_id = mall_id from public.profiles where id = femi),
+      'nobody excuses themselves, or moves their own store');
+    perform act_as(boss);
+    update public.profiles set push_exempt = true where id = femi;
+    perform assert((select push_exempt from public.profiles where id = femi),
+      'an admin can excuse a phone that cannot take notifications');
+    update public.profiles set push_exempt = false where id = femi;
+    perform notifications_on(femi);
+    perform assert(public.has_live_push(femi), 'a real phone subscription counts');
+
     perform act_as(femi);
     got := public.record_beacon(jsonb_build_object('reason', 'open', 'battery_pct', 81,
       'charging', false, 'outbox_count', 0, 'device_time', now(), 'lat', 6.6019, 'lng', 3.3516,
@@ -1695,7 +1729,7 @@ begin
     got := public.check_excuse(femi, now() - interval '2 hours 30 minutes', now() + interval '1 minute');
     perform assert(jsonb_array_length(got->'contacts') >= 3,
       'the check lists every time the phone was heard from');
-    perform assert(got->'before'->>'at' is not null and (got->>'has_push')::boolean = false,
+    perform assert(got->'before'->>'at' is not null and (got->>'has_push')::boolean,
       'with the last report before the gap, and whether the phone can be pushed');
     perform act_as(ada);
     begin

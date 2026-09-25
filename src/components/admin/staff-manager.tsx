@@ -42,6 +42,7 @@ export function StaffManager({
   outlets,
   isAdmin = true,
   supervisors = [],
+  notified = [],
 }: {
   staff: Profile[]
   outlets: Outlet[]
@@ -49,7 +50,11 @@ export function StaffManager({
   isAdmin?: boolean
   /** Who an admin may name as somebody's supervisor. */
   supervisors?: SupervisorOption[]
+  /** Who has notifications on, which clocking in needs (migration 027). */
+  notified?: string[]
 }) {
+  const hasPush = useMemo(() => new Set(notified), [notified])
+  const isField = (role: string) => role === 'merchandiser' || role === 'marketer'
   const router = useRouter()
   const [draft, setDraft] = useState<Draft>(EMPTY)
   const [creating, setCreating] = useState(false)
@@ -334,6 +339,13 @@ export function StaffManager({
                       Temp password
                     </Badge>
                   )}
+                  {isField(person.role) && (
+                    <NotificationBadge
+                      on={hasPush.has(person.id)}
+                      exempt={Boolean(person.push_exempt)}
+                      className="ml-1"
+                    />
+                  )}
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
                   <Button
@@ -352,6 +364,9 @@ export function StaffManager({
                   >
                     {person.is_active ? 'Deactivate' : 'Reactivate'}
                   </Button>
+                  {isAdmin && isField(person.role) && (
+                    <ExemptButton person={person} busy={busy} patch={patch} />
+                  )}
                 </TableCell>
               </TableRow>
             ))}
@@ -377,6 +392,9 @@ export function StaffManager({
                     <Badge variant="outline">Deactivated</Badge>
                   )}
                   {person.must_change_password && <Badge variant="warning">Temp password</Badge>}
+                  {isField(person.role) && (
+                    <NotificationBadge on={hasPush.has(person.id)} exempt={Boolean(person.push_exempt)} />
+                  )}
                 </div>
               </div>
 
@@ -461,11 +479,60 @@ export function StaffManager({
                 >
                   {person.is_active ? 'Deactivate' : 'Reactivate'}
                 </Button>
+                {isAdmin && isField(person.role) && (
+                  <ExemptButton person={person} busy={busy} patch={patch} />
+                )}
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
     </div>
+  )
+}
+
+function NotificationBadge({ on, exempt, className }: { on: boolean; exempt: boolean; className?: string }) {
+  if (on) {
+    return (
+      <Badge variant="success" className={className}>
+        Notifications on
+      </Badge>
+    )
+  }
+  return (
+    <Badge variant={exempt ? 'outline' : 'warning'} className={className}>
+      {exempt ? 'Excused from notifications' : 'Notifications off: cannot clock in'}
+    </Badge>
+  )
+}
+
+function ExemptButton({
+  person,
+  busy,
+  patch,
+}: {
+  person: Profile
+  busy: boolean
+  patch: (id: string, body: Record<string, unknown>) => Promise<void>
+}) {
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      disabled={busy}
+      onClick={() => {
+        const excuse = !person.push_exempt
+        if (
+          excuse &&
+          !confirm(
+            `Let ${person.full_name} clock in without notifications? Only do this for a phone that cannot receive them: their phone can then not be checked live.`,
+          )
+        )
+          return
+        void patch(person.id, { push_exempt: excuse })
+      }}
+    >
+      {person.push_exempt ? 'Require notifications' : 'Excuse from notifications'}
+    </Button>
   )
 }

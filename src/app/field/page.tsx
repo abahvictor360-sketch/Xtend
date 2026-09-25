@@ -11,7 +11,7 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Clock — Xtend' }
 
 export default async function FieldPage() {
-  await requireSession(FIELD_ROLES)
+  const session = await requireSession(FIELD_ROLES)
   const supabase = await createServerSupabase()
 
   // The day itself, how much of it the heartbeat saw, today's store visits,
@@ -50,6 +50,7 @@ export default async function FieldPage() {
         visits={(visits ?? []) as VisitRow[]}
         outlets={(outlets ?? []) as VisitOutlet[]}
         canVisitStores={canVisitStores === true}
+        notificationsRequired={!session.profile.push_exempt}
       />
     </>
   )

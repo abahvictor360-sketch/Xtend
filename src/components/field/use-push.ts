@@ -44,7 +44,21 @@ export function usePush() {
     try {
       const registration = await navigator.serviceWorker.ready
       const existing = await registration.pushManager.getSubscription()
-      setState(existing ? 'on' : 'off')
+      if (existing && Notification.permission === 'granted') {
+        // The server may have retired it (a failed send) while the phone
+        // kept it: register it again, so "on" here is "on" there too.
+        const res = await fetch('/api/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(existing.toJSON()),
+        }).catch(() => null)
+        if (res && !res.ok && res.status !== 401) {
+          await existing.unsubscribe().catch(() => {})
+          setState('off')
+          return
+        }
+      }
+      setState(existing && Notification.permission === 'granted' ? 'on' : 'off')
     } catch {
       setState('off')
     }

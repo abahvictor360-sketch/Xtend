@@ -28,6 +28,8 @@ export interface Profile {
   avatar_path: string | null
   is_active: boolean
   must_change_password: boolean
+  /** Excused by an admin from needing notifications on to clock in (027). */
+  push_exempt?: boolean
   created_at: string
   updated_at: string
 }

@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
+import { LIVE_PUSH_ENDPOINT } from '@/lib/push-endpoint'
 import { buttonVariants } from '@/components/ui/button'
 import { StaffManager } from '@/components/admin/staff-manager'
 import type { Outlet, Profile } from '@/lib/types'
@@ -21,6 +23,24 @@ export default async function UsersPage() {
     // Empty for a supervisor: only an admin assigns a reporting line.
     supabase.rpc('available_supervisors'),
   ])
+
+  // Who has notifications on: clocking in needs them (migration 027).
+  const ids = ((staff ?? []) as Profile[]).map((p) => p.id)
+  const notified: string[] = []
+  if (ids.length) {
+    try {
+      const { data: subs } = await createAdminSupabase()
+        .from('push_subscriptions')
+        .select('user_id, endpoint')
+        .eq('is_active', true)
+        .in('user_id', ids)
+      for (const sub of (subs ?? []) as { user_id: string; endpoint: string }[]) {
+        if (LIVE_PUSH_ENDPOINT.test(sub.endpoint)) notified.push(sub.user_id)
+      }
+    } catch {
+      // Without the service key the list still shows, without this column.
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -44,6 +64,7 @@ export default async function UsersPage() {
         staff={(staff ?? []) as Profile[]}
         outlets={(outlets ?? []) as Outlet[]}
         isAdmin={isAdmin}
+        notified={notified}
         supervisors={(supervisors ?? []) as { id: string; full_name: string; role: string }[]}
       />
     </div>
