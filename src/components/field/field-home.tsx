@@ -30,12 +30,14 @@ export function FieldHome({
   visits,
   outlets,
   canVisitStores,
+  notificationsRequired = true,
 }: {
   day: DayState
   coverage: Coverage | null
   visits: VisitRow[]
   outlets: VisitOutlet[]
   canVisitStores: boolean
+  notificationsRequired?: boolean
 }) {
   const router = useRouter()
   const gate = useLocationGate()
@@ -138,7 +140,7 @@ export function FieldHome({
         message={gate.message}
         onRetry={() => void gate.retry()}
       >
-        <ClockPanel day={day} />
+        <ClockPanel day={day} notificationsRequired={notificationsRequired} />
       </LocationGate>
 
       {tab === 'stores' && visitsStore && (

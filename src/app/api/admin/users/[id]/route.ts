@@ -12,6 +12,8 @@ const patchSchema = z.object({
   outlet_id: z.string().uuid().nullable().optional(),
   supervisor_id: z.string().uuid().nullable().optional(),
   is_active: z.boolean().optional(),
+  /** Admin only: may clock in without notifications on (migration 027). */
+  push_exempt: z.boolean().optional(),
   reset_password: z.boolean().optional(),
 })
 
@@ -48,10 +50,11 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       if (
         input.role !== undefined ||
         input.outlet_id !== undefined ||
-        input.supervisor_id !== undefined
+        input.supervisor_id !== undefined ||
+        input.push_exempt !== undefined
       ) {
         return Response.json(
-          { error: "Only an admin can change somebody's role, store or supervisor." },
+          { error: "Only an admin can change somebody's role, store, supervisor or notification rule." },
           { status: 403 },
         )
       }
@@ -65,6 +68,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       'outlet_id',
       'supervisor_id',
       'is_active',
+      'push_exempt',
     ] as const) {
       if (input[key] !== undefined) changes[key] = input[key]
     }

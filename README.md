@@ -44,6 +44,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0024_known_places.sql  # Xtend's own learned places
    supabase/migrations/0025_place_safeguards.sql  # no houses passed off as shops
    supabase/migrations/0026_phone_evidence.sql  # network and phone-off excuses
+   supabase/migrations/0027_notifications_required.sql  # no clock-in without notifications
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
@@ -234,6 +235,16 @@ Xtend settles them. None of it is visible to staff.
   service worker reports when it arrives (`/api/phone-check/ack`, with a
   one-time token). Arrived means on, with network, at that moment. It needs
   the person to have Xtend notifications on.
+- **Notifications are required to clock in** (migration 027). A
+  merchandiser or marketer cannot clock in unless the account has an active
+  subscription on a real push service (`has_live_push()`: FCM, Mozilla,
+  Apple or Windows; a made-up address does not count). The app shows
+  "Turn on notifications to clock in" in place of the button, with steps
+  for a blocked browser or an iPhone (Add to Home Screen first). Clocking
+  out is never blocked. The Staff page shows who has notifications on, and
+  an admin can excuse one person whose phone cannot receive them
+  (`profiles.push_exempt`); supervisors cannot. People cannot change their
+  own store, supervisor, active status or exemption (`profiles_self_guard`).
 
 ## Telling the office nobody is in the store
 

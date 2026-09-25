@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { AlertTriangle, Camera, CheckCircle2, CloudUpload, LogIn, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NamePlace } from '@/components/field/name-place'
+import { NotificationGate } from '@/components/field/notification-gate'
+import { usePush } from '@/components/field/use-push'
 import { CameraCapture } from '@/components/field/camera-capture'
 import { Alert } from '@/components/ui/alert'
 import { processSelfie } from '@/lib/image'
@@ -40,8 +42,16 @@ async function reverseGeocode(lat: number, lng: number): Promise<ResolvedPlace> 
   }
 }
 
-export function ClockPanel({ day }: { day: DayState }) {
+export function ClockPanel({
+  day,
+  notificationsRequired = true,
+}: {
+  day: DayState
+  /** False only for someone an admin has excused (profiles.push_exempt). */
+  notificationsRequired?: boolean
+}) {
   const router = useRouter()
+  const push = usePush()
   // Set once the location is in hand; that is what opens the camera.
   const [pending, setPending] = useState<{
     type: AttendanceType
@@ -57,6 +67,12 @@ export function ClockPanel({ day }: { day: DayState }) {
   const [unnamed, setUnnamed] = useState<{ lat: number; lng: number } | null>(null)
 
   const nextType: AttendanceType | null = !day.opening ? 'opening' : !day.closing ? 'closing' : null
+  // Clocking in needs notifications on (migration 027); clocking out never
+  // waits on them. 'unconfigured' means the server has no keys: not theirs to fix.
+  const needsNotifications =
+    nextType === 'opening' &&
+    notificationsRequired &&
+    (push.state === 'off' || push.state === 'denied' || push.state === 'unsupported' || push.state === 'working')
 
   /**
    * Location first, camera second.
@@ -247,7 +263,9 @@ export function ClockPanel({ day }: { day: DayState }) {
         onClose={() => setPending(null)}
       />
 
-      {nextType ? (
+      {needsNotifications ? (
+        <NotificationGate push={push} />
+      ) : nextType ? (
         <Button
           size="xl"
           className="w-full"
