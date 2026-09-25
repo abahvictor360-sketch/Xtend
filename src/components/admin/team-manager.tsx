@@ -139,7 +139,7 @@ export function TeamManager({
         ))}
       </div>
 
-      <div className="surface sticky top-[7.5rem] z-10 flex flex-wrap items-center gap-2 p-3 md:top-28">
+      <div className="surface sticky top-[7.5rem] z-10 flex flex-wrap items-center gap-2 p-3 lg:top-4">
         <span className="text-sm font-semibold">{chosen.size} selected</span>
         <Select
           value={target}
