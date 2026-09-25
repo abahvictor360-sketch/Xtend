@@ -1768,6 +1768,63 @@ begin
       exists (select 1 from jsonb_array_elements(got->'points') e where e->>'kind' = 'clock_in')
       and exists (select 1 from jsonb_array_elements(got->'stores') s where s->>'name' = 'Ikeja City Mall'),
       'with the clock-in and their store''s geofence');
+    -- Positions kept while offline, sent on reconnect (migration 029).
+    perform act_as(femi);
+    alert_count := (select count(*) from public.location_alerts where user_id = femi);
+    perform assert(
+      public.record_offline_pings(jsonb_build_array(
+        jsonb_build_object('lat', 6.7000, 'lng', 3.4000, 'accuracy_m', 12, 'captured_at', now() - interval '25 minutes'),
+        jsonb_build_object('lat', 6.7001, 'lng', 3.4001, 'accuracy_m', 12, 'captured_at', now() - interval '20 minutes')),
+        now()) = 2,
+      'positions saved offline are kept when the phone reconnects');
+    perform assert(
+      (select count(*) from public.location_pings
+       where user_id = femi and offline and received_at is not null
+         and created_at between now() - interval '26 minutes' and now() - interval '19 minutes') = 2,
+      'at the time they were taken, marked as sent late');
+    perform assert(
+      (select count(*) from public.location_alerts where user_id = femi) = alert_count,
+      'an hour-old "left the store" raises no alert now');
+    perform assert(
+      public.record_offline_pings(jsonb_build_array(
+        jsonb_build_object('lat', 6.7000, 'lng', 3.4000, 'accuracy_m', 12, 'captured_at', now() - interval '25 minutes')),
+        now()) = 0,
+      'a resend after a dropped connection is not stored twice');
+    counted := public.record_offline_pings(jsonb_build_array(
+        jsonb_build_object('lat', 6.7002, 'lng', 3.4002, 'accuracy_m', 12,
+                           'captured_at', now() - interval '2 hours 15 minutes')),
+        now() - interval '2 hours');
+    perform assert(
+      counted = 1
+      and exists (select 1 from public.location_pings where user_id = femi and offline
+                  and created_at between now() - interval '16 minutes' and now() - interval '14 minutes'),
+      'a phone clock two hours behind is corrected');
+    perform assert(
+      public.record_offline_pings(jsonb_build_array(
+        jsonb_build_object('lat', 6.7, 'lng', 3.4, 'accuracy_m', 12, 'captured_at', now() - interval '25 hours')),
+        now()) = 0,
+      'nothing older than a day');
+    -- (Each call is its own statement: a check in the same statement would
+    -- not yet see what the call wrote.)
+    counted := public.record_offline_pings(jsonb_build_array(
+        jsonb_build_object('lat', 6.7003, 'lng', 3.4003, 'accuracy_m', 12, 'captured_at', now() - interval '50 minutes')),
+        now());
+    perform assert(
+      counted = 0
+      and exists (select 1 from public.integrity_flags where user_id = femi and kind = 'backdated_clock'
+                  and detail->>'source' = 'offline_positions'),
+      'positions from before the phone said nothing was waiting are refused and flagged');
+    perform act_as(tunde);
+    got := public.check_excuse(femi, now() - interval '26 minutes', now() - interval '10 minutes');
+    perform assert(
+      jsonb_array_length(got->'offline_positions') = 3
+      and not exists (select 1 from jsonb_array_elements(got->'contacts') c where c->>'what' = 'location'),
+      'for an excuse, offline positions show the phone was on, not that it had network');
+    perform assert(
+      exists (select 1 from jsonb_array_elements(public.movement_trail(femi, public.business_date())->'points') e
+              where e->>'kind' = 'location_offline'),
+      'the route marks positions that were saved offline');
+
     perform act_as(ada);
     begin
       perform public.movement_trail(femi, public.business_date());

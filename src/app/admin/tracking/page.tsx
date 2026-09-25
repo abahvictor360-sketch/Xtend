@@ -72,8 +72,9 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
         <h1 className="text-2xl font-extrabold tracking-tight">Movement</h1>
         <p className="text-sm text-muted-foreground">
           Where staff are and where they have been since clocking in. While someone is on shift, the
-          app sends their position every 5 minutes; Xtend also records every clock-in, store
-          check-in and check-out. {date === today && 'Updates every minute.'}
+          app sends their position every 5 minutes (with no network, the phone keeps it and sends it
+          when the connection is back); Xtend also records every clock-in, store check-in and
+          check-out. {date === today && 'Updates every minute.'}
         </p>
       </div>
 
@@ -284,6 +285,12 @@ function Legend({ trail }: { trail?: boolean }) {
         <span className="flex items-center gap-1.5">
           <span className="w-5 border-t-2 border-dashed border-[#9a8f88]" /> No position for{' '}
           {GAP_MINUTES}+ min
+        </span>
+      ) : null}
+      {trail ? (
+        <span className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-full border-2 border-[#d1511a] bg-white" /> Saved
+          offline, sent later
         </span>
       ) : (
         <span className="flex items-center gap-1.5">

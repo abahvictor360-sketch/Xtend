@@ -5,7 +5,14 @@
  * Plain functions, used on the server and in the browser alike.
  */
 
-export type PointKind = 'clock_in' | 'clock_out' | 'location' | 'visit_in' | 'visit_out' | 'app'
+export type PointKind =
+  | 'clock_in'
+  | 'clock_out'
+  | 'location'
+  | 'location_offline'
+  | 'visit_in'
+  | 'visit_out'
+  | 'app'
 
 export interface TrailPoint {
   at: string
@@ -42,6 +49,7 @@ export const KIND_LABEL: Record<PointKind, string> = {
   clock_in: 'Clocked in',
   clock_out: 'Clocked out',
   location: 'Location check',
+  location_offline: 'Location check (no network, sent later)',
   visit_in: 'Checked in at a store',
   visit_out: 'Checked out of a store',
   app: 'Phone reported in',

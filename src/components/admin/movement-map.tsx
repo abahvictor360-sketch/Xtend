@@ -181,11 +181,13 @@ export function TrailMap({ trail }: { trail: Trail }) {
             .addTo(m)
             .bindPopup(popup)
         } else {
+          // Saved offline: a ring, so it reads as "sent later" at a glance.
+          const offline = p.kind === 'location_offline'
           L.circleMarker([p.lat, p.lng], {
             radius: i === points.length - 1 ? 7 : 5,
-            color: '#fff',
-            weight: 2,
-            fillColor: rough ? STALE : colour,
+            color: offline ? (rough ? STALE : colour) : '#fff',
+            weight: offline ? 2.5 : 2,
+            fillColor: offline ? '#fff' : rough ? STALE : colour,
             fillOpacity: 1,
           })
             .addTo(m)

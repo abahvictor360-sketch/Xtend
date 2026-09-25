@@ -128,12 +128,25 @@ async function runClock(job: ClockJob) {
   })
 }
 
-async function runPing(job: PingJob) {
-  return postJson('/api/pings', {
-    lat: job.lat,
-    lng: job.lng,
-    accuracy_m: job.accuracy_m,
+/**
+ * Positions kept while offline, sent together and stamped with when they
+ * were taken, not when they arrive (migration 029). sent_at lets the
+ * server correct a phone whose clock is wrong.
+ */
+async function sendPings(jobs: PingJob[]) {
+  return postJson('/api/pings/offline', {
+    sent_at: new Date().toISOString(),
+    points: jobs.map((j) => ({
+      lat: j.lat,
+      lng: j.lng,
+      accuracy_m: j.accuracy_m,
+      captured_at: j.client_captured_at,
+    })),
   })
+}
+
+async function runPing(job: PingJob) {
+  return sendPings([job])
 }
 
 async function runReport(job: ReportJob) {
@@ -189,7 +202,42 @@ export async function flushOutbox(): Promise<FlushResult> {
 
   try {
     const records = await listOutbox()
-    for (const record of records) {
+    for (let i = 0; i < records.length; i++) {
+      const record = records[i]
+
+      // A run of positions goes as one batch rather than one request each.
+      if (record.job.kind === 'ping') {
+        const run: OutboxRecord[] = []
+        while (i < records.length && records[i].job.kind === 'ping' && run.length < 400) {
+          const r = records[i]
+          const old = Date.now() - new Date(r.job.client_captured_at).getTime() > MAX_AGE_MS
+          if (old || r.attempts >= MAX_ATTEMPTS) {
+            await dropOutbox(r.id!)
+            result.dropped += 1
+          } else {
+            run.push(r)
+          }
+          i++
+        }
+        i-- // the for loop moves on past the run
+        if (!run.length) continue
+        try {
+          await sendPings(run.map((r) => r.job as PingJob))
+          for (const r of run) await dropOutbox(r.id!)
+          result.sent += run.length
+          continue
+        } catch (error) {
+          if (error instanceof PermanentJobError) {
+            for (const r of run) await dropOutbox(r.id!)
+            result.dropped += run.length
+            continue
+          }
+          for (const r of run) await markAttempt(r, error instanceof Error ? error.message : 'Unknown error')
+          result.failed += run.length
+          break
+        }
+      }
+
       const age = Date.now() - new Date(record.job.client_captured_at).getTime()
       if (age > MAX_AGE_MS || record.attempts >= MAX_ATTEMPTS) {
         await dropOutbox(record.id!)

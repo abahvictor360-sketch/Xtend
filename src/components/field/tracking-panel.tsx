@@ -1,6 +1,6 @@
 'use client'
 
-import { AlertTriangle, Radio, RefreshCw, Smartphone } from 'lucide-react'
+import { AlertTriangle, CloudOff, Radio, RefreshCw, Smartphone } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -66,6 +66,13 @@ export function TrackingPanel({
               </Button>
             )}
           </div>
+
+          {status.savedOffline && (
+            <p className="flex items-start gap-1.5 rounded-2xl bg-tint p-3 text-xs text-tint-foreground">
+              <CloudOff className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              {status.savedOffline}
+            </p>
+          )}
 
           {status.lastError && (
             <p className="flex items-start gap-1.5 rounded-2xl bg-warning/12 p-3 text-xs text-foreground">
