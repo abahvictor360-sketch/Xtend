@@ -14,6 +14,14 @@
 -- stops anybody clocking in.
 -- =====================================================================
 
+-- 023 builds on 022. Say so plainly rather than fail halfway.
+do $$
+begin
+  if to_regclass('public.integrity_flags') is null then
+    raise exception 'Run the integrity checks update (022, four parts) first, then this file';
+  end if;
+end $$;
+
 create table if not exists public.photo_checks (
   path       text primary key,
   bucket     text not null check (bucket in ('selfies', 'reports')),
