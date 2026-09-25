@@ -15,7 +15,7 @@ const schema = z.object({
   accuracy_m: z.number().nonnegative(),
   address: z.string().max(500).nullable().optional(),
   place_name: z.string().max(200).nullable().optional(),
-  place_source: z.enum(['outlet', 'google', 'osm', 'coordinates']).nullable().optional(),
+  place_source: z.enum(['outlet', 'known', 'google', 'osm', 'coordinates']).nullable().optional(),
   selfie_path: z.string().min(1).max(300),
   thumb_path: z.string().min(1).max(300).nullable().optional(),
   device_info: z.record(z.unknown()).default({}),

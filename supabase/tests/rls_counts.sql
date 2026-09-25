@@ -10,6 +10,9 @@ grant usage on schema public, auth to authenticated;
 grant select on all tables in schema public to authenticated;
 grant execute on function auth.uid() to authenticated;
 grant execute on function assert(boolean, text) to authenticated;
+-- Supabase also grants writes on public tables and relies on RLS; do the
+-- same here for learned places, so the test proves the policy stops staff.
+grant update, delete on public.known_places to authenticated;
 
 select id as ada   from auth.users where email = 'ada@xpel.ng'   \gset
 select id as bala  from auth.users where email = 'bala@xpel.ng'  \gset
@@ -31,6 +34,11 @@ select assert((select count(*) from public.store_counts) > 0,
 
 select assert((select count(*) from public.integrity_flags) = 0,
   'rls: nobody sees the flags raised about them');
+
+update public.known_places set name = 'Renamed by staff' where name = 'Ikeja City Mall';
+delete from public.known_places where name = 'Ikeja City Mall';
+select assert((select count(*) from public.known_places where name = 'Ikeja City Mall') = 1,
+  'rls: staff can read learned places but not rename or delete them');
 
 select set_config('request.jwt.claim.sub', :'bala', false);
 select assert((select count(*) from public.count_requests) = 0,

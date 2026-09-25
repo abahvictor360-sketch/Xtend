@@ -17,9 +17,9 @@ export async function GET(request: Request) {
       return Response.json({ error: 'lat and lng are required' }, { status: 400 })
     }
 
+    const supabase = await createServerSupabase()
     let outlet: OutletAnchor | null = null
     if (session.profile.outlet_id) {
-      const supabase = await createServerSupabase()
       const { data } = await supabase
         .from('outlets')
         .select('name, address, lat, lng, geofence_radius_m')
@@ -46,7 +46,13 @@ export async function GET(request: Request) {
     // A preview is only shown, never stored, so it is named with the free
     // provider; clock-ins and store visits ask without it and get Google.
     const preview = url.searchParams.get('purpose') === 'preview'
-    const place = await resolvePlace(lat, lng, outlet, { google: !preview })
+    // Stores and learned places first; a map only for somewhere new, and
+    // what it finds is learned unless this is only a preview.
+    const place = await resolvePlace(lat, lng, outlet, {
+      google: !preview,
+      supabase,
+      learn: !preview,
+    })
 
     return Response.json({
       name: place.name,

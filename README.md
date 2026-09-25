@@ -41,6 +41,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0021_counted_product_names.sql  # products typed while counting
    supabase/migrations/0022_integrity_checks.sql  # counts in store, selfie checks, flags
    supabase/migrations/0023_photo_checks.sql  # photos checked for screens, faces, shelves
+   supabase/migrations/0024_known_places.sql  # Xtend's own learned places
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
@@ -124,25 +125,49 @@ question rather than guessing from the role name.
 
 Clock-in records the premises, not just coordinates:
 `Justrite Superstore Bariga, 56/58 Jagun Molu St, Bariga, Lagos 23401, Lagos`.
-`src/lib/geocode.ts` resolves it from three sources, best first:
+`src/lib/geocode.ts` resolves it from these sources, best first:
 
 1. **The assigned outlet**, when the fix is inside its geofence. If someone
    is standing in their own store, that store's record is the most accurate
-   answer available and it costs no API call. This covers the normal case
-   exactly, with no key and no network dependency.
-2. **Google** — Places (New) `searchNearby` for the business name, Geocoding
-   for the street address. This is the only source that reliably names
-   Nigerian retail premises, and it is what produces the format above.
-   Set `GOOGLE_MAPS_API_KEY` with *Places API (New)* and *Geocoding API*
-   enabled.
-3. **OpenStreetMap** — Nominatim for the address, Overpass for a named
-   business within 80 m. Free, no key, but Nigerian POI coverage is thin, so
-   it usually names the street rather than the shop.
+   answer available and it costs no API call.
+2. **Any store Xtend knows** (`outlet_containing`), whoever it is allocated to.
+3. **Xtend's own learned places** (`known_places`, migration 024). See below.
+4. **Google**: Places (New) `searchNearby` for the business name, and
+   Geocoding for the street only when Places gave none. Answers are cached
+   for 30 days per ~11 m spot. Set `GOOGLE_MAPS_API_KEY` with *Places API
+   (New)* and *Geocoding API* enabled. The home screen's "you are at…"
+   preview never uses Google.
+5. **OpenStreetMap**: Nominatim for the address, Overpass for a named
+   business within 80 m. Free, no key, but thin Nigerian shop coverage.
 
 Whatever answers, `attendance.place_name` and `attendance.address` are stored
 separately along with `place_source`, so the record says where the reading
 came from. The `location_label` column in `attendance_detail` joins them for
 display and can never be empty — coordinates are the floor.
+
+### Xtend learns places for itself
+
+The business rule, as the owner asked for it: many Nigerian shops are on
+neither Google nor OpenStreetMap, so Xtend builds its own map as staff work.
+
+- The first time anyone clocks in, checks in, or trips a geofence alert
+  somewhere that is not a store, the GPS position and name are saved in
+  `known_places`. The name comes from Google or OpenStreetMap if either
+  knows it.
+- If no map knows the spot, the app asks the person *"This place is not on
+  the map. What is it called?"* and saves what they type (at most 10 new
+  names per person per day).
+- From then on, anyone within the place's radius (50 m by default) is told
+  that name straight from `known_places`, with no map lookup and no cost.
+  Example: once one merchandiser has clocked in at Ikeja City Mall, every
+  later clock-in there is named "Ikeja City Mall" from Xtend's own list.
+- A learned place only names where somebody is. Being on or off site is
+  still measured against the stores, so a wrong name misleads nobody about
+  attendance.
+- Admins check staff-typed names on **Places** (`/admin/places`): verify,
+  correct, change the radius, delete, or **Make it a store**, which turns
+  the learned spot into an outlet at the exact position staff stood. This
+  is the intended way to grow the store list from real visits.
 
 ## Telling the office nobody is in the store
 

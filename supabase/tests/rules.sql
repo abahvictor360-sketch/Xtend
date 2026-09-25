@@ -69,6 +69,8 @@ declare
   req2       uuid;
   used_path  text;
   flagged    integer;
+  place_id   uuid;
+  i          integer;
 begin
   insert into auth.users (id, email) values
     (ada, 'ada@xpel.ng'), (bala, 'bala@xpel.ng'), (boss, 'boss@xpel.ng'),
@@ -1457,6 +1459,53 @@ begin
   perform assert(
     exists (select 1 from public.store_visits where selfie_path = used_path),
     'a photo that could not be checked is still accepted');
+
+  -- ---------------------------------------------------------------
+  -- Xtend learns places (migration 024).
+  -- ---------------------------------------------------------------
+  perform act_as(grace);
+  place_id := public.learn_place(6.5000, 3.3000, '  Ikeja   City Mall  ', null, 'staff');
+  perform assert(place_id is not null, 'a person names a place the maps did not know');
+  perform assert(
+    (select name from public.known_place_at(6.50010, 3.30010)) = 'Ikeja City Mall',
+    'the next person 15 m away is told its name, tidied up');
+  perform assert(
+    not exists (select 1 from public.known_place_at(6.5100, 3.3000)),
+    'a kilometre away it is not that place');
+
+  perform act_as(bala);
+  perform assert(
+    public.learn_place(6.50005, 3.30005, 'Some Other Name', null, 'google') = place_id,
+    'the same spot is recognised, whatever name a map gives it');
+  perform assert(
+    (select times_seen from public.known_places where id = place_id) = 2
+      and (select count(*) from public.known_places) = 1,
+    'it is counted as seen again, not added twice');
+
+  perform assert(
+    public.learn_place(6.6018, 3.3515, 'Not a new place', null, 'staff') is null,
+    'inside one of the stores nothing is learned: the store names it');
+
+  begin
+    perform public.learn_place(6.4000, 3.4000, 'x', null, 'staff');
+    perform assert(false, 'a one-letter name is refused');
+  exception when others then
+    perform assert(sqlerrm like '%2 to 120%', 'a one-letter name is refused');
+  end;
+
+  perform act_as(grace);
+  for i in 1..9 loop
+    perform public.learn_place(6.40 + i * 0.01, 3.40, format('Shop %s', i), null, 'staff');
+  end loop;
+  begin
+    perform public.learn_place(6.30, 3.40, 'One too many', null, 'staff');
+    perform assert(false, 'nobody names more than 10 new places a day');
+  exception when others then
+    perform assert(sqlerrm like '%10 places today%', 'nobody names more than 10 new places a day');
+  end;
+  perform assert(
+    public.learn_place(6.31, 3.40, 'Found by the map', null, 'google') is not null,
+    'places named by a map are not limited');
 
   raise notice 'ALL RULES PASSED';
 end $$;

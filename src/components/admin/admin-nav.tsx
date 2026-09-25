@@ -20,6 +20,7 @@ const LINKS = [
   { href: '/admin/users', label: 'Staff', adminOnly: false },
   { href: '/admin/teams', label: 'Teams', adminOnly: true },
   { href: '/admin/outlets', label: 'Outlets', adminOnly: true },
+  { href: '/admin/places', label: 'Places', adminOnly: true },
   { href: '/admin/audit', label: 'Audit log', adminOnly: true },
 ]
 
