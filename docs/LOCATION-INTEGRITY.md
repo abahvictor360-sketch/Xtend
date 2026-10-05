@@ -104,28 +104,18 @@ altitude), which covers most real cheating, but a careful spoofer who also
 spoofs their IP to a nearby Nigerian address and uses a fake-GPS app that fills
 in altitude could still pass.
 
-To close that gap, wrap Xtend in a thin native shell. Nothing about the web app
-changes; the shell adds signals the browser cannot.
-
-- **TWA (Trusted Web Activity)** via Bubblewrap — the lightest option. Ships the
-  existing PWA inside an Android app with almost no new code, but a plain TWA
-  still uses the web geolocation stack, so it needs a small native plugin to add
-  value.
-- **Capacitor** (recommended for this) — wraps the same web build and exposes
-  native APIs. A Capacitor geolocation call returns `isFromMockProvider` on
-  Android, which is the hard mock-location flag. Add **Play Integrity** to
-  confirm the app is genuine and the device is not rooted/emulated.
-
-What a native shell would add as new flag kinds:
+The Xtend apps for Android and iPhone (`mobile/`, see `mobile/README.md`)
+close that gap. They load the same site and add a `LocationIntegrity` plugin
+(`LocationIntegrity.java` on Android, `LocationIntegrity.swift` on iOS) that
+`requireFix()` uses in place of the browser's location:
 
 | Flag | Source |
 | --- | --- |
-| `mock_location_confirmed` | Android `isFromMockProvider` on the fix. Hard proof, high severity. |
-| `developer_mode_on` | Developer options / "Allow mock locations" enabled. |
-| `device_integrity_failed` | Play Integrity verdict: rooted, emulated, or tampered. |
+| `mock_location_confirmed` | Android's own mock-location flag on the fix (`isMock`). Hard proof, high severity. |
+| `device_integrity_failed` | Rooted (Android) or jailbroken (iPhone) phone. |
 
-Rollout if you go native: publish the Capacitor build to Play, send a new
-install link to field staff, keep the web app as the fallback for iPhone and for
-anyone who has not installed the native build yet. The layer-2 checks here keep
-working unchanged inside the native shell, so this is additive, not a rewrite.
+Both are raised by the attendance route and allowed by migration 032. People
+still on the website are covered by the layer-2 checks above; the flags simply
+do not apply to them until they install the app (`/download`). Play Integrity
+and Apple App Attest can be added later as extra signals on the same plugin.
 ```

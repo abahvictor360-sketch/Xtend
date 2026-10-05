@@ -80,7 +80,7 @@ const GROUPS: { title: string | null; links: NavLink[] }[] = [
   {
     title: 'Setup',
     links: [
-      { href: '/admin/outlets', label: 'Outlets', icon: Store, adminOnly: true },
+      { href: '/admin/outlets', label: 'Outlets', icon: Store, adminOnly: false },
       { href: '/admin/places', label: 'Places', icon: MapPinned, adminOnly: true },
       { href: '/admin/audit', label: 'Audit log', icon: FileClock, adminOnly: true },
     ],

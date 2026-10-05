@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Xtend</string>
+    <string name="title_activity_main">Xtend</string>
+    <string name="package_name">ng.xpelbeauty.xtend</string>
+    <string name="custom_url_scheme">ng.xpelbeauty.xtend</string>
+    <!-- The notification Android requires while location is in use. -->
+    <string name="capacitor_background_geolocation_notification_channel_name">Xtend</string>
+    <string name="capacitor_background_geolocation_notification_icon">drawable/ic_stat_xtend</string>
+    <string name="capacitor_background_geolocation_notification_color">#D1511A</string>
+</resources>

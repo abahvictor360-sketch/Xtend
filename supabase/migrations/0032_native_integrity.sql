@@ -1,7 +1,7 @@
 -- ---------------------------------------------------------------------
 -- XTEND: native-shell integrity flags.
 --
--- When Xtend runs inside the Android/iOS wrapper (see /native), the OS gives
+-- When Xtend runs inside the Android/iOS wrapper (see mobile/), the OS gives
 -- two signals a browser cannot: Android's hard mock-location flag, and
 -- whether the device is rooted / jailbroken. The attendance route records
 -- these through flag_own_integrity(), so this migration only widens the two
@@ -14,6 +14,9 @@ alter table public.integrity_flags add constraint integrity_flags_kind_check
     -- 022
     'repeated_exact_location', 'perfect_accuracy', 'impossible_journey',
     'count_units_missing', 'count_identical', 'count_round_numbers',
+    -- 023, 025, 026
+    'photo_rejected', 'photo_unchecked', 'own_named_place', 'selfie_at_home',
+    'backdated_clock', 'phone_clock_wrong', 'late_sync_with_network',
     -- 030
     'vpn_suspected', 'ip_location_mismatch', 'timezone_mismatch', 'gps_mock_fingerprint',
     -- 032: from the native shell

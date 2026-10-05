@@ -21,6 +21,9 @@ alter table public.integrity_flags add constraint integrity_flags_kind_check
     -- 022
     'repeated_exact_location', 'perfect_accuracy', 'impossible_journey',
     'count_units_missing', 'count_identical', 'count_round_numbers',
+    -- 023, 025, 026
+    'photo_rejected', 'photo_unchecked', 'own_named_place', 'selfie_at_home',
+    'backdated_clock', 'phone_clock_wrong', 'late_sync_with_network',
     -- 030: manipulation checks evaluated in the API route
     'vpn_suspected', 'ip_location_mismatch', 'timezone_mismatch', 'gps_mock_fingerprint'
   ));

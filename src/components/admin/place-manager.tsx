@@ -7,6 +7,7 @@ import {
   BadgeCheck,
   ExternalLink,
   Image as ImageIcon,
+  MapPinned,
   Search,
   Store,
   Trash2,
@@ -24,7 +25,7 @@ export interface KnownPlace {
   lat: number
   lng: number
   radius_m: number
-  source: 'google' | 'osm' | 'staff' | 'admin'
+  source: 'google' | 'osm' | 'staff' | 'admin' | 'clock_in'
   verified: boolean
   times_seen: number
   created_at: string
@@ -34,6 +35,16 @@ export interface KnownPlace {
   photo_path?: string | null
   visitor_count?: number | null
   only_namer_visits?: boolean | null
+  /** Stores waiting for a location that this spot could be (034). */
+  candidate_stores?: { id: string; name: string }[] | null
+  /** Who has clocked in or checked in here (034). */
+  visitor_names?: string[] | null
+}
+
+export interface WaitingStore {
+  id: string
+  name: string
+  address: string | null
 }
 
 const SOURCE: Record<KnownPlace['source'], string> = {
@@ -41,18 +52,27 @@ const SOURCE: Record<KnownPlace['source'], string> = {
   osm: 'Named by OpenStreetMap',
   staff: 'Named by staff',
   admin: 'Added by an admin',
+  clock_in: 'Seen at a clock-in',
 }
 
 export function PlaceManager({
   places,
   photoUrls = {},
+  waitingStores = [],
 }: {
   places: KnownPlace[]
   /** Signed links to the shop-front photos, by storage path. */
   photoUrls?: Record<string, string>
+  /** Stores with no location yet, which a place can be confirmed as. */
+  waitingStores?: WaitingStore[]
 }) {
   const router = useRouter()
-  const [filter, setFilter] = useState<'check' | 'all'>('check')
+  // Spots staff clocked in at that could be a store waiting for its location.
+  const toPin = places.filter((p) => (p.candidate_stores ?? []).length > 0)
+  const [filter, setFilter] = useState<'stores' | 'check' | 'all'>(
+    toPin.length > 0 ? 'stores' : 'check',
+  )
+  const [picks, setPicks] = useState<Record<string, string>>({})
   const [search, setSearch] = useState('')
   const [names, setNames] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState<string | null>(null)
@@ -63,13 +83,13 @@ export function PlaceManager({
   const toCheck = places.filter((p) => !p.verified && p.source === 'staff')
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase()
-    return (filter === 'check' ? toCheck : places).filter(
+    return (filter === 'stores' ? toPin : filter === 'check' ? toCheck : places).filter(
       (p) =>
         !needle ||
         p.name.toLowerCase().includes(needle) ||
         (p.address ?? '').toLowerCase().includes(needle),
     )
-  }, [filter, places, search, toCheck])
+  }, [filter, places, search, toCheck, toPin])
 
   async function call(id: string, url: string, method: string, body?: unknown, done?: string) {
     setBusy(id)
@@ -104,6 +124,11 @@ export function PlaceManager({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
+        {(toPin.length > 0 || waitingStores.length > 0) && (
+          <Chip active={filter === 'stores'} onClick={() => setFilter('stores')}>
+            Store locations to confirm ({toPin.length})
+          </Chip>
+        )}
         <Chip active={filter === 'check'} onClick={() => setFilter('check')}>
           Names to check ({toCheck.length})
         </Chip>
@@ -131,6 +156,14 @@ export function PlaceManager({
           const photo = p.photo_path ? photoUrls[p.photo_path] : undefined
           // Somebody's house, named as a shop, is visited by nobody else.
           const suspect = !p.verified && p.only_namer_visits && p.times_seen >= 3
+          // The stores this spot could be first, then any other waiting store.
+          const candidates = p.candidate_stores ?? []
+          const storeOptions = [
+            ...candidates,
+            ...waitingStores.filter((w) => !candidates.some((c) => c.id === w.id)),
+          ]
+          const pick = picks[p.id] ?? (candidates.length === 1 ? candidates[0].id : '')
+          const pickName = storeOptions.find((o) => o.id === pick)?.name
           return (
             <li key={p.id} className="rounded-2xl border border-border bg-card p-4 text-sm">
               <div className="flex flex-wrap items-start justify-between gap-2">
@@ -150,6 +183,11 @@ export function PlaceManager({
                     {p.visitor_count != null &&
                       ` · ${p.visitor_count} ${p.visitor_count === 1 ? 'person' : 'people'}`}
                   </p>
+                  {(p.visitor_names ?? []).length > 0 && p.source === 'clock_in' && (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Clocked in here: {(p.visitor_names ?? []).join(', ')}
+                    </p>
+                  )}
                   {suspect && (
                     <p className="mt-1 flex items-center gap-1 text-xs font-medium text-destructive">
                       <AlertTriangle className="h-3.5 w-3.5" />
@@ -178,6 +216,60 @@ export function PlaceManager({
                   </a>
                 </div>
               </div>
+
+              {storeOptions.length > 0 && (candidates.length > 0 || p.source === 'clock_in') && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-muted/50 p-2">
+                  <select
+                    value={pick}
+                    onChange={(e) => setPicks((m) => ({ ...m, [p.id]: e.target.value }))}
+                    className="h-9 min-w-[12rem] flex-1 rounded-md border border-input bg-background px-2 text-sm"
+                    aria-label={`Which store is at ${p.name}`}
+                  >
+                    <option value="">Which store is this?</option>
+                    {candidates.length > 0 && (
+                      <optgroup label="Allocated to whoever clocked in here">
+                        {candidates.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {storeOptions.length > candidates.length && (
+                      <optgroup label="Other stores with no location">
+                        {storeOptions.slice(candidates.length).map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                  <Button
+                    size="sm"
+                    className="h-9"
+                    disabled={busy === p.id || !pick}
+                    onClick={() => {
+                      if (
+                        !confirm(
+                          `Is this where ${pickName} is? Check the map first. Clock-ins there will be measured against this spot from now on.`,
+                        )
+                      )
+                        return
+                      void call(
+                        p.id,
+                        `/api/admin/places/${p.id}/pin`,
+                        'POST',
+                        { outlet_id: pick },
+                        `${pickName} now has its location.`,
+                      )
+                    }}
+                  >
+                    <MapPinned className="h-4 w-4" />
+                    Confirm store location
+                  </Button>
+                </div>
+              )}
 
               <div className="mt-3 flex flex-wrap gap-2">
                 <Input
@@ -257,7 +349,13 @@ export function PlaceManager({
         })}
         {visible.length === 0 && (
           <li className="py-6 text-center text-sm text-muted-foreground">
-            {filter === 'check' ? 'No names waiting to be checked.' : 'No place matches.'}
+            {filter === 'stores'
+              ? waitingStores.length > 0
+                ? `${waitingStores.length} ${waitingStores.length === 1 ? 'store is' : 'stores are'} waiting for a location. Spots appear here when staff allocated to them clock in.`
+                : 'Every store has its location.'
+              : filter === 'check'
+                ? 'No names waiting to be checked.'
+                : 'No place matches.'}
           </li>
         )}
       </ul>

@@ -1653,6 +1653,19 @@ begin
     update public.profiles set push_exempt = false where id = femi;
     perform notifications_on(femi);
     perform assert(public.has_live_push(femi), 'a real phone subscription counts');
+    -- The Android and iOS apps register their own push token (033).
+    insert into auth.users (id, email) values ('00000000-0000-4000-8000-0000000000a1', 'app@xpel.ng');
+    insert into public.profiles (id, full_name, email, role, outlet_id)
+    values ('00000000-0000-4000-8000-0000000000a1', 'App User', 'app@xpel.ng', 'merchandiser', mall_id);
+    insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)
+    values ('00000000-0000-4000-8000-0000000000a1', 'native-fcm:short', 'native', 'native');
+    perform assert(not public.has_live_push('00000000-0000-4000-8000-0000000000a1'),
+      'a made-up app token does not count');
+    insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)
+    values ('00000000-0000-4000-8000-0000000000a1',
+            'native-apns:' || repeat('a1b2c3d4', 8), 'native', 'native');
+    perform assert(public.has_live_push('00000000-0000-4000-8000-0000000000a1'),
+      'a token from the iPhone app counts as notifications on');
 
     perform act_as(femi);
     got := public.record_beacon(jsonb_build_object('reason', 'open', 'battery_pct', 81,
@@ -1833,6 +1846,142 @@ begin
       perform assert(sqlerrm like '%own team%', 'staff cannot follow each other');
     end;
     perform act_as(tunde);
+  end;
+
+  -- Every flag kind the triggers and the attendance route raise is allowed.
+  declare
+    def text := (select pg_get_constraintdef(oid) from pg_constraint
+                 where conname = 'integrity_flags_kind_check');
+    k text;
+  begin
+    foreach k in array array['selfie_at_home', 'own_named_place', 'backdated_clock',
+      'late_sync_with_network', 'photo_rejected', 'vpn_suspected', 'mock_location_confirmed',
+      'device_integrity_failed'] loop
+      perform assert(def like '%''' || k || '''%', 'flag kind ' || k || ' is allowed');
+    end loop;
+  end;
+
+  -- ---------------------------------------------------------------
+  -- Stores waiting for their location, pinned from clock-ins (034).
+  -- ---------------------------------------------------------------
+  declare
+    kemi    uuid := gen_random_uuid();
+    ope     uuid := gen_random_uuid();
+    tayo    uuid := gen_random_uuid();
+    pinned  uuid;
+    waiting uuid;
+    other   uuid;
+    spot    uuid;
+    rec     record;
+  begin
+    perform act_as(boss);
+    insert into auth.users (id, email) values
+      (kemi, 'kemi@xpel.ng'), (ope, 'ope@xpel.ng'), (tayo, 'tayo@xpel.ng');
+    insert into public.outlets (name, lat, lng, geofence_radius_m)
+    values ('Jendol Badagry', 6.4150, 2.8800, 150) returning id into pinned;
+    insert into public.outlets (name) values ('Justrite Badagry') returning id into waiting;
+    insert into public.outlets (name) values ('Market Square Badagry') returning id into other;
+    perform assert(
+      (select lat is null from public.outlets where id = waiting),
+      'a store can be added before its location is known');
+    begin
+      insert into public.outlets (name, lat) values ('Half a location', 6.4);
+      perform assert(false, 'a store has both coordinates or neither');
+    exception when check_violation then
+      perform assert(true, 'a store has both coordinates or neither');
+    end;
+
+    insert into public.profiles (id, full_name, email, role, outlet_id) values
+      (kemi, 'Kemi Shabi',  'kemi@xpel.ng', 'merchandiser', pinned),
+      (ope,  'Ope Ojo',     'ope@xpel.ng',  'merchandiser', other),
+      (tayo, 'Tayo Bello',  'tayo@xpel.ng', 'merchandiser', waiting);
+    insert into public.staff_outlets (user_id, outlet_id) values (kemi, waiting);
+    perform notifications_on(kemi);
+    perform notifications_on(ope);
+    perform notifications_on(tayo);
+
+    -- Kemi clocks in 2 km from her pinned store: she may be in the other.
+    perform act_as(kemi);
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+    values ('opening', 6.4300, 2.8950, 12, fresh_photo('selfies', 'kemi-1.jpg'), now())
+    returning status, outlet_id, distance_m into rec;
+    perform assert(rec.status is null and rec.outlet_id is null and rec.distance_m is null,
+      'away from the pinned store, with a store waiting for its location: not measured');
+    perform assert(
+      not exists (select 1 from public.location_alerts where user_id = kemi),
+      'a clock-in that was not measured raises no alert');
+    select id into spot from public.known_places
+    where source = 'clock_in' and waiting = any(store_candidates);
+    perform assert(spot is not null,
+      'the spot is kept as a place that could be the waiting store');
+    perform assert(
+      not (select pinned = any(store_candidates) from public.known_places where id = spot),
+      'only waiting stores are offered for it');
+
+    -- Inside her pinned store she is measured as usual.
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+    values ('closing', 6.4151, 2.8801, 12, fresh_photo('selfies', 'kemi-2.jpg'), now())
+    returning status, outlet_id into rec;
+    perform assert(rec.status = 'on_site' and rec.outlet_id = pinned,
+      'inside a pinned store, somebody with a waiting store is still on site');
+
+    -- A rough fix teaches nothing.
+    perform act_as(ope);
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+    values ('opening', 6.5000, 2.9500, 80, fresh_photo('selfies', 'ope-1.jpg'), now());
+    perform assert(
+      not exists (select 1 from public.known_places where other = any(store_candidates)),
+      'a clock-in with a rough fix is not kept as a possible store location');
+    -- A good one at Kemi's spot joins it.
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+    values ('closing', 6.43001, 2.89501, 10, fresh_photo('selfies', 'ope-2.jpg'), now());
+    select * into rec from public.known_places where id = spot;
+    perform assert(other = any(rec.store_candidates) and cardinality(rec.visitors) = 2,
+      'a second person at the same spot joins the same place, with their stores');
+
+    -- Store visits and counts cannot be measured against a waiting store.
+    perform act_as(grace);
+    update public.store_visits set status = 'closed', departed_at = now() where user_id = grace and status = 'open';
+    insert into public.store_visits
+      (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at, selfie_path)
+    values (waiting, 6.43, 2.895, 12, now(), fresh_photo('selfies', 'grace-w.jpg'))
+    returning arrived_status into rec;
+    perform assert(rec.arrived_status is null,
+      'a visit to a store waiting for its location is neither on nor off site');
+
+    -- Only an admin confirms which store a spot is.
+    perform act_as(kemi);
+    begin
+      perform public.pin_store_from_place(spot, waiting);
+      perform assert(false, 'staff cannot pin a store');
+    exception when others then
+      perform assert(sqlerrm like '%Only an admin%', 'staff cannot pin a store');
+    end;
+    perform act_as(boss);
+    perform public.pin_store_from_place(spot, waiting);
+    select * into rec from public.outlets where id = waiting;
+    perform assert(abs(rec.lat - 6.4300) < 0.00001 and abs(rec.lng - 2.8950) < 0.00001,
+      'a confirmed spot becomes the store''s location');
+    perform assert(not exists (select 1 from public.known_places where id = spot),
+      'the place goes once the store names the spot');
+    begin
+      insert into public.known_places (name, lat, lng, source, store_candidates)
+      values ('Another spot', 6.46, 2.92, 'clock_in', array[waiting]);
+      perform public.pin_store_from_place(
+        (select id from public.known_places where name = 'Another spot'), waiting);
+      perform assert(false, 'a pinned store is not re-pinned from a place');
+    exception when others then
+      perform assert(sqlerrm like '%already has a location%', 'a pinned store is not re-pinned from a place');
+    end;
+
+    -- From then on the store is measured normally.
+    perform act_as(tayo);
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+    values ('opening', 6.4301, 2.8951, 12, fresh_photo('selfies', 'tayo-1.jpg'), now())
+    returning status, outlet_id into rec;
+    perform assert(rec.status = 'on_site' and rec.outlet_id = waiting,
+      'once pinned, clock-ins at the store are on site');
+    perform act_as(boss);
   end;
 
   raise notice 'ALL RULES PASSED';

@@ -9,7 +9,8 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Outlets — Xtend' }
 
 export default async function OutletsPage() {
-  await requireSession(['admin'])
+  const session = await requireSession(['admin', 'supervisor'])
+  const readOnly = session.profile.role === 'supervisor'
   const supabase = await createServerSupabase()
 
   const { data: outlets } = await supabase.from('outlets').select('*').order('name')
@@ -26,17 +27,22 @@ export default async function OutletsPage() {
         <div>
           <h1 className="text-xl font-semibold">Outlets</h1>
           <p className="text-sm text-muted-foreground">
-            The geofence radius is per outlet: a mall kiosk is not a standalone store.
+            {readOnly
+              ? 'The stores field staff work in. Only an admin can add or change them.'
+              : 'The geofence radius is per outlet: a mall kiosk is not a standalone store.'}
           </p>
         </div>
-        <Link href="/admin/outlets/import" className={buttonVariants({ variant: 'outline' })}>
-          Add stores in bulk
-        </Link>
+        {!readOnly && (
+          <Link href="/admin/outlets/import" className={buttonVariants({ variant: 'outline' })}>
+            Add stores in bulk
+          </Link>
+        )}
       </div>
 
       <OutletManager
         outlets={(outlets ?? []) as Outlet[]}
         staffCounts={Object.fromEntries(staffPerOutlet)}
+        readOnly={readOnly}
       />
     </div>
   )

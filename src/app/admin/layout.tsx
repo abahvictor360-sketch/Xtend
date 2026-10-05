@@ -7,6 +7,7 @@ import { AdminNav, AdminSidebarNav } from '@/components/admin/admin-nav'
 import { XpelMark } from '@/components/brand/logo'
 import { AssistantLauncher } from '@/components/admin/assistant-launcher'
 import { assistantConfigured } from '@/lib/assistant'
+import { NativeBridge } from '@/components/native-bridge'
 import { TZ } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
@@ -149,6 +150,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </div>
 
       {assistant && <AssistantLauncher />}
+      <NativeBridge />
     </div>
   )
 }

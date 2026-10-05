@@ -1,7 +1,11 @@
 import { Suspense } from 'react'
+import Link from 'next/link'
+import { headers } from 'next/headers'
+import { Smartphone } from 'lucide-react'
 import { LoginForm } from '@/app/login/login-form'
 import { Skeleton } from '@/components/ui/skeleton'
 import { XpelLockup, XpelTile } from '@/components/brand/logo'
+import { isAppUserAgent } from '@/lib/app-agent'
 
 export const metadata = { title: 'Sign in — Xtend' }
 
@@ -17,6 +21,7 @@ export default async function LoginPage({
 }) {
   const reason = (await searchParams).reason
   const notice = typeof reason === 'string' ? REASONS[reason] : undefined
+  const inApp = isAppUserAgent((await headers()).get('user-agent'))
 
   return (
     <main className="relative flex min-h-dvh flex-col overflow-hidden">
@@ -45,6 +50,24 @@ export default async function LoginPage({
           <Suspense fallback={<Skeleton className="h-64 w-full" />}>
             <LoginForm />
           </Suspense>
+
+          {!inApp && (
+            <Link
+              href="/download"
+              className="mt-6 flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 shadow-soft transition-colors hover:bg-tint"
+            >
+              <span className="icon-tile">
+                <Smartphone className="h-5 w-5" />
+              </span>
+              <span className="flex-1 leading-tight">
+                <span className="block text-sm font-bold">Get the Xtend app</span>
+                <span className="block text-xs text-muted-foreground">For Android and iPhone</span>
+              </span>
+              <span aria-hidden className="text-lg font-bold text-brand">
+                &rsaquo;
+              </span>
+            </Link>
+          )}
 
           <div className="mt-10 flex flex-col items-center gap-3">
             <XpelLockup width={140} className="opacity-90" />
