@@ -2,6 +2,8 @@ import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, FIELD_ROLES } from '@/lib/auth'
 import { notifyWatchers } from '@/lib/notify'
+import { clientIp } from '@/lib/ip-geo'
+import { evaluateLocationIntegrity } from '@/lib/integrity-signals'
 
 /**
  * The client sends what it observed. distance_m, status, user_id and
@@ -111,6 +113,58 @@ export async function POST(request: Request) {
         url: '/admin/attendance',
         detail: { kind: 'attendance_off_site', attendance_id: data.id, status: data.status },
       })
+    }
+
+    // VPN / location-manipulation checks (migration 030). These need the
+    // request IP and the phone's own signals, which the database cannot see,
+    // so they run here and record what they find through flag_own_integrity.
+    // Wrapped whole: a slow IP lookup or a provider outage must never turn a
+    // genuine clock-in into an error.
+    try {
+      const { signals, ip } = await evaluateLocationIntegrity(
+        {
+          lat: input.lat,
+          lng: input.lng,
+          accuracy_m: input.accuracy_m,
+          device_info: input.device_info,
+          headers: request.headers,
+        },
+        clientIp(request.headers),
+      )
+
+      for (const s of signals) {
+        await supabase.rpc('flag_own_integrity', {
+          p_kind: s.kind,
+          p_severity: s.severity,
+          p_summary: s.summary,
+          p_detail: { ...s.detail, attendance_id: data.id },
+          p_outlet: (data as { outlet_id: string | null }).outlet_id,
+        })
+      }
+
+      // A VPN or a far-apart IP means someone is likely clocking in from
+      // somewhere other than where the pin says, even when the pin lands
+      // on-site. That is worth telling the office now.
+      const serious = signals.find(
+        (s) =>
+          s.kind === 'vpn_suspected' ||
+          s.kind === 'ip_location_mismatch' ||
+          s.kind === 'mock_location_confirmed' ||
+          s.kind === 'device_integrity_failed',
+      )
+      if (serious) {
+        await notifyWatchers({
+          subjectId: session.userId,
+          title: `${session.profile.full_name}: clock-in location looks manipulated`,
+          body: `${serious.summary}. Check the Integrity page.`,
+          url: '/admin/integrity',
+          detail: { kind: 'integrity_signal', attendance_id: data.id, signal: serious.kind },
+        })
+      }
+
+      void ip
+    } catch {
+      // Checks are best-effort; the clock-in already succeeded.
     }
 
     // The trigger measures against whichever of the person's stores they
