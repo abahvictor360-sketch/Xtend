@@ -63,7 +63,16 @@ jobs:
 
       - name: Debug APK
         working-directory: mobile/android
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon --console=plain 2>&1 | tee "$RUNNER_TEMP/gradle.log"; exit ${PIPESTATUS[0]}
+        shell: bash
+
+      # Puts Gradle's own error where the PR's checks show it.
+      - name: Report the build error
+        if: failure()
+        run: |
+          grep -E '(^e: |error:|What went wrong|^> )' "$RUNNER_TEMP/gradle.log" | head -20 | while IFS= read -r line; do
+            echo "::error::$line"
+          done
 
       - name: Signing key
         id: key

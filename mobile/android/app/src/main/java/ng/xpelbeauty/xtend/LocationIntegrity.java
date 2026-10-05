@@ -119,18 +119,23 @@ public class LocationIntegrity extends Plugin {
         SimpleDateFormat iso = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
         iso.setTimeZone(TimeZone.getTimeZone("UTC"));
 
-        JSObject ret = new JSObject();
-        ret.put("lat", loc.getLatitude());
-        ret.put("lng", loc.getLongitude());
-        ret.put("accuracy_m", (double) loc.getAccuracy());
-        ret.put("altitude", loc.hasAltitude() ? loc.getAltitude() : JSONObject.NULL);
-        ret.put("speed", loc.hasSpeed() ? (Object) (double) loc.getSpeed() : JSONObject.NULL);
-        ret.put("heading", loc.hasBearing() ? (Object) (double) loc.getBearing() : JSONObject.NULL);
-        ret.put("is_mock", isMock);
-        ret.put("compromised", isRooted());
-        ret.put("platform", "android");
-        ret.put("captured_at", iso.format(new Date(loc.getTime())));
-        call.resolve(ret);
+        // Through JSONObject.put, which declares JSONException for doubles.
+        try {
+            JSObject ret = new JSObject();
+            ret.put("lat", loc.getLatitude());
+            ret.put("lng", loc.getLongitude());
+            ret.put("accuracy_m", (double) loc.getAccuracy());
+            ret.put("altitude", loc.hasAltitude() ? (Object) loc.getAltitude() : JSONObject.NULL);
+            ret.put("speed", loc.hasSpeed() ? (Object) (double) loc.getSpeed() : JSONObject.NULL);
+            ret.put("heading", loc.hasBearing() ? (Object) (double) loc.getBearing() : JSONObject.NULL);
+            ret.put("is_mock", isMock);
+            ret.put("compromised", isRooted());
+            ret.put("platform", "android");
+            ret.put("captured_at", iso.format(new Date(loc.getTime())));
+            call.resolve(ret);
+        } catch (Exception e) {
+            call.reject("Could not read location: " + e.getMessage());
+        }
     }
 
     private static boolean isRooted() {
