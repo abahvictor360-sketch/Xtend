@@ -60,4 +60,34 @@ export const FLAG_KINDS: Record<string, { label: string; meaning: string }> = {
     meaning:
       'A clock event was taken offline and sent much later, although the phone had network well before it was sent.',
   },
+  vpn_suspected: {
+    label: 'VPN or proxy',
+    meaning:
+      'The clock-in arrived through a VPN, proxy or datacentre IP address. Hiding the real network is what someone does to fake where they are.',
+  },
+  ip_location_mismatch: {
+    label: 'GPS vs internet far apart',
+    meaning:
+      'The GPS pin and the internet address the clock-in came from are hundreds of kilometres apart. The GPS, the network, or both were manipulated.',
+  },
+  timezone_mismatch: {
+    label: 'Phone zone not Nigeria',
+    meaning:
+      "The phone's time zone was not Nigeria's. Combined with a Nigerian GPS pin, that points to a changed location or a device somewhere else.",
+  },
+  gps_mock_fingerprint: {
+    label: 'Fake-GPS fingerprint',
+    meaning:
+      'The GPS fix carried no altitude, speed or heading, the way a fake-location app feeds a bare coordinate. On its own it is weak; read it with the other flags.',
+  },
+  mock_location_confirmed: {
+    label: 'Fake GPS confirmed',
+    meaning:
+      'The Xtend app (Android) reported that the location came from a mock provider: a fake-GPS app was switched on. This is proof, not a guess.',
+  },
+  device_integrity_failed: {
+    label: 'Rooted / jailbroken phone',
+    meaning:
+      'The clock-in came from a rooted (Android) or jailbroken (iOS) phone, where location and app checks can be bypassed. Treat its location as untrusted.',
+  },
 }

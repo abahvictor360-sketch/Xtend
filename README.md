@@ -47,7 +47,10 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0027_notifications_required.sql  # no clock-in without notifications
    supabase/migrations/0028_movement_trail.sql  # follow someone's day on a map
    supabase/migrations/0029_offline_positions.sql  # positions kept offline, sent on reconnect
-   supabase/migrations/0030_native_push.sql  # notifications from the Android and iOS apps
+   supabase/migrations/0030_vpn_location_integrity.sql  # VPN and fake-location checks
+   supabase/migrations/0031_support_messages.sql  # in-app support messages
+   supabase/migrations/0032_native_integrity.sql  # mock-GPS and rooted-phone flags from the apps
+   supabase/migrations/0033_native_push.sql  # notifications from the Android and iOS apps
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
@@ -252,9 +255,17 @@ Xtend settles them. None of it is visible to staff.
 ## Android and iOS apps
 
 `mobile/` wraps the live site in native Android and iOS apps (Capacitor)
-that add location with the screen off and native push. GitHub Actions
-builds them (`.github/workflows/mobile.yml`). Setup, signing and store
-steps: [`mobile/README.md`](mobile/README.md).
+that add location with the screen off, native push, and Android's
+mock-location flag plus a rooted / jailbroken check at clock-in (032).
+GitHub Actions builds them (`.github/workflows/mobile.yml`). Setup, signing
+and store steps: [`mobile/README.md`](mobile/README.md).
+
+Staff get the apps from **`/download`** (public, no sign-in): it puts the
+button for the phone in hand first and shows a QR code to computers. Set
+`ANDROID_APK_URL` (the signed APK, or a Play Store link), `IOS_APP_URL`
+(TestFlight invite or App Store link) and optionally `APP_VERSION` in
+Vercel; a platform without a link shows "Coming soon" and the browser
+version.
 
 ## Following movements on the map
 

@@ -15,6 +15,9 @@ const config: CapacitorConfig = {
   appName: 'Xtend',
   // Shown only if the site cannot be reached at all.
   webDir: 'www',
+  // Lets the site tell the app from a browser before any script runs
+  // (src/lib/app-agent.ts): no "Get the app" link inside the app itself.
+  appendUserAgent: 'XtendApp',
   server: {
     url,
     cleartext: false,

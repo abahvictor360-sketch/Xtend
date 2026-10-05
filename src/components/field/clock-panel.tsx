@@ -11,6 +11,7 @@ import { CameraCapture } from '@/components/field/camera-capture'
 import { Alert } from '@/components/ui/alert'
 import { processSelfie } from '@/lib/image'
 import { deviceInfo } from '@/lib/device'
+import { nativeDeviceSignals } from '@/lib/native'
 import { requireFix, GeoBlocked, haversineMetres, type Fix } from '@/lib/geo'
 import { submitOrQueue, PermanentJobError } from '@/lib/offline/sync'
 import { formatLagos, metres } from '@/lib/utils'
@@ -138,8 +139,37 @@ export function ClockPanel({
           place_name: resolved.name,
           place_source: resolved.source,
           // Recorded so an auditor can see the image came from the live
-          // camera rather than a file chosen on the device.
-          device_info: { ...deviceInfo(), selfie_source: 'in_app_camera' },
+          // camera rather than a file chosen on the device. The gps block
+          // carries the fix's extra fields for the mock-GPS fingerprint
+          // check; a real chip fills them in, a fake app usually does not.
+          device_info: {
+            ...deviceInfo(),
+            selfie_source: 'in_app_camera',
+            gps: {
+              altitude: fix.altitude,
+              altitude_accuracy: fix.altitude_accuracy,
+              speed: fix.speed,
+              heading: fix.heading,
+            },
+            // Present only inside the native shell: Android's mock-location
+            // flag and a root / jailbreak check. Empty in a plain browser.
+            ...nativeDeviceSignals(
+              fix.native_platform
+                ? {
+                    lat: fix.lat,
+                    lng: fix.lng,
+                    accuracy_m: fix.accuracy_m,
+                    altitude: fix.altitude,
+                    speed: fix.speed,
+                    heading: fix.heading,
+                    is_mock: fix.is_mock ?? false,
+                    compromised: fix.compromised ?? false,
+                    platform: fix.native_platform as 'android' | 'ios',
+                    captured_at: fix.captured_at,
+                  }
+                : null,
+            ),
+          },
           client_captured_at: fix.captured_at,
           selfie: full,
           thumb,

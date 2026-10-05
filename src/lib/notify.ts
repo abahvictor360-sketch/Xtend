@@ -137,3 +137,103 @@ export async function notifyWatchers(alert: WatcherAlert): Promise<{
     return { watchers: 0, delivered: 0 }
   }
 }
+
+/**
+ * Sends a notification to specific people by id: the inbox row plus a push
+ * to each of their devices. Used when the office replies to a support thread
+ * so the field member hears about it even with the app closed. Like
+ * notifyWatchers, it never throws; a failed push must not undo the reply.
+ */
+export async function notifyUsers(
+  userIds: string[],
+  msg: { title: string; body: string; url?: string; senderId?: string | null; detail?: Record<string, unknown> },
+): Promise<{ delivered: number }> {
+  try {
+    const ids = [...new Set(userIds)].filter(Boolean)
+    if (ids.length === 0) return { delivered: 0 }
+    const admin = createAdminSupabase()
+
+    const { data: notification } = await admin
+      .from('notifications')
+      .insert({
+        sender_id: msg.senderId ?? null,
+        title: msg.title.slice(0, 80),
+        body: msg.body.slice(0, 400),
+        url: msg.url ?? '/field',
+        audience: 'users',
+        audience_detail: { ...(msg.detail ?? {}), user_ids: ids },
+        recipients: ids.length,
+      })
+      .select('id')
+      .single<{ id: string }>()
+    if (!notification) return { delivered: 0 }
+
+    let delivered = 0
+    const deliveries: {
+      notification_id: string
+      user_id: string
+      status: 'sent' | 'failed' | 'no_device'
+      detail: string | null
+    }[] = []
+
+    if (pushConfigured()) {
+      const { data: subs } = await admin
+        .from('push_subscriptions')
+        .select('id, user_id, endpoint, p256dh, auth')
+        .in('user_id', ids)
+        .eq('is_active', true)
+
+      const devices = (subs ?? []) as PushTarget[]
+      const results = await Promise.all(
+        devices.map((device) =>
+          sendPush(device, {
+            title: msg.title,
+            body: msg.body,
+            url: msg.url ?? '/field',
+            notificationId: notification.id,
+          }),
+        ),
+      )
+
+      const dead = results.filter((r) => r.gone).map((r) => r.subscriptionId)
+      if (dead.length) {
+        await admin.from('push_subscriptions').update({ is_active: false }).in('id', dead)
+      }
+
+      const reached = new Set(results.filter((r) => r.ok).map((r) => r.userId))
+      const attempted = new Set(results.map((r) => r.userId))
+      for (const id of ids) {
+        const status = reached.has(id) ? 'sent' : attempted.has(id) ? 'failed' : 'no_device'
+        if (status === 'sent') delivered += 1
+        deliveries.push({
+          notification_id: notification.id,
+          user_id: id,
+          status,
+          detail: status === 'sent' ? null : 'Not delivered to any device',
+        })
+      }
+    } else {
+      for (const id of ids) {
+        deliveries.push({
+          notification_id: notification.id,
+          user_id: id,
+          status: 'no_device',
+          detail: 'Push is not configured on this deployment',
+        })
+      }
+    }
+
+    if (deliveries.length) {
+      await admin.from('notification_deliveries').insert(deliveries)
+      await admin
+        .from('notifications')
+        .update({ delivered, failed: deliveries.filter((d) => d.status === 'failed').length })
+        .eq('id', notification.id)
+    }
+
+    return { delivered }
+  } catch (error) {
+    console.error('notifyUsers failed', error)
+    return { delivered: 0 }
+  }
+}

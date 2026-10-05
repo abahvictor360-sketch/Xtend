@@ -34,11 +34,12 @@ Mac).
 
 ## What the owner sets up once
 
-### 1. Database (step 12)
+### 1. Database
 
-Run `supabase/migrations/0030_native_push.sql` (step 12) in the Supabase SQL
-editor, after step 9. It lets a phone's app notifications count as
-"notifications on" for the clock-in rule.
+Run migrations `0030` to `0033` in the Supabase SQL editor, in order.
+`0032` lets the apps' mock-GPS and rooted-phone flags be recorded; `0033`
+lets a phone's app notifications count as "notifications on" for the
+clock-in rule.
 
 ### 2. Android notifications: Firebase (free)
 
@@ -95,6 +96,21 @@ store.
 Apple reviews background location closely; the permission text explains
 it is used during a shift to confirm the person is at their store.
 
+### 5. The download page
+
+Staff install the apps from `https://xtend-brown.vercel.app/download`. In
+Vercel, set:
+
+| Variable | Value |
+|---|---|
+| `ANDROID_APK_URL` | Where the signed APK can be downloaded without signing in: e.g. upload `app-release.apk` to a **public** Supabase Storage bucket and paste its public URL, or a Google Play link once published |
+| `IOS_APP_URL` | The TestFlight public invite link, or the App Store link |
+| `APP_VERSION` | Optional, shown under the buttons (e.g. `1.0.0`) |
+
+Redeploy after changing them. Until a link is set, that platform shows
+"Coming soon" and points to the website instead. The page is safe to share
+anywhere (a WhatsApp group, a printed QR code): it holds no account data.
+
 ## How it fits together
 
 - `capacitor.config.ts`: app id `ng.xpelbeauty.xtend`, name, the site URL
@@ -108,6 +124,12 @@ it is used during a shift to confirm the person is at their store.
   sooner after a 150 m move; without network it joins the offline queue
   with the time it was taken (migration 029). On Android the request goes
   through the native HTTP client so it is not throttled in the background.
+- Location integrity: `LocationIntegrity` (`android/.../LocationIntegrity.java`,
+  `ios/App/App/LocationIntegrity.swift`, registered in `MainActivity.java`
+  and `XtendViewController.swift`). At clock-in `requireFix()` takes the
+  fix from it, with Android's mock-location flag and a root / jailbreak
+  check; the attendance route turns those into `mock_location_confirmed` /
+  `device_integrity_failed` flags (032).
 - Push: `@capacitor/push-notifications`. The site registers the phone's
   token at `/api/push/native`; `src/lib/push-native.ts` sends through
   Firebase (Android) or Apple (iOS). Phone checks are answered by

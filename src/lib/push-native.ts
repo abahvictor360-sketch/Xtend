@@ -16,7 +16,7 @@ import type { PushPayload } from '@/lib/push'
  *     builds run from Xcode.
  *
  * A device is stored in push_subscriptions with an endpoint of
- * "native-fcm:<token>" or "native-apns:<token>" (migration 030).
+ * "native-fcm:<token>" or "native-apns:<token>" (migration 033).
  */
 
 export const NATIVE_PREFIX = { android: 'native-fcm:', ios: 'native-apns:' } as const

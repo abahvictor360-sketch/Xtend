@@ -1848,5 +1848,18 @@ begin
     perform act_as(tunde);
   end;
 
+  -- Every flag kind the triggers and the attendance route raise is allowed.
+  declare
+    def text := (select pg_get_constraintdef(oid) from pg_constraint
+                 where conname = 'integrity_flags_kind_check');
+    k text;
+  begin
+    foreach k in array array['selfie_at_home', 'own_named_place', 'backdated_clock',
+      'late_sync_with_network', 'photo_rejected', 'vpn_suspected', 'mock_location_confirmed',
+      'device_integrity_failed'] loop
+      perform assert(def like '%''' || k || '''%', 'flag kind ' || k || ' is allowed');
+    end loop;
+  end;
+
   raise notice 'ALL RULES PASSED';
 end $$;

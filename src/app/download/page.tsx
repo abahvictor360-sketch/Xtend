@@ -4,6 +4,7 @@ import QRCode from 'qrcode'
 import { ArrowRight, BellRing, Download, Smartphone, WifiOff, Zap } from 'lucide-react'
 import { XpelLockup, XpelTile } from '@/components/brand/logo'
 import { cn } from '@/lib/utils'
+import { isAppUserAgent } from '@/lib/app-agent'
 
 export const dynamic = 'force-dynamic'
 export const metadata = {
@@ -37,6 +38,7 @@ export default async function DownloadPage() {
     ios: process.env.IOS_APP_URL || null,
   }
   const version = process.env.APP_VERSION || null
+  const inApp = isAppUserAgent(ua)
 
   const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'xtend-brown.vercel.app'
   const pageUrl = `https://${host}/download`
@@ -70,6 +72,13 @@ export default async function DownloadPage() {
 
       <div className="-mt-12 flex-1 rounded-t-[2rem] bg-background px-4 pb-12 pt-6 sm:px-6">
         <div className="mx-auto w-full max-w-3xl space-y-8">
+          {inApp && (
+            <p className="rounded-2xl bg-tint px-4 py-3 text-sm text-tint-foreground">
+              You are already using the Xtend app on this phone. Share this page with a colleague
+              who needs it.
+            </p>
+          )}
+
           <section aria-label="Choose your phone" className="grid gap-4 sm:grid-cols-2">
             {order.map((p) => (
               <PlatformCard
@@ -115,10 +124,10 @@ export default async function DownloadPage() {
           <section className="flex flex-col items-center gap-3 pt-2 text-center">
             <Link
               href="/"
-              className="inline-flex items-center gap-1.5 text-sm font-semibold text-brand hover:underline"
+              className="text-balance text-sm font-semibold text-brand hover:underline"
             >
-              Already installed, or prefer the browser? Open Xtend
-              <ArrowRight className="h-4 w-4" />
+              Already installed, or prefer the browser? Open Xtend{' '}
+              <ArrowRight className="inline h-4 w-4 align-[-3px]" />
             </Link>
             <p className="max-w-sm text-xs text-muted-foreground">
               Having trouble installing? Ask your supervisor or admin.

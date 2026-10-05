@@ -185,3 +185,55 @@ export async function registerNativePush(): Promise<boolean> {
   })
   return res.ok
 }
+
+// ---------------------------------------------------------------------------
+// Location integrity (LocationIntegrity, mobile/ native code)
+// ---------------------------------------------------------------------------
+
+export interface NativeFix {
+  lat: number
+  lng: number
+  accuracy_m: number
+  altitude: number | null
+  speed: number | null
+  heading: number | null
+  /** Android: location came from a mock provider. iOS: always false. */
+  is_mock: boolean
+  /** Rooted (Android) or jailbroken (iOS): the OS integrity is compromised. */
+  compromised: boolean
+  platform: NativePlatform
+  captured_at: string
+}
+
+/**
+ * One location fix from the OS, with Android's mock-location flag and a
+ * root / jailbreak check. Null in a browser or if the app's call fails, so
+ * the caller falls back to the browser's Geolocation API.
+ */
+export async function getNativeFix(): Promise<NativeFix | null> {
+  if (!nativePlatform() || !hasPlugin('LocationIntegrity')) return null
+  try {
+    const fix = await callNative<NativeFix>('LocationIntegrity', 'getFix')
+    if (!Number.isFinite(fix?.lat) || !Number.isFinite(fix?.lng)) return null
+    return fix
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The native block folded into device_info at submit time. Empty in a plain
+ * browser. The server reads device_info.native to raise mock_location_confirmed
+ * and device_integrity_failed (migration 032).
+ */
+export function nativeDeviceSignals(fix: NativeFix | null): Record<string, unknown> {
+  const platform = nativePlatform()
+  if (!platform) return {}
+  return {
+    native: {
+      platform,
+      is_mock: fix?.is_mock ?? null,
+      compromised: fix?.compromised ?? null,
+    },
+  }
+}

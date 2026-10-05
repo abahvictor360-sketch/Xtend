@@ -1,5 +1,5 @@
 -- =====================================================================
--- XTEND migration 030 — notifications from the Android and iOS apps
+-- XTEND migration 033 — notifications from the Android and iOS apps
 --
 -- The Xtend apps (mobile/) cannot use web push; they register the phone's
 -- own push token instead: Firebase on Android ("native-fcm:<token>"),
@@ -29,3 +29,15 @@ revoke all on function public.has_live_push(uuid) from public, anon;
 grant execute on function public.has_live_push(uuid) to authenticated, service_role;
 
 select 'App notifications (030) installed' as result;
+
+-- Every flag kind so far. 030 and 032 as first written rebuilt this list
+-- without the 023-026 kinds, which made the clock-in triggers that raise
+-- those flags fail; this puts the full list back wherever they were run.
+alter table public.integrity_flags drop constraint if exists integrity_flags_kind_check;
+alter table public.integrity_flags add constraint integrity_flags_kind_check check (kind in (
+  'repeated_exact_location', 'perfect_accuracy', 'impossible_journey',
+  'count_units_missing', 'count_identical', 'count_round_numbers',
+  'photo_rejected', 'photo_unchecked', 'own_named_place', 'selfie_at_home',
+  'backdated_clock', 'phone_clock_wrong', 'late_sync_with_network',
+  'vpn_suspected', 'ip_location_mismatch', 'timezone_mismatch', 'gps_mock_fingerprint',
+  'mock_location_confirmed', 'device_integrity_failed'));

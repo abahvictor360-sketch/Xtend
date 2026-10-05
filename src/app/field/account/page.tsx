@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Bell, KeyRound, MapPin, Radio, Smartphone } from 'lucide-react'
+import { Bell, Headset, KeyRound, MapPin, Radio, Smartphone } from 'lucide-react'
 import { FIELD_ROLES, requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { SheetScreen, HeaderField, SectionHeader } from '@/components/field/screen'
@@ -66,6 +66,17 @@ export default async function AccountPage() {
             }
             muted={!outlet}
           />
+        </section>
+
+        <section className="space-y-3">
+          <SectionHeader title="Need help?" />
+          <Link href="/field/support" className="block">
+            <TaskRow
+              icon={<Headset className="h-5 w-5" />}
+              title="Message support"
+              meta="Report a problem. The Xtend helper replies, and the office steps in when needed."
+            />
+          </Link>
         </section>
 
         <section className="space-y-3">
