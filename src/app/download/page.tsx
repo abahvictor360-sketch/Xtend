@@ -5,6 +5,7 @@ import { ArrowRight, BellRing, Download, Smartphone, WifiOff, Zap } from 'lucide
 import { XpelLockup, XpelTile } from '@/components/brand/logo'
 import { cn } from '@/lib/utils'
 import { isAppUserAgent } from '@/lib/app-agent'
+import { publishedAndroidApk } from '@/lib/app-release'
 
 export const dynamic = 'force-dynamic'
 export const metadata = {
@@ -17,10 +18,12 @@ type Platform = 'android' | 'ios'
 /**
  * Where staff get the Xtend app (mobile/). Public, no sign-in.
  *
- *   ANDROID_APK_URL  the signed APK (e.g. the GitHub release the mobile
- *                    workflow publishes, or a Play Store link)
+ *   ANDROID_APK_URL  optional: the APK or a Play Store link. Without it,
+ *                    the APK the mobile workflow publishes on GitHub
+ *                    (src/lib/app-release.ts)
  *   IOS_APP_URL      the TestFlight invite or App Store link
- *   APP_VERSION      optional, shown under the buttons
+ *   APP_VERSION      optional, shown under the buttons (the GitHub
+ *                    release's version otherwise)
  *
  * A platform without a link shows "coming soon" and the browser version.
  */
@@ -33,11 +36,14 @@ export default async function DownloadPage() {
       ? 'ios'
       : 'desktop'
 
+  // A link set in Vercel wins; otherwise the APK the mobile workflow
+  // published on GitHub, if there is one yet.
+  const published = process.env.ANDROID_APK_URL ? null : await publishedAndroidApk()
   const links: Record<Platform, string | null> = {
-    android: process.env.ANDROID_APK_URL || null,
+    android: process.env.ANDROID_APK_URL || published?.url || null,
     ios: process.env.IOS_APP_URL || null,
   }
-  const version = process.env.APP_VERSION || null
+  const version = process.env.APP_VERSION || published?.version || null
   const inApp = isAppUserAgent(ua)
 
   const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'xtend-brown.vercel.app'

@@ -4,6 +4,9 @@
 # a signed release APK and Play Store bundle when the signing secrets are
 # set. iOS: compiled for the simulator on every run, to prove it builds;
 # a TestFlight upload needs an Apple Developer account (see the README).
+#
+# On the production branch the APK is also published as xtend.apk on the
+# repo's "android" release, which the /download page links to.
 name: Mobile apps
 
 on:
@@ -21,6 +24,8 @@ jobs:
   android:
     name: Android
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     defaults:
       run:
         working-directory: mobile
@@ -87,6 +92,31 @@ jobs:
             mobile/android/app/build/outputs/apk/**/*.apk
             mobile/android/app/build/outputs/bundle/**/*.aab
           if-no-files-found: error
+
+      # The signed APK when the signing secrets are set; the debug APK until
+      # then. Debug builds are signed with a key made fresh on each runner,
+      # so a phone must uninstall the old one before installing the next.
+      - name: Publish for the download page
+        if: github.ref_name == github.event.repository.default_branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SIGNED: ${{ steps.key.outputs.path != '' }}
+        run: |
+          if [ "$SIGNED" = "true" ]; then
+            cp android/app/build/outputs/apk/release/app-release.apk "$RUNNER_TEMP/xtend.apk"
+            kind="signed"
+          else
+            cp android/app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/xtend.apk"
+            kind="debug build: set the Android signing secrets for updates that install over each other"
+          fi
+          title="Xtend for Android $XTEND_VERSION_NAME"
+          notes="Built from ${GITHUB_SHA::7} ($kind). Install from https://xtend-brown.vercel.app/download"
+          if gh release view android >/dev/null 2>&1; then
+            gh release edit android --title "$title" --notes "$notes"
+          else
+            gh release create android --target "$GITHUB_SHA" --title "$title" --notes "$notes"
+          fi
+          gh release upload android "$RUNNER_TEMP/xtend.apk" --clobber
 
   ios:
     name: iOS

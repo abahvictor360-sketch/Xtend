@@ -98,18 +98,27 @@ it is used during a shift to confirm the person is at their store.
 
 ### 5. The download page
 
-Staff install the apps from `https://xtend-brown.vercel.app/download`. In
-Vercel, set:
+Staff install the apps from `https://xtend-brown.vercel.app/download`.
 
-| Variable | Value |
-|---|---|
-| `ANDROID_APK_URL` | Where the signed APK can be downloaded without signing in: e.g. upload `app-release.apk` to a **public** Supabase Storage bucket and paste its public URL, or a Google Play link once published |
-| `IOS_APP_URL` | The TestFlight public invite link, or the App Store link |
-| `APP_VERSION` | Optional, shown under the buttons (e.g. `1.0.0`) |
+**Android works by itself.** Each time the production branch is built
+(after a merge that touches `mobile/`, or **Actions → Mobile apps → Run
+workflow**), the workflow publishes the APK as `xtend.apk` on this repo's
+**android** release, and the download page links to it automatically. That
+needs the repo to be public, which it is.
 
-Redeploy after changing them. Until a link is set, that platform shows
-"Coming soon" and points to the website instead. The page is safe to share
-anywhere (a WhatsApp group, a printed QR code): it holds no account data.
+- Until the signing secrets (step 3) are set, the published APK is a
+  *debug* build. Each debug build is signed with a different key, so a
+  phone must uninstall the old app before installing a newer one. Set the
+  signing secrets before handing the app to staff; from then on updates
+  install over each other.
+
+**iPhone** needs a link: in Vercel set `IOS_APP_URL` to the TestFlight
+public invite link or the App Store link, and redeploy. Until then the
+iPhone card shows "Coming soon" and points to the website.
+
+Optional overrides in Vercel: `ANDROID_APK_URL` (e.g. a Google Play link
+once the app is published there) and `APP_VERSION` (shown under the
+buttons; otherwise the release's version is used).
 
 ## How it fits together
 

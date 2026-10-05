@@ -262,11 +262,12 @@ GitHub Actions builds them (`.github/workflows/mobile.yml`). Setup, signing
 and store steps: [`mobile/README.md`](mobile/README.md).
 
 Staff get the apps from **`/download`** (public, no sign-in): it puts the
-button for the phone in hand first and shows a QR code to computers. Set
-`ANDROID_APK_URL` (the signed APK, or a Play Store link), `IOS_APP_URL`
-(TestFlight invite or App Store link) and optionally `APP_VERSION` in
-Vercel; a platform without a link shows "Coming soon" and the browser
-version.
+button for the phone in hand first and shows a QR code to computers. The
+Android button links to the APK the mobile workflow publishes on this
+repo's `android` release; set `IOS_APP_URL` (TestFlight invite or App Store
+link) in Vercel for iPhone. `ANDROID_APK_URL` and `APP_VERSION` override
+the Android link and version. A platform without a link shows "Coming
+soon" and the browser version.
 
 ## Following movements on the map
 
