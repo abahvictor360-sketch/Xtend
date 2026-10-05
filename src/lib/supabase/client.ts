@@ -24,3 +24,5 @@ export function supabase() {
   if (!browserClient) browserClient = createClient()
   return browserClient
 }
+
+// Supabase project settings are supplied through Vercel environment variables.
