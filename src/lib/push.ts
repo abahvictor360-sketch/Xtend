@@ -1,6 +1,7 @@
 import 'server-only'
 import { createECDH } from 'node:crypto'
 import webpush, { type PushSubscription, type WebPushError } from 'web-push'
+import { isNativeEndpoint, sendNative } from '@/lib/push-native'
 
 let configured = false
 
@@ -61,6 +62,12 @@ export interface PushPayload {
  * is a row to retire.
  */
 export async function sendPush(target: PushTarget, payload: PushPayload): Promise<PushOutcome> {
+  // The Xtend Android and iOS apps: Firebase or Apple, not web push.
+  if (isNativeEndpoint(target.endpoint)) {
+    const outcome = await sendNative(target.endpoint, payload)
+    return { subscriptionId: target.id, userId: target.user_id, ...outcome }
+  }
+
   if (!configure()) {
     return {
       subscriptionId: target.id,

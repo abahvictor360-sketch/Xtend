@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { HEARTBEAT_INTERVAL_MS } from '@/lib/geo'
 import { countOutbox, enqueue } from '@/lib/offline/db'
 import { flushOutbox } from '@/lib/offline/sync'
+import { nativePostJson, watchBackgroundLocation } from '@/lib/native'
 
 /** Absent entirely on older Android WebViews, so it is read defensively. */
 type MaybeWakeLock = { request: (type: 'screen') => Promise<WakeLockSentinel> } | undefined
@@ -33,8 +34,11 @@ export interface HeartbeatStatus {
  * that is not on screen, and a service worker cannot read geolocation, so the
  * interval below only runs while the page is live. Two things narrow the gap
  * — a screen wake lock while on shift, and an immediate fix whenever the page
- * becomes visible again — and the server stamps every gap it does see. True
- * background location needs the native wrapper (Phase 4).
+ * becomes visible again — and the server stamps every gap it does see.
+ *
+ * Inside the Xtend Android or iOS app (mobile/) there is no such gap: the
+ * native location watcher keeps sending positions with the screen off and
+ * the app in the background, for as long as the shift is open.
  */
 export function useHeartbeat(active: boolean): HeartbeatStatus {
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -152,6 +156,51 @@ export function useHeartbeat(active: boolean): HeartbeatStatus {
       document.removeEventListener('visibilitychange', onVisible)
     }
   }, [active, send])
+
+  // In the Xtend app: positions keep coming with the screen off. One is
+  // sent at most every 2.5 minutes, sooner after a move of 150 m or more;
+  // without network it is kept with the time it was taken (migration 029).
+  useEffect(() => {
+    if (!active) return
+    let last: { at: number; lat: number; lng: number } | null = null
+    const stop = watchBackgroundLocation(async (loc) => {
+      const now = Date.now()
+      const moved = last
+        ? Math.hypot((loc.latitude - last.lat) * 111_000, (loc.longitude - last.lng) * 111_000 *
+            Math.cos((loc.latitude * Math.PI) / 180))
+        : Infinity
+      if (last && now - last.at < 150_000 && moved < 150) return
+      last = { at: now, lat: loc.latitude, lng: loc.longitude }
+      const point = {
+        kind: 'ping' as const,
+        lat: loc.latitude,
+        lng: loc.longitude,
+        accuracy_m: loc.accuracy,
+        client_captured_at: new Date(loc.time ?? now).toISOString(),
+      }
+      try {
+        const res = await nativePostJson('/api/pings', {
+          lat: point.lat,
+          lng: point.lng,
+          accuracy_m: point.accuracy_m,
+        })
+        if (res.status >= 200 && res.status < 300) {
+          const ping = (res.data as { ping?: { distance_m: number | null; created_at: string } })?.ping
+          if (ping) {
+            setLastPingAt(ping.created_at)
+            setLastDistanceM(ping.distance_m)
+          }
+          return
+        }
+        // A refused position (400) is not worth keeping; anything else
+        // (signed out, server busy) is kept and sent later.
+        if (res.status !== 400) await enqueue(point)
+      } catch {
+        await enqueue(point).catch(() => {})
+      }
+    })
+    return () => stop?.()
+  }, [active])
 
   // Screen wake lock: the only lever the web gives us against the phone
   // locking mid-shift and taking the heartbeat with it.

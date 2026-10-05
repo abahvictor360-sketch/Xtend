@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { isNativeApp, nativePushPermission, registerNativePush } from '@/lib/native'
 
 export type PushState =
   | 'unsupported'
@@ -28,6 +29,20 @@ export function usePush() {
 
   const read = useCallback(async () => {
     if (typeof window === 'undefined') return
+    // The Xtend app: the phone's own notifications, not web push.
+    if (isNativeApp()) {
+      try {
+        const permission = await nativePushPermission()
+        if (permission === 'denied') return setState('denied')
+        if (permission !== 'granted') return setState('off')
+        // Registered on every start, so the server always holds the
+        // phone's current token.
+        setState((await registerNativePush()) ? 'on' : 'off')
+      } catch {
+        setState('off')
+      }
+      return
+    }
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
       setState('unsupported')
       return
@@ -72,6 +87,16 @@ export function usePush() {
     setError(null)
     setState('working')
     try {
+      if (isNativeApp()) {
+        const permission = await nativePushPermission(true)
+        if (permission !== 'granted') {
+          setState(permission === 'denied' ? 'denied' : 'off')
+          return
+        }
+        if (!(await registerNativePush())) throw new Error('Could not register this phone.')
+        setState('on')
+        return
+      }
       if (!publicKey) throw new Error('Notifications are not configured on the server.')
 
       const permission = await Notification.requestPermission()

@@ -47,6 +47,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0027_notifications_required.sql  # no clock-in without notifications
    supabase/migrations/0028_movement_trail.sql  # follow someone's day on a map
    supabase/migrations/0029_offline_positions.sql  # positions kept offline, sent on reconnect
+   supabase/migrations/0030_native_push.sql  # notifications from the Android and iOS apps
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
@@ -247,6 +248,13 @@ Xtend settles them. None of it is visible to staff.
   an admin can excuse one person whose phone cannot receive them
   (`profiles.push_exempt`); supervisors cannot. People cannot change their
   own store, supervisor, active status or exemption (`profiles_self_guard`).
+
+## Android and iOS apps
+
+`mobile/` wraps the live site in native Android and iOS apps (Capacitor)
+that add location with the screen off and native push. GitHub Actions
+builds them (`.github/workflows/mobile.yml`). Setup, signing and store
+steps: [`mobile/README.md`](mobile/README.md).
 
 ## Following movements on the map
 

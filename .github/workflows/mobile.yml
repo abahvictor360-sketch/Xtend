@@ -1,0 +1,125 @@
+# Builds the Xtend Android and iOS apps (mobile/). See mobile/README.md.
+#
+# Android: a debug APK on every run (install it straight on a phone), plus
+# a signed release APK and Play Store bundle when the signing secrets are
+# set. iOS: compiled for the simulator on every run, to prove it builds;
+# a TestFlight upload needs an Apple Developer account (see the README).
+name: Mobile apps
+
+on:
+  push:
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/mobile.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: mobile
+    env:
+      XTEND_VERSION_CODE: ${{ github.run_number }}
+      XTEND_VERSION_NAME: 1.0.${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - run: npm ci
+
+      - name: Firebase config (push notifications)
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+            echo "google-services.json written"
+          else
+            echo "::warning::GOOGLE_SERVICES_JSON is not set: this build cannot receive push notifications"
+          fi
+
+      - run: npx cap sync android
+
+      - name: Debug APK
+        working-directory: mobile/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Signing key
+        id: key
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/xtend.keystore"
+            echo "path=$RUNNER_TEMP/xtend.keystore" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Signed release APK and Play bundle
+        if: steps.key.outputs.path != ''
+        working-directory: mobile/android
+        env:
+          XTEND_KEYSTORE_PATH: ${{ steps.key.outputs.path }}
+          XTEND_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          XTEND_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          XTEND_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: ./gradlew assembleRelease bundleRelease --no-daemon
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xtend-android-${{ github.run_number }}
+          path: |
+            mobile/android/app/build/outputs/apk/**/*.apk
+            mobile/android/app/build/outputs/bundle/**/*.aab
+          if-no-files-found: error
+
+  ios:
+    name: iOS
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Newest Xcode
+        run: |
+          latest=$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)
+          sudo xcode-select -s "$latest"
+          xcodebuild -version
+
+      - run: npm ci
+
+      - run: npx cap sync ios
+
+      - name: Build for the simulator
+        working-directory: mobile/ios/App
+        run: |
+          xcodebuild \
+            -project App.xcodeproj \
+            -scheme App \
+            -configuration Debug \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO \
+            build

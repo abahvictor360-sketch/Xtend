@@ -1653,6 +1653,19 @@ begin
     update public.profiles set push_exempt = false where id = femi;
     perform notifications_on(femi);
     perform assert(public.has_live_push(femi), 'a real phone subscription counts');
+    -- The Android and iOS apps register their own push token (030).
+    insert into auth.users (id, email) values ('00000000-0000-4000-8000-0000000000a1', 'app@xpel.ng');
+    insert into public.profiles (id, full_name, email, role, outlet_id)
+    values ('00000000-0000-4000-8000-0000000000a1', 'App User', 'app@xpel.ng', 'merchandiser', mall_id);
+    insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)
+    values ('00000000-0000-4000-8000-0000000000a1', 'native-fcm:short', 'native', 'native');
+    perform assert(not public.has_live_push('00000000-0000-4000-8000-0000000000a1'),
+      'a made-up app token does not count');
+    insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)
+    values ('00000000-0000-4000-8000-0000000000a1',
+            'native-apns:' || repeat('a1b2c3d4', 8), 'native', 'native');
+    perform assert(public.has_live_push('00000000-0000-4000-8000-0000000000a1'),
+      'a token from the iPhone app counts as notifications on');
 
     perform act_as(femi);
     got := public.record_beacon(jsonb_build_object('reason', 'open', 'battery_pct', 81,
