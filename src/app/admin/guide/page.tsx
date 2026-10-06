@@ -31,6 +31,7 @@ export const metadata = { title: 'Guide — Xtend' }
 
 const T = {
   setup: { id: 'set-up', title: 'Setting up', icon: Rocket },
+  places: { id: 'stores-and-places', title: 'Adding a store or place', icon: Store },
   staff: { id: 'staff', title: 'Staff and teams', icon: Users },
   apps: { id: 'apps', title: 'Getting staff on the app', icon: Smartphone },
   overview: { id: 'overview', title: 'The overview', icon: LayoutDashboard },
@@ -74,8 +75,8 @@ export default async function AdminGuidePage() {
               <>
                 <Ui>Outlets</Ui> (admins only): add each store with its address and map position,
                 its shift start time and its radius (a small kiosk needs a small radius). A store
-                that is not on any map can be added without a location; it is pinned later from
-                where staff clock in, on <Ui>Places</Ui>.
+                marked “No location yet” is pinned later from where staff clock in, on{' '}
+                <Ui>Places</Ui>. See “Adding a store or place” below.
               </>,
               <>
                 <Ui>Staff</Ui>: add everyone (one by one, or <Ui>Bulk import CSV</Ui>). Choose the
@@ -90,6 +91,61 @@ export default async function AdminGuidePage() {
               </>,
             ]}
           />
+        </GuideSection>
+
+        <GuideSection
+          topic={T.places}
+          intro="Stores are what clock-ins are measured against. Only admins add or change them."
+        >
+          <p className="font-semibold">Add a store yourself</p>
+          <Steps
+            items={[
+              <>
+                Open <Ui>Outlets</Ui> and click <Ui>Add outlet</Ui>.
+              </>,
+              <>
+                Fill in the <Ui>Name</Ui> and <Ui>Address</Ui>.
+              </>,
+              <>
+                For the location, the easiest way is to stand inside the store and click{' '}
+                <Ui>I am standing here</Ui>: Xtend fills in Latitude and Longitude (and the name and
+                address if it can). Otherwise, in Google Maps press and hold on the store&apos;s
+                entrance; the two numbers appear at the top (for example 6.6018, 3.3515). Copy the
+                first into <Ui>Latitude</Ui> and the second into <Ui>Longitude</Ui>.
+              </>,
+              <>
+                Set the <Ui>Geofence radius</Ui>: about 50–100 m for a kiosk or small shop, 150–300
+                m for a supermarket or mall. Set <Ui>Shift start</Ui> and <Ui>Shift end</Ui>.
+              </>,
+              <>
+                Click <Ui>Create outlet</Ui>. Then allocate staff to it on{' '}
+                <Ui>Store allocation</Ui>.
+              </>,
+            ]}
+          />
+          <Tip>
+            A store marked <Ui>No location yet</Ui> on Outlets can still be allocated. When its
+            staff clock in there, the spot shows on <Ui>Places</Ui> under{' '}
+            <Ui>Store locations to confirm</Ui>: check the photo and click{' '}
+            <Ui>Confirm store location</Ui>. Or edit the store and add its location yourself.
+          </Tip>
+
+          <p className="pt-2 font-semibold">Places your staff named</p>
+          <p>
+            When staff clock in or check in at a shop no map knows, Xtend asks them for its name and
+            a photo of the shop front. These appear on <Ui>Places</Ui> (admins only):
+          </p>
+          <ul className="list-disc space-y-1.5 pl-5">
+            <li>
+              <Ui>Names to check</Ui>: correct the spelling if needed, then click{' '}
+              <Ui>Save and verify</Ui> (or <Ui>Verify</Ui>).
+            </li>
+            <li>
+              <Ui>Make it a store</Ui>: turns the place into one of your outlets, so staff can be
+              allocated to it.
+            </li>
+            <li>Delete a place that is wrong, such as a photo that is not a shop.</li>
+          </ul>
         </GuideSection>
 
         <GuideSection topic={T.staff} intro="People pages, under People in the menu.">

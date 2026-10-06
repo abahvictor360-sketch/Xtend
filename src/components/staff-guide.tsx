@@ -8,6 +8,7 @@ import {
   LifeBuoy,
   LogIn,
   LogOut,
+  MapPinPlus,
   Smartphone,
   Store,
   WifiOff,
@@ -30,6 +31,7 @@ export const STAFF_TOPICS = {
   photo: { id: 'profile-photo', title: 'Your profile photo', icon: Camera },
   clockIn: { id: 'clock-in', title: 'Clock in', icon: LogIn },
   visits: { id: 'store-visits', title: 'Store visits (marketers)', icon: Store },
+  place: { id: 'add-a-place', title: 'Adding a place', icon: MapPinPlus },
   report: { id: 'daily-report', title: 'Daily report', icon: FileText },
   count: { id: 'store-count', title: 'Store count', icon: ClipboardList },
   clockOut: { id: 'clock-out', title: 'Clock out', icon: LogOut },
@@ -146,6 +148,41 @@ export function StaffGuide() {
             </>,
           ]}
         />
+      </GuideSection>
+
+      <GuideSection
+        topic={T.place}
+        intro="Sometimes Xtend does not know the shop you are in. It then asks you for its name."
+      >
+        <Steps
+          items={[
+            <>
+              After you clock in or check in, look for <Ui>What is the name of this shop?</Ui> on
+              the home screen.
+            </>,
+            <>
+              Type the name exactly as it is written on the shop&apos;s sign, for example “Mama
+              Nkechi Provisions”.
+            </>,
+            <>
+              Tap <Ui>Photo and save</Ui> and take a clear photo of the <Ui>shop front, sign or
+              entrance</Ui>, standing outside so the sign can be read.
+            </>,
+            <>
+              Wait while Xtend checks the photo. When you see <Ui>Saved. Thank you.</Ui>, you are
+              done.
+            </>,
+          ]}
+        />
+        <p>
+          <Ui>Marketers:</Ui> if Xtend does not recognise the store when you check in, tap{' '}
+          <Ui>Pick the store myself</Ui> and choose it from the list. Stores marked{' '}
+          <Ui>Here</Ui> are the ones you are standing in.
+        </p>
+        <Tip>
+          The photo must show a shop. A photo of a house or the inside of a room is not accepted. If
+          the shop has no sign, photograph the entrance and type the name people know it by.
+        </Tip>
       </GuideSection>
 
       <GuideSection topic={T.report} intro="If you see a Report tab at the bottom, file one report each day.">
