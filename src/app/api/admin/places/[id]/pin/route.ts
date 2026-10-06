@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 
 const schema = z.object({ outlet_id: z.string().uuid() })
@@ -24,7 +24,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
       p_place: id,
       p_outlet: parsed.data.outlet_id,
     })
-    if (error) return Response.json({ error: error.message }, { status: 400 })
+    if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
 
     await audit(supabase, 'place.pin_store', 'outlets', parsed.data.outlet_id, { place_id: id })
     return Response.json({ ok: true })

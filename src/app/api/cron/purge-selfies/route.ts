@@ -1,4 +1,5 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { cronAuthorized } from '@/lib/cron'
 import { purgeExpiredSelfies } from '@/lib/retention-server'
 
 export const maxDuration = 60
@@ -12,9 +13,7 @@ export const maxDuration = 60
  * Vercel Cron sends `Authorization: Bearer $CRON_SECRET`.
  */
 export async function GET(request: Request) {
-  const secret = process.env.CRON_SECRET
-  const header = request.headers.get('authorization')
-  if (!secret || header !== `Bearer ${secret}`) {
+  if (!cronAuthorized(request)) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 

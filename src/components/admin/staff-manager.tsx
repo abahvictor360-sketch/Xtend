@@ -45,9 +45,12 @@ export function StaffManager({
   notified = [],
   initialSearch = '',
   startCreating = false,
+  newStaffOutletIds,
 }: {
   staff: Profile[]
   outlets: Outlet[]
+  /** The stores a supervisor may add new staff to; every store when unset. */
+  newStaffOutletIds?: string[]
   /** Supervisors staff their own team but never hand out roles or stores. */
   isAdmin?: boolean
   /** Who an admin may name as somebody's supervisor. */
@@ -221,7 +224,9 @@ export function StaffManager({
                   onChange={(e) => setDraft({ ...draft, outlet_id: e.target.value })}
                 >
                   <option value="">No outlet</option>
-                  {outlets.map((outlet) => (
+                  {outlets
+                    .filter((outlet) => !newStaffOutletIds || newStaffOutletIds.includes(outlet.id))
+                    .map((outlet) => (
                     <option key={outlet.id} value={outlet.id}>
                       {outlet.name}
                     </option>

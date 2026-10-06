@@ -1,5 +1,7 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { cronAuthorized } from '@/lib/cron'
 import { notifyWatchers } from '@/lib/notify'
+import { dbErrorMessage } from '@/lib/auth'
 
 export const maxDuration = 60
 
@@ -27,9 +29,7 @@ interface NoShow {
  * safe whenever the plan allows.
  */
 export async function GET(request: Request) {
-  const secret = process.env.CRON_SECRET
-  const header = request.headers.get('authorization')
-  if (!secret || header !== `Bearer ${secret}`) {
+  if (!cronAuthorized(request)) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -39,7 +39,7 @@ export async function GET(request: Request) {
   const { data, error } = await supabase.rpc('staff_no_show', {
     p_grace_minutes: Number.isFinite(graceMinutes) ? graceMinutes : 30,
   })
-  if (error) return Response.json({ error: error.message }, { status: 500 })
+  if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 500 })
 
   const absent = (data ?? []) as NoShow[]
   let reported = 0

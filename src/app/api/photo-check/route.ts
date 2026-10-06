@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import Anthropic from '@anthropic-ai/sdk'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { apiError, requireApiSession, FIELD_ROLES } from '@/lib/auth'
+import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/auth'
 import { judgePhoto, photoCheckConfigured, type PhotoKind, type PhotoSetting } from '@/lib/photo-check'
 
 export const maxDuration = 60
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
     // Before migration 023 there is nowhere to keep the verdict, and nothing
     // requires one either: still tell the phone, so a bad photo is retaken.
     if (saveError && saveError.code !== '42P01' && saveError.code !== 'PGRST205') {
-      return Response.json({ error: saveError.message }, { status: 500 })
+      return Response.json({ error: dbErrorMessage(saveError) }, { status: 500 })
     }
 
     // A rejected photo is worth a supervisor knowing about: one is a bad

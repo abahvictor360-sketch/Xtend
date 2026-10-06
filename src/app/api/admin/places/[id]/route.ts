@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 
 const schema = z.object({
@@ -18,7 +18,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
     if (!parsed.success) return Response.json({ error: 'Invalid change' }, { status: 400 })
     const supabase = await createServerSupabase()
     const { error } = await supabase.from('known_places').update(parsed.data).eq('id', id)
-    if (error) return Response.json({ error: error.message }, { status: 400 })
+    if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
     await audit(supabase, 'place.update', 'known_places', id, parsed.data)
     return Response.json({ ok: true })
   } catch (error) {
@@ -33,7 +33,7 @@ export async function DELETE(_request: Request, ctx: { params: Promise<{ id: str
     const { id } = await ctx.params
     const supabase = await createServerSupabase()
     const { error } = await supabase.from('known_places').delete().eq('id', id)
-    if (error) return Response.json({ error: error.message }, { status: 400 })
+    if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
     await audit(supabase, 'place.delete', 'known_places', id, {})
     return Response.json({ ok: true })
   } catch (error) {

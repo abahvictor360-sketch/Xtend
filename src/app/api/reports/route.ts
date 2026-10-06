@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession, REPORTING_ROLES } from '@/lib/auth'
+import { apiError, requireApiSession, REPORTING_ROLES, dbErrorMessage } from '@/lib/auth'
 
 const schema = z.object({
   body: z.string().max(4000).default(''),
@@ -57,7 +57,7 @@ export async function POST(request: Request) {
 
     if (reportId) {
       const { error } = await supabase.from('reports').update(fields).eq('id', reportId)
-      if (error) return Response.json({ error: error.message }, { status: 400 })
+      if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
     } else {
       const { data, error } = await supabase
         .from('reports')
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
         if (error.code === '23505') {
           return Response.json({ error: 'Today’s report is already filed.' }, { status: 409 })
         }
-        return Response.json({ error: error.message }, { status: 400 })
+        return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
       }
       reportId = data.id
     }
@@ -77,7 +77,7 @@ export async function POST(request: Request) {
       const { error } = await supabase.from('report_photos').insert(
         input.photo_paths.map((storage_path) => ({ report_id: reportId, storage_path })),
       )
-      if (error) return Response.json({ error: error.message }, { status: 400 })
+      if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
     }
 
     return Response.json({ report_id: reportId }, { status: 201 })

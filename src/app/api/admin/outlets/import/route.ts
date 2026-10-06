@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 import { locateAddress } from '@/lib/geocode'
 
@@ -136,7 +136,7 @@ export async function POST(request: Request) {
       )
       .select('id, name')
 
-    if (error) return Response.json({ error: error.message }, { status: 400 })
+    if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
 
     const idByName = new Map(
       (inserted ?? []).map((o: { id: string; name: string }) => [o.name, o.id]),

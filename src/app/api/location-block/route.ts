@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 
 const schema = z.object({
   reason: z.enum(['permission_denied', 'position_unavailable', 'low_accuracy', 'unsupported']),
@@ -19,7 +19,7 @@ export async function POST(request: Request) {
       p_reason: parsed.data.reason,
       p_accuracy_m: parsed.data.accuracy_m ?? null,
     })
-    if (error) return Response.json({ error: error.message }, { status: 400 })
+    if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
 
     return Response.json({ logged: true })
   } catch (error) {
