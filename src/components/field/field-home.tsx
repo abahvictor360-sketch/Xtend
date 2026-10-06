@@ -29,6 +29,7 @@ export function FieldHome({
   outlets,
   canVisitStores,
   notificationsRequired = true,
+  avatarUrl = null,
 }: {
   day: DayState
   coverage: Coverage | null
@@ -36,6 +37,7 @@ export function FieldHome({
   outlets: VisitOutlet[]
   canVisitStores: boolean
   notificationsRequired?: boolean
+  avatarUrl?: string | null
 }) {
   const router = useRouter()
   const gate = useLocationGate()
@@ -76,6 +78,7 @@ export function FieldHome({
     <div className="space-y-5">
       <GreetingHeader
         fullName={day.profile?.full_name ?? 'there'}
+        avatarUrl={avatarUrl}
         subtitle={
           onShift ? 'Have a good shift!' : day.closing ? 'Nice work today!' : 'Have a nice day!'
         }

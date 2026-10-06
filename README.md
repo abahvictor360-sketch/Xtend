@@ -52,6 +52,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0032_native_integrity.sql  # mock-GPS and rooted-phone flags from the apps
    supabase/migrations/0033_native_push.sql  # notifications from the Android and iOS apps
    supabase/migrations/0034_stores_pinned_from_clock_in.sql  # stores without a location, pinned from clock-ins
+   supabase/migrations/0035_profile_photos.sql  # staff profile photos and first-run onboarding
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

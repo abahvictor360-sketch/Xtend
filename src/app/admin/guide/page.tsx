@@ -22,6 +22,7 @@ import {
   Steps,
   Tip,
   Ui,
+  GuideShot,
   type GuideTopic,
 } from '@/components/guide'
 
@@ -103,6 +104,8 @@ export default async function AdminGuidePage() {
             tick people (or <Ui>Select all shown</Ui>), choose a supervisor and click{' '}
             <Ui>Assign to supervisor</Ui>.
           </p>
+          <GuideShot src="/guide/admin-add-staff.png" alt="The Add staff form" width={1932} height={504} caption="Staff → Add staff" />
+          <GuideShot src="/guide/admin-teams.png" alt="The Teams page with category tabs" width={2000} height={1216} caption="Teams: pick a category, tick people, assign" />
           <Tip>
             Supervisors can add merchandisers and marketers, who join their own team, and reset their
             passwords. Only admins create supervisors and admins or move people between teams.
@@ -127,6 +130,11 @@ export default async function AdminGuidePage() {
                 Each person signs in, chooses a password, allows location and camera, and turns on
                 notifications. Clocking in needs notifications on; the Staff page shows who has them.
               </>,
+              <>
+                New staff see a short welcome walkthrough the first time they open Xtend: what a day
+                looks like, their profile photo, location, notifications and how to clock in.
+                Their photo then shows beside their name and on the Movement map.
+              </>,
             ]}
           />
         </GuideSection>
@@ -138,6 +146,7 @@ export default async function AdminGuidePage() {
             coverage and everyone on shift. The tip card suggests the next thing worth doing. Use
             the search box at the top to find anyone on the Staff page.
           </p>
+          <GuideShot src="/guide/admin-overview.png" alt="The overview page" width={2880} height={1800} caption="The overview, before anyone has clocked in" />
         </GuideSection>
 
         <GuideSection topic={T.attendance} intro="Every clock-in and clock-out, with filters.">

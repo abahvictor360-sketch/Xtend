@@ -4,6 +4,7 @@ import { FieldHome } from '@/components/field/field-home'
 import { Alert } from '@/components/ui/alert'
 import { CountDueBanner } from '@/components/field/count-due-banner'
 import { getCountStatus } from '@/lib/store-count-status'
+import { avatarUrls } from '@/lib/avatars'
 import type { Coverage, DayState } from '@/lib/types'
 import type { VisitOutlet, VisitRow } from '@/components/field/store-visits'
 
@@ -37,6 +38,8 @@ export default async function FieldPage() {
     getCountStatus(supabase),
   ])
 
+  const photo = (await avatarUrls(supabase, [session.userId])).get(session.userId) ?? null
+
   if (error || !data) {
     return <Alert variant="destructive">Could not load today. Pull down to retry.</Alert>
   }
@@ -51,6 +54,7 @@ export default async function FieldPage() {
         outlets={(outlets ?? []) as VisitOutlet[]}
         canVisitStores={canVisitStores === true}
         notificationsRequired={!session.profile.push_exempt}
+        avatarUrl={photo}
       />
     </>
   )

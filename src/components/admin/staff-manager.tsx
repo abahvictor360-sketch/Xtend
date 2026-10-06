@@ -45,6 +45,7 @@ export function StaffManager({
   notified = [],
   initialSearch = '',
   startCreating = false,
+  photos = {},
 }: {
   staff: Profile[]
   outlets: Outlet[]
@@ -58,6 +59,8 @@ export function StaffManager({
   initialSearch?: string
   /** From the dashboard's "Add staff" button (?new=1). */
   startCreating?: boolean
+  /** Signed links to profile photos (035), by person. */
+  photos?: Record<string, string>
 }) {
   const hasPush = useMemo(() => new Set(notified), [notified])
   const isField = (role: string) => role === 'merchandiser' || role === 'marketer'
@@ -270,7 +273,12 @@ export function StaffManager({
           <TableBody>
             {visible.map((person) => (
               <TableRow key={person.id}>
-                <TableCell className="font-medium">{person.full_name}</TableCell>
+                <TableCell className="font-medium">
+                  <span className="flex items-center gap-2.5">
+                    <PersonPhoto name={person.full_name} url={photos[person.id]} />
+                    {person.full_name}
+                  </span>
+                </TableCell>
                 <TableCell className="text-xs text-muted-foreground">
                   {person.email}
                   <br />
@@ -386,7 +394,8 @@ export function StaffManager({
           <Card key={person.id}>
             <CardContent className="space-y-3 pt-4">
               <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
+                <PersonPhoto name={person.full_name} url={photos[person.id]} />
+                <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold">{person.full_name}</p>
                   <p className="truncate text-xs text-muted-foreground">{person.email}</p>
                   <p className="text-xs text-muted-foreground">{person.phone ?? 'No phone'}</p>
@@ -540,5 +549,23 @@ function ExemptButton({
     >
       {person.push_exempt ? 'Require notifications' : 'Excuse from notifications'}
     </Button>
+  )
+}
+
+/** Their profile photo, or initials until they take one. */
+function PersonPhoto({ name, url }: { name: string; url?: string }) {
+  if (url) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={url} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+  }
+  return (
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-tint text-[11px] font-bold text-tint-foreground">
+      {name
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((w) => w[0]?.toUpperCase())
+        .join('')}
+    </span>
   )
 }

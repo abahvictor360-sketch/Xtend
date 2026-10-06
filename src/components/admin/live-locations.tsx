@@ -26,6 +26,8 @@ export interface LiveLocation {
   last_place_name: string | null
   distance_from_outlet_m: number | null
   inside_geofence: boolean | null
+  /** Signed link to their profile photo (035), when they have one. */
+  avatar_url?: string | null
 }
 
 /**

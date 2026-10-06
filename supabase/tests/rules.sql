@@ -1848,6 +1848,43 @@ begin
     perform act_as(tunde);
   end;
 
+  -- Profile photos and onboarding (035).
+  declare
+    kemi uuid := gen_random_uuid();
+    yemi uuid := gen_random_uuid();
+  begin
+    insert into auth.users (id, email) values (kemi, 'photo-kemi@xpel.ng'), (yemi, 'photo-yemi@xpel.ng');
+    insert into public.profiles (id, full_name, email, role, supervisor_id)
+    values (kemi, 'Kemi', 'photo-kemi@xpel.ng', 'merchandiser', tunde),
+           (yemi, 'Yemi', 'photo-yemi@xpel.ng', 'merchandiser', tunde);
+    insert into storage.objects (bucket_id, name)
+    values ('avatars', kemi::text || '/me.jpg'), ('avatars', yemi::text || '/yemi.jpg');
+
+    perform act_as(kemi);
+    begin
+      perform public.set_my_avatar(yemi::text || '/yemi.jpg');
+      perform assert(false, 'nobody can use someone else''s photo');
+    exception when others then
+      perform assert(sqlerrm like '%not yours%', 'nobody can use someone else''s photo');
+    end;
+    begin
+      perform public.set_my_avatar(kemi::text || '/missing.jpg');
+      perform assert(false, 'a photo must be uploaded before it is used');
+    exception when others then
+      perform assert(sqlerrm like '%Upload the photo first%', 'a photo must be uploaded before it is used');
+    end;
+    perform public.set_my_avatar(kemi::text || '/me.jpg');
+    perform public.finish_onboarding();
+    perform set_config('xtend.own_photo', '', true);
+    update public.profiles set avatar_path = yemi::text || '/yemi.jpg' where id = kemi;
+    perform act_as(tunde);
+
+    perform assert((select avatar_path from public.profiles where id = kemi) = kemi::text || '/me.jpg',
+      'a person''s photo changes only through set_my_avatar');
+    perform assert((select onboarded_at from public.profiles where id = kemi) is not null,
+      'finishing onboarding is remembered');
+  end;
+
   -- Every flag kind the triggers and the attendance route raise is allowed.
   declare
     def text := (select pg_get_constraintdef(oid) from pg_constraint

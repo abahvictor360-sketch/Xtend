@@ -19,7 +19,15 @@ function initials(name: string) {
  * "Hi, John" beside a round avatar that opens the account menu, with the
  * messages bell on the right, as in the reference.
  */
-export function GreetingHeader({ fullName, subtitle }: { fullName: string; subtitle: string }) {
+export function GreetingHeader({
+  fullName,
+  subtitle,
+  avatarUrl = null,
+}: {
+  fullName: string
+  subtitle: string
+  avatarUrl?: string | null
+}) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const firstName = fullName.split(' ')[0] ?? fullName
@@ -32,9 +40,14 @@ export function GreetingHeader({ fullName, subtitle }: { fullName: string; subti
           aria-label={open ? 'Close menu' : 'Open menu'}
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
-          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand text-base font-bold text-primary-foreground ring-4 ring-card"
+          className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand text-base font-bold text-primary-foreground ring-4 ring-card"
         >
-          {initials(fullName)}
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+          ) : (
+            initials(fullName)
+          )}
         </button>
         <div className="min-w-0 flex-1">
           <p className="truncate text-[15px] text-muted-foreground">Hi {firstName}</p>
@@ -60,7 +73,7 @@ export function GreetingHeader({ fullName, subtitle }: { fullName: string; subti
             Account and password
           </Link>
           <Link
-            href="/guide"
+            href="/field/guide"
             onClick={() => setOpen(false)}
             className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-tint"
           >

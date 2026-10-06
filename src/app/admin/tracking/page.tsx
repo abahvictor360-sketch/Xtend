@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { AutoRefresh, LiveMap, TrailMap } from '@/components/admin/movement-map'
 import type { LiveLocation } from '@/components/admin/live-locations'
+import { avatarUrls, withAvatars } from '@/lib/avatars'
 import {
   GAP_MINUTES,
   KIND_LABEL,
@@ -43,8 +44,9 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
       .order('full_name'),
     supabase.rpc('live_locations'),
   ])
-  const onShift = (live ?? []) as LiveLocation[]
+  const onShift = await withAvatars(supabase, (live ?? []) as LiveLocation[])
   const person = (people ?? []).find((p) => p.id === search.person) ?? null
+  const personPhoto = person ? ((await avatarUrls(supabase, [person.id])).get(person.id) ?? null) : null
 
   let trail: Trail | null = null
   let problem: string | null = null
@@ -172,6 +174,30 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
 
       {person && trail && summary && (
         <>
+          <div className="flex items-center gap-3">
+            {personPhoto ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={personPhoto}
+                alt={`Photo of ${person.full_name}`}
+                className="h-14 w-14 rounded-2xl object-cover ring-2 ring-brand/30"
+              />
+            ) : (
+              <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-tint text-sm font-bold text-tint-foreground">
+                {person.full_name
+                  .split(/\s+/)
+                  .slice(0, 2)
+                  .map((w: string) => w[0]?.toUpperCase())
+                  .join('')}
+              </span>
+            )}
+            <div>
+              <p className="text-lg font-bold leading-tight">{person.full_name}</p>
+              <p className="text-xs text-muted-foreground">
+                {personPhoto ? 'Profile photo' : 'No profile photo yet'}
+              </p>
+            </div>
+          </div>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
             <Figure
               label="Clocked in"

@@ -380,7 +380,7 @@ export function OverviewView({
                       className="flex min-w-0 flex-col items-center gap-1.5"
                       title={p.full_name}
                     >
-                      <Avatar name={p.full_name} size="lg" ring={p.inside_geofence === false} />
+                      <Avatar name={p.full_name} size="lg" ring={p.inside_geofence === false} photo={p.avatar_url} />
                       <span className="w-full truncate text-center text-[11px]">
                         {p.full_name.split(/\s+/)[0]}
                       </span>
@@ -484,7 +484,31 @@ function Figure({
   )
 }
 
-function Avatar({ name, size = 'md', ring }: { name: string; size?: 'md' | 'lg'; ring?: boolean }) {
+function Avatar({
+  name,
+  size = 'md',
+  ring,
+  photo,
+}: {
+  name: string
+  size?: 'md' | 'lg'
+  ring?: boolean
+  photo?: string | null
+}) {
+  if (photo) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={photo}
+        alt={name}
+        className={cn(
+          'shrink-0 rounded-xl object-cover',
+          size === 'lg' ? 'h-12 w-12' : 'h-10 w-10',
+          ring && 'ring-2 ring-brand ring-offset-2 ring-offset-card',
+        )}
+      />
+    )
+  }
   return (
     <span
       className={cn(

@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -103,4 +104,38 @@ export function Questions({ items }: { items: { q: string; a: React.ReactNode }[
 /** A term in bold, as it appears on screen. */
 export function Ui({ children }: { children: React.ReactNode }) {
   return <strong className="font-semibold text-foreground">{children}</strong>
+}
+
+/**
+ * A picture of the screen being described. Pictures live in /public/guide
+ * and show placeholder names ("Your name", "Your store"), not real people.
+ */
+export function GuideShot({
+  src,
+  alt,
+  width,
+  height,
+  caption,
+  phone,
+}: {
+  src: string
+  alt: string
+  width: number
+  height: number
+  caption?: string
+  /** Narrow phone screenshots sit centred at phone width. */
+  phone?: boolean
+}) {
+  return (
+    <figure className={cn('mx-auto', phone ? 'max-w-[320px]' : 'w-full')}>
+      <Image
+        src={src}
+        alt={alt}
+        width={width}
+        height={height}
+        className="h-auto w-full rounded-2xl border border-border bg-muted"
+      />
+      {caption && <figcaption className="mt-2 text-center text-xs text-muted-foreground">{caption}</figcaption>}
+    </figure>
+  )
 }
