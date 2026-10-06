@@ -8,6 +8,7 @@ import {
   type CountPerson,
   type CountRequestRow,
 } from '@/components/admin/count-requests'
+import { CountTemplateCard } from '@/components/admin/count-template-card'
 import type { Profile } from '@/lib/types'
 import { Alert } from '@/components/ui/alert'
 import { buttonVariants } from '@/components/ui/button'
@@ -75,7 +76,7 @@ export default async function StoreCountsPage({
     problem = e instanceof Error ? e.message : 'The counts could not be loaded.'
   }
 
-  const [{ data: staff }, { data: requests }, { data: sheetRows }] = await Promise.all([
+  const [{ data: staff }, { data: requests }, { data: sheetRows }, { data: template }] = await Promise.all([
     // Everyone for an admin, the supervisor's own team for a supervisor.
     supabase.rpc('my_staff'),
     supabase
@@ -91,6 +92,13 @@ export default async function StoreCountsPage({
       .lte('count_date', to)
       .order('created_at', { ascending: false })
       .limit(500),
+    // The blank count sheet staff download (migration 035).
+    supabase
+      .from('count_sheet_templates')
+      .select('file_name, created_at')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle<{ file_name: string; created_at: string }>(),
   ])
   const sheets = (sheetRows ?? []) as {
     id: string
@@ -152,6 +160,8 @@ export default async function StoreCountsPage({
           asks, and at the end of every month.
         </p>
       </div>
+
+      <CountTemplateCard current={template ?? null} canUpload={isAdmin} />
 
       <CountRequests
         people={people}

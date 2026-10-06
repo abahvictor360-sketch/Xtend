@@ -25,16 +25,19 @@ const ACCEPTED: Record<string, string> = {
 const MAX_BYTES = 10 * 1024 * 1024
 
 /**
- * Counting on paper: download the store's count sheet, fill it in (on the
+ * Counting on paper: download the office's count sheet, fill it in (on the
  * phone, or printed and by pen), and send it back as a PDF or a photo. The
  * file is kept with the store's count for the office to open.
  */
 export function CountSheetPanel({
   stores,
   sent,
+  hasTemplate,
 }: {
   stores: { id: string; name: string }[]
   sent: SentSheet[]
+  /** Whether an admin has uploaded the blank count sheet yet. */
+  hasTemplate: boolean
 }) {
   const router = useRouter()
   const input = useRef<HTMLInputElement>(null)
@@ -99,7 +102,7 @@ export function CountSheetPanel({
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
           Download the count sheet, fill it in on your phone or print it and fill it by pen, then
-          send it back here as a PDF or a photo.
+          upload it here as a PDF or a photo, for the store you counted.
         </p>
       </div>
 
@@ -120,14 +123,20 @@ export function CountSheetPanel({
       {notice && <Alert variant="success">{notice}</Alert>}
 
       <div className="grid gap-2 sm:grid-cols-2">
-        <a
-          href={`/api/store-counts/template?outlet_id=${storeId}`}
-          download
-          className={buttonVariants({ variant: 'outline', className: 'h-11' })}
-        >
-          <Download className="h-4 w-4" />
-          Download sheet
-        </a>
+        {hasTemplate ? (
+          <a
+            href="/api/store-counts/template"
+            download
+            className={buttonVariants({ variant: 'outline', className: 'h-11' })}
+          >
+            <Download className="h-4 w-4" />
+            Download sheet
+          </a>
+        ) : (
+          <p className="flex items-center rounded-xl bg-muted px-3 text-xs text-muted-foreground">
+            The office has not uploaded the count sheet yet. You can still upload one you have.
+          </p>
+        )}
         <Button type="button" className="h-11" disabled={busy !== null} onClick={() => input.current?.click()}>
           <Upload className="h-4 w-4" />
           {busy ?? 'Upload filled sheet'}

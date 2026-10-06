@@ -34,24 +34,27 @@ export default async function StoreCountPage() {
 
   // Today's figures, the products from their last count at each store, and
   // every name counted so far, for suggestions while typing.
-  const [{ data: outlets }, { data: mine }, { data: names }, { data: sheets }] = await Promise.all([
-    supabase.rpc('my_outlets'),
-    supabase
-      .from('store_count_detail')
-      .select('outlet_id, product_name, in_store, sold, count_date')
-      .eq('user_id', session.userId)
-      .order('count_date', { ascending: false })
-      .order('product_name')
-      .limit(1000),
-    supabase.rpc('counted_product_names'),
-    // Paper count sheets sent today (migration 035).
-    supabase
-      .from('store_count_sheet_detail')
-      .select('id, outlet_name, file_name, created_at')
-      .eq('user_id', session.userId)
-      .eq('count_date', businessDate)
-      .order('created_at', { ascending: false }),
-  ])
+  const [{ data: outlets }, { data: mine }, { data: names }, { data: sheets }, { count: templates }] =
+    await Promise.all([
+      supabase.rpc('my_outlets'),
+      supabase
+        .from('store_count_detail')
+        .select('outlet_id, product_name, in_store, sold, count_date')
+        .eq('user_id', session.userId)
+        .order('count_date', { ascending: false })
+        .order('product_name')
+        .limit(1000),
+      supabase.rpc('counted_product_names'),
+      // Paper count sheets sent today (migration 035).
+      supabase
+        .from('store_count_sheet_detail')
+        .select('id, outlet_name, file_name, created_at')
+        .eq('user_id', session.userId)
+        .eq('count_date', businessDate)
+        .order('created_at', { ascending: false }),
+      // Whether an admin has uploaded the blank count sheet.
+      supabase.from('count_sheet_templates').select('id', { count: 'exact', head: true }),
+    ])
 
   const rows = (mine ?? []) as {
     outlet_id: string
@@ -96,7 +99,11 @@ export default async function StoreCountPage() {
       }
     >
       <div className="space-y-4">
-        <CountSheetPanel stores={stores} sent={(sheets ?? []) as SentSheet[]} />
+        <CountSheetPanel
+          stores={stores}
+          sent={(sheets ?? []) as SentSheet[]}
+          hasTemplate={(templates ?? 0) > 0}
+        />
         <StoreCountForm
           stores={stores}
           today={todays}

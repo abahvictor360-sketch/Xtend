@@ -1,61 +1,42 @@
-import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { apiError, requireApiSession } from '@/lib/auth'
-import { getCountStatus } from '@/lib/store-count-status'
-import { renderCountSheet } from '@/lib/count-sheet'
-
-const query = z.object({ outlet_id: z.string().uuid() })
 
 /**
- * The count sheet for one of the caller's stores, as a PDF to fill in on
- * the phone or print. The products from their last count there are filled
- * in. Available whenever, so a sheet can be printed ahead of the count.
+ * The blank count sheet an admin uploaded (migration 035), for staff to
+ * fill in. Anyone signed in may download it. The file sits in the admin's
+ * folder, which staff cannot read, so it is fetched with the service role
+ * once the table, read as the caller, has said which file it is.
  */
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const session = await requireApiSession(['merchandiser', 'marketer', 'admin'])
-    const parsed = query.safeParse(Object.fromEntries(new URL(request.url).searchParams))
-    if (!parsed.success) return Response.json({ error: 'Pick a store' }, { status: 400 })
-
+    await requireApiSession()
     const supabase = await createServerSupabase()
-    const { data: mine } = await supabase.rpc('my_outlets')
-    const store = ((mine ?? []) as { id: string; name: string }[]).find(
-      (o) => o.id === parsed.data.outlet_id,
-    )
-    if (!store) return Response.json({ error: 'That store is not one of yours' }, { status: 403 })
+    const { data: template } = await supabase
+      .from('count_sheet_templates')
+      .select('path, file_name')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle<{ path: string; file_name: string }>()
+    if (!template) {
+      return Response.json(
+        { error: 'The office has not uploaded a count sheet yet.' },
+        { status: 404 },
+      )
+    }
 
-    const [{ data: today }, status, { data: counted }] = await Promise.all([
-      supabase.rpc('business_date'),
-      getCountStatus(supabase),
-      supabase
-        .from('store_count_detail')
-        .select('product_name, count_date')
-        .eq('user_id', session.userId)
-        .eq('outlet_id', store.id)
-        .order('count_date', { ascending: false })
-        .order('product_name')
-        .limit(500),
-    ])
+    const { data: file, error } = await createAdminSupabase()
+      .storage.from('reports')
+      .download(template.path)
+    if (error || !file) {
+      return Response.json({ error: 'The count sheet could not be loaded.' }, { status: 502 })
+    }
 
-    // The products of the most recent count at this store.
-    const rows = (counted ?? []) as { product_name: string; count_date: string }[]
-    const last = rows[0]?.count_date
-    const products = rows.filter((r) => r.count_date === last).map((r) => r.product_name)
-
-    const date = (today as string) ?? new Date().toISOString().slice(0, 10)
-    const pdf = await renderCountSheet({
-      storeName: store.name,
-      staffName: session.profile.full_name,
-      date,
-      occasion: status.open && status.reason === 'request' ? 'Requested count' : 'Month-end count',
-      products,
-    })
-
-    const file = `count-sheet-${store.name.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase()}-${date}.pdf`
-    return new Response(Buffer.from(pdf), {
+    const name = template.file_name.replace(/[^\w .()-]+/g, '_')
+    return new Response(file, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="${file}"`,
+        'Content-Disposition': `attachment; filename="${name}"`,
         'Cache-Control': 'no-store',
       },
     })

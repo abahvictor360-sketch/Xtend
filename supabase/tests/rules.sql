@@ -2062,7 +2062,36 @@ begin
     exception when others then
       perform assert(sqlerrm like '%already been sent%', 'the same file cannot be sent twice');
     end;
+
+    -- The blank sheet comes from an admin, as a PDF.
+    insert into storage.objects (bucket_id, name, metadata) values
+      ('reports', sade || '/template.pdf', '{"mimetype":"application/pdf","size":5000}');
+    begin
+      perform public.set_count_sheet_template(sade || '/template.pdf', 'Xpel count sheet.pdf');
+      perform assert(false, 'only an admin sets the count sheet');
+    exception when others then
+      perform assert(sqlerrm like '%Only an admin%', 'only an admin sets the count sheet');
+    end;
     perform act_as(boss);
+    insert into storage.objects (bucket_id, name, metadata) values
+      ('reports', boss || '/template.pdf', '{"mimetype":"application/pdf","size":5000}'),
+      ('reports', boss || '/template.docx', '{"mimetype":"application/vnd.openxmlformats-officedocument.wordprocessingml.document","size":5000}');
+    begin
+      perform public.set_count_sheet_template(boss || '/template.docx', 'sheet.docx');
+      perform assert(false, 'the count sheet must be a PDF');
+    exception when others then
+      perform assert(sqlerrm like '%must be a PDF%', 'the count sheet must be a PDF');
+    end;
+    begin
+      perform public.set_count_sheet_template(sade || '/template.pdf', 'sheet.pdf');
+      perform assert(false, 'an admin uploads the sheet from their own folder');
+    exception when others then
+      perform assert(sqlerrm like '%Upload the count sheet again%', 'an admin uploads the sheet from their own folder');
+    end;
+    perform public.set_count_sheet_template(boss || '/template.pdf', 'Xpel count sheet.pdf');
+    perform assert(
+      (select file_name from public.count_sheet_templates order by created_at desc limit 1) = 'Xpel count sheet.pdf',
+      'an admin''s PDF becomes the count sheet staff download');
   end;
 
   raise notice 'ALL RULES PASSED';

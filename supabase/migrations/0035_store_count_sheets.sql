@@ -1,17 +1,18 @@
 -- =====================================================================
 -- XTEND migration 035 — paper count sheets
 --
--- A merchandiser may count on paper: they download the store's count
--- sheet (a PDF Xtend makes), fill it in by hand or on the phone, and
--- upload it. The file is kept with that store's count for admins and
--- supervisors to open. Its figures are not read into Xtend, so they are
--- not in the dashboard totals or the missing-stock checks; an uploaded
--- sheet does count as having counted when a count was asked for.
+-- Xpel counts on its own paper count sheet. An admin uploads that sheet
+-- (a PDF) once; merchandisers download it, fill it in by hand or on the
+-- phone, and upload it back. The filled sheet is kept with that store's
+-- count for admins and supervisors to open. Its figures are not read into
+-- Xtend, so they are not in the dashboard totals or the missing-stock
+-- checks; a filled sheet does count as having counted when a count was
+-- asked for.
 --
--- The rules are the ones a typed count follows: a count must be due, the
--- store must be one of theirs, and the file must have been uploaded just
--- now into their own folder. What the file is and how big it is are read
--- from storage, not taken from the phone.
+-- A filled sheet follows the rules a typed count does: a count must be
+-- due, the store must be one of theirs, and the file must have been
+-- uploaded just now into their own folder. What the file is and how big
+-- it is are read from storage, not taken from the phone.
 -- =====================================================================
 
 do $$
@@ -110,6 +111,66 @@ $$;
 
 revoke all on function public.submit_count_sheet(uuid, text, text) from public, anon;
 grant execute on function public.submit_count_sheet(uuid, text, text) to authenticated, service_role;
+
+-- ---------------------------------------------------------------------
+-- The blank count sheet, uploaded by an admin. The newest one is the one
+-- staff download; older ones are kept so a past upload is still explained.
+-- ---------------------------------------------------------------------
+create table if not exists public.count_sheet_templates (
+  id           uuid primary key default gen_random_uuid(),
+  path         text not null unique,
+  file_name    text not null check (length(file_name) between 1 and 200),
+  size_bytes   bigint not null,
+  uploaded_by  uuid references public.profiles(id) on delete set null,
+  created_at   timestamptz not null default now()
+);
+
+alter table public.count_sheet_templates enable row level security;
+
+drop policy if exists count_sheet_templates_read on public.count_sheet_templates;
+create policy count_sheet_templates_read on public.count_sheet_templates
+  for select using (auth.uid() is not null);
+
+revoke insert, update, delete, truncate on public.count_sheet_templates from anon, authenticated;
+
+create or replace function public.set_count_sheet_template(p_path text, p_file_name text)
+returns uuid
+language plpgsql security definer set search_path = public, storage as $$
+declare
+  obj record;
+  clean_name text := left(btrim(regexp_replace(coalesce(p_file_name, ''), '[\r\n\t/\\]+', ' ', 'g')), 200);
+  new_id uuid;
+begin
+  if not public.is_admin() then
+    raise exception 'Only an admin can change the count sheet';
+  end if;
+
+  select o.metadata->>'mimetype' as mimetype, (o.metadata->>'size')::bigint as size
+    into obj
+  from storage.objects o
+  where o.bucket_id = 'reports'
+    and o.name = p_path
+    and p_path like auth.uid()::text || '/%'
+    and o.created_at >= now() - interval '30 minutes';
+  if not found then
+    raise exception 'Upload the count sheet again, then save it';
+  end if;
+  if lower(coalesce(obj.mimetype, '')) <> 'application/pdf' then
+    raise exception 'The count sheet must be a PDF';
+  end if;
+  if coalesce(obj.size, 0) <= 0 or obj.size > 10 * 1024 * 1024 then
+    raise exception 'The count sheet must be smaller than 10 MB';
+  end if;
+
+  insert into public.count_sheet_templates (path, file_name, size_bytes, uploaded_by)
+  values (p_path, coalesce(nullif(clean_name, ''), 'Count sheet.pdf'), obj.size, auth.uid())
+  returning id into new_id;
+  return new_id;
+end;
+$$;
+
+revoke all on function public.set_count_sheet_template(text, text) from public, anon;
+grant execute on function public.set_count_sheet_template(text, text) to authenticated, service_role;
 
 -- READ MODEL: sheets with who sent them and for which store.
 create or replace view public.store_count_sheet_detail
