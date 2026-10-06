@@ -1,6 +1,7 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { cronAuthorized } from '@/lib/cron'
 import { notifyWatchers } from '@/lib/notify'
+import { flushFlagAlerts } from '@/lib/flag-alerts'
 import { dbErrorMessage } from '@/lib/auth'
 
 export const maxDuration = 60
@@ -63,7 +64,11 @@ export async function GET(request: Request) {
     reported += 1
   }
 
+  // And anything flagged that nobody has been told about yet.
+  const flags_sent = await flushFlagAlerts()
+
   return Response.json({
+    flags_sent,
     checked_at: new Date().toISOString(),
     grace_minutes: graceMinutes,
     absent: absent.length,

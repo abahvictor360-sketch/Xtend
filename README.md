@@ -53,6 +53,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0033_native_push.sql  # notifications from the Android and iOS apps
    supabase/migrations/0034_stores_pinned_from_clock_in.sql  # stores without a location, pinned from clock-ins
    supabase/migrations/0035_store_count_sheets.sql  # paper count sheets, downloaded and sent back
+   supabase/migrations/0036_supervisor_alerts.sql  # late, early and flagged activity pushed to supervisors
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
@@ -84,6 +85,18 @@ flow over a plain-HTTP LAN address will fail at the location gate, correctly.
 Vercel picks up `vercel.json`, which schedules `/api/cron/purge-selfies`
 nightly at 02:20 UTC (03:20 Lagos). Set `CRON_SECRET` in the project; the route
 refuses anything without the matching bearer token.
+
+On a VPS nothing reads `vercel.json`, so schedule the jobs in the server's
+crontab instead (times in UTC; `$CRON_SECRET` as in the app's environment):
+
+```
+20 2 * * *      curl -s -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/purge-selfies
+30 8 * * 1-6    curl -s -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/absence-sweep
+0-59/5 * * * *  curl -s -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/alerts
+```
+
+The last one sends any integrity flag (late in, early out, a faked location
+and so on) that was not already pushed to the supervisor when it was raised.
 
 ## What is where
 

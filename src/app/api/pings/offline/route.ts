@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/auth'
+import { flushFlagAlerts } from '@/lib/flag-alerts'
 
 const schema = z.object({
   /** The phone's clock when it sent these, to correct a wrong one. */
@@ -39,6 +40,10 @@ export async function POST(request: Request) {
       const missing = error.code === 'PGRST202' || error.code === '42883'
       return Response.json({ error: dbErrorMessage(error) }, { status: missing ? 503 : 400 })
     }
+
+    // Any flag this raised goes to the person's admins and supervisor now.
+    await flushFlagAlerts()
+
     return Response.json({ kept: data as number })
   } catch (error) {
     return apiError(error)
