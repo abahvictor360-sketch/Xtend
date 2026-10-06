@@ -9,12 +9,22 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const session = await requireSession(['admin', 'supervisor'])
   const readOnly = session.profile.role === 'supervisor'
 
-  // Open alerts, for the bell. RLS narrows it to a supervisor's own team.
+  // Open alerts, for the bell: location alerts and the late, early and
+  // suspicious activity still to review. RLS narrows both to a
+  // supervisor's own team.
   const supabase = await createServerSupabase()
-  const { count: openAlerts } = await supabase
-    .from('location_alerts')
-    .select('id', { count: 'exact', head: true })
-    .eq('is_resolved', false)
+  const [{ count: location }, { count: flags }] = await Promise.all([
+    supabase
+      .from('location_alerts')
+      .select('id', { count: 'exact', head: true })
+      .eq('is_resolved', false),
+    supabase
+      .from('integrity_flags')
+      .select('id', { count: 'exact', head: true })
+      .is('reviewed_at', null)
+      .in('severity', ['medium', 'high']),
+  ])
+  const openAlerts = location === null && flags === null ? null : (location ?? 0) + (flags ?? 0)
 
   return (
     <AdminFrame

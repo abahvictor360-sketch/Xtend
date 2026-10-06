@@ -1,7 +1,6 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
 import { MapPin } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
@@ -55,22 +54,6 @@ export function AlertsList({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-semibold">Alerts</h1>
-          <p className="text-sm text-muted-foreground">
-            {resolved ? 'Resolved alerts.' : 'Unresolved alerts, newest first.'} Every resolution is
-            written to the audit log.
-          </p>
-        </div>
-        <Link
-          href={resolved ? '/admin/alerts' : '/admin/alerts?show=resolved'}
-          className="text-sm text-primary"
-        >
-          {resolved ? 'Show unresolved' : 'Show resolved'}
-        </Link>
-      </div>
-
       {error && <Alert variant="destructive">{error}</Alert>}
 
       {alerts.length === 0 ? (
