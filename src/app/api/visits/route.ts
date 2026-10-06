@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, REPORTING_ROLES, dbErrorMessage } from '@/lib/auth'
 import { notifyWatchers } from '@/lib/notify'
+import { flushFlagAlerts } from '@/lib/flag-alerts'
 
 /**
  * Check in to a store. Naming the store is optional: left out, the
@@ -112,6 +113,9 @@ export async function POST(request: Request) {
         detail: { kind: 'store_visit_off_site', visit_id: data.id },
       })
     }
+
+    // Any flag this raised goes to the person's admins and supervisor now.
+    await flushFlagAlerts()
 
     return Response.json(
       {

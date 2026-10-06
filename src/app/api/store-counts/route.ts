@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
+import { flushFlagAlerts } from '@/lib/flag-alerts'
 
 const schema = z.object({
   outlet_id: z.string().uuid(),
@@ -51,6 +52,9 @@ export async function POST(request: Request) {
       p_photo_path: parsed.data.photo_path,
     })
     if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
+
+    // Any flag this raised goes to the person's admins and supervisor now.
+    await flushFlagAlerts()
 
     return Response.json({ saved: data ?? 0 }, { status: 201 })
   } catch (error) {

@@ -6,8 +6,19 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { usePush } from '@/components/field/use-push'
 
-/** One switch, on the account screen, for this device's notifications. */
-export function PushToggle() {
+/**
+ * One switch for this device's notifications: on the staff account screen,
+ * and on the dashboard's Alerts page, where it is what lets an admin or
+ * supervisor be told about their staff at all.
+ */
+export function PushToggle({
+  title = 'Notifications',
+  hint,
+}: {
+  title?: string
+  /** What turning it on gets you; shown while it is off. */
+  hint?: string
+} = {}) {
   const { state, error, enable, disable } = usePush()
 
   const label =
@@ -38,10 +49,11 @@ export function PushToggle() {
 
         <div className="min-w-0 flex-1">
           <p className="flex items-center gap-2 text-sm font-bold">
-            Notifications
+            {title}
             {state === 'on' && <Badge variant="success">On</Badge>}
           </p>
           <p className="mt-0.5 text-xs text-muted-foreground">{label}</p>
+          {hint && state === 'off' && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
           {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
           {state === 'denied' && (
             <p className="mt-1 text-xs text-muted-foreground">
