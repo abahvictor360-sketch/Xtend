@@ -1639,9 +1639,20 @@ begin
     exception when others then
       perform assert(sqlerrm like '%Turn on Xtend notifications%', 'no clock-in with notifications off');
     end;
-    insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)
-    values (femi, 'https://example.com/made-up', 'k', 'a');
-    perform assert(not public.has_live_push(femi), 'a made-up notification address does not count');
+    -- The server POSTs to these addresses, so only real push services (038).
+    foreach used_path in array array[
+      'https://example.com/made-up', 'http://127.0.0.1:5432/', 'http://169.254.169.254/latest',
+      'https://fcm.googleapis.com@169.254.169.254/x', 'https://fcm.googleapis.com:8443/x'] loop
+      begin
+        insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)
+        values (femi, used_path, 'k', 'a');
+        perform assert(false, 'a notification address that is not a push service is refused: ' || used_path);
+      exception when check_violation then
+        null;
+      end;
+    end loop;
+    perform assert(not public.has_live_push(femi),
+      'a notification address that is not a push service is refused, and does not count');
     update public.profiles set push_exempt = true, outlet_id = null where id = femi;
     perform assert(
       (select not push_exempt and outlet_id = mall_id from public.profiles where id = femi),
@@ -1657,10 +1668,14 @@ begin
     insert into auth.users (id, email) values ('00000000-0000-4000-8000-0000000000a1', 'app@xpel.ng');
     insert into public.profiles (id, full_name, email, role, outlet_id)
     values ('00000000-0000-4000-8000-0000000000a1', 'App User', 'app@xpel.ng', 'merchandiser', mall_id);
-    insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)
-    values ('00000000-0000-4000-8000-0000000000a1', 'native-fcm:short', 'native', 'native');
-    perform assert(not public.has_live_push('00000000-0000-4000-8000-0000000000a1'),
-      'a made-up app token does not count');
+    begin
+      insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)
+      values ('00000000-0000-4000-8000-0000000000a1', 'native-fcm:short', 'native', 'native');
+      perform assert(false, 'a made-up app token is refused');
+    exception when check_violation then
+      perform assert(not public.has_live_push('00000000-0000-4000-8000-0000000000a1'),
+        'a made-up app token is refused, and does not count');
+    end;
     insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)
     values ('00000000-0000-4000-8000-0000000000a1',
             'native-apns:' || repeat('a1b2c3d4', 8), 'native', 'native');
@@ -1834,7 +1849,10 @@ begin
       and not exists (select 1 from jsonb_array_elements(got->'contacts') c where c->>'what' = 'location'),
       'for an excuse, offline positions show the phone was on, not that it had network');
     perform assert(
-      exists (select 1 from jsonb_array_elements(public.movement_trail(femi, public.business_date())->'points') e
+      -- The day the offline positions were taken, which just after
+      -- midnight is yesterday.
+      exists (select 1 from jsonb_array_elements(public.movement_trail(femi,
+                (now() at time zone 'Africa/Lagos' - interval '15 minutes')::date)->'points') e
               where e->>'kind' = 'location_offline'),
       'the route marks positions that were saved offline');
 

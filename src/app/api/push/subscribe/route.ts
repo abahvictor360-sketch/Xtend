@@ -1,9 +1,14 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
+import { isWebPushEndpoint } from '@/lib/push-endpoint'
 
 const schema = z.object({
-  endpoint: z.string().url().max(1000),
+  // Only a real push service: the server sends to this address later.
+  endpoint: z
+    .string()
+    .max(1000)
+    .refine(isWebPushEndpoint, 'That is not a push service this app can use'),
   keys: z.object({ p256dh: z.string().min(1).max(300), auth: z.string().min(1).max(300) }),
 })
 

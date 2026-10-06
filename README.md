@@ -55,6 +55,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0035_store_count_sheets.sql  # paper count sheets, downloaded and sent back
    supabase/migrations/0036_supervisor_alerts.sql  # late, early and flagged activity pushed to supervisors
    supabase/migrations/0037_profile_photos.sql  # staff profile photos and first-run onboarding
+   supabase/migrations/0038_push_endpoint_guard.sql  # notifications go only to real push services
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
@@ -68,6 +69,8 @@ cp .env.example .env.local     # fill in your Supabase keys
    | `GEOCODER_USER_AGENT` | Contact string for Nominatim's usage policy |
    | `CREDENTIALS_WEBHOOK_URL` | Optional: relay that SMS/emails temporary passwords |
    | `ANTHROPIC_API_KEY` | Optional: turns on **Ask Xtend**, the attendance assistant |
+   | `TRUSTED_PROXY_HOPS` | Optional: proxies in front of the app (default 1: Nginx, Caddy or Vercel; 2 with Cloudflare in front). Used to read the real caller IP |
+   | `IP_API_KEY` | Optional: ip-api.com key, so the VPN check looks IPs up over HTTPS instead of plain HTTP |
 
 3. **Bootstrap the first admin.** There is no public signup:
 
