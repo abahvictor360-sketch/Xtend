@@ -1,0 +1,248 @@
+import Link from 'next/link'
+import {
+  BarChart3,
+  Bell,
+  ClipboardList,
+  Headset,
+  LayoutDashboard,
+  MessageSquareText,
+  PackageSearch,
+  Rocket,
+  Route,
+  ShieldAlert,
+  Smartphone,
+  Store,
+  Users,
+} from 'lucide-react'
+import { requireSession } from '@/lib/auth'
+import {
+  GuideContents,
+  GuideSection,
+  Questions,
+  Steps,
+  Tip,
+  Ui,
+  type GuideTopic,
+} from '@/components/guide'
+
+export const dynamic = 'force-dynamic'
+export const metadata = { title: 'Guide — Xtend' }
+
+const T = {
+  setup: { id: 'set-up', title: 'Setting up', icon: Rocket },
+  staff: { id: 'staff', title: 'Staff and teams', icon: Users },
+  apps: { id: 'apps', title: 'Getting staff on the app', icon: Smartphone },
+  overview: { id: 'overview', title: 'The overview', icon: LayoutDashboard },
+  attendance: { id: 'attendance', title: 'Attendance and exports', icon: ClipboardList },
+  movement: { id: 'movement', title: 'Movement and store visits', icon: Route },
+  alerts: { id: 'alerts', title: 'Alerts and checks', icon: ShieldAlert },
+  counts: { id: 'store-counts', title: 'Store counts', icon: PackageSearch },
+  support: { id: 'support', title: 'Support messages', icon: Headset },
+  notify: { id: 'notifications', title: 'Notifications', icon: Bell },
+  ask: { id: 'ask', title: 'Ask Xtend and analytics', icon: MessageSquareText },
+  faq: { id: 'questions', title: 'Questions', icon: BarChart3 },
+} satisfies Record<string, GuideTopic>
+
+/** How to run Xtend, for admins and supervisors. Staff have /guide. */
+export default async function AdminGuidePage() {
+  const session = await requireSession(['admin', 'supervisor'])
+  const isAdmin = session.profile.role === 'admin'
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight">How to use Xtend</h1>
+        <p className="text-sm text-muted-foreground">
+          {isAdmin
+            ? 'For admins and supervisors. Parts marked “admins only” are hidden from supervisors.'
+            : 'For supervisors. Everything here covers your own team.'}{' '}
+          Staff have their own guide at{' '}
+          <Link href="/guide" className="font-semibold text-brand hover:underline">
+            /guide
+          </Link>
+          , which you can share with them.
+        </p>
+      </div>
+
+      <GuideContents topics={Object.values(T)} />
+
+      <div className="grid gap-5 xl:grid-cols-2">
+        <GuideSection topic={T.setup} intro="Do this once, before staff start clocking in.">
+          <Steps
+            items={[
+              <>
+                <Ui>Outlets</Ui> (admins only): add each store with its address and map position,
+                its shift start time and its radius (a small kiosk needs a small radius). A store
+                that is not on any map can be added without a location; it is pinned later from
+                where staff clock in, on <Ui>Places</Ui>.
+              </>,
+              <>
+                <Ui>Staff</Ui>: add everyone (one by one, or <Ui>Bulk import CSV</Ui>). Choose the
+                role: merchandiser, marketer, supervisor or admin.
+              </>,
+              <>
+                <Ui>Store allocation</Ui>: give each merchandiser their store, so their clock-in is
+                measured against it. Marketers do not need one.
+              </>,
+              <>
+                <Ui>Teams</Ui> (admins only): put merchandisers and marketers under a supervisor.
+              </>,
+            ]}
+          />
+        </GuideSection>
+
+        <GuideSection topic={T.staff} intro="People pages, under People in the menu.">
+          <p>
+            On <Ui>Staff</Ui>, <Ui>Add staff</Ui> creates an account and shows a temporary
+            password (Xtend also tries to send it). The person chooses their own password at first
+            sign-in. From the same list you can reset a password, change someone&apos;s store or
+            supervisor, or deactivate them: their history is kept.
+          </p>
+          <p>
+            On <Ui>Teams</Ui>, pick <Ui>All</Ui>, <Ui>Merchandisers</Ui> or <Ui>Marketers</Ui>,
+            tick people (or <Ui>Select all shown</Ui>), choose a supervisor and click{' '}
+            <Ui>Assign to supervisor</Ui>.
+          </p>
+          <Tip>
+            Supervisors can add merchandisers and marketers, who join their own team, and reset their
+            passwords. Only admins create supervisors and admins or move people between teams.
+          </Tip>
+        </GuideSection>
+
+        <GuideSection topic={T.apps} intro="Staff use the Android or iPhone app, or Chrome.">
+          <Steps
+            items={[
+              <>
+                Share{' '}
+                <Link href="/download" className="font-semibold text-brand hover:underline">
+                  the download page
+                </Link>{' '}
+                with your staff (it has a QR code for computers), and{' '}
+                <Link href="/guide" className="font-semibold text-brand hover:underline">
+                  the staff guide
+                </Link>
+                .
+              </>,
+              <>
+                Each person signs in, chooses a password, allows location and camera, and turns on
+                notifications. Clocking in needs notifications on; the Staff page shows who has them.
+              </>,
+            ]}
+          />
+        </GuideSection>
+
+        <GuideSection topic={T.overview} intro="The first page you see each day.">
+          <p>
+            The week&apos;s clock-ins (point at a day for its figures), today&apos;s clocked in,
+            late and not-in-store counts, who has not clocked in yet, open alerts, location
+            coverage and everyone on shift. The tip card suggests the next thing worth doing. Use
+            the search box at the top to find anyone on the Staff page.
+          </p>
+        </GuideSection>
+
+        <GuideSection topic={T.attendance} intro="Every clock-in and clock-out, with filters.">
+          <p>
+            On <Ui>Attendance</Ui>, filter by dates, person, outlet, status and type, then export
+            the same view as <Ui>Excel</Ui>, <Ui>Word</Ui>, <Ui>PDF</Ui> or <Ui>CSV</Ui>. Records
+            cannot be edited or deleted. Times are Lagos time.
+          </p>
+        </GuideSection>
+
+        <GuideSection topic={T.movement} intro="Where people are during their shift.">
+          <p>
+            <Ui>Movement</Ui> shows everyone on shift on a map, and any one person&apos;s day as a
+            route: clock-in, positions while on shift, store check-ins and clock-out.{' '}
+            <Ui>Store visits</Ui> lists each person&apos;s rounds: which stores, for how long, and
+            downloads as PDF, Word or Excel.
+          </p>
+        </GuideSection>
+
+        <GuideSection topic={T.alerts} intro="Things that need a look.">
+          <ul className="list-disc space-y-2 pl-5">
+            <li>
+              <Ui>Alerts</Ui>: someone left their store during a shift, clocked in away from it,
+              or had location off. Check, then resolve each one.
+            </li>
+            <li>
+              <Ui>Integrity</Ui>: signs of a fake-location app, a rooted phone, a VPN, or store
+              counts that do not add up. A flag is a reason to ask, not proof; mark it reviewed with
+              what you found.
+            </li>
+            <li>
+              <Ui>Check an excuse</Ui>: someone says their network was bad or their phone was off?
+              Pick who, when and what they said, and Xtend shows what it heard from their phone in
+              that time.
+            </li>
+          </ul>
+        </GuideSection>
+
+        <GuideSection topic={T.counts} intro="Stock in each store.">
+          <p>
+            Merchandisers count what is on the shelf at the end of every month, and whenever you
+            request a count on <Ui>Store counts</Ui>. Each count shows what is left, what was sold
+            and a shelf photo.
+          </p>
+        </GuideSection>
+
+        <GuideSection topic={T.support} intro="Problems staff raise in the app.">
+          <p>
+            The Xtend helper answers simple questions. Anything marked{' '}
+            <Ui>With the office</Ui> needs a person: open it on <Ui>Support</Ui> and reply. The
+            staff member gets your reply in their app.
+          </p>
+        </GuideSection>
+
+        <GuideSection topic={T.notify} intro="Reach staff phones directly.">
+          <p>
+            On <Ui>Notifications</Ui>, write a message and send it.{' '}
+            {isAdmin
+              ? 'Admins can reach everyone, one role, one outlet, or named people.'
+              : 'As a supervisor you reach the staff at your own outlet.'}
+          </p>
+        </GuideSection>
+
+        <GuideSection topic={T.ask} intro="Answers without digging.">
+          <p>
+            <Ui>Ask Xtend</Ui> answers plain questions such as “who clocked in late today?” or
+            “who has not clocked out?”. <Ui>Analytics</Ui> shows lateness and attendance over a
+            period, measured against each store&apos;s shift start.
+          </p>
+        </GuideSection>
+
+        <GuideSection topic={T.faq}>
+          <Questions
+            items={[
+              {
+                q: 'Someone cannot clock in',
+                a: (
+                  <>
+                    Most often notifications or location are off on their phone; the staff guide
+                    walks them through it. Check they are active on Staff and, for a merchandiser,
+                    that they have a store on Store allocation.
+                  </>
+                ),
+              },
+              {
+                q: 'Someone forgot their password',
+                a: <>Reset it on the Staff page. They choose a new one when they sign in.</>,
+              },
+              {
+                q: 'Someone left the company',
+                a: <>Deactivate them on the Staff page. Their attendance history stays.</>,
+              },
+              {
+                q: 'A store’s location is wrong',
+                a: (
+                  <>
+                    An admin corrects it on Outlets, or confirms the right spot on Places from
+                    where staff actually clock in.
+                  </>
+                ),
+              },
+            ]}
+          />
+        </GuideSection>
+      </div>
+    </div>
+  )
+}

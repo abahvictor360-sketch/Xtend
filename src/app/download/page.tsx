@@ -136,7 +136,11 @@ export default async function DownloadPage() {
               <ArrowRight className="inline h-4 w-4 align-[-3px]" />
             </Link>
             <p className="max-w-sm text-xs text-muted-foreground">
-              Having trouble installing? Ask your supervisor or admin.
+              New to Xtend?{' '}
+              <Link href="/guide" className="font-semibold text-brand hover:underline">
+                Read the guide
+              </Link>
+              . Having trouble installing? Ask your supervisor or admin.
             </p>
             <XpelLockup width={120} className="mt-4 opacity-90" />
           </section>
