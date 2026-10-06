@@ -17,8 +17,8 @@ export async function createServerSupabase() {
               cookieStore.set(name, value, options),
             )
           } catch {
-            // Called from a Server Component. The middleware refreshes the
-            // session cookie instead; nothing to do here.
+            // Called from a Server Component. The middleware
+            // (src/middleware.ts) refreshes the session cookie instead.
           }
         },
       },
