@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/auth'
 import { notifyWatchers } from '@/lib/notify'
+import { flushFlagAlerts } from '@/lib/flag-alerts'
 import { clientIp } from '@/lib/ip-geo'
 import { evaluateLocationIntegrity } from '@/lib/integrity-signals'
 
@@ -144,30 +145,16 @@ export async function POST(request: Request) {
         })
       }
 
-      // A VPN or a far-apart IP means someone is likely clocking in from
-      // somewhere other than where the pin says, even when the pin lands
-      // on-site. That is worth telling the office now.
-      const serious = signals.find(
-        (s) =>
-          s.kind === 'vpn_suspected' ||
-          s.kind === 'ip_location_mismatch' ||
-          s.kind === 'mock_location_confirmed' ||
-          s.kind === 'device_integrity_failed',
-      )
-      if (serious) {
-        await notifyWatchers({
-          subjectId: session.userId,
-          title: `${session.profile.full_name}: clock-in location looks manipulated`,
-          body: `${serious.summary}. Check the Integrity page.`,
-          url: '/admin/integrity',
-          detail: { kind: 'integrity_signal', attendance_id: data.id, signal: serious.kind },
-        })
-      }
-
+      // Anything serious those checks found (a VPN, a fake GPS app) is
+      // pushed to the watchers with every other new flag, below.
       void ip
     } catch {
       // Checks are best-effort; the clock-in already succeeded.
     }
+
+    // New flags from this clock-in (late, early, a VPN, a jump across the
+    // country...) go to the person's admins and supervisor now.
+    await flushFlagAlerts()
 
     // The trigger measures against whichever of the person's stores they
     // are nearest, which may not be their home outlet, so the response says

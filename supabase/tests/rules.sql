@@ -1848,7 +1848,7 @@ begin
     perform act_as(tunde);
   end;
 
-  -- Profile photos and onboarding (036).
+  -- Profile photos and onboarding (037).
   declare
     kemi uuid := gen_random_uuid();
     yemi uuid := gen_random_uuid();
@@ -2129,6 +2129,90 @@ begin
     perform assert(
       (select file_name from public.count_sheet_templates order by created_at desc limit 1) = 'Xpel count sheet.pdf',
       'an admin''s PDF becomes the count sheet staff download');
+  end;
+
+  -- ---------------------------------------------------------------
+  -- Supervisors hear about it (036).
+  -- ---------------------------------------------------------------
+  declare
+    lola     uuid := gen_random_uuid();
+    lead     uuid := gen_random_uuid();
+    stranger uuid := gen_random_uuid();
+    early    uuid;
+    far      uuid;
+    local_now time := (now() at time zone 'Africa/Lagos')::time;
+    claimed  integer;
+  begin
+    perform act_as(boss);
+    insert into auth.users (id, email) values
+      (lola, 'lola@xpel.ng'), (lead, 'lead@xpel.ng'), (stranger, 'stranger@xpel.ng');
+    insert into public.outlets (name, lat, lng) values ('Lead''s own store', 6.2, 3.2) returning id into far;
+    insert into public.outlets (name, lat, lng, shift_start, shift_end)
+    values ('Lola Store', 6.3, 3.3, '08:00', '18:00') returning id into early;
+    insert into public.profiles (id, full_name, email, role, outlet_id) values
+      (lead, 'Lead Supervisor', 'lead@xpel.ng', 'supervisor', far),
+      (stranger, 'Other Supervisor', 'stranger@xpel.ng', 'supervisor', far);
+    insert into public.profiles (id, full_name, email, role, outlet_id, supervisor_id)
+    values (lola, 'Lola Bello', 'lola@xpel.ng', 'merchandiser', early, lead);
+    update public.profiles set outlet_id = null where id = stranger;
+    perform notifications_on(lola);
+
+    perform assert(
+      exists (select 1 from public.alert_watchers(lola) w where w.user_id = lead),
+      'a supervisor is told about their team, even from another store');
+    perform assert(
+      not exists (select 1 from public.alert_watchers(lola) w where w.user_id = stranger),
+      'a supervisor is not told about somebody else''s team');
+    perform assert(
+      exists (select 1 from public.alert_watchers(lola) w where w.user_id = boss),
+      'admins are always told');
+
+    perform assert(
+      not exists (select 1 from public.claim_flag_alerts(200) c where c.created_at < now() - interval '1 minute'),
+      'flags from before alerts were pushed are not sent now');
+
+    -- Late: the shift started 40 minutes ago. (Skipped just after
+    -- midnight, when "40 minutes ago" was yesterday.)
+    if local_now > '01:30' and local_now < '22:00' then
+      update public.outlets
+      set shift_start = (local_now - interval '40 minutes')::time,
+          shift_end = (local_now + interval '30 minutes')::time
+      where id = early;
+      perform act_as(lola);
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+      values ('opening', 6.3, 3.3, 10, fresh_photo('selfies', 'lola-1.jpg'), now());
+      perform assert(
+        exists (select 1 from public.integrity_flags
+                where user_id = lola and kind = 'late_clock_in' and severity = 'medium'
+                  and summary like 'Clocked in % min late at Lola Store%'),
+        'clocking in 40 minutes after the shift starts is flagged');
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+      values ('closing', 6.3, 3.3, 10, fresh_photo('selfies', 'lola-2.jpg'), now());
+      perform assert(
+        exists (select 1 from public.integrity_flags
+                where user_id = lola and kind = 'early_clock_out' and summary like 'Clocked out % min early at Lola Store%'),
+        'clocking out 30 minutes before the shift ends is flagged');
+
+      perform act_as(boss);
+      select count(*) into claimed from public.claim_flag_alerts(200) c where c.user_id = lola;
+      perform assert(claimed = 2, 'each new flag is handed over to be sent');
+      select count(*) into claimed from public.claim_flag_alerts(200) c where c.user_id = lola;
+      perform assert(claimed = 0, 'and only once');
+    end if;
+
+    -- On time is not flagged.
+    perform act_as(boss);
+    delete from public.attendance where user_id = lola;
+    update public.outlets set shift_start = '00:00', shift_end = '23:59' where id = early;
+    delete from public.integrity_flags where user_id = lola;
+    perform act_as(lola);
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+    values ('opening', 6.3, 3.3, 10, fresh_photo('selfies', 'lola-3.jpg'),
+            (date_trunc('day', now() at time zone 'Africa/Lagos') + interval '5 minutes') at time zone 'Africa/Lagos');
+    perform assert(
+      not exists (select 1 from public.integrity_flags where user_id = lola and kind = 'late_clock_in'),
+      'clocking in within the grace period is not flagged');
+    perform act_as(boss);
   end;
 
   raise notice 'ALL RULES PASSED';

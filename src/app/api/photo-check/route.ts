@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/auth'
 import { judgePhoto, photoCheckConfigured, type PhotoKind, type PhotoSetting } from '@/lib/photo-check'
+import { flushFlagAlerts } from '@/lib/flag-alerts'
 
 export const maxDuration = 60
 
@@ -114,6 +115,9 @@ export async function POST(request: Request) {
         detail: { bucket, path, setting },
       })
     }
+
+    // Any flag this raised goes to the person's admins and supervisor now.
+    await flushFlagAlerts()
 
     return verdictResponse(verdict, message)
   } catch (error) {

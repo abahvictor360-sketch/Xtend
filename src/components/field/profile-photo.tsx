@@ -20,7 +20,7 @@ function initials(name: string) {
 /**
  * The person's profile photo, taken with the camera inside Xtend (no
  * gallery), so it is a current picture of them. Saved to their own folder
- * in the avatars bucket, then set with set_my_avatar (migration 036).
+ * in the avatars bucket, then set with set_my_avatar (migration 037).
  */
 export function ProfilePhoto({
   name,

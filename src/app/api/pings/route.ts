@@ -6,6 +6,7 @@ import { notifyWatchers } from '@/lib/notify'
 import { resolvePlace } from '@/lib/geocode'
 import { HEARTBEAT_GEOFENCE_M } from '@/lib/geo'
 import { sweepExpiredSelfies } from '@/lib/retention-server'
+import { flushFlagAlerts } from '@/lib/flag-alerts'
 
 const schema = z.object({
   lat: z.number().min(-90).max(90),
@@ -81,6 +82,9 @@ export async function POST(request: Request) {
       // A ping is never worth failing over a housekeeping job.
       console.error('selfie sweep failed', sweepError)
     }
+
+    // Any flag this raised goes to the person's admins and supervisor now.
+    await flushFlagAlerts()
 
     return Response.json({ ping: data }, { status: 201 })
   } catch (error) {

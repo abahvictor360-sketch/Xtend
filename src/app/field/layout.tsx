@@ -14,7 +14,7 @@ export const dynamic = 'force-dynamic'
  */
 export default async function FieldLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession(FIELD_ROLES)
-  // New staff see the walkthrough first, once (036). Undefined before the
+  // New staff see the walkthrough first, once (037). Undefined before the
   // migration runs, so nobody is sent there until it exists.
   if (session.profile.onboarded_at === null) redirect('/welcome')
 
