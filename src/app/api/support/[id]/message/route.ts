@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession, FIELD_ROLES } from '@/lib/auth'
+import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/auth'
 import { respondToSupportThread } from '@/lib/support-assistant'
 
 export const maxDuration = 60
@@ -23,7 +23,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       p_thread: id,
       p_body: parsed.data.body,
     })
-    if (error) return Response.json({ error: error.message }, { status: 400 })
+    if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
 
     const result = await respondToSupportThread(id)
     return Response.json({ reply: result.reply, escalated: result.escalated }, { status: 201 })

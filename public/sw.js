@@ -100,9 +100,19 @@ function answerCheck(check, stage) {
   }).catch(() => {})
 }
 
+function sameOrigin(url) {
+  try {
+    return new URL(url, self.location.origin).origin === self.location.origin
+  } catch (e) {
+    return false
+  }
+}
+
 self.addEventListener('notificationclick', (event) => {
   event.notification.close()
-  const target = (event.notification.data && event.notification.data.url) || '/field'
+  // Only ever a page in Xtend: a notification must not open another site.
+  const asked = (event.notification.data && event.notification.data.url) || '/field'
+  const target = sameOrigin(asked) ? asked : '/field'
   const check = event.notification.data && event.notification.data.check
   if (check) event.waitUntil(answerCheck(check, 'opened'))
 

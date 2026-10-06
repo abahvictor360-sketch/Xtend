@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowRight, Eye, EyeOff } from 'lucide-react'
-import { supabase } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -24,22 +23,16 @@ export function LoginForm() {
     setError(null)
 
     try {
-      // Staff sign in with an email or a phone number; Supabase needs email.
-      const res = await fetch('/api/auth/resolve-identifier', {
+      // The server resolves a phone number and signs in, so the email
+      // behind a phone number never reaches the browser.
+      const res = await fetch('/api/auth/sign-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier }),
+        body: JSON.stringify({ identifier, password }),
       })
-      const { email } = (await res.json()) as { email: string | null }
-
-      if (!email) {
-        setError('Those details are not correct.')
-        return
-      }
-
-      const { error: authError } = await supabase().auth.signInWithPassword({ email, password })
-      if (authError) {
-        setError('Those details are not correct.')
+      if (!res.ok) {
+        const { error: message } = (await res.json().catch(() => ({}))) as { error?: string }
+        setError(message ?? 'Those details are not correct.')
         return
       }
 

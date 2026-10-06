@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { pushToUsers } from '@/lib/push-users'
 import { pushConfigured } from '@/lib/push'
 
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     const { data: id, error } = await supabase.rpc('request_phone_check', {
       p_user: parsed.data.user_id,
     })
-    if (error) return Response.json({ error: error.message }, { status: 400 })
+    if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
 
     const admin = createAdminSupabase()
     const { data: check } = await admin

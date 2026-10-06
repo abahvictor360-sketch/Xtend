@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession, FIELD_ROLES } from '@/lib/auth'
+import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/auth'
 import { notifyWatchers } from '@/lib/notify'
 import { clientIp } from '@/lib/ip-geo'
 import { evaluateLocationIntegrity } from '@/lib/integrity-signals'
@@ -81,7 +81,7 @@ export async function POST(request: Request) {
           { status: 400 },
         )
       }
-      return Response.json({ error: error.message }, { status: 400 })
+      return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
     }
 
     // An off-site or flagged clock event is worth interrupting someone

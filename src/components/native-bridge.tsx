@@ -39,7 +39,8 @@ export function NativeBridge() {
       (action) => {
         const data = action.notification?.data
         answerCheck(data, 'opened')
-        if (data?.url && data.url.startsWith('/')) router.push(data.url)
+        // A page in Xtend only; '//host' would leave the app.
+        if (data?.url && /^\/(?![/\\])/.test(data.url)) router.push(data.url)
       },
     )
     return () => {

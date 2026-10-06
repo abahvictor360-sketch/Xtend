@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 
 const schema = z.object({
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
       .select('id')
       .single<{ id: string }>()
 
-    if (error) return Response.json({ error: error.message }, { status: 400 })
+    if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
 
     await audit(supabase, 'outlet.create', 'outlets', data.id, parsed.data)
     return Response.json({ outlet_id: data.id }, { status: 201 })

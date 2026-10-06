@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 import { generateTempPassword } from '@/lib/credentials'
 
@@ -83,7 +83,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
 
     if (Object.keys(changes).length) {
       const { error } = await admin.from('profiles').update(changes).eq('id', id)
-      if (error) return Response.json({ error: error.message }, { status: 400 })
+      if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
     }
 
     // Deactivation is a soft delete. Attendance rows are never destroyed;

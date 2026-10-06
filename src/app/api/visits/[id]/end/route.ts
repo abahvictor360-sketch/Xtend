@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession, REPORTING_ROLES } from '@/lib/auth'
+import { apiError, requireApiSession, REPORTING_ROLES, dbErrorMessage } from '@/lib/auth'
 
 const schema = z.object({
   lat: z.number().min(-90).max(90),
@@ -36,7 +36,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
         : error.message.includes('not yours')
           ? 404
           : 400
-      return Response.json({ error: error.message }, { status })
+      return Response.json({ error: dbErrorMessage(error) }, { status })
     }
 
     return Response.json({ visit: data })

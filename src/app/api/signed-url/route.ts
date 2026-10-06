@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 
 const schema = z.object({
   bucket: z.enum(['selfies', 'reports']),
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
       .from(parsed.data.bucket)
       .createSignedUrls(parsed.data.paths, parsed.data.expires_in)
 
-    if (error) return Response.json({ error: error.message }, { status: 400 })
+    if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
 
     const urls: Record<string, string> = {}
     for (const row of data ?? []) {

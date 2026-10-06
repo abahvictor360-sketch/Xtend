@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 
 const schema = z.object({
@@ -39,7 +39,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
       })
       .select('id')
       .single<{ id: string }>()
-    if (error) return Response.json({ error: error.message }, { status: 400 })
+    if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
 
     await supabase.from('known_places').delete().eq('id', id)
     await audit(supabase, 'place.make_store', 'outlets', outlet.id, { place_id: id, name: place.name })

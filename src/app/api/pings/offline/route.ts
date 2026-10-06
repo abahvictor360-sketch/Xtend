@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession, FIELD_ROLES } from '@/lib/auth'
+import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/auth'
 
 const schema = z.object({
   /** The phone's clock when it sent these, to correct a wrong one. */
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
     // them (a 5xx is retried) until there is.
     if (error) {
       const missing = error.code === 'PGRST202' || error.code === '42883'
-      return Response.json({ error: error.message }, { status: missing ? 503 : 400 })
+      return Response.json({ error: dbErrorMessage(error) }, { status: missing ? 503 : 400 })
     }
     return Response.json({ kept: data as number })
   } catch (error) {
