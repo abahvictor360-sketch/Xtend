@@ -26,6 +26,13 @@ export interface TeamSupervisor {
 
 const UNASSIGNED = 'unassigned'
 
+type Category = 'all' | TeamMember['role']
+const CATEGORIES: { value: Category; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'merchandiser', label: 'Merchandisers' },
+  { value: 'marketer', label: 'Marketers' },
+]
+
 export function TeamManager({
   members,
   supervisors,
@@ -34,6 +41,7 @@ export function TeamManager({
   supervisors: TeamSupervisor[]
 }) {
   const router = useRouter()
+  const [category, setCategory] = useState<Category>('all')
   const [filter, setFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
   const [chosen, setChosen] = useState<Set<string>>(new Set())
@@ -43,18 +51,27 @@ export function TeamManager({
   const [notice, setNotice] = useState<string | null>(null)
 
   const nameOf = useMemo(() => new Map(supervisors.map((s) => [s.id, s.full_name])), [supervisors])
+  const inCategory = useMemo(
+    () => (category === 'all' ? members : members.filter((m) => m.role === category)),
+    [members, category],
+  )
+  const roleCounts = useMemo(() => {
+    const map = new Map<Category, number>([['all', members.length]])
+    for (const m of members) map.set(m.role, (map.get(m.role) ?? 0) + 1)
+    return map
+  }, [members])
   const counts = useMemo(() => {
     const map = new Map<string, number>()
-    for (const m of members) {
+    for (const m of inCategory) {
       const key = m.supervisor_id ?? UNASSIGNED
       map.set(key, (map.get(key) ?? 0) + 1)
     }
     return map
-  }, [members])
+  }, [inCategory])
 
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase()
-    return members.filter((m) => {
+    return inCategory.filter((m) => {
       if (filter === UNASSIGNED && m.supervisor_id) return false
       if (filter !== 'all' && filter !== UNASSIGNED && m.supervisor_id !== filter) return false
       if (!needle) return true
@@ -62,9 +79,20 @@ export function TeamManager({
         m.full_name.toLowerCase().includes(needle) || (m.store ?? '').toLowerCase().includes(needle)
       )
     })
-  }, [members, filter, search])
+  }, [inCategory, filter, search])
 
   const allVisibleChosen = visible.length > 0 && visible.every((m) => chosen.has(m.id))
+
+  // Switching category drops anyone ticked who is no longer shown, so a
+  // move never includes people the admin cannot see.
+  function chooseCategory(next: Category) {
+    setCategory(next)
+    setChosen((current) => {
+      if (next === 'all') return current
+      const roleOf = new Map(members.map((m) => [m.id, m.role]))
+      return new Set([...current].filter((id) => roleOf.get(id) === next))
+    })
+  }
 
   function toggle(id: string) {
     setChosen((current) => {
@@ -125,9 +153,33 @@ export function TeamManager({
 
   return (
     <div className="space-y-4">
+      <div
+        role="tablist"
+        aria-label="Category"
+        className="flex w-full rounded-2xl bg-muted p-1 sm:inline-flex sm:w-auto"
+      >
+        {CATEGORIES.map((c) => (
+          <button
+            key={c.value}
+            type="button"
+            role="tab"
+            aria-selected={category === c.value}
+            onClick={() => chooseCategory(c.value)}
+            className={cn(
+              'flex-1 whitespace-nowrap rounded-xl px-2 py-2 text-[13px] font-semibold transition-colors sm:flex-none sm:px-4 sm:text-sm',
+              category === c.value
+                ? 'bg-card text-foreground shadow-soft'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {c.label} ({roleCounts.get(c.value) ?? 0})
+          </button>
+        ))}
+      </div>
+
       <div className="flex flex-wrap gap-2">
         <Chip active={filter === 'all'} onClick={() => setFilter('all')}>
-          Everyone ({members.length})
+          Everyone ({inCategory.length})
         </Chip>
         <Chip active={filter === UNASSIGNED} onClick={() => setFilter(UNASSIGNED)}>
           No supervisor ({counts.get(UNASSIGNED) ?? 0})
@@ -211,8 +263,18 @@ export function TeamManager({
                 />
                 <span className="min-w-0 flex-1">
                   <span className="font-medium">{m.full_name}</span>
-                  <span className="block text-xs text-muted-foreground">
-                    {m.role} · {m.store ?? 'no home store'}
+                  <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                    <span
+                      className={cn(
+                        'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                        m.role === 'merchandiser'
+                          ? 'bg-tint text-tint-foreground'
+                          : 'bg-muted text-foreground',
+                      )}
+                    >
+                      {m.role === 'merchandiser' ? 'Merchandiser' : 'Marketer'}
+                    </span>
+                    {m.store ?? 'no home store'}
                   </span>
                 </span>
                 <span

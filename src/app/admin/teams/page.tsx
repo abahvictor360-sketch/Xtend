@@ -33,8 +33,8 @@ export default async function TeamsPage() {
         <h1 className="text-xl font-semibold">Teams</h1>
         <p className="text-sm text-muted-foreground">
           Put merchandisers and marketers on a supervisor&apos;s team. A supervisor sees their
-          team&apos;s attendance, reports and counts, and manages their accounts. Tick several people
-          to move them at once.
+          team&apos;s attendance, reports and counts, and manages their accounts. Pick a category,
+          tick several people (or select all shown) and move them at once.
         </p>
       </div>
       <TeamManager members={members} supervisors={(supervisors ?? []) as TeamSupervisor[]} />

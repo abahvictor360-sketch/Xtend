@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { Bell } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
 import { formatLagos, metres } from '@/lib/utils'
 import type { AlertDetail } from '@/lib/types'
 
@@ -45,35 +44,47 @@ export function LiveAlertFeed({ initial }: { initial: AlertDetail[] }) {
   return (
     <Card>
       <CardHeader className="flex-row items-center justify-between space-y-0">
-        <CardTitle className="flex items-center gap-2">
-          <Bell className="h-4 w-4" />
-          Open alerts ({alerts.length})
-        </CardTitle>
-        <Link href="/admin/alerts" className="text-xs text-primary">
+        <CardTitle className="text-lg font-semibold">Open alerts</CardTitle>
+        <Link
+          href="/admin/alerts"
+          className="rounded-lg border border-border px-2.5 py-1 text-xs font-semibold hover:bg-tint"
+        >
           Review all
         </Link>
       </CardHeader>
       <CardContent>
+        <p className="mb-2 flex justify-between text-xs text-muted-foreground">
+          <span>Name</span>
+          <span>When</span>
+        </p>
         {alerts.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nothing unresolved.</p>
+          <p className="py-4 text-sm text-muted-foreground">Nothing unresolved.</p>
         ) : (
-          <ul className="divide-y divide-border text-sm">
-            {alerts.map((alert) => (
-              <li key={alert.id} className="flex items-start justify-between gap-3 py-2">
-                <div className="min-w-0">
-                  <p className="font-medium">{alert.staff_name}</p>
-                  <p className="text-xs text-muted-foreground">
+          <ul className="space-y-3.5 text-sm">
+            {alerts.slice(0, 8).map((alert) => (
+              <li key={alert.id} className="flex items-center gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-tint text-brand">
+                  <Bell className="h-4 w-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-medium">{alert.staff_name}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">
                     {LABEL[alert.alert_type] ?? alert.alert_type}
                     {alert.distance_m !== null && ` · ${metres(alert.distance_m)}`}
                   </p>
-                  {alert.location_label && (
-                    <p className="truncate text-xs text-muted-foreground">{alert.location_label}</p>
-                  )}
                 </div>
-                <Badge variant="outline">{formatLagos(alert.created_at, false)}</Badge>
+                <div className="shrink-0 text-right">
+                  <p className="text-xs font-semibold tabular-nums">{formatLagos(alert.created_at, false)}</p>
+                  <p className="text-[11px] text-brand">Open</p>
+                </div>
               </li>
             ))}
           </ul>
+        )}
+        {alerts.length > 8 && (
+          <Link href="/admin/alerts" className="mt-4 block text-xs font-semibold text-brand">
+            {alerts.length - 8} more
+          </Link>
         )}
       </CardContent>
     </Card>

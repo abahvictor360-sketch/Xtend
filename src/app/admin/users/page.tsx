@@ -10,7 +10,12 @@ import type { Outlet, Profile } from '@/lib/types'
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Staff — Xtend' }
 
-export default async function UsersPage() {
+export default async function UsersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; new?: string }>
+}) {
+  const { q, new: startNew } = await searchParams
   const session = await requireSession(['admin', 'supervisor'])
   const isAdmin = session.profile.role === 'admin'
   const supabase = await createServerSupabase()
@@ -66,6 +71,8 @@ export default async function UsersPage() {
         isAdmin={isAdmin}
         notified={notified}
         supervisors={(supervisors ?? []) as { id: string; full_name: string; role: string }[]}
+        initialSearch={typeof q === 'string' ? q.slice(0, 80) : ''}
+        startCreating={startNew === '1'}
       />
     </div>
   )
