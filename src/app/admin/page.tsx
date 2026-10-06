@@ -4,6 +4,7 @@ import { OverviewView, type OverviewData } from '@/components/admin/overview-vie
 import type { LiveLocation } from '@/components/admin/live-locations'
 import type { DayCount } from '@/components/admin/overview-charts'
 import { addDays, lagosDateString } from '@/lib/utils'
+import { withAvatars } from '@/lib/avatars'
 import type { AlertDetail } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -71,7 +72,7 @@ export default async function AdminOverview() {
       stats={(overview ?? {}) as OverviewData['stats']}
       away={(absentees ?? []) as OverviewData['away']}
       tracked={(coverage ?? []) as OverviewData['tracked']}
-      onShift={(live ?? []) as LiveLocation[]}
+      onShift={await withAvatars(supabase, (live ?? []) as LiveLocation[])}
       alerts={(alerts ?? []) as AlertDetail[]}
       photos={retention as OverviewData['photos']}
     />

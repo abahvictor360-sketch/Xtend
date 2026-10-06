@@ -62,10 +62,10 @@ export function AdminFrame({
   )
 
   return (
-    <div className="admin-shell min-h-dvh bg-canvas lg:bg-[hsl(30_5%_88%)] lg:p-5">
-      {/* Desktop: one white frame holding the menu and a grey workspace. */}
-      <div className="lg:flex lg:min-h-[calc(100dvh-2.5rem)] lg:overflow-clip lg:rounded-[2rem] lg:bg-card lg:shadow-[0_30px_60px_-40px_rgb(24_18_14/0.45)]">
-        <aside className="sticky top-5 hidden h-[calc(100dvh-2.5rem)] w-64 shrink-0 flex-col bg-card lg:flex">
+    <div className="admin-shell min-h-dvh bg-canvas">
+      {/* Desktop: the menu down the left, edge to edge, beside a grey workspace. */}
+      <div className="lg:flex lg:min-h-dvh">
+        <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-border bg-card lg:flex">
           <div className="px-6 pb-6 pt-7">
             <Brand />
           </div>
@@ -115,7 +115,7 @@ export function AdminFrame({
           </div>
         </aside>
 
-        <div className="min-w-0 flex-1 lg:my-2 lg:mr-2 lg:rounded-[1.6rem] lg:bg-canvas">
+        <div className="min-w-0 flex-1 bg-canvas">
           {/* Phone and tablet: a top bar with the menu as a drop-down. */}
           <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur lg:hidden">
             <div className="flex items-center justify-between gap-3 px-4 py-3">
@@ -161,7 +161,7 @@ export function AdminFrame({
             </div>
           </div>
 
-          <main className="mx-auto w-full max-w-[1500px] px-4 py-6 pb-24 lg:px-6 lg:pt-4">{children}</main>
+          <main className="w-full px-4 py-6 pb-24 lg:px-6 lg:pt-4">{children}</main>
         </div>
       </div>
 

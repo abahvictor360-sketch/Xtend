@@ -5,6 +5,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { LIVE_PUSH_ENDPOINT } from '@/lib/push-endpoint'
 import { buttonVariants } from '@/components/ui/button'
 import { StaffManager } from '@/components/admin/staff-manager'
+import { avatarUrls } from '@/lib/avatars'
 import type { Outlet, Profile } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -33,6 +34,13 @@ export default async function UsersPage({
         ? Promise.resolve({ data: null })
         : supabase.rpc('outlets_for_user', { target: session.userId }),
     ])
+
+  const photos = Object.fromEntries(
+    await avatarUrls(
+      supabase,
+      ((staff ?? []) as Profile[]).map((p) => p.id),
+    ),
+  )
 
   // Who has notifications on: clocking in needs them (migration 027).
   const ids = ((staff ?? []) as Profile[]).map((p) => p.id)
@@ -81,6 +89,7 @@ export default async function UsersPage({
         supervisors={(supervisors ?? []) as { id: string; full_name: string; role: string }[]}
         initialSearch={typeof q === 'string' ? q.slice(0, 80) : ''}
         startCreating={startNew === '1'}
+        photos={photos}
       />
     </div>
   )

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 
-const PUBLIC_PATHS = ['/login', '/deactivated', '/offline', '/download']
+const PUBLIC_PATHS = ['/login', '/deactivated', '/offline', '/download', '/guide']
 
 /**
  * Refreshes the Supabase session cookie on every navigation so field staff

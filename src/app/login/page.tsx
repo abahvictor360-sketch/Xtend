@@ -72,7 +72,10 @@ export default async function LoginPage({
           <div className="mt-10 flex flex-col items-center gap-3">
             <XpelLockup width={140} className="opacity-90" />
             <p className="text-center text-xs text-muted-foreground">
-              Accounts are created by an administrator. There is no public signup.
+              Accounts are created by an administrator. There is no public signup.{' '}
+              <Link href="/guide" className="font-semibold text-brand hover:underline">
+                How to use Xtend
+              </Link>
             </p>
           </div>
         </div>

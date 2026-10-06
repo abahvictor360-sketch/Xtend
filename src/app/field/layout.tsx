@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation'
 import { FIELD_ROLES, requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { FieldNav } from '@/components/field/field-nav'
@@ -12,7 +13,10 @@ export const dynamic = 'force-dynamic'
  * greets and the sheet screens carry a brand block instead.
  */
 export default async function FieldLayout({ children }: { children: React.ReactNode }) {
-  await requireSession(FIELD_ROLES)
+  const session = await requireSession(FIELD_ROLES)
+  // New staff see the walkthrough first, once (037). Undefined before the
+  // migration runs, so nobody is sent there until it exists.
+  if (session.profile.onboarded_at === null) redirect('/welcome')
 
   // Postgres is the authority on who may file a report; the nav just asks it.
   const supabase = await createServerSupabase()
@@ -23,11 +27,13 @@ export default async function FieldLayout({ children }: { children: React.ReactN
   ])
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col overflow-x-hidden">
-      <main className="flex-1 px-4 pb-8 pt-4">{children}</main>
-      <PhoneBeacon />
-      <NativeBridge />
-      <FieldNav canFileReport={canFileReport === true} canCountStock={countStatus.open} />
+    <div className="field-shell min-h-dvh bg-background">
+      <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col overflow-x-hidden">
+        <main className="flex-1 px-4 pb-28 pt-4">{children}</main>
+        <PhoneBeacon />
+        <NativeBridge />
+        <FieldNav canFileReport={canFileReport === true} canCountStock={countStatus.open} />
+      </div>
     </div>
   )
 }

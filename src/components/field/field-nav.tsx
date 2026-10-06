@@ -6,8 +6,9 @@ import { CalendarDays, ClipboardList, FileText, Home, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /**
- * Floating bottom bar. Thumb-reachable, and the Report tab only exists for
- * the people who file reports.
+ * A floating dark bar at the bottom, thumb-reachable. The current tab opens
+ * into a white pill with its name; the others are round icons. The Report
+ * and Count tabs only exist for the people who use them.
  */
 export function FieldNav({
   canFileReport,
@@ -27,8 +28,8 @@ export function FieldNav({
   ]
 
   return (
-    <nav className="safe-bottom sticky bottom-0 z-30 -mt-6 bg-gradient-to-t from-background via-background to-transparent px-4 pt-6">
-      <div className="surface flex items-center justify-around rounded-3xl px-2 py-2">
+    <nav className="safe-bottom pointer-events-none fixed inset-x-0 bottom-0 z-30 px-4 pb-2">
+      <div className="pointer-events-auto mx-auto flex w-full max-w-md items-center justify-between gap-1 rounded-full bg-[hsl(24_14%_11%)] p-1.5 shadow-[0_18px_40px_-16px_rgb(24_18_14/0.6)]">
         {links.map(({ href, label, icon: Icon }) => {
           const active = href === '/field' ? pathname === href : pathname.startsWith(href)
           return (
@@ -38,12 +39,14 @@ export function FieldNav({
               aria-label={label}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'flex min-w-[56px] flex-col items-center gap-1 rounded-2xl px-3 py-2 text-[10px] font-semibold transition-colors',
-                active ? 'bg-tint text-brand' : 'text-muted-foreground',
+                'flex h-12 items-center justify-center gap-2 rounded-full text-sm font-semibold transition-all',
+                active
+                  ? 'flex-[2] bg-white px-4 text-foreground'
+                  : 'w-12 flex-1 bg-white/10 text-white/75 hover:bg-white/15 hover:text-white',
               )}
             >
-              <Icon className="h-5 w-5" strokeWidth={active ? 2.4 : 1.9} />
-              {label}
+              <Icon className={cn('h-5 w-5 shrink-0', active && 'text-brand')} strokeWidth={active ? 2.3 : 1.9} />
+              {active && <span className="truncate">{label}</span>}
             </Link>
           )
         })}

@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Bell, Headset, KeyRound, MapPin, Radio, Smartphone } from 'lucide-react'
+import { Bell, BookOpen, Headset, KeyRound, MapPin, Radio, Smartphone } from 'lucide-react'
 import { FIELD_ROLES, requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { SheetScreen, HeaderField, SectionHeader } from '@/components/field/screen'
@@ -8,6 +8,8 @@ import { SignOutButton } from '@/components/sign-out-button'
 import { XpelLockup } from '@/components/brand/logo'
 import { PushToggle } from '@/components/field/push-toggle'
 import { formatLagos } from '@/lib/utils'
+import { avatarUrls } from '@/lib/avatars'
+import { ProfilePhoto } from '@/components/field/profile-photo'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Your account — Xtend' }
@@ -38,6 +40,8 @@ export default async function AccountPage() {
       shift_end: string
     }>()
 
+  const photo = (await avatarUrls(supabase, [session.userId])).get(session.userId) ?? null
+
   return (
     <SheetScreen
       title="Your account"
@@ -54,6 +58,13 @@ export default async function AccountPage() {
       }
     >
       <div className="space-y-5">
+        <section className="surface p-5">
+          <ProfilePhoto name={session.profile.full_name} url={photo} />
+          <p className="mt-3 text-center text-xs text-muted-foreground">
+            Your photo helps your team recognise you. Take it facing the camera in good light.
+          </p>
+        </section>
+
         <section className="space-y-3">
           <SectionHeader title="Your posting" />
           <TaskRow
@@ -75,6 +86,13 @@ export default async function AccountPage() {
               icon={<Headset className="h-5 w-5" />}
               title="Message support"
               meta="Report a problem. The Xtend helper replies, and the office steps in when needed."
+            />
+          </Link>
+          <Link href="/field/guide" className="block">
+            <TaskRow
+              icon={<BookOpen className="h-5 w-5" />}
+              title="How to use Xtend"
+              meta="Step-by-step help, from clocking in to the end of the day."
             />
           </Link>
         </section>

@@ -27,6 +27,21 @@ function pin(L: any, text: string, colour: string) {
   })
 }
 
+/** A round photo pin with a ring in the status colour, and the first name under it. */
+function photoPin(L: any, url: string, name: string, colour: string) {
+  return L.divIcon({
+    className: '',
+    html:
+      `<span style="display:flex;flex-direction:column;align-items:center;gap:2px">` +
+      `<img src="${escape(url)}" alt="" style="width:40px;height:40px;border-radius:9999px;object-fit:cover;border:3px solid ${colour};box-shadow:0 0 0 2px #fff,0 6px 14px rgb(0 0 0/.3);background:#eee"/>` +
+      `<span style="padding:1px 6px;border-radius:8px;background:#fff;color:#2b211c;font:700 10px system-ui;box-shadow:0 2px 6px rgb(0 0 0/.2);white-space:nowrap">${escape(name)}</span>` +
+      `</span>`,
+    iconSize: [60, 60],
+    iconAnchor: [30, 22],
+    popupAnchor: [0, -20],
+  })
+}
+
 function baseMap(L: any, el: HTMLElement) {
   const map = L.map(el, { scrollWheelZoom: false })
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -108,10 +123,16 @@ export function LiveMap({ rows }: { rows: LiveLocation[] }) {
           .slice(0, 2)
           .map((w) => w[0]?.toUpperCase())
           .join('')
-        L.marker([r.last_lat, r.last_lng], { icon: pin(L, initials, colour) })
+        const icon = r.avatar_url
+          ? photoPin(L, r.avatar_url, r.full_name.split(/\s+/)[0], colour)
+          : pin(L, initials, colour)
+        L.marker([r.last_lat, r.last_lng], { icon })
           .addTo(m)
           .bindPopup(
-            `<strong>${escape(r.full_name)}</strong><br/>` +
+            (r.avatar_url
+              ? `<img src="${escape(r.avatar_url)}" alt="" style="width:64px;height:64px;border-radius:12px;object-fit:cover;margin-bottom:6px"/><br/>`
+              : '') +
+              `<strong>${escape(r.full_name)}</strong><br/>` +
               `${escape(r.last_place_name ?? 'Last position')} · ${formatLagos(r.last_ping_at, false)}` +
               (r.minutes_since_ping != null ? ` (${r.minutes_since_ping} min ago)` : '') +
               `<br/>${r.distance_from_outlet_m != null ? `${metres(r.distance_from_outlet_m)} from ${escape(r.outlet_name ?? 'their store')}` : ''}` +

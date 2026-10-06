@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, Circle, Clock3, FileText, LogIn, LogOut, MapPin, Store } from 'lucide-react'
+import { CheckCircle2, Clock3, FileText, LogIn, LogOut, MapPin, Store } from 'lucide-react'
 import { GreetingHeader } from '@/components/field/greeting-header'
 import { LocationGate } from '@/components/field/location-gate'
 import { useLocationGate } from '@/components/field/use-location-gate'
@@ -13,14 +13,12 @@ import { OutboxBanner } from '@/components/field/outbox-banner'
 import { ClockPanel } from '@/components/field/clock-panel'
 import { TrackingPanel } from '@/components/field/tracking-panel'
 import { StoreVisits, type VisitOutlet, type VisitRow } from '@/components/field/store-visits'
-import { TaskRow } from '@/components/field/task-row'
 import { SectionHeader } from '@/components/field/screen'
 import { Chip } from '@/components/ui/chip'
-import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { haversineMetres } from '@/lib/geo'
-import { formatLagos, metres } from '@/lib/utils'
-import type { ClockSummary, Coverage, DayState } from '@/lib/types'
+import { addDays, cn, dayOfMonth, formatLagos, metres, weekdayShort } from '@/lib/utils'
+import type { Coverage, DayState } from '@/lib/types'
 
 type Tab = 'stores' | 'day' | 'outlet' | 'tracking'
 
@@ -31,6 +29,7 @@ export function FieldHome({
   outlets,
   canVisitStores,
   notificationsRequired = true,
+  avatarUrl = null,
 }: {
   day: DayState
   coverage: Coverage | null
@@ -38,6 +37,7 @@ export function FieldHome({
   outlets: VisitOutlet[]
   canVisitStores: boolean
   notificationsRequired?: boolean
+  avatarUrl?: string | null
 }) {
   const router = useRouter()
   const gate = useLocationGate()
@@ -78,12 +78,9 @@ export function FieldHome({
     <div className="space-y-5">
       <GreetingHeader
         fullName={day.profile?.full_name ?? 'there'}
+        avatarUrl={avatarUrl}
         subtitle={
-          onShift
-            ? 'You are on shift. Have a good one.'
-            : day.closing
-              ? 'Shift closed for today. Nice work.'
-              : 'Have a nice day!'
+          onShift ? 'Have a good shift!' : day.closing ? 'Nice work today!' : 'Have a nice day!'
         }
       />
 
@@ -97,24 +94,15 @@ export function FieldHome({
         ))}
       </div>
 
-      {/* The two clock events as brand cards, exactly the shape of the
-          project cards in the reference. */}
-      <div className="no-scrollbar -mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1">
-        <ClockCard
-          kind="opening"
-          state={day.opening}
-          outletName={day.outlet?.name}
-          progress={progress}
-          date={day.date}
-        />
-        <ClockCard
-          kind="closing"
-          state={day.closing}
-          outletName={day.outlet?.name}
-          progress={progress}
-          date={day.date}
-        />
-      </div>
+      <ShiftPill
+        state={day.closing ? 'done' : onShift ? 'on' : 'before'}
+        since={day.opening ? formatLagos(day.opening.at, false) : null}
+        outletName={day.outlet?.name ?? null}
+      />
+
+      <WeekRow today={day.date} />
+
+      <DayCard day={day} steps={steps} progress={progress} onShift={onShift} />
 
       {gate.status === 'ready' && (
         <div className="flex items-start gap-2 rounded-2xl bg-tint px-3 py-2.5 text-tint-foreground">
@@ -136,6 +124,7 @@ export function FieldHome({
         </div>
       )}
 
+      <div id="clock" className="scroll-mt-4">
       <LocationGate
         status={gate.status}
         reason={gate.reason}
@@ -144,6 +133,7 @@ export function FieldHome({
       >
         <ClockPanel day={day} notificationsRequired={notificationsRequired} />
       </LocationGate>
+      </div>
 
       {tab === 'stores' && visitsStore && (
         <StoreVisits
@@ -160,44 +150,40 @@ export function FieldHome({
             action={<span className="text-xs font-semibold text-brand">{progress}% done</span>}
           />
 
-          <TaskRow
+          <RingRow
             icon={<LogIn className="h-5 w-5" />}
-            title="Clock in"
+            title={day.opening ? formatLagos(day.opening.at, false) : 'Clock in'}
             meta={
               day.opening
-                ? `${formatLagos(day.opening.at, false)} · ${metres(day.opening.distance_m)} from outlet`
+                ? `Clocked in · ${day.opening.status === 'on_site' ? 'on site' : day.opening.status === 'off_site' ? 'off site' : 'not confirmed'}`
                 : 'Not yet today'
             }
-            muted={!day.opening}
-            trailing={<StatusDot summary={day.opening} />}
+            done={Boolean(day.opening)}
+            warn={day.opening?.status === 'off_site'}
           />
 
           {day.can_file_report && (
-            <TaskRow
-              icon={<FileText className="h-5 w-5" />}
-              title="Daily report"
-              meta={day.report_filed ? 'Filed. Editable until midnight.' : 'Not filed yet'}
-              muted={!day.report_filed}
-              trailing={
-                <Link href="/field/report" className="text-xs font-semibold text-brand">
-                  {day.report_filed ? 'Edit' : 'File'}
-                </Link>
-              }
-            />
+            <Link href="/field/report" className="block">
+              <RingRow
+                icon={<FileText className="h-5 w-5" />}
+                title="Daily report"
+                meta={day.report_filed ? 'Filed. Editable until midnight.' : 'Not filed yet · tap to file'}
+                done={day.report_filed}
+              />
+            </Link>
           )}
 
-          <TaskRow
+          <RingRow
             icon={<LogOut className="h-5 w-5" />}
-            title="Clock out"
+            title={day.closing ? formatLagos(day.closing.at, false) : 'Clock out'}
             meta={
               day.closing
-                ? `${formatLagos(day.closing.at, false)} · ${metres(day.closing.distance_m)} from outlet`
+                ? 'Clocked out'
                 : day.opening
                   ? 'At the end of your shift'
                   : 'Clock in first'
             }
-            muted={!day.closing}
-            trailing={<StatusDot summary={day.closing} />}
+            done={Boolean(day.closing)}
           />
         </section>
       )}
@@ -274,68 +260,189 @@ export function FieldHome({
   )
 }
 
-function ClockCard({
-  kind,
+/** The dark bar at the top: where the shift stands, and the next step. */
+function ShiftPill({
   state,
+  since,
   outletName,
-  progress,
-  date,
 }: {
-  kind: 'opening' | 'closing'
-  state: ClockSummary | null
-  outletName?: string
-  progress: number
-  date: string
+  state: 'before' | 'on' | 'done'
+  since: string | null
+  outletName: string | null
 }) {
-  const label = kind === 'opening' ? 'Clock in' : 'Clock out'
-  const done = Boolean(state)
-
+  const title = state === 'before' ? "Today's shift" : state === 'on' ? 'On shift' : 'Shift complete'
+  const meta =
+    state === 'before'
+      ? (outletName ?? 'Clock in when you arrive')
+      : state === 'on'
+        ? `Since ${since}${outletName ? ` · ${outletName}` : ''}`
+        : 'See you next time'
   return (
-    <article
-      className={`min-w-[62%] snap-start rounded-3xl p-4 ${
-        done ? 'brand-surface shadow-lift' : 'surface border border-dashed border-brand/25'
-      }`}
-    >
-      <div className="flex items-start justify-between">
-        <span className={`text-[11px] font-semibold ${done ? 'text-white/75' : 'text-muted-foreground'}`}>
-          {date}
+    <div className="flex items-center gap-3 rounded-full bg-[hsl(24_14%_11%)] p-2 pr-2.5 text-white">
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-brand">
+        {state === 'done' ? <CheckCircle2 className="h-5 w-5" /> : <Clock3 className="h-5 w-5" />}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-sm font-bold">{title}</span>
+        <span className="block truncate text-xs text-white/70">{meta}</span>
+      </span>
+      {state === 'before' ? (
+        <a
+          href="#clock"
+          className="shrink-0 rounded-full bg-white/15 px-4 py-2 text-xs font-bold uppercase tracking-wide transition-colors hover:bg-white/25"
+        >
+          Clock in
+        </a>
+      ) : (
+        <span className="shrink-0 rounded-full bg-white/15 px-4 py-2 text-xs font-bold uppercase tracking-wide">
+          {state === 'on' ? 'Live' : 'Done'}
         </span>
-        {done ? (
-          <Badge variant="onBrand">
-            {state!.status === 'on_site' ? 'On site' : state!.status === 'off_site' ? 'Off site' : 'Not confirmed'}
-          </Badge>
-        ) : (
-          <Badge variant="outline">Pending</Badge>
-        )}
-      </div>
-
-      <p className={`mt-6 text-lg font-extrabold ${done ? 'text-white' : 'text-foreground'}`}>{label}</p>
-      <p className={`text-sm ${done ? 'text-white/80' : 'text-muted-foreground'}`}>
-        {done ? formatLagos(state!.at, false) : outletName ?? 'Awaiting'}
-      </p>
-
-      <div className="mt-5">
-        <div className={`flex items-center justify-between text-[11px] ${done ? 'text-white/80' : 'text-muted-foreground'}`}>
-          <span>Day progress</span>
-          <span className="font-semibold">{progress}%</span>
-        </div>
-        <div className={`mt-1.5 h-1.5 w-full overflow-hidden rounded-full ${done ? 'bg-white/25' : 'bg-muted'}`}>
-          <div
-            className={`h-full rounded-full ${done ? 'bg-white' : 'bg-brand'}`}
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-      </div>
-    </article>
+      )}
+    </div>
   )
 }
 
-function StatusDot({ summary }: { summary: ClockSummary | null }) {
-  if (!summary) return <Circle className="h-5 w-5 text-muted-foreground/40" />
-  return summary.status === 'on_site' ? (
-    <CheckCircle2 className="h-5 w-5 text-success" />
-  ) : (
-    <Clock3 className="h-5 w-5 text-destructive" />
+/** The last seven days as round dates; each opens that day in History. */
+function WeekRow({ today }: { today: string }) {
+  const days = Array.from({ length: 7 }, (_, i) => addDays(today, i - 6))
+  return (
+    <div className="grid grid-cols-7 gap-1.5 text-center">
+      {days.map((date) => {
+        const isToday = date === today
+        return (
+          <Link key={date} href={`/field/history?d=${date}`} className="flex flex-col items-center gap-2">
+            <span className={cn('text-xs', isToday ? 'font-bold text-foreground' : 'text-muted-foreground')}>
+              {weekdayShort(date)}
+            </span>
+            <span
+              className={cn(
+                'flex aspect-square w-full max-w-[2.75rem] items-center justify-center rounded-full text-sm tabular-nums transition-colors',
+                isToday
+                  ? 'bg-card font-bold text-foreground shadow-[0_8px_20px_-12px_rgb(24_18_14/0.45)]'
+                  : 'border border-border text-muted-foreground hover:bg-card',
+              )}
+            >
+              {dayOfMonth(date)}
+            </span>
+          </Link>
+        )
+      })}
+    </div>
+  )
+}
+
+/** Bar labels under the orange card's progress bars. */
+const SHORT: Record<string, string> = {
+  'Clock in': 'In',
+  'On shift': 'Shift',
+  'Daily report': 'Report',
+  'Clock out': 'Out',
+}
+
+/** The big orange card: today's progress, one bar per step. */
+function DayCard({
+  day,
+  steps,
+  progress,
+  onShift,
+}: {
+  day: DayState
+  steps: { done: boolean; label: string }[]
+  progress: number
+  onShift: boolean
+}) {
+  const status = day.closing ? 'Done' : onShift ? 'In progress' : 'Not started'
+  return (
+    <section className="brand-surface relative overflow-hidden rounded-[2rem] p-5">
+      {/* Soft shapes behind the content, as in the reference. */}
+      <span aria-hidden className="absolute -right-10 top-6 h-56 w-28 rotate-[25deg] rounded-full bg-white/10" />
+      <span aria-hidden className="absolute right-16 -top-16 h-56 w-24 rotate-[25deg] rounded-full bg-white/[0.07]" />
+
+      <div className="relative flex items-start justify-between">
+        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-brand">
+          <Store className="h-6 w-6" />
+        </span>
+        <span className="rounded-full bg-white px-4 py-2 text-sm font-semibold text-brand">{status}</span>
+      </div>
+
+      <div className="relative mt-8 flex items-end justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-2xl font-bold italic">My day</p>
+          <p className="mt-1 text-lg italic text-white/90">{progress}% done</p>
+          <p className="mt-1 truncate text-xs text-white/75">
+            {day.outlet
+              ? `${day.outlet.name} · ${day.outlet.shift_start.slice(0, 5)}–${day.outlet.shift_end.slice(0, 5)}`
+              : 'Have a good day'}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-end gap-2" aria-label={`${progress}% of today done`}>
+          {steps.map((step) => (
+            <div key={step.label} className="flex flex-col items-center gap-1.5" title={step.label}>
+              <span
+                className={cn(
+                  'relative block w-6 rounded-full',
+                  step.done ? 'h-20 bg-white' : 'h-9 bg-white/35',
+                )}
+              >
+                <span
+                  className={cn(
+                    'absolute -top-1 left-1/2 h-2 w-2 -translate-x-1/2 rounded-full ring-2',
+                    step.done ? 'bg-white ring-brand' : 'bg-white/60 ring-transparent',
+                  )}
+                />
+              </span>
+              <span className="text-[10px] font-semibold text-white/85">{SHORT[step.label] ?? step.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+/** A rounded row with a white icon disc and a ring that closes when done. */
+function RingRow({
+  icon,
+  title,
+  meta,
+  done,
+  warn,
+}: {
+  icon: React.ReactNode
+  title: string
+  meta: string
+  done: boolean
+  warn?: boolean
+}) {
+  const r = 20
+  const c = 2 * Math.PI * r
+  return (
+    <div className="flex items-center gap-3 rounded-full bg-card p-2 pr-3">
+      <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-tint text-brand">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-lg font-semibold leading-tight">{title}</span>
+        <span className="block truncate text-xs text-muted-foreground">{meta}</span>
+      </span>
+      <span className="relative flex h-14 w-14 shrink-0 items-center justify-center">
+        <svg viewBox="0 0 48 48" className="absolute inset-0 h-full w-full -rotate-90">
+          <circle cx="24" cy="24" r={r} fill="none" stroke="hsl(var(--muted))" strokeWidth="4" />
+          {done && (
+            <circle
+              cx="24"
+              cy="24"
+              r={r}
+              fill="none"
+              stroke={warn ? 'hsl(var(--warning))' : 'hsl(var(--brand))'}
+              strokeWidth="4"
+              strokeDasharray={`${c} ${c}`}
+            />
+          )}
+        </svg>
+        <span className="text-[11px] font-bold italic">{done ? 'Done' : 'Due'}</span>
+      </span>
+    </div>
   )
 }
 

@@ -109,15 +109,26 @@
   }
 
   /*
-   * The admin and supervisor dashboard: one white frame on a grey page,
-   * light grey workspace, flat white cards with a hairline border (after
-   * the "ACRU" reference). Scoped so the staff app keeps its own look.
+   * The admin and supervisor dashboard: a white menu down the left, edge
+   * to edge, beside a light grey workspace, with flat white cards and a
+   * hairline border. Scoped so the staff app keeps its own look.
    */
   .admin-shell {
     --canvas: 30 6% 95.5%;
   }
   .admin-shell .surface {
     @apply rounded-[1.25rem] border border-border/80 shadow-none;
+  }
+
+  /*
+   * The staff app: a soft grey page, big white cards with generous
+   * rounding and no shadow, a floating dark menu bar at the bottom.
+   */
+  .field-shell {
+    --background: 30 8% 94%;
+  }
+  .field-shell .surface {
+    @apply rounded-[1.75rem] shadow-none;
   }
 
   /* Diagonal stripes over a filled bar or arc, as in the reference. */
