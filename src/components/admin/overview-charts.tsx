@@ -7,19 +7,22 @@ import { cn } from '@/lib/utils'
  * Chart colours, from the brand's own orange family, checked with the
  * data-viz palette validator (lightness band, chroma, colour-blind and
  * normal-vision separation, contrast on white):
- *   on time #d1511a · late #8a3a12  — all checks pass
- *   today's split adds #c98500      — passes, contrast 2.99:1, so every
- *                                     part is also labelled with its count
- * Values and labels stay in text colours; colour only marks the series.
+ *   on time #d1511a · late #c98500 · not in #8a3a12
+ * Gold's contrast on white is 2.99:1, so every part is also labelled with
+ * its count. Days not picked in the week chart fall back to greys, so the
+ * colour marks the one day being read (as in the reference).
  */
-const ON_TIME = '#d1511a'
-const LATE = '#8a3a12'
-const SPLIT = ['#d1511a', '#8a3a12', '#c98500']
+export const ON_TIME = '#d1511a'
+export const LATE = '#c98500'
+export const NOT_IN = '#8a3a12'
+const IDLE = ['#e6e2de', '#efece9']
 
 export interface DayCount {
   date: string
   /** e.g. "Mon" */
   label: string
+  /** e.g. "Wednesday, 7 Oct" */
+  long: string
   onTime: number
   late: number
 }
@@ -34,169 +37,198 @@ function niceMax(value: number) {
   return 10 * step
 }
 
-/** Clock-ins per day for the last week, on time beside late. */
-export function WeekChart({ days }: { days: DayCount[] }) {
-  const [hover, setHover] = useState<number | null>(null)
-  const max = niceMax(Math.max(1, ...days.map((d) => Math.max(d.onTime, d.late))))
-  const ticks = [max, max / 2, 0]
+/**
+ * Clock-ins per day for the last week, on time under late. One day is in
+ * colour with its figures beside it: today, or whichever day is pointed at.
+ */
+export function AttendanceChart({ days }: { days: DayCount[] }) {
+  const [picked, setPicked] = useState(days.length - 1)
+  const max = niceMax(Math.max(1, ...days.map((d) => d.onTime + d.late)))
+  const ticks = [max, (max * 3) / 4, max / 2, max / 4, 0]
 
   return (
-    <div>
-      <div className="mb-4 flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-        <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ background: ON_TIME }} /> On time
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-full" style={{ background: LATE }} /> Late
-        </span>
+    <div className="relative flex h-64 gap-3">
+      <div className="flex w-7 flex-col justify-between pb-7 text-right text-[11px] tabular-nums text-muted-foreground">
+        {ticks.map((t) => (
+          <span key={t} className="-translate-y-1/2 leading-none first:translate-y-0 last:translate-y-0">
+            {Number.isInteger(t) ? t : t.toFixed(1)}
+          </span>
+        ))}
       </div>
 
-      <div className="relative flex h-56 gap-3">
-        {/* Y axis: three recessive ticks. */}
-        <div className="flex w-6 flex-col justify-between pb-6 text-right text-[11px] tabular-nums text-muted-foreground">
+      <div className="relative flex-1">
+        <div className="pointer-events-none absolute inset-x-0 bottom-7 top-0 flex flex-col justify-between">
           {ticks.map((t) => (
-            <span key={t} className="-translate-y-1/2 leading-none first:translate-y-0 last:translate-y-0">
-              {Number.isInteger(t) ? t : t.toFixed(1)}
-            </span>
+            <div key={t} className="border-t border-border" />
           ))}
         </div>
 
-        <div className="relative flex-1">
-          <div className="pointer-events-none absolute inset-x-0 bottom-6 top-0 flex flex-col justify-between">
-            {ticks.map((t) => (
-              <div key={t} className="border-t border-dashed border-border" />
-            ))}
-          </div>
-
-          <div className="absolute inset-x-0 bottom-0 top-0 flex items-stretch justify-between gap-2">
-            {days.map((d, i) => (
-              <div
+        <div className="absolute inset-0 flex items-stretch justify-between gap-2 sm:gap-3">
+          {days.map((d, i) => {
+            const on = picked === i
+            const total = d.onTime + d.late
+            return (
+              <button
+                type="button"
                 key={d.date}
-                className="relative flex flex-1 flex-col items-center"
-                onMouseEnter={() => setHover(i)}
-                onMouseLeave={() => setHover(null)}
-                onFocus={() => setHover(i)}
-                onBlur={() => setHover(null)}
-                tabIndex={0}
-                aria-label={`${d.label}: ${d.onTime} on time, ${d.late} late`}
+                className="group relative flex flex-1 flex-col items-center focus-visible:outline-none"
+                onMouseEnter={() => setPicked(i)}
+                onFocus={() => setPicked(i)}
+                onClick={() => setPicked(i)}
+                aria-pressed={on}
+                aria-label={`${d.long}: ${d.onTime} on time, ${d.late} late`}
               >
-                <div
-                  className={cn(
-                    'flex w-full flex-1 items-end justify-center gap-0.5 rounded-xl pb-0 transition-colors',
-                    hover === i && 'bg-muted/70',
-                  )}
-                >
-                  {[
-                    { v: d.onTime, c: ON_TIME },
-                    { v: d.late, c: LATE },
-                  ].map((bar, j) => (
+                <div className="flex w-full max-w-[4.5rem] flex-1 flex-col justify-end gap-[3px] pb-0">
+                  {d.late > 0 && (
                     <span
-                      key={j}
-                      className="block w-3 rounded-t sm:w-4"
+                      className={cn('block w-full rounded-lg transition-colors', on && 'hatch')}
                       style={{
-                        background: bar.c,
-                        height: `${(bar.v / max) * 100}%`,
-                        minHeight: bar.v > 0 ? 3 : 0,
+                        height: `${(d.late / max) * 100}%`,
+                        minHeight: 4,
+                        background: on ? LATE : IDLE[1],
                       }}
                     />
-                  ))}
+                  )}
+                  <span
+                    className={cn('block w-full rounded-lg transition-colors', on && 'hatch')}
+                    style={{
+                      height: `${(d.onTime / max) * 100}%`,
+                      minHeight: total === 0 ? 4 : d.onTime > 0 ? 4 : 0,
+                      background: on ? ON_TIME : IDLE[0],
+                    }}
+                  />
                 </div>
-                <span className="mt-2 h-4 text-[11px] text-muted-foreground">{d.label}</span>
+                <span
+                  className={cn(
+                    'mt-2 h-5 text-xs',
+                    on ? 'font-semibold text-foreground' : 'text-muted-foreground',
+                  )}
+                >
+                  {d.label}
+                </span>
 
-                {hover === i && (
-                  <div className="pointer-events-none absolute left-1/2 top-2 z-10 w-max -translate-x-1/2 rounded-xl bg-card px-3 py-2 text-xs shadow-soft ring-1 ring-border">
-                    <p className="font-bold">{d.label}</p>
-                    <p className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full" style={{ background: ON_TIME }} />
-                      {d.onTime} on time
-                    </p>
-                    <p className="flex items-center gap-1.5">
-                      <span className="h-2 w-2 rounded-full" style={{ background: LATE }} />
-                      {d.late} late
+                {on && (
+                  <div
+                    className={cn(
+                      'pointer-events-none absolute top-1 z-10 w-max rounded-xl border border-border bg-card px-3 py-2 text-left text-xs shadow-soft',
+                      i >= days.length - 2 ? 'right-1/2' : 'left-1/2',
+                    )}
+                  >
+                    <p className="mb-1 text-[11px] text-muted-foreground">{d.long}</p>
+                    <Row colour={ON_TIME} label="On time" value={d.onTime} />
+                    <Row colour={LATE} label="Late" value={d.late} />
+                    <p className="mt-1 flex justify-between gap-6 border-t border-border pt-1 font-semibold">
+                      <span>Clock-ins</span>
+                      <span className="tabular-nums">{total}</span>
                     </p>
                   </div>
                 )}
-              </div>
-            ))}
-          </div>
+              </button>
+            )
+          })}
         </div>
       </div>
     </div>
   )
 }
 
-export interface SplitPart {
-  label: string
-  value: number
+function Row({ colour, label, value }: { colour: string; label: string; value: number }) {
+  return (
+    <p className="flex items-center justify-between gap-6">
+      <span className="flex items-center gap-1.5">
+        <span className="h-1.5 w-1.5 rounded-full" style={{ background: colour }} />
+        {label}
+      </span>
+      <span className="font-semibold tabular-nums">{value}</span>
+    </p>
+  )
 }
 
-/** Today's staff in three parts, as a ring with the parts labelled beside it. */
-export function TodaySplit({ parts, centreLabel }: { parts: SplitPart[]; centreLabel: string }) {
-  const [hover, setHover] = useState<number | null>(null)
-  const total = parts.reduce((s, p) => s + p.value, 0)
-  const r = 42
-  const circumference = 2 * Math.PI * r
-  // A 2px surface gap between parts, in the ring's own units (100 wide).
-  const gap = parts.filter((p) => p.value > 0).length > 1 ? 1.4 : 0
+export interface Part {
+  label: string
+  value: number
+  colour: string
+}
 
-  let offset = 0
-  const arcs = parts.map((p, i) => {
-    const length = total ? (p.value / total) * circumference : 0
-    const arc = { i, length: Math.max(0, length - gap), offset }
-    offset += length
-    return arc
-  })
-
-  const shown = hover !== null ? parts[hover] : null
-
+/**
+ * One bar cut into parts with a gap between them, then the parts listed
+ * with their share. `of` is the whole the bar stands for; any part of it
+ * not covered by `parts` shows as grey track.
+ */
+export function SegmentBar({ parts, of }: { parts: Part[]; of: number }) {
+  const whole = Math.max(of, parts.reduce((s, p) => s + p.value, 0), 1)
   return (
-    <div className="flex flex-col items-center gap-5">
-      <div className="relative h-44 w-44">
-        <svg viewBox="0 0 100 100" className="h-full w-full -rotate-90">
-          <circle cx="50" cy="50" r={r} fill="none" stroke="hsl(var(--muted))" strokeWidth="12" />
-          {total > 0 &&
-            arcs.map((a) =>
-              a.length > 0 ? (
-                <circle
-                  key={a.i}
-                  cx="50"
-                  cy="50"
-                  r={r}
-                  fill="none"
-                  stroke={SPLIT[a.i]}
-                  strokeWidth={hover === a.i ? 14 : 12}
-                  strokeDasharray={`${a.length} ${circumference - a.length}`}
-                  strokeDashoffset={-a.offset}
-                  onMouseEnter={() => setHover(a.i)}
-                  onMouseLeave={() => setHover(null)}
-                  className="cursor-default transition-[stroke-width]"
-                />
-              ) : null,
-            )}
-        </svg>
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
-          <span className="text-3xl font-extrabold tabular-nums">{shown ? shown.value : total}</span>
-          <span className="max-w-[7rem] text-xs text-muted-foreground">{shown ? shown.label : centreLabel}</span>
-        </div>
+    <div>
+      <div className="flex h-7 w-full gap-1 overflow-hidden rounded-lg bg-muted">
+        {parts.map((p) =>
+          p.value > 0 ? (
+            <span
+              key={p.label}
+              className="hatch block h-full rounded-md first:rounded-l-lg"
+              style={{ width: `${(p.value / whole) * 100}%`, background: p.colour, minWidth: 6 }}
+              title={`${p.label}: ${p.value}`}
+            />
+          ) : null,
+        )}
       </div>
-
-      <ul className="w-full space-y-2 text-sm">
-        {parts.map((p, i) => (
-          <li
-            key={p.label}
-            className={cn('flex items-center gap-2 rounded-xl px-2 py-1', hover === i && 'bg-muted/70')}
-            onMouseEnter={() => setHover(i)}
-            onMouseLeave={() => setHover(null)}
-          >
-            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: SPLIT[i] }} />
+      <ul className="mt-5 space-y-2.5 text-sm">
+        {parts.map((p) => (
+          <li key={p.label} className="flex items-center gap-2.5">
+            <span className="h-3 w-3 shrink-0 rounded-[4px]" style={{ background: p.colour }} />
             <span className="flex-1">{p.label}</span>
-            <span className="font-bold tabular-nums">{p.value}</span>
-            <span className="w-10 text-right text-xs tabular-nums text-muted-foreground">
-              {total ? Math.round((p.value / total) * 100) : 0}%
+            <span className="font-semibold tabular-nums">{p.value}</span>
+            <span className="w-10 text-right tabular-nums text-muted-foreground">
+              {Math.round((p.value / whole) * 100)}%
             </span>
           </li>
         ))}
       </ul>
+    </div>
+  )
+}
+
+/** A half-ring in five blocks, filled to `pct`, with the figure inside. */
+export function Gauge({ pct, label }: { pct: number; label: string }) {
+  const value = Math.max(0, Math.min(100, pct))
+  const cx = 100
+  const cy = 100
+  const r = 78
+  const point = (deg: number) => {
+    const a = (deg * Math.PI) / 180
+    return `${(cx - r * Math.cos(a)).toFixed(2)} ${(cy - r * Math.sin(a)).toFixed(2)}`
+  }
+  const arc = (from: number, to: number) => `M ${point(from)} A ${r} ${r} 0 0 1 ${point(to)}`
+  const filled = (value / 100) * 180
+  const blocks = Array.from({ length: 5 }, (_, i) => [i * 36 + 2, (i + 1) * 36 - 2] as const)
+
+  return (
+    <div className="relative mx-auto w-full max-w-[17rem]">
+      <svg viewBox="0 0 200 112" className="w-full" role="img" aria-label={`${value}% ${label}`}>
+        <defs>
+          <linearGradient id="gauge-fill" gradientUnits="userSpaceOnUse" x1="22" y1="0" x2="178" y2="0">
+            <stop offset="0%" stopColor={LATE} />
+            <stop offset="100%" stopColor={ON_TIME} />
+          </linearGradient>
+          <pattern id="gauge-hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <rect width="2" height="7" fill="rgb(255 255 255 / 0.3)" />
+          </pattern>
+        </defs>
+        {blocks.map(([a, b]) => (
+          <path key={a} d={arc(a, b)} fill="none" stroke="hsl(var(--muted))" strokeWidth="26" />
+        ))}
+        {blocks.map(([a, b]) =>
+          filled > a ? (
+            <g key={`f${a}`}>
+              <path d={arc(a, Math.min(b, filled))} fill="none" stroke="url(#gauge-fill)" strokeWidth="26" />
+              <path d={arc(a, Math.min(b, filled))} fill="none" stroke="url(#gauge-hatch)" strokeWidth="26" />
+            </g>
+          ) : null,
+        )}
+      </svg>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center">
+        <span className="text-3xl font-bold tabular-nums tracking-tight">{value}%</span>
+        <span className="text-xs text-muted-foreground">{label}</span>
+      </div>
     </div>
   )
 }

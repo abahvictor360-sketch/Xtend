@@ -108,6 +108,27 @@
     @apply text-xs font-medium uppercase tracking-wide text-muted-foreground;
   }
 
+  /*
+   * The admin and supervisor dashboard: one white frame on a grey page,
+   * light grey workspace, flat white cards with a hairline border (after
+   * the "ACRU" reference). Scoped so the staff app keeps its own look.
+   */
+  .admin-shell {
+    --canvas: 30 6% 95.5%;
+  }
+  .admin-shell .surface {
+    @apply rounded-[1.25rem] border border-border/80 shadow-none;
+  }
+
+  /* Diagonal stripes over a filled bar or arc, as in the reference. */
+  .hatch {
+    background-image: repeating-linear-gradient(
+      135deg,
+      rgb(255 255 255 / 0.28) 0 2px,
+      transparent 2px 7px
+    );
+  }
+
   .field-label {
     @apply text-xs font-semibold uppercase tracking-wide text-muted-foreground;
   }

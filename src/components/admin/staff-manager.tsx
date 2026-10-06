@@ -43,6 +43,8 @@ export function StaffManager({
   isAdmin = true,
   supervisors = [],
   notified = [],
+  initialSearch = '',
+  startCreating = false,
 }: {
   staff: Profile[]
   outlets: Outlet[]
@@ -52,16 +54,20 @@ export function StaffManager({
   supervisors?: SupervisorOption[]
   /** Who has notifications on, which clocking in needs (migration 027). */
   notified?: string[]
+  /** From the dashboard's search box (?q=). */
+  initialSearch?: string
+  /** From the dashboard's "Add staff" button (?new=1). */
+  startCreating?: boolean
 }) {
   const hasPush = useMemo(() => new Set(notified), [notified])
   const isField = (role: string) => role === 'merchandiser' || role === 'marketer'
   const router = useRouter()
   const [draft, setDraft] = useState<Draft>(EMPTY)
-  const [creating, setCreating] = useState(false)
+  const [creating, setCreating] = useState(startCreating)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [issued, setIssued] = useState<{ name: string; password: string } | null>(null)
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(initialSearch)
 
   const outletName = useMemo(
     () => new Map(outlets.map((outlet) => [outlet.id, outlet.name])),

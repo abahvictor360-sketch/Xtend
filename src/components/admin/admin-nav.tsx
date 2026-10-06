@@ -106,7 +106,7 @@ export function AdminSidebarNav({ readOnly }: { readOnly: boolean }) {
   const { groups, isActive } = useLinks(readOnly)
 
   return (
-    <nav aria-label="Dashboard" className="space-y-5">
+    <nav aria-label="Dashboard" className="space-y-6">
       {groups.map((group, i) => (
         <div key={group.title ?? i} className="space-y-1">
           {group.title && (
@@ -123,13 +123,13 @@ export function AdminSidebarNav({ readOnly }: { readOnly: boolean }) {
                 href={link.href}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  'flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-semibold transition-colors',
+                  'relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-[15px] font-medium transition-colors',
                   active
-                    ? 'bg-brand text-primary-foreground shadow-lift'
-                    : 'text-muted-foreground hover:bg-tint hover:text-tint-foreground',
+                    ? 'bg-muted text-foreground before:absolute before:-left-4 before:top-1/2 before:h-6 before:w-1 before:-translate-y-1/2 before:rounded-r-full before:bg-brand'
+                    : 'text-foreground/75 hover:bg-muted/70 hover:text-foreground',
                 )}
               >
-                <Icon className="h-4 w-4 shrink-0" />
+                <Icon className={cn('h-[18px] w-[18px] shrink-0', active && 'text-brand')} />
                 {link.label}
               </Link>
             )
