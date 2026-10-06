@@ -120,6 +120,17 @@
     @apply rounded-[1.25rem] border border-border/80 shadow-none;
   }
 
+  /*
+   * The staff app: a soft grey page, big white cards with generous
+   * rounding and no shadow, a floating dark menu bar at the bottom.
+   */
+  .field-shell {
+    --background: 30 8% 94%;
+  }
+  .field-shell .surface {
+    @apply rounded-[1.75rem] shadow-none;
+  }
+
   /* Diagonal stripes over a filled bar or arc, as in the reference. */
   .hatch {
     background-image: repeating-linear-gradient(

@@ -307,24 +307,32 @@ export function ClockPanel({
       {needsNotifications ? (
         <NotificationGate push={push} />
       ) : nextType ? (
-        <Button
-          size="xl"
-          className="w-full"
+        <button
+          type="button"
           disabled={Boolean(busyStep)}
           onClick={() => void start(nextType)}
+          className="relative flex h-16 w-full items-center rounded-full bg-brand p-2 text-primary-foreground transition-[filter] hover:brightness-105 active:scale-[0.99] disabled:opacity-80"
         >
-          {busyStep ? (
-            <>
+          <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-brand">
+            {busyStep ? (
               <Camera className="h-5 w-5 animate-pulse" />
-              {busyStep}…
-            </>
-          ) : (
-            <>
-              {nextType === 'opening' ? <LogIn className="h-5 w-5" /> : <LogOut className="h-5 w-5" />}
-              {nextType === 'opening' ? 'Clock in with selfie' : 'Clock out with selfie'}
-            </>
-          )}
-        </Button>
+            ) : nextType === 'opening' ? (
+              <LogIn className="h-5 w-5" />
+            ) : (
+              <LogOut className="h-5 w-5" />
+            )}
+          </span>
+          <span className="flex-1 text-center text-base font-semibold italic">
+            {busyStep
+              ? `${busyStep}…`
+              : nextType === 'opening'
+                ? 'Clock in with selfie'
+                : 'Clock out with selfie'}
+          </span>
+          <span aria-hidden className="w-12 shrink-0 text-center text-lg tracking-[-0.2em] text-white/70">
+            ›››
+          </span>
+        </button>
       ) : (
         <Alert variant="success" className="flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4 shrink-0 text-success" />

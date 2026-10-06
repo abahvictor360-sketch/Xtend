@@ -23,11 +23,13 @@ export default async function FieldLayout({ children }: { children: React.ReactN
   ])
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col overflow-x-hidden">
-      <main className="flex-1 px-4 pb-8 pt-4">{children}</main>
-      <PhoneBeacon />
-      <NativeBridge />
-      <FieldNav canFileReport={canFileReport === true} canCountStock={countStatus.open} />
+    <div className="field-shell min-h-dvh bg-background">
+      <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col overflow-x-hidden">
+        <main className="flex-1 px-4 pb-28 pt-4">{children}</main>
+        <PhoneBeacon />
+        <NativeBridge />
+        <FieldNav canFileReport={canFileReport === true} canCountStock={countStatus.open} />
+      </div>
     </div>
   )
 }
