@@ -7,7 +7,7 @@ import { Onboarding } from '@/components/field/onboarding'
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Welcome — Xtend' }
 
-/** The first-run walkthrough for new field staff (035). Shown once. */
+/** The first-run walkthrough for new field staff (036). Shown once. */
 export default async function WelcomePage({
   searchParams,
 }: {

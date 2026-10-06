@@ -62,7 +62,7 @@ export function StaffManager({
   initialSearch?: string
   /** From the dashboard's "Add staff" button (?new=1). */
   startCreating?: boolean
-  /** Signed links to profile photos (035), by person. */
+  /** Signed links to profile photos (036), by person. */
   photos?: Record<string, string>
 }) {
   const hasPush = useMemo(() => new Set(notified), [notified])

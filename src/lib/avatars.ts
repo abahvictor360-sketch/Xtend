@@ -1,7 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**
- * Profile photos (migration 035) live in the private "avatars" bucket.
+ * Profile photos (migration 036) live in the private "avatars" bucket.
  * Pages read them through signed links that expire after an hour; storage
  * RLS decides whose photos this session may see (their own, an admin's
  * everyone, a supervisor's team).
@@ -30,7 +30,7 @@ export async function avatarUrls(
       if (url) out.set(r.id, url)
     }
   } catch {
-    // Before migration 035, or storage unreachable: names and initials only.
+    // Before migration 036, or storage unreachable: names and initials only.
   }
   return out
 }

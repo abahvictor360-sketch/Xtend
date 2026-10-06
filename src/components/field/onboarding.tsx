@@ -27,7 +27,7 @@ const STEPS: Step[] = ['welcome', 'photo', 'location', 'notifications', 'clock']
 /**
  * The first-run walkthrough for new staff: what a day in Xtend looks like,
  * a profile photo, location, notifications, and how to clock in. Finishing
- * it sets profiles.onboarded_at (035), so it shows once.
+ * it sets profiles.onboarded_at (036), so it shows once.
  */
 export function Onboarding({ name, photoUrl }: { name: string; photoUrl: string | null }) {
   const router = useRouter()

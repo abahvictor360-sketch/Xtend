@@ -7,6 +7,7 @@ import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
+import { Chip } from '@/components/ui/chip'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
 
@@ -19,7 +20,24 @@ export interface Allocation {
   home_outlet_name: string | null
   outlet_ids: string[]
   outlet_names: string[]
+  /** Their supervisor, which is their team; null when on nobody's team. */
+  supervisor_id: string | null
 }
+
+/** A supervisor's team, by the supervisor's name. */
+export interface AllocationTeam {
+  id: string
+  name: string
+}
+
+const NO_TEAM = 'no-team'
+
+type Category = 'all' | Allocation['role']
+const CATEGORIES: { value: Category; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'merchandiser', label: 'Merchandisers' },
+  { value: 'marketer', label: 'Marketers' },
+]
 
 export interface AllocatableOutlet {
   id: string
@@ -35,27 +53,61 @@ export interface AllocatableOutlet {
 export function OutletAllocator({
   allocations,
   outlets,
+  teams = [],
 }: {
   allocations: Allocation[]
   outlets: AllocatableOutlet[]
+  /** Every supervisor's team, for an admin; empty for a supervisor. */
+  teams?: AllocationTeam[]
 }) {
   const router = useRouter()
   const [search, setSearch] = useState('')
+  const [category, setCategory] = useState<Category>('all')
+  const [team, setTeam] = useState<string>('all')
   const [editing, setEditing] = useState<string | null>(null)
   const [chosen, setChosen] = useState<Set<string>>(new Set())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
 
+  const teamName = useMemo(() => new Map(teams.map((t) => [t.id, t.name])), [teams])
+  const inCategory = useMemo(
+    () => (category === 'all' ? allocations : allocations.filter((a) => a.role === category)),
+    [allocations, category],
+  )
+  const roleCounts = useMemo(() => {
+    const counts = new Map<Category, number>([['all', allocations.length]])
+    for (const a of allocations) counts.set(a.role, (counts.get(a.role) ?? 0) + 1)
+    return counts
+  }, [allocations])
+  const teamCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const a of inCategory) {
+      const key = a.supervisor_id ?? NO_TEAM
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    return counts
+  }, [inCategory])
+
+  // Grouped by team, then by name, so a team's people sit together.
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase()
-    if (!needle) return allocations
-    return allocations.filter(
-      (a) =>
-        a.staff_name.toLowerCase().includes(needle) ||
-        a.outlet_names.some((name) => name.toLowerCase().includes(needle)),
-    )
-  }, [allocations, search])
+    return inCategory
+      .filter((a) => {
+        if (team === NO_TEAM && a.supervisor_id) return false
+        if (team !== 'all' && team !== NO_TEAM && a.supervisor_id !== team) return false
+        return (
+          !needle ||
+          a.staff_name.toLowerCase().includes(needle) ||
+          a.outlet_names.some((name) => name.toLowerCase().includes(needle))
+        )
+      })
+      .sort((x, y) => {
+        const tx = x.supervisor_id ? (teamName.get(x.supervisor_id) ?? '') : '~'
+        const ty = y.supervisor_id ? (teamName.get(y.supervisor_id) ?? '') : '~'
+        return tx.localeCompare(ty) || x.staff_name.localeCompare(y.staff_name)
+      })
+  }, [inCategory, team, search, teamName])
 
   function startEditing(person: Allocation) {
     setError(null)
@@ -104,6 +156,46 @@ export function OutletAllocator({
       {error && <Alert variant="destructive">{error}</Alert>}
       {saved && <Alert variant="success">{saved}</Alert>}
 
+      <div
+        role="tablist"
+        aria-label="Role"
+        className="flex w-full rounded-2xl bg-muted p-1 sm:inline-flex sm:w-auto"
+      >
+        {CATEGORIES.map((c) => (
+          <button
+            key={c.value}
+            type="button"
+            role="tab"
+            aria-selected={category === c.value}
+            onClick={() => setCategory(c.value)}
+            className={cn(
+              'flex-1 whitespace-nowrap rounded-xl px-2 py-2 text-[13px] font-semibold transition-colors sm:flex-none sm:px-4 sm:text-sm',
+              category === c.value
+                ? 'bg-card text-foreground shadow-soft'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {c.label} ({roleCounts.get(c.value) ?? 0})
+          </button>
+        ))}
+      </div>
+
+      {teams.length > 0 && (
+        <div className="flex flex-wrap gap-2" aria-label="Team">
+          <Chip active={team === 'all'} onClick={() => setTeam('all')}>
+            Every team ({inCategory.length})
+          </Chip>
+          {teams.map((t) => (
+            <Chip key={t.id} active={team === t.id} onClick={() => setTeam(t.id)}>
+              {t.name}&rsquo;s team ({teamCounts.get(t.id) ?? 0})
+            </Chip>
+          ))}
+          <Chip active={team === NO_TEAM} onClick={() => setTeam(NO_TEAM)}>
+            No supervisor ({teamCounts.get(NO_TEAM) ?? 0})
+          </Chip>
+        </div>
+      )}
+
       <div className="relative">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -116,7 +208,7 @@ export function OutletAllocator({
 
       {visible.length === 0 && (
         <p className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-          Nobody to allocate stores to.
+          {allocations.length === 0 ? 'Nobody to allocate stores to.' : 'Nobody matches.'}
         </p>
       )}
 
@@ -134,6 +226,12 @@ export function OutletAllocator({
                   </p>
                   <p className="text-xs text-muted-foreground">
                     Home store: {person.home_outlet_name ?? 'none set'}
+                    {teams.length > 0 &&
+                      ` · ${
+                        person.supervisor_id
+                          ? `${teamName.get(person.supervisor_id) ?? 'A supervisor'}'s team`
+                          : 'No supervisor'
+                      }`}
                   </p>
                 </div>
                 {open ? (

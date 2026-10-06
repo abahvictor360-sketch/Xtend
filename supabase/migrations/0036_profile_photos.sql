@@ -1,5 +1,5 @@
 -- =====================================================================
--- XTEND migration 035 — profile photos and first-run onboarding
+-- XTEND migration 036 — profile photos and first-run onboarding
 --
 -- Field staff take a profile photo in the app (onboarding asks for it
 -- first). Admins and their supervisor see it beside the person's name and
@@ -98,4 +98,4 @@ $$;
 
 revoke all on function public.profiles_self_guard() from public, anon, authenticated;
 
-select 'Profile photos and onboarding (035) installed' as result;
+select 'Profile photos and onboarding (036) installed' as result;

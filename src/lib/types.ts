@@ -31,7 +31,7 @@ export interface Profile {
   must_change_password: boolean
   /** Excused by an admin from needing notifications on to clock in (027). */
   push_exempt?: boolean
-  /** When they finished the first-run walkthrough (035); null until then. */
+  /** When they finished the first-run walkthrough (036); null until then. */
   onboarded_at?: string | null
   created_at: string
   updated_at: string
