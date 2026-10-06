@@ -109,9 +109,9 @@
   }
 
   /*
-   * The admin and supervisor dashboard: one white frame on a grey page,
-   * light grey workspace, flat white cards with a hairline border (after
-   * the "ACRU" reference). Scoped so the staff app keeps its own look.
+   * The admin and supervisor dashboard: a white menu down the left, edge
+   * to edge, beside a light grey workspace, with flat white cards and a
+   * hairline border. Scoped so the staff app keeps its own look.
    */
   .admin-shell {
     --canvas: 30 6% 95.5%;
