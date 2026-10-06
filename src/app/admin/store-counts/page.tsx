@@ -75,7 +75,7 @@ export default async function StoreCountsPage({
     problem = e instanceof Error ? e.message : 'The counts could not be loaded.'
   }
 
-  const [{ data: staff }, { data: requests }] = await Promise.all([
+  const [{ data: staff }, { data: requests }, { data: sheetRows }] = await Promise.all([
     // Everyone for an admin, the supervisor's own team for a supervisor.
     supabase.rpc('my_staff'),
     supabase
@@ -83,7 +83,25 @@ export default async function StoreCountsPage({
       .select('*')
       .order('created_at', { ascending: false })
       .limit(15),
+    // Paper count sheets (migration 035); RLS narrows them like the counts.
+    supabase
+      .from('store_count_sheet_detail')
+      .select('id, staff_name, outlet_name, count_date, file_name, content_type, path, created_at')
+      .gte('count_date', from)
+      .lte('count_date', to)
+      .order('created_at', { ascending: false })
+      .limit(500),
   ])
+  const sheets = (sheetRows ?? []) as {
+    id: string
+    staff_name: string
+    outlet_name: string
+    count_date: string
+    file_name: string
+    content_type: string
+    path: string
+    created_at: string
+  }[]
 
   const people: CountPerson[] = ((staff ?? []) as Profile[])
     .filter(
@@ -103,7 +121,12 @@ export default async function StoreCountsPage({
   // may see, so their photos are signed with the service role: supervisors
   // cannot read the reports bucket directly. Links last an hour.
   const photoUrls = new Map<string, string>()
-  const paths = [...new Set(rows.map((r) => r.photo_path).filter((p): p is string => Boolean(p)))]
+  const paths = [
+    ...new Set([
+      ...rows.map((r) => r.photo_path).filter((p): p is string => Boolean(p)),
+      ...sheets.map((s) => s.path),
+    ]),
+  ]
   if (paths.length) {
     try {
       const { data } = await createAdminSupabase()
@@ -200,6 +223,54 @@ export default async function StoreCountsPage({
           )}
         </CardContent>
       </Card>
+
+      {sheets.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Count sheets ({sheets.length})</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Counts done on paper and sent as a file. Their figures are not in the totals above;
+              open the sheet to read them.
+            </p>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Staff</TableHead>
+                  <TableHead>Store</TableHead>
+                  <TableHead>Sheet</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sheets.map((sheet) => (
+                  <TableRow key={sheet.id}>
+                    <TableCell className="whitespace-nowrap">{sheet.count_date}</TableCell>
+                    <TableCell>{sheet.staff_name}</TableCell>
+                    <TableCell>{sheet.outlet_name}</TableCell>
+                    <TableCell className="text-xs">
+                      {photoUrls.get(sheet.path) ? (
+                        <a
+                          href={photoUrls.get(sheet.path)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-semibold text-brand underline-offset-2 hover:underline"
+                        >
+                          Open {sheet.content_type === 'application/pdf' ? 'PDF' : 'photo'}
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground">Link unavailable</span>
+                      )}
+                      <span className="ml-2 text-muted-foreground">{sheet.file_name}</span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
 
       {rows.length > 0 && (
         <Card>

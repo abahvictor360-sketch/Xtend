@@ -1984,5 +1984,86 @@ begin
     perform act_as(boss);
   end;
 
+  -- ---------------------------------------------------------------
+  -- Paper count sheets (035).
+  -- ---------------------------------------------------------------
+  declare
+    sade     uuid := gen_random_uuid();
+    shop     uuid;
+    other    uuid;
+    req_id   uuid;
+    sheet    uuid;
+    prog     record;
+  begin
+    perform act_as(boss);
+    insert into auth.users (id, email) values (sade, 'sade@xpel.ng');
+    insert into public.outlets (name, lat, lng) values ('Sade Shop', 6.5, 3.6) returning id into shop;
+    insert into public.outlets (name, lat, lng) values ('Not Sade''s', 6.51, 3.61) returning id into other;
+    insert into public.profiles (id, full_name, email, role, outlet_id)
+    values (sade, 'Sade Ade', 'sade@xpel.ng', 'merchandiser', shop);
+    insert into storage.buckets (id, name) values ('reports', 'reports') on conflict do nothing;
+
+    perform act_as(sade);
+    insert into storage.objects (bucket_id, name, metadata) values
+      ('reports', sade || '/sheet-1.pdf', '{"mimetype":"application/pdf","size":120000}'),
+      ('reports', sade || '/sheet-2.txt', '{"mimetype":"text/plain","size":100}'),
+      ('reports', sade || '/sheet-3.pdf', '{"mimetype":"application/pdf","size":20000000}'),
+      ('reports', bala || '/not-mine.pdf', '{"mimetype":"application/pdf","size":100}');
+
+    if not public.is_month_end_window() then
+      begin
+        perform public.submit_count_sheet(shop, sade || '/sheet-1.pdf', 'count.pdf');
+        perform assert(false, 'a sheet nobody asked for is refused');
+      exception when others then
+        perform assert(sqlerrm like '%No store count is due%', 'a sheet nobody asked for is refused');
+      end;
+    end if;
+
+    perform act_as(boss);
+    req_id := public.request_store_count(array[sade], public.business_date() + 1, null);
+    perform act_as(sade);
+
+    begin
+      perform public.submit_count_sheet(other, sade || '/sheet-1.pdf', 'count.pdf');
+      perform assert(false, 'a sheet for somebody else''s store is refused');
+    exception when others then
+      perform assert(sqlerrm like '%not one of yours%', 'a sheet for somebody else''s store is refused');
+    end;
+    begin
+      perform public.submit_count_sheet(shop, bala || '/not-mine.pdf', 'count.pdf');
+      perform assert(false, 'a file from somebody else''s folder is refused');
+    exception when others then
+      perform assert(sqlerrm like '%Upload the filled count sheet again%', 'a file from somebody else''s folder is refused');
+    end;
+    begin
+      perform public.submit_count_sheet(shop, sade || '/sheet-2.txt', 'count.txt');
+      perform assert(false, 'only a PDF or a photo is accepted');
+    exception when others then
+      perform assert(sqlerrm like '%as a PDF%', 'only a PDF or a photo is accepted');
+    end;
+    begin
+      perform public.submit_count_sheet(shop, sade || '/sheet-3.pdf', 'big.pdf');
+      perform assert(false, 'a file over 10 MB is refused');
+    exception when others then
+      perform assert(sqlerrm like '%smaller than 10 MB%', 'a file over 10 MB is refused');
+    end;
+
+    sheet := public.submit_count_sheet(shop, sade || '/sheet-1.pdf', E'my\ncount.pdf');
+    select * into prog from public.store_count_sheets where id = sheet;
+    perform assert(prog.user_id = sade and prog.request_id = req_id and prog.size_bytes = 120000
+                   and prog.content_type = 'application/pdf' and prog.file_name = 'my count.pdf',
+      'a filled sheet is kept against the request, with its type and size from storage');
+    select * into prog from public.count_request_progress where id = req_id;
+    perform assert(prog.counted = 1 and cardinality(prog.waiting_on) = 0,
+      'sending a sheet counts as having counted');
+    begin
+      perform public.submit_count_sheet(shop, sade || '/sheet-1.pdf', 'again.pdf');
+      perform assert(false, 'the same file cannot be sent twice');
+    exception when others then
+      perform assert(sqlerrm like '%already been sent%', 'the same file cannot be sent twice');
+    end;
+    perform act_as(boss);
+  end;
+
   raise notice 'ALL RULES PASSED';
 end $$;

@@ -3,6 +3,7 @@ import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { SheetScreen, HeaderField } from '@/components/field/screen'
 import { StoreCountForm, type CountLine } from '@/components/field/store-count-form'
+import { CountSheetPanel, type SentSheet } from '@/components/field/count-sheet-panel'
 import { Alert } from '@/components/ui/alert'
 import { getCountStatus } from '@/lib/store-count-status'
 import { longDate } from '@/lib/utils'
@@ -33,7 +34,7 @@ export default async function StoreCountPage() {
 
   // Today's figures, the products from their last count at each store, and
   // every name counted so far, for suggestions while typing.
-  const [{ data: outlets }, { data: mine }, { data: names }] = await Promise.all([
+  const [{ data: outlets }, { data: mine }, { data: names }, { data: sheets }] = await Promise.all([
     supabase.rpc('my_outlets'),
     supabase
       .from('store_count_detail')
@@ -43,6 +44,13 @@ export default async function StoreCountPage() {
       .order('product_name')
       .limit(1000),
     supabase.rpc('counted_product_names'),
+    // Paper count sheets sent today (migration 035).
+    supabase
+      .from('store_count_sheet_detail')
+      .select('id, outlet_name, file_name, created_at')
+      .eq('user_id', session.userId)
+      .eq('count_date', businessDate)
+      .order('created_at', { ascending: false }),
   ])
 
   const rows = (mine ?? []) as {
@@ -87,12 +95,15 @@ export default async function StoreCountPage() {
         </>
       }
     >
-      <StoreCountForm
-        stores={stores}
-        today={todays}
-        previous={previous}
-        suggestions={((names ?? []) as { name: string }[]).map((n) => n.name)}
-      />
+      <div className="space-y-4">
+        <CountSheetPanel stores={stores} sent={(sheets ?? []) as SentSheet[]} />
+        <StoreCountForm
+          stores={stores}
+          today={todays}
+          previous={previous}
+          suggestions={((names ?? []) as { name: string }[]).map((n) => n.name)}
+        />
+      </div>
     </SheetScreen>
   )
 }
