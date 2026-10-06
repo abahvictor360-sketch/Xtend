@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { notifyUsers } from '@/lib/notify'
 
 export const maxDuration = 60
@@ -27,7 +27,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       p_thread: id,
       p_body: parsed.data.body,
     })
-    if (error) return Response.json({ error: error.message }, { status: 400 })
+    if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
 
     if (parsed.data.resolve) {
       await supabase.rpc('resolve_support_thread', { p_thread: id })

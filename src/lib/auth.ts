@@ -117,8 +117,25 @@ export function apiError(error: unknown) {
       { status: error.status },
     )
   }
-  const message = error instanceof Error ? error.message : 'Unexpected error'
-  return Response.json({ error: message }, { status: 500 })
+  // Anything else is a fault, not an answer: its text can name tables,
+  // columns or services, so it goes to the server log and not the caller.
+  console.error('unexpected API error', error)
+  return Response.json({ error: 'Something went wrong. Try again.' }, { status: 500 })
+}
+
+/**
+ * What a database error may tell the caller. A message a Postgres function
+ * raises on purpose (SQLSTATE P0001) is written for people, so it is passed
+ * on. Anything else (a constraint, a column, a policy) describes the
+ * database, so it is logged and the caller gets the fallback.
+ */
+export function dbErrorMessage(
+  error: { code?: string; message: string } | null | undefined,
+  fallback = 'That could not be saved. Try again.',
+): string {
+  if (error?.code === 'P0001') return error.message
+  if (error) console.error('database error', error)
+  return fallback
 }
 
 /** The roles that use the phone app: they clock in, out and are tracked. */

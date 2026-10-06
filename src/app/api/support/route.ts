@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession, FIELD_ROLES } from '@/lib/auth'
+import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/auth'
 import { respondToSupportThread } from '@/lib/support-assistant'
 
 export const maxDuration = 60
@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       p_body: parsed.data.body,
     })
     if (error || !threadId) {
-      return Response.json({ error: error?.message ?? 'Could not send your message.' }, { status: 400 })
+      return Response.json({ error: dbErrorMessage(error, 'Could not send your message.') }, { status: 400 })
     }
 
     void session

@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { pushConfigured, sendPush, type PushTarget } from '@/lib/push'
 
 export const maxDuration = 60
@@ -9,7 +9,14 @@ export const maxDuration = 60
 const schema = z.object({
   title: z.string().trim().min(1).max(80),
   body: z.string().trim().min(1).max(400),
-  url: z.string().max(300).nullable().optional(),
+  // A page in Xtend only. A link to another site would let a notification
+  // that reads as Xtend's open somebody else's page.
+  url: z
+    .string()
+    .max(300)
+    .regex(/^\/(?![/\\])[^\s\\]*$/, 'A notification can only open a page in Xtend')
+    .nullable()
+    .optional(),
   audience: z.enum(['everyone', 'role', 'outlet', 'users']),
   role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).nullable().optional(),
   outlet_id: z.string().uuid().nullable().optional(),
@@ -60,7 +67,7 @@ export async function POST(request: Request) {
       'resolve_notification_targets',
       { p_audience: input.audience, p_detail: detail },
     )
-    if (targetError) return Response.json({ error: targetError.message }, { status: 400 })
+    if (targetError) return Response.json({ error: dbErrorMessage(targetError) }, { status: 400 })
 
     const targets = (targetData ?? []) as TargetRow[]
 
@@ -100,7 +107,7 @@ export async function POST(request: Request) {
       .select('id, user_id, endpoint, p256dh, auth')
       .in('user_id', userIds)
       .eq('is_active', true)
-    if (subsError) return Response.json({ error: subsError.message }, { status: 400 })
+    if (subsError) return Response.json({ error: dbErrorMessage(subsError) }, { status: 400 })
 
     const { data: notification, error: insertError } = await admin
       .from('notifications')
@@ -115,7 +122,7 @@ export async function POST(request: Request) {
       })
       .select('id')
       .single<{ id: string }>()
-    if (insertError) return Response.json({ error: insertError.message }, { status: 400 })
+    if (insertError) return Response.json({ error: dbErrorMessage(insertError) }, { status: 400 })
 
     const devices = (subs ?? []) as PushTarget[]
     const results = await Promise.all(

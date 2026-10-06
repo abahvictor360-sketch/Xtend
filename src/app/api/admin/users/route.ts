@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 import { deliverCredentials, generateTempPassword } from '@/lib/credentials'
 
@@ -35,6 +35,19 @@ export async function POST(request: Request) {
         { error: 'Supervisors can create merchandisers and marketers only.' },
         { status: 403 },
       )
+    }
+    // And into one of their own stores: editing a store is admin-only, so
+    // creating somebody must not be a way round that.
+    if (isSupervisor && input.outlet_id) {
+      const supabase = await createServerSupabase()
+      const { data: mine } = await supabase.rpc('outlets_for_user', { target: session.userId })
+      const own = ((mine ?? []) as { outlet_id: string }[]).some((o) => o.outlet_id === input.outlet_id)
+      if (!own) {
+        return Response.json(
+          { error: 'Supervisors can add staff to their own stores only.' },
+          { status: 403 },
+        )
+      }
     }
     const supervisor_id = isSupervisor ? session.userId : (input.supervisor_id ?? null)
     const outlet_id = isSupervisor
@@ -72,8 +85,15 @@ export async function POST(request: Request) {
     if (profileError) {
       // Never leave an auth user without a profile.
       await admin.auth.admin.deleteUser(created.user.id)
-      const status = profileError.code === '23505' ? 409 : 400
-      return Response.json({ error: profileError.message }, { status })
+      const duplicate = profileError.code === '23505'
+      return Response.json(
+        {
+          error: duplicate
+            ? 'Somebody already has that email or phone number.'
+            : dbErrorMessage(profileError),
+        },
+        { status: duplicate ? 409 : 400 },
+      )
     }
 
     const delivery = await deliverCredentials({

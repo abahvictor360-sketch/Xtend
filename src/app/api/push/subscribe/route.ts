@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 
 const schema = z.object({
   endpoint: z.string().url().max(1000),
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
       { onConflict: 'endpoint' },
     )
 
-    if (error) return Response.json({ error: error.message }, { status: 400 })
+    if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
     return Response.json({ subscribed: true }, { status: 201 })
   } catch (error) {
     return apiError(error)
@@ -46,7 +46,7 @@ export async function DELETE(request: Request) {
 
     const supabase = await createServerSupabase()
     const { error } = await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint)
-    if (error) return Response.json({ error: error.message }, { status: 400 })
+    if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
 
     return Response.json({ unsubscribed: true })
   } catch (error) {

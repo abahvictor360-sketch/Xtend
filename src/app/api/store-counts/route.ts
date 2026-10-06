@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 
 const schema = z.object({
   outlet_id: z.string().uuid(),
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
       p_accuracy_m: parsed.data.accuracy_m,
       p_photo_path: parsed.data.photo_path,
     })
-    if (error) return Response.json({ error: error.message }, { status: 400 })
+    if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
 
     return Response.json({ saved: data ?? 0 }, { status: 201 })
   } catch (error) {

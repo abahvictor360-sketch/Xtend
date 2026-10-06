@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
-import { apiError, requireApiSession, FIELD_ROLES } from '@/lib/auth'
+import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/auth'
 import { notifyWatchers } from '@/lib/notify'
 import { resolvePlace } from '@/lib/geocode'
 import { HEARTBEAT_GEOFENCE_M } from '@/lib/geo'
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
       .select('id, distance_m, created_at')
       .single()
 
-    if (error) return Response.json({ error: error.message }, { status: 400 })
+    if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
 
     // The trigger raises a left_geofence alert at most once every 30
     // minutes. Rather than duplicating that rule here, ask whether it

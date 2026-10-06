@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 
 const schema = z.object({ note: z.string().trim().max(500).nullable().optional() })
 
@@ -17,7 +17,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
       p_id: id,
       p_note: parsed.data.note ?? null,
     })
-    if (error) return Response.json({ error: error.message }, { status: 400 })
+    if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
     return Response.json({ ok: true })
   } catch (error) {
     return apiError(error)

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession, FIELD_ROLES } from '@/lib/auth'
+import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/auth'
 
 const schema = z.object({
   lat: z.number().min(-90).max(90),
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
       p_source: 'staff',
       p_photo_path: parsed.data.photo_path,
     })
-    if (error) return Response.json({ error: error.message }, { status: 400 })
+    if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
     return Response.json({ id: data }, { status: 201 })
   } catch (error) {
     return apiError(error)

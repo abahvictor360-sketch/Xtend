@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { pushToUsers } from '@/lib/push-users'
 import { longDate } from '@/lib/utils'
 
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
       p_due_date: input.due_date,
       p_note: input.note ?? null,
     })
-    if (error) return Response.json({ error: error.message }, { status: 400 })
+    if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
 
     const notified = await pushToUsers(input.user_ids, {
       title: 'Store count requested',

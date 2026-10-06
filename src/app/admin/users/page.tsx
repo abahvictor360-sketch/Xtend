@@ -23,12 +23,17 @@ export default async function UsersPage({
 
   // my_staff() is the whole list for an admin and the supervisor's own
   // team for a supervisor, decided in Postgres rather than here.
-  const [{ data: staff }, { data: outlets }, { data: supervisors }] = await Promise.all([
-    supabase.rpc('my_staff'),
-    supabase.from('outlets').select('*').order('name'),
-    // Empty for a supervisor: only an admin assigns a reporting line.
-    supabase.rpc('available_supervisors'),
-  ])
+  const [{ data: staff }, { data: outlets }, { data: supervisors }, { data: ownOutlets }] =
+    await Promise.all([
+      supabase.rpc('my_staff'),
+      supabase.from('outlets').select('*').order('name'),
+      // Empty for a supervisor: only an admin assigns a reporting line.
+      supabase.rpc('available_supervisors'),
+      // A supervisor adds staff to their own stores only.
+      isAdmin
+        ? Promise.resolve({ data: null })
+        : supabase.rpc('outlets_for_user', { target: session.userId }),
+    ])
 
   const photos = Object.fromEntries(
     await avatarUrls(
@@ -76,6 +81,9 @@ export default async function UsersPage({
       <StaffManager
         staff={(staff ?? []) as Profile[]}
         outlets={(outlets ?? []) as Outlet[]}
+        newStaffOutletIds={
+          isAdmin ? undefined : ((ownOutlets ?? []) as { outlet_id: string }[]).map((o) => o.outlet_id)
+        }
         isAdmin={isAdmin}
         notified={notified}
         supervisors={(supervisors ?? []) as { id: string; full_name: string; role: string }[]}
