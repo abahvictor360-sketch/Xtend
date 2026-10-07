@@ -1,12 +1,12 @@
 import { z } from 'zod'
-import { optional, zAddress, zPlaceName } from '@/lib/validation'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
+import { address, thingName } from '@/lib/fields'
 
 const schema = z.object({
-  name: zPlaceName.optional(),
-  address: optional(zAddress),
+  name: thingName(160, 'store name').optional(),
+  address,
   lat: z.number().min(-90).max(90).optional(),
   lng: z.number().min(-180).max(180).optional(),
   geofence_radius_m: z.number().int().min(25).max(2000).optional(),

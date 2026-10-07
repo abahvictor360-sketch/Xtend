@@ -11,7 +11,7 @@ import { processReportPhoto } from '@/lib/image'
 import { CameraCapture } from '@/components/field/camera-capture'
 import { submitOrQueue, PermanentJobError } from '@/lib/offline/sync'
 import { cn } from '@/lib/utils'
-import { checkText } from '@/lib/validation'
+import { writtenText } from '@/lib/fields'
 
 const MAX_PHOTOS = 5
 
@@ -23,38 +23,61 @@ export interface ReportFields {
   issues: string
 }
 
-const SECTIONS: { key: keyof ReportFields; label: string; hint: string; placeholder: string }[] = [
+const SECTIONS: {
+  key: keyof ReportFields
+  label: string
+  hint: string
+  placeholder: string
+  /** The day, sales and stock must be filled in; the rest may be empty. */
+  required: boolean
+  max: number
+}[] = [
   {
     key: 'body',
     label: 'The day',
     hint: 'How the day went',
     placeholder: 'Footfall, staffing, anything notable.',
+    required: true,
+    max: 4000,
   },
   {
     key: 'sales_summary',
     label: 'Sales',
     hint: 'What moved',
     placeholder: 'Units sold, best sellers, value.',
+    required: true,
+    max: 2000,
   },
   {
     key: 'stock_status',
     label: 'Stock',
     hint: 'What is on the shelf',
     placeholder: 'What is low, what is out, what arrived.',
+    required: true,
+    max: 2000,
   },
   {
     key: 'competitor_activity',
     label: 'Competitors',
     hint: 'What they are doing',
-    placeholder: 'Promos, new SKUs, price moves.',
+    placeholder: 'Promos, new SKUs, price moves. Leave empty if nothing.',
+    required: false,
+    max: 2000,
   },
   {
     key: 'issues',
     label: 'Issues',
     hint: 'What needs the office',
-    placeholder: 'Anything head office has to act on.',
+    placeholder: 'Anything head office has to act on. Leave empty if nothing.',
+    required: false,
+    max: 2000,
   },
 ]
+
+/** The server's own rules (lib/fields.ts), checked before anything is saved. */
+const RULES = Object.fromEntries(
+  SECTIONS.map((s) => [s.key, writtenText(s.max, s.required ? 10 : 0, `"${s.label}"`)]),
+) as Record<keyof ReportFields, ReturnType<typeof writtenText>>
 
 const EMPTY: ReportFields = {
   body: '',
@@ -125,13 +148,13 @@ export function ReportForm({
     event.preventDefault()
     setError(null)
     setNotice(null)
-    // Checked here too: a report saved offline is only sent later.
+    // Checked here as the server will: a report saved offline is only sent
+    // later, when a refusal would reach nobody.
     for (const s of SECTIONS) {
-      const text = fields[s.key]
-      const problem = text.trim() ? checkText(text, { min: 2, max: s.key === 'body' ? 4000 : 2000, what: s.label.toLowerCase() }) : null
-      if (problem) {
+      const check = RULES[s.key].safeParse(fields[s.key])
+      if (!check.success) {
         setActive(s.key)
-        setError(`${s.label}: ${problem}`)
+        setError(check.error.issues[0]?.message ?? `Check "${s.label}".`)
         return
       }
     }
@@ -192,6 +215,7 @@ export function ReportForm({
               >
                 {done && <Check className={cn('h-3 w-3', isActive ? 'text-white' : 'text-brand')} />}
                 {item.label}
+                {item.required && !done && <span aria-label="required">*</span>}
               </button>
             )
           })}
@@ -199,13 +223,19 @@ export function ReportForm({
       </div>
 
       <div className="space-y-1.5">
-        <Label htmlFor={active}>{section.hint}</Label>
+        <Label htmlFor={active}>
+          {section.hint}
+          <span className="ml-1 font-normal text-muted-foreground">
+            {section.required ? '(required)' : '(optional)'}
+          </span>
+        </Label>
         <Textarea
           id={active}
           key={active}
           autoFocus
           value={fields[active]}
           placeholder={section.placeholder}
+          maxLength={section.max}
           onChange={(e) => setFields((f) => ({ ...f, [active]: e.target.value }))}
           className="min-h-[132px]"
         />

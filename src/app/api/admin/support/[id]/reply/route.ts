@@ -1,14 +1,15 @@
 import { z } from 'zod'
-import { zText } from '@/lib/validation'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { notifyUsers } from '@/lib/notify'
+import { writtenText } from '@/lib/fields'
 
 export const maxDuration = 60
 
 const schema = z.object({
-  body: zText({ max: 4000, what: 'reply' }),
+  // An admin's own words: links allowed, junk not.
+  body: writtenText(4000, 2, 'the reply', true),
   resolve: z.boolean().default(false),
 })
 

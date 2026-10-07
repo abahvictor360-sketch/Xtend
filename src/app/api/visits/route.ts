@@ -3,6 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, REPORTING_ROLES, dbErrorMessage } from '@/lib/auth'
 import { notifyWatchers } from '@/lib/notify'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
+import { mapText } from '@/lib/fields'
 
 /**
  * Check in to a store. Naming the store is optional: left out, the
@@ -14,8 +15,8 @@ const schema = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   accuracy_m: z.number().nonnegative(),
-  address: z.string().max(500).nullable().optional(),
-  place_name: z.string().max(200).nullable().optional(),
+  address: mapText(500),
+  place_name: mapText(200),
   selfie_path: z.string().min(1).max(300).nullable().optional(),
   thumb_path: z.string().min(1).max(300).nullable().optional(),
   device_info: z.record(z.unknown()).default({}),

@@ -5,7 +5,7 @@ import { audit } from '@/lib/audit'
 import { buildStaffLoginDoc, staffLogins } from '@/lib/staff-logins'
 
 /**
- * The staff login sheet as Word (migration 039): built from the live staff
+ * The staff login sheet as Word (migration 041): built from the live staff
  * list on every download, so new people are always in it. Admins only: it
  * holds temporary passwords.
  */

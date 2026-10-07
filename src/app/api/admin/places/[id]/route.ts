@@ -1,11 +1,11 @@
 import { z } from 'zod'
-import { zPlaceName } from '@/lib/validation'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
+import { thingName } from '@/lib/fields'
 
 const schema = z.object({
-  name: zPlaceName.optional(),
+  name: thingName(120, 'place name').optional(),
   radius_m: z.number().int().min(15).max(500).optional(),
   verified: z.boolean().optional(),
 })

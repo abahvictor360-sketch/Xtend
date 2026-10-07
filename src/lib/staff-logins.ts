@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { TextRun as DocxRun } from 'docx'
 
 /**
- * Keeps a temporary password for the staff login sheet (migration 039)
+ * Keeps a temporary password for the staff login sheet (migration 041)
  * until the person chooses their own. Called with the service-role client
  * wherever a temporary password is made: a new account, a bulk import, a
  * reset. A failure here never stops the account being created; the
@@ -15,7 +15,7 @@ export async function rememberTempPassword(admin: SupabaseClient, userId: string
       .from('staff_temp_passwords')
       .upsert({ user_id: userId, password, set_at: new Date().toISOString() })
   } catch {
-    // Before migration 039 the table does not exist; the sheet then shows
+    // Before migration 041 the table does not exist; the sheet then shows
     // "Reset to issue one" for this person.
   }
 }

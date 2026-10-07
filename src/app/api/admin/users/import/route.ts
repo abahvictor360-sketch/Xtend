@@ -1,16 +1,16 @@
 import { z } from 'zod'
-import { optional, zEmail, zPersonName, zPhone } from '@/lib/validation'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 import { deliverCredentials, generateTempPassword } from '@/lib/credentials'
+import { emailAddress, optionalPhone, personName } from '@/lib/fields'
 import { rememberTempPassword } from '@/lib/staff-logins'
 
 const rowSchema = z.object({
-  full_name: zPersonName,
-  email: zEmail,
-  phone: optional(zPhone),
+  full_name: personName,
+  email: emailAddress,
+  phone: optionalPhone,
   outlet_name: z.string().max(160).nullable().optional(),
   role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).default('merchandiser'),
 })
@@ -86,11 +86,13 @@ export async function POST(request: Request) {
         results.push(base)
         return
       }
-      // Tidied: single spaces, one phone format, so duplicates are caught.
-      normalised.full_name = check.data.full_name
-      normalised.phone = check.data.phone ?? null
-      base.full_name = normalised.full_name
-      base.phone = normalised.phone
+      // From here on, the tidied values: the name with single spaces, the
+      // email in lower case, the phone as 0803….
+      base.full_name = check.data.full_name
+      base.email = check.data.email
+      base.phone = check.data.phone
+      normalised.email = check.data.email
+      normalised.phone = check.data.phone
 
       if (seenEmails.has(normalised.email)) base.error = 'Duplicate email inside this file'
       else if (takenEmails.has(normalised.email)) base.error = 'An account with this email exists'

@@ -3,7 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 /**
  * The Xpel stock count sheet as an Excel file, laid out like Xpel's own
  * sheet: company name, the month being counted, store name, date and
- * location, then every product on the sheet (migration 038) with its
+ * location, then every product on the sheet (migration 040) with its
  * barcode and columns for the back store, the shop floor, their total and
  * the expiry date. Built from the product list each time, so it always
  * matches what the app counts.

@@ -1,11 +1,12 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
+import { fileName } from '@/lib/fields'
 
 const schema = z.object({
   outlet_id: z.string().uuid(),
   path: z.string().min(1).max(300),
-  file_name: z.string().max(200).default(''),
+  file_name: fileName,
 })
 
 /**

@@ -1,12 +1,12 @@
 import { z } from 'zod'
-import { zPlaceName } from '@/lib/validation'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/auth'
+import { thingName } from '@/lib/fields'
 
 const schema = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
-  name: zPlaceName,
+  name: thingName(120, 'name of the place'),
   /** The shop-front photo, already checked by /api/photo-check. */
   photo_path: z.string().min(1).max(300),
 })

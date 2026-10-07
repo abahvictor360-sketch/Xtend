@@ -110,7 +110,7 @@ export default async function StoreCountsPage({
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle<{ file_name: string; created_at: string }>(),
-    // The products on the Xpel stock count sheet (migration 038).
+    // The products on the Xpel stock count sheet (migration 040).
     supabase
       .from('products')
       .select('id', { count: 'exact', head: true })

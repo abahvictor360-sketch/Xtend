@@ -1,5 +1,5 @@
 -- =====================================================================
--- XTEND migration 039 — the staff login sheet
+-- XTEND migration 041 — the staff login sheet
 --
 -- Admins download a Word document with every merchandiser's and
 -- marketer's login: email, phone and temporary password, plus how to
@@ -40,4 +40,4 @@ create or replace trigger trg_profiles_clear_temp_password
   after update of must_change_password on public.profiles
   for each row execute function public.clear_temp_password();
 
-select 'Staff login sheet (039) installed' as result;
+select 'Staff login sheet (041) installed' as result;

@@ -12,7 +12,7 @@ const MAX_BYTES = 10 * 1024 * 1024
 
 /**
  * The blank count sheet staff download. It is the Xpel stock count sheet
- * (migration 038), built as Excel from the product list and named for the
+ * (migration 040), built as Excel from the product list and named for the
  * month being counted. Only while no product is on the sheet can an admin
  * upload a PDF to use instead.
  */

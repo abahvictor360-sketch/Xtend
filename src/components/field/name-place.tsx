@@ -8,7 +8,8 @@ import { CameraCapture } from '@/components/field/camera-capture'
 import { processReportPhoto } from '@/lib/image'
 import { supabase } from '@/lib/supabase/client'
 import { checkPhoto } from '@/lib/offline/sync'
-import { check } from '@/lib/validation'
+import { thingName } from '@/lib/fields'
+import { problemWith } from '@/lib/field-check'
 
 /**
  * Shown after a clock-in or check-in at a spot no map could name. What the
@@ -102,7 +103,7 @@ export function NamePlace({ lat, lng }: { lat: number; lng: number }) {
           disabled={state === 'saving' || name.trim().length < 2}
           onClick={() => {
             // The name is checked before the photo, so nobody takes it twice.
-            const problem = check.placeName(name)
+            const problem = problemWith(thingName(120, 'name of the place'), name)
             setError(problem)
             if (!problem) setCamera(true)
           }}

@@ -1,9 +1,9 @@
 import { z } from 'zod'
-import { zNote } from '@/lib/validation'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
+import { note } from '@/lib/fields'
 
-const schema = z.object({ note: zNote(500) })
+const schema = z.object({ note: note(500) })
 
 /** Marks a flag as looked at. Who may is decided by review_integrity_flag(). */
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -18,7 +18,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     const supabase = await createServerSupabase()
     const { error } = await supabase.rpc('review_integrity_flag', {
       p_id: id,
-      p_note: parsed.data.note ?? null,
+      p_note: parsed.data.note || null,
     })
     if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
     return Response.json({ ok: true })

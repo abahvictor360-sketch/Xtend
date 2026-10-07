@@ -74,7 +74,7 @@ export default async function UsersPage({
         </div>
         {isAdmin && (
           <div className="flex flex-wrap justify-end gap-2">
-            {/* Built from the live list on every download (migration 039). */}
+            {/* Built from the live list on every download (migration 041). */}
             <a
               href="/api/admin/staff-logins"
               download

@@ -366,7 +366,7 @@ export interface StoreCountRow {
   store: string
   product: string
   sku: string | null
-  /** Barcode, back store, shop floor and expiry: the Xpel count sheet (038). */
+  /** Barcode, back store, shop floor and expiry: the Xpel count sheet (040). */
   barcode: string | null
   back_store: number | null
   shop_floor: number | null
@@ -407,7 +407,7 @@ export async function storeCounts(
 
   const base = 'count_date, staff_name, outlet_name, product_name, sku, in_store, sold'
   let result = await run(`${base}, distance_m, photo_path, barcode, back_store, shop_floor, expiry_date`)
-  // Until migration 038 is run the view has no count sheet columns, and
+  // Until migration 040 is run the view has no count sheet columns, and
   // until 022 none for location or photo.
   if (result.error?.code === '42703') result = await run(`${base}, distance_m, photo_path`)
   if (result.error?.code === '42703') result = await run(base)

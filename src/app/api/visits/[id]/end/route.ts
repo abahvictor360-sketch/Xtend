@@ -1,13 +1,14 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, REPORTING_ROLES, dbErrorMessage } from '@/lib/auth'
+import { mapText } from '@/lib/fields'
 
 const schema = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   accuracy_m: z.number().nonnegative(),
-  address: z.string().max(500).nullable().optional(),
-  place_name: z.string().max(200).nullable().optional(),
+  address: mapText(500),
+  place_name: mapText(200),
 })
 
 /** Check out of the store. Closing a visit is a one-way door. */

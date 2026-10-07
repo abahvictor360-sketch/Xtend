@@ -2,11 +2,12 @@ import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { NATIVE_PREFIX } from '@/lib/push-native'
+import { NATIVE_TOKEN } from '@/lib/push-endpoint'
 
 const schema = z.object({
   platform: z.enum(['android', 'ios']),
   // FCM tokens are long base64url-ish strings; APNs tokens are hex.
-  token: z.string().regex(/^[A-Za-z0-9_:-]{20,4096}$/),
+  token: z.string().regex(NATIVE_TOKEN),
 })
 
 /**

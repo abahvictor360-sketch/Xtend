@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { Textarea } from '@/components/ui/textarea'
 import { cn, formatLagos } from '@/lib/utils'
-import { checkText } from '@/lib/validation'
+import { writtenText } from '@/lib/fields'
+import { problemWith } from '@/lib/field-check'
 
 export interface AdminThread {
   id: string
@@ -64,7 +65,7 @@ export function SupportThreads({
   async function reply(threadId: string, resolve: boolean) {
     const text = (drafts[threadId] ?? '').trim()
     if (!text) return
-    const problem = checkText(text, { max: 4000, what: 'reply' })
+    const problem = problemWith(writtenText(4000, 2, 'the reply', true), text)
     if (problem) {
       setError(problem)
       return

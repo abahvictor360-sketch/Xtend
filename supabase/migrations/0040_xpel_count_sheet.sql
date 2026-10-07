@@ -1,5 +1,5 @@
 -- =====================================================================
--- XTEND migration 038 — the Xpel stock count sheet
+-- XTEND migration 040 — the Xpel stock count sheet
 --
 -- Stores are counted against Xpel's own stock count sheet: a fixed list of
 -- products, each with its barcode, counted in the back store and on the
@@ -582,4 +582,4 @@ $$;
 revoke all on function public.submit_count_sheet(uuid, text, text) from public, anon;
 grant execute on function public.submit_count_sheet(uuid, text, text) to authenticated, service_role;
 
-select 'Xpel stock count sheet (038) installed' as result;
+select 'Xpel stock count sheet (040) installed' as result;

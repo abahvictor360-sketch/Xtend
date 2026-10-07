@@ -11,7 +11,8 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import type { Outlet } from '@/lib/types'
-import { check } from '@/lib/validation'
+import { address, thingName } from '@/lib/fields'
+import { problemWith } from '@/lib/field-check'
 
 interface Draft {
   name: string
@@ -100,7 +101,7 @@ export function OutletManager({
     event.preventDefault()
     setError(null)
     const problem =
-      check.placeName(draft.name) ?? (draft.address.trim() ? check.address(draft.address) : null)
+      problemWith(thingName(160, 'store name'), draft.name) ?? problemWith(address, draft.address)
     if (problem) {
       setError(problem)
       return
@@ -191,10 +192,8 @@ export function OutletManager({
                 <Label>Name</Label>
                 <Input
                   required
-                  minLength={2}
-                  maxLength={120}
-                  autoCapitalize="words"
-                  placeholder="e.g. Shoprite Ikeja City Mall"
+                  maxLength={160}
+                  placeholder="Justrite Ogba"
                   value={draft.name}
                   onChange={(e) => setDraft({ ...draft, name: e.target.value })}
                 />
@@ -202,8 +201,8 @@ export function OutletManager({
               <div className="space-y-1 lg:col-span-2">
                 <Label>Address</Label>
                 <Input
-                  maxLength={300}
-                  placeholder="Street, area, city"
+                  maxLength={400}
+                  placeholder="124 Oba Akran Ave, Ogba, Lagos"
                   value={draft.address}
                   onChange={(e) => setDraft({ ...draft, address: e.target.value })}
                 />

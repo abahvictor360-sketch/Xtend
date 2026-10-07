@@ -36,7 +36,7 @@ Mac).
 
 ### 1. Database
 
-Run migrations `0030` to `0039` in the Supabase SQL editor, in order.
+Run migrations `0030` to `0041` in the Supabase SQL editor, in order.
 `0032` lets the apps' mock-GPS and rooted-phone flags be recorded; `0033`
 lets a phone's app notifications count as "notifications on" for the
 clock-in rule.

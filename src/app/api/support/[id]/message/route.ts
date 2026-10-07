@@ -1,12 +1,12 @@
 import { z } from 'zod'
-import { zText } from '@/lib/validation'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/auth'
 import { respondToSupportThread } from '@/lib/support-assistant'
+import { writtenText } from '@/lib/fields'
 
 export const maxDuration = 60
 
-const schema = z.object({ body: zText({ max: 4000 }) })
+const schema = z.object({ body: writtenText(4000, 2, 'your message') })
 
 /** A field member adds a message to their own thread; the AI replies again. */
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {

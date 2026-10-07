@@ -1,8 +1,8 @@
 import { z } from 'zod'
-import { zProductName } from '@/lib/validation'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
+import { thingName } from '@/lib/fields'
 
 const schema = z.object({
   outlet_id: z.string().uuid(),
@@ -13,8 +13,9 @@ const schema = z.object({
   lines: z
     .array(
       z.object({
-        product_name: zProductName,
-        // The Xpel count sheet (038): back store and shop floor, whose total
+        // "7UP" has two letters; "S26" only one, so one is enough.
+        product_name: thingName(120, 'product name', 1),
+        // The Xpel count sheet (040): back store and shop floor, whose total
         // is what is in the store. Older phones send in_store alone.
         back_store: z.number().int().min(0).max(1_000_000).nullable().optional(),
         shop_floor: z.number().int().min(0).max(1_000_000).nullable().optional(),

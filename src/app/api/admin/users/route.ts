@@ -1,16 +1,16 @@
 import { z } from 'zod'
-import { optional, zEmail, zPersonName, zPhone } from '@/lib/validation'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 import { deliverCredentials, generateTempPassword } from '@/lib/credentials'
+import { emailAddress, optionalPhone, personName } from '@/lib/fields'
 import { rememberTempPassword } from '@/lib/staff-logins'
 
 const createUserSchema = z.object({
-  full_name: zPersonName,
-  email: zEmail,
-  phone: optional(zPhone),
+  full_name: personName,
+  email: emailAddress,
+  phone: optionalPhone,
   role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).default('merchandiser'),
   outlet_id: z.string().uuid().nullable().optional(),
   supervisor_id: z.string().uuid().nullable().optional(),
@@ -106,7 +106,7 @@ export async function POST(request: Request) {
       )
     }
 
-    // Kept for the staff login sheet until they choose their own (039).
+    // Kept for the staff login sheet until they choose their own (041).
     await rememberTempPassword(admin, created.user.id, temp_password)
 
     const delivery = await deliverCredentials({

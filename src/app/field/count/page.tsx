@@ -33,7 +33,7 @@ export default async function StoreCountPage() {
   const { data: today } = await supabase.rpc('business_date')
   const businessDate = (today as string) ?? ''
 
-  // Today's figures, the Xpel count sheet's products (038), and every name
+  // Today's figures, the Xpel count sheet's products (040), and every name
   // counted so far, for suggestions when adding one not on the sheet.
   const [{ data: outlets }, { data: mine }, { data: sheetProducts }, { data: names }, { data: sheets }, { count: templates }] =
     await Promise.all([

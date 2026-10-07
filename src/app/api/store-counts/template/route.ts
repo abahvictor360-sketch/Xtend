@@ -5,7 +5,7 @@ import { buildCountSheet, countSheetFileName, sheetProducts } from '@/lib/count-
 
 /**
  * The blank count sheet staff fill in. It is the Xpel stock count sheet
- * (migration 038), built as Excel for the month being counted: with
+ * (migration 040), built as Excel for the month being counted: with
  * ?store=<id> for one of the caller's stores it also carries that store's
  * name, address and today's date.
  *
