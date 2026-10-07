@@ -5,7 +5,7 @@ import { Alert } from '@/components/ui/alert'
 import { CountDueBanner } from '@/components/field/count-due-banner'
 import { getCountStatus } from '@/lib/store-count-status'
 import { avatarUrls } from '@/lib/avatars'
-import type { Coverage, DayState } from '@/lib/types'
+import type { DayState } from '@/lib/types'
 import type { VisitOutlet, VisitRow } from '@/components/field/store-visits'
 
 export const dynamic = 'force-dynamic'
@@ -15,19 +15,17 @@ export default async function FieldPage() {
   const session = await requireSession(FIELD_ROLES)
   const supabase = await createServerSupabase()
 
-  // The day itself, how much of it the heartbeat saw, today's store visits,
+  // The day itself, today's store visits,
   // and every store Xtend knows, so the picker can name one without anybody
   // having had to allocate it first.
   const [
     { data, error },
-    { data: coverage },
     { data: visits },
     { data: outlets },
     { data: canVisitStores },
     countStatus,
   ] = await Promise.all([
     supabase.rpc('my_day'),
-    supabase.rpc('my_coverage'),
     supabase.rpc('my_store_visits'),
     supabase
       .from('outlets')
@@ -49,7 +47,6 @@ export default async function FieldPage() {
       {countStatus.open && <CountDueBanner status={countStatus} />}
       <FieldHome
         day={data as DayState}
-        coverage={(coverage as Coverage) ?? null}
         visits={(visits ?? []) as VisitRow[]}
         outlets={(outlets ?? []) as VisitOutlet[]}
         canVisitStores={canVisitStores === true}

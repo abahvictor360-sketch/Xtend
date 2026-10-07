@@ -60,5 +60,6 @@ run supabase/migrations/0038_push_endpoint_guard.sql
 run supabase/migrations/0039_field_rules.sql
 run supabase/migrations/0040_xpel_count_sheet.sql
 run supabase/migrations/0041_staff_login_sheet.sql
+run supabase/migrations/0042_staff_roles.sql
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rules.sql 2>&1 | grep -E 'NOTICE|ERROR' | sed 's/^psql:[^ ]*: //'
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_counts.sql 2>&1 | grep -E 'NOTICE|ERROR|PASSED' | sed 's/^psql:[^ ]*: //'

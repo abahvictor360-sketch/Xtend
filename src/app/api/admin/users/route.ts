@@ -12,6 +12,8 @@ const createUserSchema = z.object({
   email: emailAddress,
   phone: optionalPhone,
   role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).default('merchandiser'),
+  /** A role an admin added (042); the person then works like its base role. */
+  staff_role_id: z.string().uuid().nullable().optional(),
   outlet_id: z.string().uuid().nullable().optional(),
   supervisor_id: z.string().uuid().nullable().optional(),
 })
@@ -27,6 +29,19 @@ export async function POST(request: Request) {
       )
     }
     const input = parsed.data
+
+    // An added role decides the base role: what the person can do.
+    if (input.staff_role_id) {
+      const { data: added } = await createAdminSupabase()
+        .from('staff_roles')
+        .select('base_role, is_active')
+        .eq('id', input.staff_role_id)
+        .maybeSingle<{ base_role: 'merchandiser' | 'marketer' | 'supervisor'; is_active: boolean }>()
+      if (!added?.is_active) {
+        return Response.json({ error: 'That role is not available any more.' }, { status: 400 })
+      }
+      input.role = added.base_role
+    }
 
     // A supervisor staffs their own team: field roles only, reporting to
     // them. Role is the one field that grants power, so it stays with
@@ -87,6 +102,7 @@ export async function POST(request: Request) {
       email,
       phone: input.phone || null,
       role: input.role,
+      staff_role_id: input.staff_role_id ?? null,
       outlet_id: outlet_id || null,
       supervisor_id,
       must_change_password: true,

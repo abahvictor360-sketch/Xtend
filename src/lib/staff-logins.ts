@@ -22,6 +22,8 @@ export async function rememberTempPassword(admin: SupabaseClient, userId: string
 
 export interface StaffLogin {
   role: 'merchandiser' | 'marketer'
+  /** A role an admin added (042), shown as its own section; null for built-in. */
+  addedRole?: string | null
   name: string
   email: string
   phone: string | null
@@ -34,11 +36,14 @@ export interface StaffLogin {
 export async function staffLogins(admin: SupabaseClient): Promise<StaffLogin[]> {
   const { data: people, error } = await admin
     .from('profiles')
-    .select('id, full_name, email, phone, role, must_change_password')
+    .select('id, full_name, email, phone, role, must_change_password, staff_role_id')
     .in('role', ['merchandiser', 'marketer'])
     .eq('is_active', true)
     .order('full_name')
   if (error) throw new Error(error.message)
+
+  const { data: roles } = await admin.from('staff_roles').select('id, name')
+  const roleName = new Map(((roles ?? []) as { id: string; name: string }[]).map((r) => [r.id, r.name]))
 
   const ids = (people ?? []).map((p) => p.id as string)
   const kept = new Map<string, string>()
@@ -53,6 +58,7 @@ export async function staffLogins(admin: SupabaseClient): Promise<StaffLogin[]> 
     const temp = p.must_change_password ? kept.get(p.id as string) : undefined
     return {
       role: p.role as StaffLogin['role'],
+      addedRole: p.staff_role_id ? (roleName.get(p.staff_role_id as string) ?? null) : null,
       name: p.full_name as string,
       email: p.email as string,
       phone: (p.phone as string | null) ?? null,
@@ -185,8 +191,10 @@ export async function buildStaffLoginDoc(staff: StaffLogin[], site: string) {
       ],
     })
 
-  const merch = staff.filter((s) => s.role === 'merchandiser')
-  const market = staff.filter((s) => s.role === 'marketer')
+  const merch = staff.filter((s) => s.role === 'merchandiser' && !s.addedRole)
+  const market = staff.filter((s) => s.role === 'marketer' && !s.addedRole)
+  // Each role an admin added gets its own section, after the built-in ones.
+  const added = [...new Set(staff.map((s) => s.addedRole).filter((r): r is string => Boolean(r)))].sort()
   const empty = (who: string) =>
     new Paragraph({ children: [t(`No ${who} yet.`, { color: MUTED })] })
 
@@ -257,7 +265,15 @@ export async function buildStaffLoginDoc(staff: StaffLogin[], site: string) {
           new Paragraph({
             spacing: { after: 240 },
             children: [
-              t(`Prepared ${today} · ${merch.length} merchandisers · ${market.length} marketers`, { color: MUTED, size: 19 }),
+              t(
+                [
+                  `Prepared ${today}`,
+                  `${merch.length} merchandisers`,
+                  `${market.length} marketers`,
+                  ...added.map((r) => `${staff.filter((s) => s.addedRole === r).length} ${r}`),
+                ].join(' · '),
+                { color: MUTED, size: 19 },
+              ),
             ],
           }),
           note([
@@ -334,6 +350,15 @@ export async function buildStaffLoginDoc(staff: StaffLogin[], site: string) {
             children: [t('Marketers check in at each store they visit.', { color: MUTED })],
           }),
           market.length ? table(market) : empty('marketers'),
+
+          ...added.flatMap((r) => {
+            const people = staff.filter((s) => s.addedRole === r)
+            return [
+              new Paragraph({ children: [new PageBreak()] }),
+              h1(`${r} (${people.length})`),
+              table(people),
+            ]
+          }),
         ],
       },
     ],

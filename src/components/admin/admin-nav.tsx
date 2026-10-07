@@ -25,6 +25,7 @@ import {
   UserCog,
   Users,
   UsersRound,
+  BadgeCheck,
   type LucideIcon,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -75,6 +76,7 @@ const GROUPS: { title: string | null; links: NavLink[] }[] = [
     links: [
       { href: '/admin/users', label: 'Staff', icon: Users, adminOnly: false },
       { href: '/admin/teams', label: 'Teams', icon: UsersRound, adminOnly: true },
+      { href: '/admin/roles', label: 'Roles', icon: BadgeCheck, adminOnly: true },
       { href: '/admin/assignments', label: 'Store allocation', icon: UserCog, adminOnly: false },
       { href: '/admin/notifications', label: 'Notifications', icon: Bell, adminOnly: false },
     ],

@@ -33,6 +33,8 @@ export interface Profile {
   push_exempt?: boolean
   /** When they finished the first-run walkthrough (037); null until then. */
   onboarded_at?: string | null
+  /** A role an admin added (042), shown by its name; role is its base. */
+  staff_role_id?: string | null
   created_at: string
   updated_at: string
 }

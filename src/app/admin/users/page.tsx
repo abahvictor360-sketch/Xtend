@@ -8,6 +8,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { StaffManager } from '@/components/admin/staff-manager'
 import { avatarUrls } from '@/lib/avatars'
 import type { Outlet, Profile } from '@/lib/types'
+import type { StaffRole } from '@/lib/staff-roles'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Staff — Xtend' }
@@ -35,6 +36,12 @@ export default async function UsersPage({
         ? Promise.resolve({ data: null })
         : supabase.rpc('outlets_for_user', { target: session.userId }),
     ])
+
+  // Roles an admin added (042); empty until that migration is run.
+  const { data: addedRoles } = await supabase
+    .from('staff_roles')
+    .select('id, name, base_role, is_active')
+    .order('name')
 
   const photos = Object.fromEntries(
     await avatarUrls(
@@ -102,6 +109,7 @@ export default async function UsersPage({
         initialSearch={typeof q === 'string' ? q.slice(0, 80) : ''}
         startCreating={startNew === '1'}
         photos={photos}
+        roles={(addedRoles ?? []) as StaffRole[]}
       />
     </div>
   )

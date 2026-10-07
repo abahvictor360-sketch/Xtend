@@ -11,20 +11,18 @@ import { useHeartbeat } from '@/components/field/heartbeat'
 import { usePlace } from '@/components/field/use-place'
 import { OutboxBanner } from '@/components/field/outbox-banner'
 import { ClockPanel } from '@/components/field/clock-panel'
-import { TrackingPanel } from '@/components/field/tracking-panel'
 import { StoreVisits, type VisitOutlet, type VisitRow } from '@/components/field/store-visits'
 import { SectionHeader } from '@/components/field/screen'
 import { Chip } from '@/components/ui/chip'
 import { Card, CardContent } from '@/components/ui/card'
 import { haversineMetres } from '@/lib/geo'
 import { addDays, cn, dayOfMonth, formatLagos, metres, weekdayShort } from '@/lib/utils'
-import type { Coverage, DayState } from '@/lib/types'
+import type { DayState } from '@/lib/types'
 
-type Tab = 'stores' | 'day' | 'outlet' | 'tracking'
+type Tab = 'stores' | 'day' | 'outlet'
 
 export function FieldHome({
   day,
-  coverage,
   visits,
   outlets,
   canVisitStores,
@@ -32,7 +30,6 @@ export function FieldHome({
   avatarUrl = null,
 }: {
   day: DayState
-  coverage: Coverage | null
   visits: VisitRow[]
   outlets: VisitOutlet[]
   canVisitStores: boolean
@@ -49,11 +46,11 @@ export function FieldHome({
     ...(visitsStore ? [{ id: 'stores' as Tab, label: 'Stores' }] : []),
     { id: 'day', label: 'My day' },
     { id: 'outlet', label: visitsStore ? 'Base' : 'Outlet' },
-    { id: 'tracking', label: 'Location' },
   ]
 
   const onShift = Boolean(day.opening) && !day.closing
-  const heartbeat = useHeartbeat(onShift && gate.status === 'ready')
+  // Runs quietly while on shift; nothing about it is shown here.
+  useHeartbeat(onShift && gate.status === 'ready')
 
   const { place, loading: placeLoading } = usePlace(gate.fix)
   const whereIAm = place?.label ?? place?.address ?? null
@@ -250,12 +247,6 @@ export function FieldHome({
         </section>
       )}
 
-      {tab === 'tracking' && (
-        <section className="space-y-3">
-          <SectionHeader title="Location" />
-          <TrackingPanel onShift={onShift} status={heartbeat} coverage={coverage} />
-        </section>
-      )}
     </div>
   )
 }

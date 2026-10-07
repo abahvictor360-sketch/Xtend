@@ -14,6 +14,8 @@ const patchSchema = z.object({
   // Left out: unchanged. Empty or null: removed. Otherwise a mobile number.
   phone: z.union([z.literal(''), z.null(), phoneNumber]).optional().transform((v) => (v === '' ? null : v)),
   role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).optional(),
+  /** A role an admin added (042), or null for a built-in one. */
+  staff_role_id: z.string().uuid().nullable().optional(),
   outlet_id: z.string().uuid().nullable().optional(),
   supervisor_id: z.string().uuid().nullable().optional(),
   is_active: z.boolean().optional(),
@@ -38,7 +40,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
     if (id === session.userId && input.is_active === false) {
       return Response.json({ error: 'You cannot deactivate your own account.' }, { status: 400 })
     }
-    if (id === session.userId && input.role && input.role !== 'admin') {
+    if (id === session.userId && ((input.role && input.role !== 'admin') || input.staff_role_id)) {
       return Response.json({ error: 'You cannot remove your own admin role.' }, { status: 400 })
     }
 
@@ -59,6 +61,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       }
       if (
         input.role !== undefined ||
+        input.staff_role_id !== undefined ||
         input.email !== undefined ||
         input.outlet_id !== undefined ||
         input.supervisor_id !== undefined ||
@@ -76,12 +79,26 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       'full_name',
       'phone',
       'role',
+      'staff_role_id',
       'outlet_id',
       'supervisor_id',
       'is_active',
       'push_exempt',
     ] as const) {
       if (input[key] !== undefined) changes[key] = input[key]
+    }
+
+    // An added role must still be in use; the database sets the base role.
+    if (input.staff_role_id) {
+      const { data: added } = await admin
+        .from('staff_roles')
+        .select('is_active')
+        .eq('id', input.staff_role_id)
+        .maybeSingle<{ is_active: boolean }>()
+      if (!added?.is_active) {
+        return Response.json({ error: 'That role is not available any more.' }, { status: 400 })
+      }
+      delete changes.role
     }
 
     // A new email is a new login: free, and changed on the account too.

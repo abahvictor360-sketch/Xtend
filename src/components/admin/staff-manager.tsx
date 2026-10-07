@@ -13,6 +13,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { Outlet, Profile, UserRole } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { RoleSelect } from '@/components/admin/role-select'
+import { BUILT_IN_ROLES, parseRoleValue, roleLabel, roleValue, type StaffRole } from '@/lib/staff-roles'
 import { emailAddress, personName, phoneNumber } from '@/lib/fields'
 import { problemWith } from '@/lib/field-check'
 
@@ -20,19 +22,14 @@ interface Draft {
   full_name: string
   email: string
   phone: string
-  role: UserRole
+  /** A built-in role, or "custom:<id>" for one an admin added (042). */
+  role: string
   outlet_id: string
   supervisor_id: string
 }
 
-type Category = 'all' | UserRole
-const CATEGORIES: { value: Category; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'merchandiser', label: 'Merchandisers' },
-  { value: 'marketer', label: 'Marketers' },
-  { value: 'supervisor', label: 'Supervisors' },
-  { value: 'admin', label: 'Admins' },
-]
+/** 'all', a built-in role, or "custom:<id>". */
+type Category = string
 
 const EMPTY: Draft = {
   full_name: '',
@@ -59,7 +56,10 @@ export function StaffManager({
   startCreating = false,
   photos = {},
   newStaffOutletIds,
+  roles = [],
 }: {
+  /** Roles an admin added (042). */
+  roles?: StaffRole[]
   staff: Profile[]
   outlets: Outlet[]
   /** The stores a supervisor may add new staff to; every store when unset. */
@@ -96,6 +96,13 @@ export function StaffManager({
   } | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
 
+  const roleById = useMemo(() => new Map(roles.map((r) => [r.id, r])), [roles])
+  // The base role a picked value works like.
+  const baseOf = (value: string): UserRole =>
+    value.startsWith('custom:')
+      ? (roleById.get(value.slice('custom:'.length))?.base_role ?? 'merchandiser')
+      : (value as UserRole)
+
   const outletName = useMemo(
     () => new Map(outlets.map((outlet) => [outlet.id, outlet.name])),
     [outlets],
@@ -108,14 +115,20 @@ export function StaffManager({
 
   const roleCounts = useMemo(() => {
     const counts = new Map<Category, number>([['all', staff.length]])
-    for (const p of staff) counts.set(p.role, (counts.get(p.role) ?? 0) + 1)
+    for (const p of staff) counts.set(roleValue(p), (counts.get(roleValue(p)) ?? 0) + 1)
     return counts
   }, [staff])
+  // Built-in roles first, then each added role by name.
+  const CATEGORIES: { value: Category; label: string }[] = [
+    { value: 'all', label: 'All' },
+    ...BUILT_IN_ROLES.map((r) => ({ value: r.value as Category, label: r.plural })),
+    ...roles.map((r) => ({ value: `custom:${r.id}`, label: r.name })),
+  ]
   // A category nobody is in is left out, so a supervisor sees only their team's.
   const categories = CATEGORIES.filter((c) => c.value === 'all' || (roleCounts.get(c.value) ?? 0) > 0)
 
   const visible = staff.filter((person) => {
-    if (category !== 'all' && person.role !== category) return false
+    if (category !== 'all' && roleValue(person) !== category) return false
     const needle = search.trim().toLowerCase()
     if (!needle) return true
     return [person.full_name, person.email, person.phone].some((value) =>
@@ -133,7 +146,7 @@ export function StaffManager({
       problemWith(emailAddress, draft.email) ??
       (draft.phone.trim()
         ? problemWith(phoneNumber, draft.phone)
-        : isField(draft.role)
+        : isField(baseOf(draft.role))
           ? 'Enter their phone number: merchandisers and marketers sign in with it.'
           : null)
     if (problem) {
@@ -150,7 +163,7 @@ export function StaffManager({
           full_name: draft.full_name,
           email: draft.email,
           phone: draft.phone || null,
-          role: draft.role,
+          ...parseRoleValue(draft.role),
           outlet_id: draft.outlet_id || null,
           supervisor_id: draft.supervisor_id || null,
         }),
@@ -376,13 +389,13 @@ export function StaffManager({
               </div>
               <div className="space-y-1">
                 <Label htmlFor="new-phone">
-                  Phone (Nigerian mobile){isField(draft.role) ? '' : ', optional'}
+                  Phone (Nigerian mobile){isField(baseOf(draft.role)) ? '' : ', optional'}
                 </Label>
                 <Input
                   id="new-phone"
                   type="tel"
                   inputMode="tel"
-                  required={isField(draft.role)}
+                  required={isField(baseOf(draft.role))}
                   autoComplete="off"
                   maxLength={18}
                   value={draft.phone}
@@ -391,16 +404,14 @@ export function StaffManager({
                 />
               </div>
               <div className="space-y-1">
-                <Label>Role</Label>
-                <Select
+                <Label htmlFor="new-role">Role</Label>
+                <RoleSelect
+                  id="new-role"
                   value={draft.role}
-                  onChange={(e) => setDraft({ ...draft, role: e.target.value as UserRole })}
-                >
-                  <option value="merchandiser">Merchandiser</option>
-                  <option value="marketer">Marketer</option>
-                  {isAdmin && <option value="supervisor">Supervisor</option>}
-                  {isAdmin && <option value="admin">Admin</option>}
-                </Select>
+                  onChange={(role) => setDraft({ ...draft, role })}
+                  roles={roles}
+                  isAdmin={isAdmin}
+                />
               </div>
               <div className="space-y-1">
                 <Label>Outlet</Label>
@@ -473,18 +484,15 @@ export function StaffManager({
                 </TableCell>
                 <TableCell>
                   {isAdmin ? (
-<Select
-                    className="h-9 w-36"
-                    value={person.role}
-                    onChange={(e) => void patch(person.id, { role: e.target.value })}
-                  >
-                    <option value="merchandiser">Merchandiser</option>
-                    <option value="marketer">Marketer</option>
-                    <option value="supervisor">Supervisor</option>
-                    <option value="admin">Admin</option>
-                  </Select>
+<RoleSelect
+                    className="h-9 w-48"
+                    value={roleValue(person)}
+                    onChange={(value) => void patch(person.id, parseRoleValue(value))}
+                    roles={roles}
+                    isAdmin
+                  />
                   ) : (
-                    <span className="text-sm text-muted-foreground">{person.role}</span>
+                    <span className="text-sm text-muted-foreground">{roleLabel(person, roleById)}</span>
                   )}
                 </TableCell>
                 <TableCell>
@@ -612,18 +620,15 @@ export function StaffManager({
                 <div className="space-y-1">
                   <Label className="field-label">Role</Label>
                   {isAdmin ? (
-<Select
+<RoleSelect
                     className="h-10"
-                    value={person.role}
-                    onChange={(e) => void patch(person.id, { role: e.target.value })}
-                  >
-                    <option value="merchandiser">Merchandiser</option>
-                    <option value="marketer">Marketer</option>
-                    <option value="supervisor">Supervisor</option>
-                    <option value="admin">Admin</option>
-                  </Select>
+                    value={roleValue(person)}
+                    onChange={(value) => void patch(person.id, parseRoleValue(value))}
+                    roles={roles}
+                    isAdmin
+                  />
                   ) : (
-                    <span className="text-sm text-muted-foreground">{person.role}</span>
+                    <span className="text-sm text-muted-foreground">{roleLabel(person, roleById)}</span>
                   )}
                 </div>
                 <div className="space-y-1">

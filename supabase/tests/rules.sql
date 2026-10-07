@@ -2352,6 +2352,53 @@ begin
     perform assert(not public.text_has_words('..............', 10), 'nor are dots');
     perform assert(not public.text_has_words('aaaaaaaaaaaaa', 10), 'nor one key held down');
     perform assert(public.text_has_words('All in stock today', 10), 'a short real sentence is');
+
+    -- ---------------------------------------------------------------
+    -- Roles an admin adds (042).
+    -- ---------------------------------------------------------------
+    declare
+      ar uuid;
+      promo uuid;
+      lola uuid := gen_random_uuid();
+    begin
+      perform act_as(boss);
+      insert into auth.users (id, email) values (lola, 'roles-test@xpel.ng');
+      insert into public.profiles (id, full_name, email, role) values (lola, 'Role Tester', 'roles-test@xpel.ng', 'merchandiser');
+      insert into public.staff_roles (name, base_role) values ('Account Receivable', 'merchandiser') returning id into ar;
+      insert into public.staff_roles (name, base_role) values ('Promoter', 'marketer') returning id into promo;
+      begin
+        insert into public.staff_roles (name, base_role) values ('account  receivable', 'marketer');
+        perform assert(false, 'two roles cannot share a name');
+      exception when unique_violation then
+        perform assert(true, 'two roles cannot share a name');
+      end;
+      begin
+        insert into public.staff_roles (name, base_role) values ('Admins', 'supervisor');
+        perform assert(false, 'an added role cannot take a built-in name');
+      exception when check_violation then
+        perform assert(true, 'an added role cannot take a built-in name');
+      end;
+      begin
+        insert into public.staff_roles (name, base_role) values ('Boss', 'admin');
+        perform assert(false, 'an added role cannot work like an admin');
+      exception when check_violation then
+        perform assert(true, 'an added role cannot work like an admin');
+      end;
+
+      update public.profiles set staff_role_id = promo where id = lola;
+      perform assert((select role = 'marketer' from public.profiles where id = lola),
+        'giving someone an added role gives them its base role');
+      update public.profiles set role = 'merchandiser' where id = lola;
+      perform assert((select staff_role_id is null and role = 'merchandiser' from public.profiles where id = lola),
+        'changing the role on its own clears the added role');
+      update public.profiles set staff_role_id = ar where id = lola;
+
+      perform act_as(lola);
+      update public.profiles set staff_role_id = promo where id = lola;
+      perform assert((select staff_role_id = ar and role = 'merchandiser' from public.profiles where id = lola),
+        'nobody changes their own added role');
+      perform act_as(boss);
+    end;
   end;
 
   raise notice 'ALL RULES PASSED';

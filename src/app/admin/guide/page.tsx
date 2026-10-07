@@ -158,6 +158,14 @@ export default async function AdminGuidePage() {
           </p>
           {isAdmin && (
             <p>
+              <Ui>Roles</Ui> (admins only): besides Merchandiser, Marketer, Supervisor and Admin,
+              add a role with its own name, such as Account Receivable, and choose what it works
+              like. Give it to someone with the <Ui>Role</Ui> picker on Staff; they can do what the
+              base role does and show by the new name. Retire a role you no longer use.
+            </p>
+          )}
+          {isAdmin && (
+            <p>
               <Ui>Login details (Word)</Ui> on Staff downloads every merchandiser&apos;s and
               marketer&apos;s login, with their temporary password and how to install the app. It is
               built fresh on each download, so anyone added since is in it. Once someone chooses
