@@ -21,10 +21,15 @@ export default async function FieldLayout({ children }: { children: React.ReactN
   // Postgres is the authority on who may file a report; the nav just asks it.
   const supabase = await createServerSupabase()
   // The Count tab only appears while a count is due: asked for, or month end.
-  const [{ data: canFileReport }, countStatus] = await Promise.all([
+  const [{ data: canFileReport }, countStatus, { data: myStores }, { data: xmStores }] = await Promise.all([
     supabase.rpc('can_file_report'),
     getCountStatus(supabase),
+    supabase.rpc('my_outlets'),
+    // X Metrics (043): the tab shows once one of their stores is in it.
+    supabase.from('xm_stores').select('outlet_id').eq('is_active', true),
   ])
+  const inXm = new Set(((xmStores ?? []) as { outlet_id: string }[]).map((s) => s.outlet_id))
+  const hasMetrics = ((myStores ?? []) as { id: string }[]).some((o) => inXm.has(o.id))
 
   return (
     <div className="field-shell min-h-dvh bg-background">
@@ -32,7 +37,7 @@ export default async function FieldLayout({ children }: { children: React.ReactN
         <main className="flex-1 px-4 pb-28 pt-4">{children}</main>
         <PhoneBeacon />
         <NativeBridge />
-        <FieldNav canFileReport={canFileReport === true} canCountStock={countStatus.open} />
+        <FieldNav canFileReport={canFileReport === true} canCountStock={countStatus.open} hasMetrics={hasMetrics} />
       </div>
     </div>
   )

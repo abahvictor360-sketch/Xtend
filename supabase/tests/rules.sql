@@ -2399,6 +2399,255 @@ begin
         'nobody changes their own added role');
       perform act_as(boss);
     end;
+    -- ---------------------------------------------------------------
+    -- X Metrics (043): supplies, counts, sales, reconciliation,
+    -- expiry and grades.
+    -- ---------------------------------------------------------------
+    declare
+      kem    uuid := gen_random_uuid();
+      shop   uuid;
+      oil    uuid;
+      gel    uuid;
+      c1     uuid;
+      c2     uuid;
+      s1     uuid;
+      s2     uuid;
+      sup    uuid;
+      d1     date := ((now() - interval '50 hours') at time zone 'Africa/Lagos')::date;
+      d2     date := ((now() - interval '26 hours') at time zone 'Africa/Lagos')::date;
+      g      jsonb;
+      rec    record;
+    begin
+      perform act_as(boss);
+      insert into auth.users (id, email) values (kem, 'xm-test@xpel.ng');
+      insert into public.outlets (name, lat, lng, geofence_radius_m)
+      values ('XM Test Store', 6.5000, 3.3000, 100) returning id into shop;
+      insert into public.profiles (id, full_name, email, role, outlet_id)
+      values (kem, 'Kemi Adebayo', 'xm-test@xpel.ng', 'merchandiser', shop);
+      insert into public.products (name, sku, category, unit) values ('XM Body Oil', 'XM-OIL', 'Body', 'bottle')
+      returning id into oil;
+      insert into public.products (name, sku, category, unit) values ('XM Hair Gel', 'XM-GEL', 'Hair', 'tub')
+      returning id into gel;
+      begin
+        insert into public.products (name, sku) values ('XM Other', 'xm-oil');
+        perform assert(false, 'xm: two products cannot share a SKU');
+      exception when unique_violation then
+        perform assert(true, 'xm: two products cannot share a SKU');
+      end;
+
+      perform act_as(kem);
+      begin
+        perform public.xm_submit_count(shop, jsonb_build_array(jsonb_build_object(
+          'product_id', oil, 'batch', 'B1', 'expiry_date', public.business_date() + 100,
+          'on_shelf', 150, 'in_backroom', 50)), 6.5, 3.3, 10,
+          fresh_photo('reports', 'xm-0.jpg'), now() - interval '50 hours');
+        perform assert(false, 'xm: a store not in X Metrics takes no counts');
+      exception when others then
+        perform assert(sqlerrm like '%not in X Metrics%', 'xm: a store not in X Metrics takes no counts');
+      end;
+      begin
+        perform public.xm_set_store(shop, true);
+        perform assert(false, 'xm: staff cannot add a store');
+      exception when others then
+        perform assert(sqlerrm like '%Only an admin%', 'xm: staff cannot add a store');
+      end;
+
+      perform act_as(boss);
+      perform public.xm_set_store(shop, true);
+
+      perform act_as(kem);
+      begin
+        perform public.xm_submit_count(shop, jsonb_build_array(jsonb_build_object(
+          'product_id', oil, 'batch', 'B1', 'on_shelf', 1, 'in_backroom', 0)), 6.6, 3.4, 10,
+          fresh_photo('reports', 'xm-far.jpg'), now() - interval '50 hours');
+        perform assert(false, 'xm: a count from outside the store is refused');
+      exception when others then
+        perform assert(sqlerrm like '%must be in the store%', 'xm: a count from outside the store is refused');
+      end;
+      begin
+        perform public.xm_submit_count(shop, jsonb_build_array(jsonb_build_object(
+          'product_id', oil, 'batch', 'B1', 'on_shelf', 1, 'in_backroom', 0)), 6.5, 3.3, 10,
+          'someone-else/photo.jpg', now() - interval '50 hours');
+        perform assert(false, 'xm: a count needs its own checked photo');
+      exception when others then
+        perform assert(sqlerrm like '%shelf photo%', 'xm: a count needs its own checked photo');
+      end;
+      begin
+        perform public.xm_submit_count(shop, jsonb_build_array(jsonb_build_object(
+          'product_id', oil, 'batch', 'B1', 'on_shelf', 1.5, 'in_backroom', 0)), 6.5, 3.3, 10,
+          fresh_photo('reports', 'xm-frac.jpg'), now() - interval '50 hours');
+        perform assert(false, 'xm: units are whole numbers');
+      exception when others then
+        perform assert(sqlerrm like '%whole numbers%', 'xm: units are whole numbers');
+      end;
+      begin
+        perform public.xm_submit_count(shop, jsonb_build_array(jsonb_build_object(
+          'product_id', oil, 'batch', 'B1', 'on_shelf', 1, 'in_backroom', 0)), 6.5, 3.3, 10,
+          fresh_photo('reports', 'xm-old.jpg'), now() - interval '4 days');
+        perform assert(false, 'xm: a count held offline over 3 days is refused');
+      exception when others then
+        perform assert(sqlerrm like '%Invalid capture time%', 'xm: a count held offline over 3 days is refused');
+      end;
+
+      -- Opening stock: 200 bottles of oil.
+      c1 := public.xm_submit_count(shop, jsonb_build_array(jsonb_build_object(
+        'product_id', oil, 'batch', 'B1', 'expiry_date', public.business_date() + 100,
+        'on_shelf', 150, 'in_backroom', 50)), 6.5001, 3.3001, 10,
+        fresh_photo('reports', 'xm-1.jpg'), now() - interval '50 hours');
+      perform assert((select is_opening and count_date = d1 and user_id = kem from public.xm_counts where id = c1),
+        'xm: the first count of a store is its opening stock, dated when it was taken');
+
+      perform act_as(boss);
+      begin
+        perform public.xm_log_supply(shop, oil, 300, 'B1', public.business_date() + 100, d2 + 1, null);
+        perform assert(d2 + 1 > public.business_date(), 'xm: a supply cannot be dated in the future');
+      exception when others then
+        perform assert(sqlerrm like '%future%', 'xm: a supply cannot be dated in the future');
+      end;
+      sup := public.xm_log_supply(shop, oil, 300, 'B1', public.business_date() + 100, d2, 'Delivery');
+      perform assert((select logged_by = boss from public.xm_supplies where id = sup), 'xm: a supply records who logged it');
+
+      perform act_as(kem);
+      begin
+        perform public.xm_log_supply(shop, oil, 10, 'B1', null, d2, null);
+        perform assert(false, 'xm: only admins log supplies');
+      exception when others then
+        perform assert(sqlerrm like '%Only an admin%', 'xm: only admins log supplies');
+      end;
+      begin
+        perform public.xm_submit_sales(shop, d2, jsonb_build_array(jsonb_build_object('product_id', oil, 'units', 80)),
+                                       null, now());
+        perform assert(false, 'xm: sales need a photo while the setting is on');
+      exception when others then
+        perform assert(sqlerrm like '%photo%', 'xm: sales need a photo while the setting is on');
+      end;
+      s1 := public.xm_submit_sales(shop, d2, jsonb_build_array(jsonb_build_object('product_id', oil, 'units', 80)),
+                                   fresh_photo('reports', 'xm-s1.jpg'), now());
+      s2 := public.xm_submit_sales(shop, d2, jsonb_build_array(jsonb_build_object('product_id', oil, 'units', 100)),
+                                   fresh_photo('reports', 'xm-s2.jpg'), now());
+      perform assert((select superseded_by = s2 from public.xm_sales where id = s1)
+                     and (select sum(units) from public.xm_live_sale_lines where outlet_id = shop) = 100,
+        'xm: sending a day''s sales again supersedes the first, which is kept');
+
+      -- 200 + 300 supplied - 100 sold = 400 expected; 300 counted.
+      c2 := public.xm_submit_count(shop, jsonb_build_array(
+        jsonb_build_object('product_id', oil, 'batch', 'B1', 'expiry_date', public.business_date() + 100,
+                           'on_shelf', 200, 'in_backroom', 100),
+        jsonb_build_object('product_id', gel, 'batch', 'G7', 'expiry_date', public.business_date() + 20,
+                           'on_shelf', 50, 'in_backroom', 0)), 6.5, 3.3, 10,
+        fresh_photo('reports', 'xm-2.jpg'), now() - interval '26 hours');
+      perform assert((select not is_opening from public.xm_counts where id = c2), 'xm: later counts are not opening stock');
+      perform assert((select count(*) from public.xm_my_store_batches() where outlet_id = shop) = 2,
+        'xm: the next count starts from the batches last counted');
+
+      begin
+        perform public.xm_reconcile_pending();
+        perform assert(false, 'xm: staff cannot run reconciliation');
+      exception when others then
+        perform assert(sqlerrm like '%Only an admin%', 'xm: staff cannot run reconciliation');
+      end;
+
+      perform act_as(boss);
+      perform assert(public.xm_reconcile_pending() = 2, 'xm: both earlier counts are reconciled');
+      select * into rec from public.xm_reconciliations where count_id = c2 and product_id = oil;
+      perform assert(rec.expected_units = 400 and rec.actual_units = 300 and rec.variance_units = -100
+                     and rec.variance_pct = 25 and rec.flagged,
+        'xm: expected = last count + supplied - sold, and a 25% gap is flagged');
+      perform assert((select kind = 'stock_discrepancy' and severity = 'high' and user_id = kem
+                             and outlet_id = shop and summary like '100 units of XM Body Oil missing%'
+                      from public.integrity_flags where id = rec.flag_id),
+        'xm: the gap raises a high discrepancy flag on the person and the store');
+      perform assert(not exists (select 1 from public.xm_reconciliations where count_id = c2 and product_id = gel),
+        'xm: a product counted for the first time is its own baseline');
+      perform assert(public.xm_reconcile_pending() = 0, 'xm: a count is reconciled once');
+
+      -- Expiry.
+      perform assert(public.xm_expiry_scan() = 2, 'xm: both batches on hand are in an alert window');
+      perform assert((select window_days = 180 and not consider_pulling
+                      from public.xm_expiry_alerts where outlet_id = shop and product_id = oil),
+        'xm: 100 days left is the 6-month window, and selling fast enough is not pulled');
+      perform assert((select window_days = 30 and consider_pulling and days_to_sell is null
+                      from public.xm_expiry_alerts where outlet_id = shop and product_id = gel),
+        'xm: 20 days left with no sales says consider pulling');
+      perform assert(public.xm_expiry_scan() = 0, 'xm: each window alerts once');
+      perform assert((select count(*) from public.xm_claim_expiry_alerts()) = 2
+                     and (select count(*) from public.xm_claim_expiry_alerts()) = 0,
+        'xm: new expiry alerts are handed out once to push');
+
+      -- Settings are kept, never overwritten.
+      update public.xm_settings set tolerance_pct = 10, updated_by = boss;
+      perform assert((select count(*) from public.xm_settings_history where (settings->>'tolerance_pct')::numeric = 5 and changed_by = boss) >= 1,
+        'xm: the previous settings are kept when changed');
+      begin
+        update public.xm_settings set weight_sales = 50;
+        perform assert(false, 'xm: the weights must add up to 100');
+      exception when check_violation then
+        perform assert(true, 'xm: the weights must add up to 100');
+      end;
+      update public.xm_settings set tolerance_pct = 5, updated_by = boss;
+
+      -- Grade: sales 100 of 200 = 50, accuracy 0 of 1 = 0, expiry 100, no
+      -- attendance so consistency is left out: (50x40 + 0x30 + 100x10) / 80.
+      perform public.xm_set_target(d2, kem, null, 200);
+      g := public.xm_grade(kem, d2);
+      perform assert((g->'sales'->>'score')::numeric = 50 and (g->'accuracy'->>'score')::numeric = 0
+                     and g->'consistency'->>'score' is null and (g->'expiry'->>'score')::numeric = 100
+                     and (g->>'score')::numeric = 37.5 and g->>'band' = 'Poor',
+        'xm: the grade weighs the factors it has and bands the score');
+      perform public.xm_set_target(d2, kem, null, 100);
+      g := public.xm_grade(kem, d2);
+      perform assert((g->'sales'->>'score')::numeric = 100 and g->>'band' = 'Average',
+        'xm: the latest target counts, and a better score moves the band');
+      -- Consistency: a day they clocked in, with that day's sales taken
+      -- before the day ended (sent later is not late) and a count that day.
+      perform notifications_on(kem);
+      perform act_as(kem);
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+      values ('opening', 6.5, 3.3, 10, fresh_photo('selfies', 'xm-in.jpg'), now());
+      perform act_as(boss);
+      update public.attendance set attendance_date = d2 where user_id = kem;
+      perform act_as(kem);
+      perform public.xm_submit_sales(shop, d2, jsonb_build_array(jsonb_build_object('product_id', oil, 'units', 100)),
+        fresh_photo('reports', 'xm-s3.jpg'), ((d2 + 1)::timestamp at time zone 'Africa/Lagos') - interval '1 hour');
+      perform act_as(boss);
+      g := public.xm_grade(kem, d2);
+      perform assert((g->'consistency'->>'days_present')::int = 1 and (g->'consistency'->>'score')::numeric = 100,
+        'xm: a day present with that day''s sales and a count is fully consistent');
+
+      begin
+        perform public.xm_finalise_month(public.business_date());
+        perform assert(false, 'xm: a month is finalised only once it has ended');
+      exception when others then
+        perform assert(sqlerrm like '%once it has ended%', 'xm: a month is finalised only once it has ended');
+      end;
+
+      perform act_as(kem);
+      begin
+        perform public.xm_grade(bala, d2);
+        perform assert(false, 'xm: staff cannot see another person''s grade');
+      exception when others then
+        perform assert(sqlerrm like '%own team%', 'xm: staff cannot see another person''s grade');
+      end;
+
+      -- Voiding keeps the record and says why.
+      perform act_as(boss);
+      begin
+        perform public.xm_void('supply', sup, 'x');
+        perform assert(false, 'xm: a void needs a reason');
+      exception when others then
+        perform assert(sqlerrm like '%why%', 'xm: a void needs a reason');
+      end;
+      perform public.xm_void('supply', sup, 'Logged twice');
+      perform assert((select voided_by = boss and void_reason = 'Logged twice' from public.xm_supplies where id = sup),
+        'xm: a voided supply is kept with who voided it and why');
+      begin
+        perform public.xm_void('supply', sup, 'Again');
+        perform assert(false, 'xm: a record is voided once');
+      exception when others then
+        perform assert(sqlerrm like '%already voided%', 'xm: a record is voided once');
+      end;
+    end;
+
   end;
 
   raise notice 'ALL RULES PASSED';
