@@ -10,6 +10,8 @@ import {
   type OutboxRecord,
   type PingJob,
   type ReportJob,
+  type XmCountJob,
+  type XmSalesJob,
 } from '@/lib/offline/db'
 
 /**
@@ -17,6 +19,12 @@ import {
  * dropped locally instead of retried forever.
  */
 const MAX_AGE_MS = 24 * 60 * 60 * 1000
+/** X Metrics counts and sales are accepted up to three days late (043). */
+const XM_MAX_AGE_MS = 72 * 60 * 60 * 1000
+
+function maxAge(kind: OutboxRecord['kind']) {
+  return kind === 'xm_count' || kind === 'xm_sales' ? XM_MAX_AGE_MS : MAX_AGE_MS
+}
 const MAX_ATTEMPTS = 8
 
 function uuid() {
@@ -174,6 +182,43 @@ async function runReport(job: ReportJob) {
   })
 }
 
+/** Uploads a shelf photo for X Metrics and has it checked. */
+async function uploadShelfPhoto(photo: Blob, label: string) {
+  const userId = await currentUserId()
+  const path = `${userId}/xm-${label}-${uuid()}.jpg`
+  const { error } = await supabase().storage.from('reports').upload(path, photo, {
+    contentType: 'image/jpeg',
+    upsert: true,
+  })
+  if (error) throw new Error(error.message)
+  await checkPhoto('reports', path)
+  return path
+}
+
+async function runXmCount(job: XmCountJob) {
+  const photo_path = await uploadShelfPhoto(job.photo, 'count')
+  return postJson('/api/metrics/counts', {
+    outlet_id: job.outlet_id,
+    lat: job.lat,
+    lng: job.lng,
+    accuracy_m: job.accuracy_m,
+    photo_path,
+    captured_at: job.client_captured_at,
+    lines: job.lines,
+  })
+}
+
+async function runXmSales(job: XmSalesJob) {
+  const photo_path = job.photo ? await uploadShelfPhoto(job.photo, 'sales') : null
+  return postJson('/api/metrics/sales', {
+    outlet_id: job.outlet_id,
+    sale_date: job.sale_date,
+    photo_path,
+    captured_at: job.client_captured_at,
+    lines: job.lines,
+  })
+}
+
 export async function runJob(record: OutboxRecord) {
   switch (record.job.kind) {
     case 'clock':
@@ -182,6 +227,10 @@ export async function runJob(record: OutboxRecord) {
       return runPing(record.job)
     case 'report':
       return runReport(record.job)
+    case 'xm_count':
+      return runXmCount(record.job)
+    case 'xm_sales':
+      return runXmSales(record.job)
   }
 }
 
@@ -239,7 +288,7 @@ export async function flushOutbox(): Promise<FlushResult> {
       }
 
       const age = Date.now() - new Date(record.job.client_captured_at).getTime()
-      if (age > MAX_AGE_MS || record.attempts >= MAX_ATTEMPTS) {
+      if (age > maxAge(record.kind) || record.attempts >= MAX_ATTEMPTS) {
         await dropOutbox(record.id!)
         result.dropped += 1
         continue

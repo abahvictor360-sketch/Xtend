@@ -2537,6 +2537,8 @@ begin
                            'on_shelf', 50, 'in_backroom', 0)), 6.5, 3.3, 10,
         fresh_photo('reports', 'xm-2.jpg'), now() - interval '26 hours');
       perform assert((select not is_opening from public.xm_counts where id = c2), 'xm: later counts are not opening stock');
+      perform assert((select count(*) from public.xm_my_store_batches() where outlet_id = shop) = 2,
+        'xm: the next count starts from the batches last counted');
 
       begin
         perform public.xm_reconcile_pending();

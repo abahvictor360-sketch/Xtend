@@ -597,7 +597,7 @@ begin
     raise exception 'Take the photo in the app before sending';
   end if;
   if settings.sales_photo_required and p_photo_path is null then
-    raise exception 'Take a photo (the sales book or till slip) before sending';
+    raise exception 'Take a photo of the shelf before sending the day''s sales';
   end if;
 
   if p_lines is null or jsonb_typeof(p_lines) <> 'array' or jsonb_array_length(p_lines) = 0 then
@@ -753,6 +753,19 @@ with (security_invoker = true) as
          l.on_shelf, l.in_backroom, (l.on_shelf + l.in_backroom) as units
   from latest x
   join public.xm_count_lines l on l.count_id = x.count_id and l.product_id = x.product_id;
+
+-- The batches last counted at the caller's stores, without the figures:
+-- what the next count starts from, whoever counted last.
+create or replace function public.xm_my_store_batches()
+returns table (outlet_id uuid, product_id uuid, batch text, expiry_date date)
+language sql stable security definer set search_path = public as $$
+  select h.outlet_id, h.product_id, h.batch, h.expiry_date
+  from public.xm_stock_on_hand h
+  where h.units > 0
+    and h.outlet_id in (select o.outlet_id from public.outlets_for_user(auth.uid()) o);
+$$;
+revoke all on function public.xm_my_store_batches() from public, anon;
+grant execute on function public.xm_my_store_batches() to authenticated, service_role;
 
 create or replace function public.xm_daily_velocity(p_outlet uuid, p_product uuid)
 returns numeric language sql stable security definer set search_path = public as $$

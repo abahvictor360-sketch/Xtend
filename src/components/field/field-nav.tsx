@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CalendarDays, ClipboardList, FileText, Home, User } from 'lucide-react'
+import { BarChart3, CalendarDays, ClipboardList, FileText, Home, User } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 /**
@@ -13,9 +13,12 @@ import { cn } from '@/lib/utils'
 export function FieldNav({
   canFileReport,
   canCountStock,
+  hasMetrics = false,
 }: {
   canFileReport: boolean
   canCountStock: boolean
+  /** X Metrics stock and sales, once one of their stores is in it. */
+  hasMetrics?: boolean
 }) {
   const pathname = usePathname()
 
@@ -24,6 +27,7 @@ export function FieldNav({
     { href: '/field/history', label: 'History', icon: CalendarDays },
     ...(canFileReport ? [{ href: '/field/report', label: 'Report', icon: FileText }] : []),
     ...(canCountStock ? [{ href: '/field/count', label: 'Count', icon: ClipboardList }] : []),
+    ...(hasMetrics ? [{ href: '/field/metrics', label: 'Metrics', icon: BarChart3 }] : []),
     { href: '/field/account', label: 'You', icon: User },
   ]
 

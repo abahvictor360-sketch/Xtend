@@ -3,7 +3,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import type { AttendanceType } from '@/lib/types'
 
-export type OutboxKind = 'clock' | 'ping' | 'report'
+export type OutboxKind = 'clock' | 'ping' | 'report' | 'xm_count' | 'xm_sales'
 
 export interface ClockJob {
   kind: 'clock'
@@ -40,7 +40,31 @@ export interface ReportJob {
   client_captured_at: string
 }
 
-export type OutboxJob = ClockJob | PingJob | ReportJob
+/** An X Metrics stock count (043), taken in the store, sent when online. */
+export interface XmCountJob {
+  kind: 'xm_count'
+  outlet_id: string
+  outlet_name: string
+  lat: number
+  lng: number
+  accuracy_m: number
+  lines: { product_id: string; batch: string; expiry_date: string | null; on_shelf: number; in_backroom: number }[]
+  photo: Blob
+  client_captured_at: string
+}
+
+/** An X Metrics day's sales (043). */
+export interface XmSalesJob {
+  kind: 'xm_sales'
+  outlet_id: string
+  outlet_name: string
+  sale_date: string
+  lines: { product_id: string; units: number }[]
+  photo: Blob | null
+  client_captured_at: string
+}
+
+export type OutboxJob = ClockJob | PingJob | ReportJob | XmCountJob | XmSalesJob
 
 export interface OutboxRecord {
   id?: number
