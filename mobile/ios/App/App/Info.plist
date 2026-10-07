@@ -29,7 +29,7 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Xtend uses your location to confirm you are at your store when you clock in.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>Xtend uses your location during your shift, also when the screen is off, to confirm you are at your store.</string>
+	<string>Xtend uses your location while you are on shift to confirm you are at your store.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>

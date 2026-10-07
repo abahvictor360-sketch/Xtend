@@ -128,7 +128,7 @@ export function StaffGuide() {
           phone
         />
         <GuideShot src="/guide/staff-clock.png" alt="The Clock in with selfie button" width={748} height={160} phone />
-        <Tip>Keep location on and Xtend open during your shift. On the app, it carries on in the background.</Tip>
+        <Tip>Keep location on and Xtend signed in during your shift, so you can check in, get messages and clock out.</Tip>
       </GuideSection>
 
       <GuideSection topic={T.visits} intro="Marketers who move between stores check in at each one.">

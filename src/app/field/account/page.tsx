@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Bell, BookOpen, Headset, KeyRound, MapPin, Radio, Smartphone } from 'lucide-react'
+import { Bell, BookOpen, Clock, Headset, KeyRound, MapPin, Smartphone } from 'lucide-react'
 import { FIELD_ROLES, requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { SheetScreen, HeaderField, SectionHeader } from '@/components/field/screen'
@@ -137,9 +137,9 @@ export default async function AccountPage() {
         <section className="space-y-3">
           <SectionHeader title="Tips" />
           <TaskRow
-            icon={<Radio className="h-5 w-5" />}
+            icon={<Clock className="h-5 w-5" />}
             title="Keep Xtend open on shift"
-            meta="Keep location on and Xtend open while you work, so it can see you are at your store."
+            meta="Keep location on and stay signed in while you work, so clocking in, check-ins and messages work smoothly."
           />
           <TaskRow
             icon={<Smartphone className="h-5 w-5" />}
