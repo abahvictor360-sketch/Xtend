@@ -11,6 +11,7 @@ import { processReportPhoto } from '@/lib/image'
 import { CameraCapture } from '@/components/field/camera-capture'
 import { submitOrQueue, PermanentJobError } from '@/lib/offline/sync'
 import { cn } from '@/lib/utils'
+import { checkText } from '@/lib/validation'
 
 const MAX_PHOTOS = 5
 
@@ -122,9 +123,19 @@ export function ReportForm({
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault()
-    setBusy(true)
     setError(null)
     setNotice(null)
+    // Checked here too: a report saved offline is only sent later.
+    for (const s of SECTIONS) {
+      const text = fields[s.key]
+      const problem = text.trim() ? checkText(text, { min: 2, max: s.key === 'body' ? 4000 : 2000, what: s.label.toLowerCase() }) : null
+      if (problem) {
+        setActive(s.key)
+        setError(`${s.label}: ${problem}`)
+        return
+      }
+    }
+    setBusy(true)
 
     try {
       const result = await submitOrQueue({

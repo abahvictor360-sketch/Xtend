@@ -13,6 +13,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { Outlet, Profile, UserRole } from '@/lib/types'
 import { cn } from '@/lib/utils'
+import { check } from '@/lib/validation'
 
 interface Draft {
   full_name: string
@@ -115,9 +116,22 @@ export function StaffManager({
 
   async function create(event: React.FormEvent) {
     event.preventDefault()
-    setBusy(true)
     setError(null)
     setIssued(null)
+    // Say what is wrong before sending; the server checks the same rules.
+    const problem =
+      check.personName(draft.full_name) ??
+      check.email(draft.email) ??
+      (draft.phone.trim()
+        ? check.phone(draft.phone)
+        : isField(draft.role)
+          ? 'Enter their phone number: merchandisers and marketers sign in with it.'
+          : null)
+    if (problem) {
+      setError(problem)
+      return
+    }
+    setBusy(true)
 
     try {
       const res = await fetch('/api/admin/users', {
@@ -230,27 +244,44 @@ export function StaffManager({
           <CardContent className="pt-4">
             <form onSubmit={create} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <div className="space-y-1">
-                <Label>Full name</Label>
+                <Label htmlFor="new-name">Full name</Label>
                 <Input
+                  id="new-name"
                   required
+                  minLength={3}
+                  maxLength={80}
+                  autoComplete="off"
+                  autoCapitalize="words"
+                  placeholder="First and last name"
                   value={draft.full_name}
                   onChange={(e) => setDraft({ ...draft, full_name: e.target.value })}
                 />
               </div>
               <div className="space-y-1">
-                <Label>Email</Label>
+                <Label htmlFor="new-email">Email</Label>
                 <Input
+                  id="new-email"
                   type="email"
                   required
+                  maxLength={120}
+                  autoComplete="off"
+                  autoCapitalize="none"
+                  placeholder="name@gmail.com"
                   value={draft.email}
                   onChange={(e) => setDraft({ ...draft, email: e.target.value })}
                 />
               </div>
               <div className="space-y-1">
-                <Label>Phone</Label>
+                <Label htmlFor="new-phone">Phone{isField(draft.role) ? '' : ' (optional)'}</Label>
                 <Input
+                  id="new-phone"
+                  type="tel"
+                  inputMode="tel"
+                  required={isField(draft.role)}
+                  maxLength={16}
+                  autoComplete="off"
                   value={draft.phone}
-                  onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+                  onChange={(e) => setDraft({ ...draft, phone: e.target.value.replace(/[^\d+ ]/g, '') })}
                   placeholder="08012345678"
                 />
               </div>

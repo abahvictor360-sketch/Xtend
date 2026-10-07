@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { zText } from '@/lib/validation'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
@@ -7,8 +8,8 @@ import { pushConfigured, sendPush, type PushTarget } from '@/lib/push'
 export const maxDuration = 60
 
 const schema = z.object({
-  title: z.string().trim().min(1).max(80),
-  body: z.string().trim().min(1).max(400),
+  title: zText({ max: 80, what: 'title' }),
+  body: zText({ max: 400 }),
   // A page in Xtend only. A link to another site would let a notification
   // that reads as Xtend's open somebody else's page.
   url: z

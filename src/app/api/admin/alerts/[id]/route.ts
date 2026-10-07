@@ -1,8 +1,9 @@
 import { z } from 'zod'
+import { zNote } from '@/lib/validation'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 
-const schema = z.object({ note: z.string().max(1000).default('') })
+const schema = z.object({ note: zNote(1000) })
 
 /** Resolution and its audit row are one database transaction. */
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -10,12 +11,14 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     await requireApiSession(['admin'])
     const { id } = await ctx.params
     const parsed = schema.safeParse(await request.json())
-    if (!parsed.success) return Response.json({ error: 'Invalid note' }, { status: 400 })
+    if (!parsed.success) {
+      return Response.json({ error: parsed.error.issues[0]?.message ?? 'Invalid note' }, { status: 400 })
+    }
 
     const supabase = await createServerSupabase()
     const { error } = await supabase.rpc('resolve_alert', {
       p_alert_id: id,
-      p_note: parsed.data.note,
+      p_note: parsed.data.note ?? '',
     })
     if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
 

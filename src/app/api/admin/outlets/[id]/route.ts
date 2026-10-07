@@ -1,11 +1,12 @@
 import { z } from 'zod'
+import { optional, zAddress, zPlaceName } from '@/lib/validation'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 
 const schema = z.object({
-  name: z.string().min(2).max(160).optional(),
-  address: z.string().max(400).nullable().optional(),
+  name: zPlaceName.optional(),
+  address: optional(zAddress),
   lat: z.number().min(-90).max(90).optional(),
   lng: z.number().min(-180).max(180).optional(),
   geofence_radius_m: z.number().int().min(25).max(2000).optional(),
@@ -19,7 +20,9 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
     await requireApiSession(['admin'])
     const { id } = await ctx.params
     const parsed = schema.safeParse(await request.json())
-    if (!parsed.success) return Response.json({ error: 'Invalid change' }, { status: 400 })
+    if (!parsed.success) {
+      return Response.json({ error: parsed.error.issues[0]?.message ?? 'Invalid change' }, { status: 400 })
+    }
 
     const supabase = await createServerSupabase()
     const { error } = await supabase.from('outlets').update(parsed.data).eq('id', id)

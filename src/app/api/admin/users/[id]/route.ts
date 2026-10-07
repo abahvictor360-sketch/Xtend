@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { optional, zPersonName, zPhone } from '@/lib/validation'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
@@ -7,8 +8,8 @@ import { generateTempPassword } from '@/lib/credentials'
 import { rememberTempPassword } from '@/lib/staff-logins'
 
 const patchSchema = z.object({
-  full_name: z.string().min(2).max(120).optional(),
-  phone: z.string().min(7).max(20).nullable().optional(),
+  full_name: zPersonName.optional(),
+  phone: optional(zPhone),
   role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).optional(),
   outlet_id: z.string().uuid().nullable().optional(),
   supervisor_id: z.string().uuid().nullable().optional(),
@@ -23,7 +24,9 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
     const session = await requireApiSession(['admin', 'supervisor'])
     const { id } = await ctx.params
     const parsed = patchSchema.safeParse(await request.json())
-    if (!parsed.success) return Response.json({ error: 'Invalid change' }, { status: 400 })
+    if (!parsed.success) {
+      return Response.json({ error: parsed.error.issues[0]?.message ?? 'Invalid change' }, { status: 400 })
+    }
     const input = parsed.data
 
     if (id === session.userId && input.is_active === false) {

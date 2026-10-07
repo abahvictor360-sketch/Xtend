@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { optional, zText } from '@/lib/validation'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/auth'
 import { respondToSupportThread } from '@/lib/support-assistant'
@@ -6,8 +7,8 @@ import { respondToSupportThread } from '@/lib/support-assistant'
 export const maxDuration = 60
 
 const schema = z.object({
-  subject: z.string().trim().max(160).optional(),
-  body: z.string().trim().min(1).max(4000),
+  subject: optional(zText({ max: 160, what: 'subject' })),
+  body: zText({ max: 4000 }),
 })
 
 /** A field member opens a new support thread; the AI answers it at once. */

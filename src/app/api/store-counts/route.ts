@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { zProductName } from '@/lib/validation'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
@@ -12,7 +13,7 @@ const schema = z.object({
   lines: z
     .array(
       z.object({
-        product_name: z.string().trim().min(1, 'Every product needs a name').max(120),
+        product_name: zProductName,
         // The Xpel count sheet (038): back store and shop floor, whose total
         // is what is in the store. Older phones send in_store alone.
         back_store: z.number().int().min(0).max(1_000_000).nullable().optional(),

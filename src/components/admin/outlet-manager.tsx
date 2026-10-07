@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import type { Outlet } from '@/lib/types'
+import { check } from '@/lib/validation'
 
 interface Draft {
   name: string
@@ -97,8 +98,14 @@ export function OutletManager({
 
   async function save(event: React.FormEvent) {
     event.preventDefault()
-    setBusy(true)
     setError(null)
+    const problem =
+      check.placeName(draft.name) ?? (draft.address.trim() ? check.address(draft.address) : null)
+    if (problem) {
+      setError(problem)
+      return
+    }
+    setBusy(true)
 
     const payload = {
       name: draft.name,
@@ -182,11 +189,24 @@ export function OutletManager({
             <form onSubmit={save} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <div className="space-y-1 lg:col-span-2">
                 <Label>Name</Label>
-                <Input required value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
+                <Input
+                  required
+                  minLength={2}
+                  maxLength={120}
+                  autoCapitalize="words"
+                  placeholder="e.g. Shoprite Ikeja City Mall"
+                  value={draft.name}
+                  onChange={(e) => setDraft({ ...draft, name: e.target.value })}
+                />
               </div>
               <div className="space-y-1 lg:col-span-2">
                 <Label>Address</Label>
-                <Input value={draft.address} onChange={(e) => setDraft({ ...draft, address: e.target.value })} />
+                <Input
+                  maxLength={300}
+                  placeholder="Street, area, city"
+                  value={draft.address}
+                  onChange={(e) => setDraft({ ...draft, address: e.target.value })}
+                />
               </div>
               <div className="space-y-1">
                 <Label>Latitude</Label>

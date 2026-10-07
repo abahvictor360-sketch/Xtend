@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { checkText } from '@/lib/validation'
 
 type Audience = 'everyone' | 'role' | 'outlet' | 'users'
 
@@ -90,9 +91,14 @@ export function NotificationComposer({
   }, [payload])
 
   async function send() {
-    setBusy(true)
     setError(null)
     setResult(null)
+    const problem = checkText(title, { max: 80, what: 'title' }) ?? checkText(body, { max: 400 })
+    if (problem) {
+      setError(problem)
+      return
+    }
+    setBusy(true)
     try {
       const res = await fetch('/api/admin/notifications', {
         method: 'POST',

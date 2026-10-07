@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { optional, zEmail, zPersonName, zPhone } from '@/lib/validation'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession } from '@/lib/auth'
@@ -7,9 +8,9 @@ import { deliverCredentials, generateTempPassword } from '@/lib/credentials'
 import { rememberTempPassword } from '@/lib/staff-logins'
 
 const rowSchema = z.object({
-  full_name: z.string().min(2).max(120),
-  email: z.string().email().max(200),
-  phone: z.string().max(20).nullable().optional(),
+  full_name: zPersonName,
+  email: zEmail,
+  phone: optional(zPhone),
   outlet_name: z.string().max(160).nullable().optional(),
   role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).default('merchandiser'),
 })
@@ -85,6 +86,11 @@ export async function POST(request: Request) {
         results.push(base)
         return
       }
+      // Tidied: single spaces, one phone format, so duplicates are caught.
+      normalised.full_name = check.data.full_name
+      normalised.phone = check.data.phone ?? null
+      base.full_name = normalised.full_name
+      base.phone = normalised.phone
 
       if (seenEmails.has(normalised.email)) base.error = 'Duplicate email inside this file'
       else if (takenEmails.has(normalised.email)) base.error = 'An account with this email exists'

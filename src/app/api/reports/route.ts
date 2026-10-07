@@ -1,13 +1,14 @@
 import { z } from 'zod'
+import { zMaybeText } from '@/lib/validation'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, REPORTING_ROLES, dbErrorMessage } from '@/lib/auth'
 
 const schema = z.object({
-  body: z.string().max(4000).default(''),
-  sales_summary: z.string().max(2000).default(''),
-  stock_status: z.string().max(2000).default(''),
-  competitor_activity: z.string().max(2000).default(''),
-  issues: z.string().max(2000).default(''),
+  body: zMaybeText(4000, 'report'),
+  sales_summary: zMaybeText(2000, 'sales summary'),
+  stock_status: zMaybeText(2000, 'stock status'),
+  competitor_activity: zMaybeText(2000, 'competitor activity'),
+  issues: zMaybeText(2000, 'issues'),
   photo_paths: z.array(z.string().min(1)).max(5).default([]),
 })
 

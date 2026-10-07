@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import { checkText } from '@/lib/validation'
 
 export interface CountPerson {
   id: string
@@ -83,9 +84,14 @@ export function CountRequests({
   }
 
   async function send() {
-    setBusy(true)
     setError(null)
     setNotice(null)
+    const problem = note.trim() ? checkText(note, { max: 500, what: 'note' }) : null
+    if (problem) {
+      setError(problem)
+      return
+    }
+    setBusy(true)
     try {
       const res = await fetch('/api/admin/count-requests', {
         method: 'POST',

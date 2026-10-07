@@ -15,6 +15,7 @@ import { GeoBlocked, requireFix, type Fix } from '@/lib/geo'
 import { processReportPhoto } from '@/lib/image'
 import { supabase } from '@/lib/supabase/client'
 import { checkPhoto } from '@/lib/offline/sync'
+import { check } from '@/lib/validation'
 
 /** A product on the Xpel stock count sheet, in the sheet's order. */
 export interface SheetProduct {
@@ -147,9 +148,12 @@ export function StoreCountForm({
       e.product.trim() &&
       (onSheet.has(productKey(e.product)) || extraKeys.indexOf(productKey(e.product)) !== i),
   )
+  const badName = extraLines.find((e) => e.product.trim() && check.productName(e.product))
   const problem = missingName
     ? 'Give every product you added a name.'
-    : duplicate
+    : badName
+      ? `"${badName.product.trim()}": ${check.productName(badName.product)}`
+      : duplicate
       ? onSheet.has(productKey(duplicate.product))
         ? `"${duplicate.product.trim()}" is on the sheet: count it there.`
         : `"${duplicate.product.trim()}" is in the list twice.`

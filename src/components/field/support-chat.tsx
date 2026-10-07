@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert } from '@/components/ui/alert'
 import { cn, formatLagos } from '@/lib/utils'
+import { checkText } from '@/lib/validation'
 
 export interface SupportThread {
   id: string
@@ -51,6 +52,12 @@ export function SupportChat({
 
   async function send() {
     if (!body.trim()) return
+    const problem =
+      checkText(body, { max: 4000 }) ?? (subject.trim() ? checkText(subject, { max: 160, what: 'subject' }) : null)
+    if (problem) {
+      setError(problem)
+      return
+    }
     setBusy(true)
     setError(null)
     try {
@@ -74,6 +81,11 @@ export function SupportChat({
   async function reply(threadId: string) {
     const text = (replies[threadId] ?? '').trim()
     if (!text) return
+    const problem = checkText(text, { max: 4000 })
+    if (problem) {
+      setError(problem)
+      return
+    }
     setBusy(true)
     setError(null)
     try {

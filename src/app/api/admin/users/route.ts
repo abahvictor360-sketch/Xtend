@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { optional, zEmail, zPersonName, zPhone } from '@/lib/validation'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
@@ -7,9 +8,9 @@ import { deliverCredentials, generateTempPassword } from '@/lib/credentials'
 import { rememberTempPassword } from '@/lib/staff-logins'
 
 const createUserSchema = z.object({
-  full_name: z.string().min(2).max(120),
-  email: z.string().email().max(200),
-  phone: z.string().min(7).max(20).nullable().optional(),
+  full_name: zPersonName,
+  email: zEmail,
+  phone: optional(zPhone),
   role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).default('merchandiser'),
   outlet_id: z.string().uuid().nullable().optional(),
   supervisor_id: z.string().uuid().nullable().optional(),
@@ -54,6 +55,14 @@ export async function POST(request: Request) {
     const outlet_id = isSupervisor
       ? (input.outlet_id ?? session.profile.outlet_id ?? null)
       : (input.outlet_id ?? null)
+
+    // Merchandisers and marketers sign in with their phone, so they need one.
+    if ((input.role === 'merchandiser' || input.role === 'marketer') && !input.phone) {
+      return Response.json(
+        { error: 'Enter their phone number: merchandisers and marketers sign in with it.' },
+        { status: 400 },
+      )
+    }
 
     const email = input.email.toLowerCase().trim()
     const temp_password = generateTempPassword()

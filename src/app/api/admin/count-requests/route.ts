@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { zNote } from '@/lib/validation'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { pushToUsers } from '@/lib/push-users'
@@ -9,7 +10,7 @@ export const maxDuration = 60
 const schema = z.object({
   user_ids: z.array(z.string().uuid()).min(1, 'Pick at least one person').max(500),
   due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  note: z.string().trim().max(500).nullable().optional(),
+  note: zNote(500),
 })
 
 /**

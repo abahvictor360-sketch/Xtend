@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { zText } from '@/lib/validation'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
@@ -7,7 +8,7 @@ import { notifyUsers } from '@/lib/notify'
 export const maxDuration = 60
 
 const schema = z.object({
-  body: z.string().trim().min(1).max(4000),
+  body: zText({ max: 4000, what: 'reply' }),
   resolve: z.boolean().default(false),
 })
 
@@ -19,7 +20,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { id } = await params
     const parsed = schema.safeParse(await request.json())
     if (!parsed.success) {
-      return Response.json({ error: 'Write a reply first.' }, { status: 400 })
+      return Response.json(
+        { error: parsed.error.issues[0]?.message ?? 'Write a reply first.' },
+        { status: 400 },
+      )
     }
 
     const supabase = await createServerSupabase()
