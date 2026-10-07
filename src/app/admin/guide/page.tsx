@@ -150,7 +150,8 @@ export default async function AdminGuidePage() {
 
         <GuideSection topic={T.staff} intro="People pages, under People in the menu.">
           <p>
-            On <Ui>Staff</Ui>, <Ui>Add staff</Ui> creates an account and shows a temporary
+            On <Ui>Staff</Ui>, the tabs show <Ui>All</Ui>, <Ui>Merchandisers</Ui>,{' '}
+            <Ui>Marketers</Ui>, <Ui>Supervisors</Ui> or <Ui>Admins</Ui>. <Ui>Add staff</Ui> creates an account and shows a temporary
             password (Xtend also tries to send it). The person chooses their own password at first
             sign-in. From the same list you can reset a password, change someone&apos;s store or
             supervisor, or deactivate them: their history is kept.
