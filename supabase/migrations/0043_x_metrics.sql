@@ -861,7 +861,9 @@ $$;
 -- scaled up to 100.
 --   sales:       units sold against their target (or their stores')
 --   accuracy:    share of their reconciliations within tolerance
---   consistency: days they clocked in with that day's sales on time, and
+--   consistency: days they clocked in with that day's sales on time (by
+--                when the phone took them, so a report held offline is
+--                not late), and
 --                with a count in the last count_interval_days
 --   expiry:      expiry dates recorded, and nothing expired on the shelf
 -- =====================================================================
@@ -924,7 +926,7 @@ begin
          count(*) filter (where exists (
            select 1 from public.xm_sales s
            where s.user_id = p_user and s.sale_date = days.d and s.voided_at is null
-             and s.created_at <= ((days.d + 1)::timestamp at time zone 'Africa/Lagos')
+             and s.captured_at <= ((days.d + 1)::timestamp at time zone 'Africa/Lagos')
                                  + make_interval(hours => settings.sales_grace_hours))),
          count(*) filter (where exists (
            select 1 from public.xm_counts c

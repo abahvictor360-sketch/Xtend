@@ -2598,6 +2598,22 @@ begin
       g := public.xm_grade(kem, d2);
       perform assert((g->'sales'->>'score')::numeric = 100 and g->>'band' = 'Average',
         'xm: the latest target counts, and a better score moves the band');
+      -- Consistency: a day they clocked in, with that day's sales taken
+      -- before the day ended (sent later is not late) and a count that day.
+      perform notifications_on(kem);
+      perform act_as(kem);
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+      values ('opening', 6.5, 3.3, 10, fresh_photo('selfies', 'xm-in.jpg'), now());
+      perform act_as(boss);
+      update public.attendance set attendance_date = d2 where user_id = kem;
+      perform act_as(kem);
+      perform public.xm_submit_sales(shop, d2, jsonb_build_array(jsonb_build_object('product_id', oil, 'units', 100)),
+        fresh_photo('reports', 'xm-s3.jpg'), ((d2 + 1)::timestamp at time zone 'Africa/Lagos') - interval '1 hour');
+      perform act_as(boss);
+      g := public.xm_grade(kem, d2);
+      perform assert((g->'consistency'->>'days_present')::int = 1 and (g->'consistency'->>'score')::numeric = 100,
+        'xm: a day present with that day''s sales and a count is fully consistent');
+
       begin
         perform public.xm_finalise_month(public.business_date());
         perform assert(false, 'xm: a month is finalised only once it has ended');
