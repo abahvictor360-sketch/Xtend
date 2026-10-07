@@ -60,6 +60,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0040_xpel_count_sheet.sql  # the Xpel stock count sheet: products, back store, shop floor, expiry
    supabase/migrations/0041_staff_login_sheet.sql  # staff login sheet: temporary passwords kept until changed
    supabase/migrations/0042_staff_roles.sql  # roles an admin adds, each working like a built-in role
+   supabase/migrations/0043_x_metrics.sql  # X Metrics: supplies, batch counts, daily sales, reconciliation, expiry, grades
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
@@ -105,6 +106,39 @@ crontab instead (times in UTC; `$CRON_SECRET` as in the app's environment):
 
 The last one sends any integrity flag (late in, early out, a faked location
 and so on) that was not already pushed to the supervisor when it was raised.
+Once an hour it also runs the X Metrics checks: it reconciles stock counts
+whose day has ended and raises expiry alerts by batch. To run those on their
+own schedule instead, call `/api/cron/metrics`.
+
+## X Metrics
+
+Stock and sales tracking for the stores an admin adds to it, using the
+existing staff, roles, store allocations and login.
+
+- **Merchandisers and marketers** (Metrics tab on the phone): a stock count
+  per store, by batch, with shelf and backroom units and the expiry date,
+  taken in the store with a shelf photo; and the day's units sold. Both are
+  kept on the phone without signal and sent within 3 days.
+- **Admins** (`/admin/metrics`): log supplies; manage products (SKU,
+  category, unit) and which stores are in X Metrics; set monthly targets per
+  person or store; see stock gaps, expiry alerts and per-store and per-staff
+  analytics; finalise and review monthly grades; export grades, stock,
+  reconciliation and supplies to Excel, Word, PDF or CSV. Supervisors see
+  their own team, read-only.
+- **Reconciliation**: expected = last count + supplied since − sold since. A
+  count off by more than the tolerance (5% to start) is an integrity flag on
+  the person and the store.
+- **Expiry**: each batch is alerted as it enters a window (2 years, 1 year, 6
+  months, 3 months, 1 month) and once expired. A batch that will not sell
+  before it expires at the recent rate of sale says "consider pulling".
+- **Grades**: sales vs target 40, stock accuracy 30, reporting consistency 20
+  (sales and counts on the days the person clocked in), expiry handling 10.
+  Poor below 40, Average to 69, Strong from 70.
+
+Tolerance, weights, bands, alert windows and the rest are in X Metrics →
+Settings; every change keeps the earlier version. Nothing is overwritten:
+supplies, counts and sales are voided with a reason, and a second sales
+report for the same day replaces the first while keeping it.
 
 ## What is where
 

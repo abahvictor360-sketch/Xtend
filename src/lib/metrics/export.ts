@@ -7,8 +7,6 @@ import { fmtScore, monthLabel, windowLabel, type XmGrade } from '@/lib/metrics/s
 export const XM_EXPORTS = ['grades', 'stock', 'discrepancies', 'supplies'] as const
 export type XmExportKind = (typeof XM_EXPORTS)[number]
 
-const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ? (v[0] ?? null) : (v ?? null))
-
 function monthEnd(month: string) {
   const [y, m] = month.split('-').map(Number)
   return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10)
@@ -18,14 +16,14 @@ function monthEnd(month: string) {
 async function gradesSheet(db: SupabaseClient, month: string): Promise<Sheet> {
   const { data: kept } = await db
     .from('xm_monthly_grades')
-    .select('grade, review_note, profiles:user_id(full_name)')
+    .select('grade, review_note')
     .eq('month', month)
   let grades: (XmGrade & { review_note?: string | null })[]
   let status: string
   if (kept && kept.length) {
     grades = kept.map((k) => ({
+      // The kept grade carries the name it had (xm_month_grades).
       ...(k.grade as XmGrade),
-      full_name: one(k.profiles as { full_name: string } | { full_name: string }[] | null)?.full_name,
       review_note: k.review_note as string | null,
     }))
     status = 'Finalised'
@@ -112,31 +110,21 @@ async function stockSheet(db: SupabaseClient, outlet: string | null): Promise<Sh
   }
 }
 
-type Rec = { count_date: string; outlet_id: string; user_id: string }
-
 /** Every reconciliation in a month, gaps first. */
 async function discrepancySheet(db: SupabaseClient, month: string, outlet: string | null): Promise<Sheet> {
   let q = db
-    .from('xm_reconciliations')
+    .from('xm_reconciliation_detail')
     .select(
-      'previous_units, supplied_units, sold_units, expected_units, actual_units, variance_units, variance_pct, tolerance_pct, flagged, product_id, xm_counts!inner(count_date, outlet_id, user_id)',
+      'count_date, outlet_name, staff_name, product_name, previous_units, supplied_units, sold_units, expected_units, actual_units, variance_units, variance_pct, tolerance_pct, flagged',
     )
-    .gte('xm_counts.count_date', month)
-    .lte('xm_counts.count_date', monthEnd(month))
+    .gte('count_date', month)
+    .lte('count_date', monthEnd(month))
     .order('variance_pct', { ascending: false })
     .limit(5000)
-  if (outlet) q = q.eq('xm_counts.outlet_id', outlet)
+  if (outlet) q = q.eq('outlet_id', outlet)
   const { data, error } = await q
   if (error) throw new ApiError('Could not read the reconciliations', 400)
-  const rows = (data ?? []).map((r) => ({ ...r, c: one(r.xm_counts as unknown as Rec | Rec[]) as Rec }))
-  const [{ data: outlets }, { data: products }, { data: people }] = await Promise.all([
-    db.from('outlets').select('id, name').in('id', [...new Set(rows.map((r) => r.c.outlet_id))]),
-    db.from('products').select('id, name').in('id', [...new Set(rows.map((r) => r.product_id))]),
-    db.from('profiles').select('id, full_name').in('id', [...new Set(rows.map((r) => r.c.user_id))]),
-  ])
-  const name = (list: { id: string; name?: string; full_name?: string }[] | null) =>
-    new Map((list ?? []).map((x) => [x.id, (x.name ?? x.full_name) as string]))
-  const o = name(outlets), p = name(products), u = name(people)
+  const rows = data ?? []
   return {
     title: `X Metrics stock reconciliation: ${monthLabel(month)}`,
     subtitle: `${rows.length} product counts checked, ${rows.filter((r) => r.flagged).length} outside tolerance.`,
@@ -145,10 +133,10 @@ async function discrepancySheet(db: SupabaseClient, month: string, outlet: strin
     columns: ['Date', 'Store', 'Counted by', 'Product', 'Previous', 'Supplied', 'Sold', 'Expected', 'Counted', 'Gap', 'Gap %', 'Flagged'],
     rows: rows.map((r) => ({
       values: [
-        r.c.count_date,
-        o.get(r.c.outlet_id) ?? '',
-        u.get(r.c.user_id) ?? '',
-        p.get(r.product_id) ?? '',
+        r.count_date,
+        r.outlet_name,
+        r.staff_name ?? '',
+        r.product_name,
         String(r.previous_units),
         String(r.supplied_units),
         String(r.sold_units),
@@ -166,8 +154,8 @@ async function discrepancySheet(db: SupabaseClient, month: string, outlet: strin
 
 async function suppliesSheet(db: SupabaseClient, month: string, outlet: string | null): Promise<Sheet> {
   let q = db
-    .from('xm_supplies')
-    .select('supplied_on, outlet_id, product_id, quantity, batch, expiry_date, note, logged_by, created_at, voided_at, void_reason')
+    .from('xm_supply_detail')
+    .select('supplied_on, outlet_name, product_name, quantity, batch, expiry_date, note, logged_by_name, voided_at, void_reason')
     .gte('supplied_on', month)
     .lte('supplied_on', monthEnd(month))
     .order('supplied_on')
@@ -176,28 +164,21 @@ async function suppliesSheet(db: SupabaseClient, month: string, outlet: string |
   const { data, error } = await q
   if (error) throw new ApiError('Could not read the supplies', 400)
   const rows = data ?? []
-  const [{ data: outlets }, { data: products }, { data: people }] = await Promise.all([
-    db.from('outlets').select('id, name').in('id', [...new Set(rows.map((r) => r.outlet_id))]),
-    db.from('products').select('id, name').in('id', [...new Set(rows.map((r) => r.product_id))]),
-    db.from('profiles').select('id, full_name').in('id', [...new Set(rows.map((r) => r.logged_by))]),
-  ])
-  const name = (list: { id: string; name?: string; full_name?: string }[] | null) =>
-    new Map((list ?? []).map((x) => [x.id, (x.name ?? x.full_name) as string]))
-  const o = name(outlets), p = name(products), u = name(people)
+  const voided = rows.filter((r) => r.voided_at).length
   return {
     title: `X Metrics supplies: ${monthLabel(month)}`,
-    subtitle: `${rows.filter((r) => !r.voided_at).length} deliveries${rows.some((r) => r.voided_at) ? `, ${rows.filter((r) => r.voided_at).length} voided` : ''}.`,
+    subtitle: `${rows.length - voided} deliveries${voided ? `, ${voided} voided` : ''}.`,
     sheetName: 'Supplies',
     columns: ['Supplied', 'Store', 'Product', 'Quantity', 'Batch', 'Expiry', 'Logged by', 'Note', 'Status'],
     rows: rows.map((r) => ({
       values: [
         r.supplied_on,
-        o.get(r.outlet_id) ?? '',
-        p.get(r.product_id) ?? '',
+        r.outlet_name,
+        r.product_name,
         String(r.quantity),
         r.batch || '—',
         r.expiry_date ?? '',
-        u.get(r.logged_by) ?? '',
+        r.logged_by_name ?? '',
         r.note ?? '',
         r.voided_at ? `Voided: ${r.void_reason}` : 'Live',
       ],

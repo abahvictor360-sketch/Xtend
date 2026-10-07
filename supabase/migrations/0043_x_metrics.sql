@@ -45,8 +45,18 @@ alter table public.products add column if not exists category text
   check (category is null or length(btrim(category)) between 1 and 60);
 alter table public.products add column if not exists unit text not null default 'unit'
   check (length(btrim(unit)) between 1 and 30);
-create unique index if not exists products_sku_unique
-  on public.products (lower(btrim(sku))) where sku is not null;
+-- One product per SKU. If two already share one, the migration still runs
+-- and says so; fix them and run it again to add the rule.
+do $$
+begin
+  if exists (select 1 from public.products where sku is not null
+             group by lower(btrim(sku)) having count(*) > 1) then
+    raise notice 'Two products share a SKU: SKUs are not made unique until that is fixed';
+  else
+    create unique index if not exists products_sku_unique
+      on public.products (lower(btrim(sku))) where sku is not null;
+  end if;
+end $$;
 
 -- ---------------------------------------------------------------------
 -- Settings: one row, changed by admins, every version kept.
@@ -1048,5 +1058,39 @@ begin
 end $$;
 
 grant select on public.xm_live_sale_lines, public.xm_current_targets, public.xm_stock_on_hand to authenticated;
+
+-- Read-only views for the dashboard and exports: the same rows, with names.
+-- security_invoker, so each table's own rules still decide who sees what.
+create or replace view public.xm_reconciliation_detail
+with (security_invoker = true) as
+  select r.*, c.count_date, c.outlet_id, c.user_id, o.name as outlet_name,
+         p.name as product_name, p.sku, pr.full_name as staff_name
+  from public.xm_reconciliations r
+  join public.xm_counts c on c.id = r.count_id
+  join public.outlets o on o.id = c.outlet_id
+  join public.products p on p.id = r.product_id
+  left join public.profiles pr on pr.id = c.user_id;
+
+create or replace view public.xm_expiry_alert_detail
+with (security_invoker = true) as
+  select a.*, o.name as outlet_name, p.name as product_name, p.sku, p.unit,
+         ack.full_name as acknowledged_by_name
+  from public.xm_expiry_alerts a
+  join public.outlets o on o.id = a.outlet_id
+  join public.products p on p.id = a.product_id
+  left join public.profiles ack on ack.id = a.acknowledged_by;
+
+create or replace view public.xm_supply_detail
+with (security_invoker = true) as
+  select s.*, o.name as outlet_name, p.name as product_name, p.sku, p.unit,
+         lb.full_name as logged_by_name, vb.full_name as voided_by_name
+  from public.xm_supplies s
+  join public.outlets o on o.id = s.outlet_id
+  join public.products p on p.id = s.product_id
+  left join public.profiles lb on lb.id = s.logged_by
+  left join public.profiles vb on vb.id = s.voided_by;
+
+grant select on public.xm_reconciliation_detail, public.xm_expiry_alert_detail, public.xm_supply_detail
+  to authenticated;
 
 select 'X Metrics (043) installed' as result;

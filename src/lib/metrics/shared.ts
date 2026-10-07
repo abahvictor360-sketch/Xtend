@@ -77,11 +77,12 @@ export function windowLabel(days: number): string {
   return `${days} days`
 }
 
-export function bandTone(band: string | null | undefined) {
-  if (band === 'Strong') return 'bg-emerald-100 text-emerald-800'
-  if (band === 'Average') return 'bg-amber-100 text-amber-800'
-  if (band === 'Poor') return 'bg-red-100 text-red-800'
-  return 'bg-slate-100 text-slate-600'
+/** The Badge variant for a band. */
+export function bandVariant(band: string | null | undefined) {
+  if (band === 'Strong') return 'success' as const
+  if (band === 'Average') return 'warning' as const
+  if (band === 'Poor') return 'destructive' as const
+  return 'outline' as const
 }
 
 export function fmtScore(value: number | null | undefined) {
