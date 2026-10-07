@@ -2,6 +2,7 @@ import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { TeamManager, type TeamMember, type TeamSupervisor } from '@/components/admin/team-manager'
 import type { Profile } from '@/lib/types'
+import { roleLabel, type StaffRole } from '@/lib/staff-roles'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Teams — Xtend' }
@@ -10,11 +11,13 @@ export default async function TeamsPage() {
   await requireSession(['admin'])
   const supabase = await createServerSupabase()
 
-  const [{ data: staff }, { data: supervisors }, { data: outlets }] = await Promise.all([
+  const [{ data: staff }, { data: supervisors }, { data: outlets }, { data: roles }] = await Promise.all([
     supabase.rpc('my_staff'),
     supabase.rpc('available_supervisors'),
     supabase.from('outlets').select('id, name'),
+    supabase.from('staff_roles').select('id, name, base_role, is_active'),
   ])
+  const roleById = new Map(((roles ?? []) as StaffRole[]).map((r) => [r.id, r]))
 
   const outletName = new Map(((outlets ?? []) as { id: string; name: string }[]).map((o) => [o.id, o.name]))
   const members: TeamMember[] = ((staff ?? []) as Profile[])
@@ -23,6 +26,7 @@ export default async function TeamsPage() {
       id: p.id,
       full_name: p.full_name,
       role: p.role as TeamMember['role'],
+      role_label: roleLabel(p, roleById),
       store: p.outlet_id ? (outletName.get(p.outlet_id) ?? null) : null,
       supervisor_id: p.supervisor_id ?? null,
     }))

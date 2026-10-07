@@ -14,6 +14,8 @@ export interface TeamMember {
   id: string
   full_name: string
   role: 'merchandiser' | 'marketer'
+  /** The name shown: a role an admin added (042), or the built-in one. */
+  role_label: string
   store: string | null
   supervisor_id: string | null
 }
@@ -272,7 +274,7 @@ export function TeamManager({
                           : 'bg-muted text-foreground',
                       )}
                     >
-                      {m.role === 'merchandiser' ? 'Merchandiser' : 'Marketer'}
+                      {m.role_label}
                     </span>
                     {m.store ?? 'no home store'}
                   </span>

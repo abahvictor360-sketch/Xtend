@@ -2,6 +2,7 @@ import Link from 'next/link'
 import { Bell, BookOpen, Clock, Headset, KeyRound, MapPin, Smartphone } from 'lucide-react'
 import { FIELD_ROLES, requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { BASE_LABEL } from '@/lib/staff-roles'
 import { SheetScreen, HeaderField, SectionHeader } from '@/components/field/screen'
 import { TaskRow } from '@/components/field/task-row'
 import { SignOutButton } from '@/components/sign-out-button'
@@ -19,6 +20,14 @@ export default async function AccountPage() {
   const supabase = await createServerSupabase()
 
   const { data: inbox } = await supabase.rpc('my_notifications', { p_limit: 10 })
+  // A role an admin added (042) shows by its own name.
+  const { data: addedRole } = session.profile.staff_role_id
+    ? await supabase
+        .from('staff_roles')
+        .select('name')
+        .eq('id', session.profile.staff_role_id)
+        .maybeSingle<{ name: string }>()
+    : { data: null }
   const messages = (inbox ?? []) as {
     id: string
     title: string
@@ -52,7 +61,7 @@ export default async function AccountPage() {
           <HeaderField label="Signed in as" value={session.profile.email ?? session.email ?? '—'} />
           <HeaderField
             label="Role"
-            value={session.profile.role === 'merchandiser' ? 'Merchandiser' : session.profile.role}
+            value={addedRole?.name ?? BASE_LABEL[session.profile.role]}
           />
         </>
       }

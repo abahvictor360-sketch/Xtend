@@ -59,6 +59,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0039_field_rules.sql  # names, phones and reports must be what they say
    supabase/migrations/0040_xpel_count_sheet.sql  # the Xpel stock count sheet: products, back store, shop floor, expiry
    supabase/migrations/0041_staff_login_sheet.sql  # staff login sheet: temporary passwords kept until changed
+   supabase/migrations/0042_staff_roles.sql  # roles an admin adds, each working like a built-in role
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
