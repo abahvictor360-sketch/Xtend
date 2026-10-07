@@ -3,11 +3,13 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { notifyUsers } from '@/lib/notify'
+import { writtenText } from '@/lib/fields'
 
 export const maxDuration = 60
 
 const schema = z.object({
-  body: z.string().trim().min(1).max(4000),
+  // An admin's own words: links allowed, junk not.
+  body: writtenText(4000, 2, 'the reply', true),
   resolve: z.boolean().default(false),
 })
 

@@ -1,4 +1,5 @@
 import 'server-only'
+import { requestIp } from '@/lib/client-ip'
 
 /**
  * IP geolocation for the VPN / location-manipulation checks.
@@ -6,8 +7,9 @@ import 'server-only'
  * Free and keyless by default: ip-api.com returns a lat/lng, a country, and
  * crucially a proxy / hosting flag that marks VPN and datacentre IPs, with no
  * sign-up (45 requests a minute, which is far above Xtend's clock-in rate).
- * Swap the provider by pointing IP_GEO_URL at another JSON endpoint that uses
- * the same field names, or set IP_GEO_DISABLED=1 to turn the lookup off.
+ * Swap the provider by pointing IP_GEO_URL at another HTTPS JSON endpoint that
+ * uses the same field names, set IP_API_KEY to use ip-api's paid HTTPS
+ * endpoint, or set IP_GEO_DISABLED=1 to turn the lookup off.
  *
  * When the lookup cannot run (no network, a private IP, the rate limit), the
  * caller simply gets null and the IP-based checks are skipped for that event.
@@ -39,20 +41,14 @@ const PRIVATE = [
   /^fe80:/i,
 ]
 
-/** The first public IP in an x-forwarded-for chain, or null. */
+/**
+ * The caller's public IP, or null for a private one. Read from the end of
+ * the forwarding chain (lib/client-ip.ts): the start is whatever the caller
+ * wrote, and a VPN user could otherwise claim a Lagos address.
+ */
 export function clientIp(headers: Headers): string | null {
-  const candidates = [
-    ...(headers.get('x-forwarded-for')?.split(',') ?? []),
-    headers.get('x-real-ip') ?? '',
-    headers.get('cf-connecting-ip') ?? '',
-  ]
-    .map((s) => s.trim())
-    .filter(Boolean)
-
-  for (const ip of candidates) {
-    if (!PRIVATE.some((re) => re.test(ip))) return ip
-  }
-  return null
+  const ip = requestIp(headers)
+  return ip && !isPrivate(ip) ? ip : null
 }
 
 function isPrivate(ip: string) {
@@ -83,8 +79,15 @@ function fromVercelHeaders(ip: string, headers: Headers): IpGeo | null {
 
 async function fromIpApi(ip: string, signal: AbortSignal): Promise<IpGeo | null> {
   // fields: status, country code, lat, lon, proxy, hosting, mobile.
-  const base = process.env.IP_GEO_URL ?? 'http://ip-api.com/json'
-  const url = `${base}/${encodeURIComponent(ip)}?fields=status,message,countryCode,lat,lon,proxy,hosting,mobile`
+  // ip-api's free tier is plain HTTP only, so its answer could be altered on
+  // the way back (to hide a VPN, say). With IP_API_KEY set, its paid HTTPS
+  // endpoint is used instead. A custom IP_GEO_URL must be HTTPS.
+  const key = process.env.IP_API_KEY
+  const custom = process.env.IP_GEO_URL
+  if (custom && !custom.startsWith('https://')) return null
+  const base = custom ?? (key ? 'https://pro.ip-api.com/json' : 'http://ip-api.com/json')
+  const fields = 'fields=status,message,countryCode,lat,lon,proxy,hosting,mobile'
+  const url = `${base}/${encodeURIComponent(ip)}?${fields}${key && !custom ? `&key=${encodeURIComponent(key)}` : ''}`
   const res = await fetch(url, { signal, headers: { accept: 'application/json' } })
   if (!res.ok) return null
   const j = (await res.json()) as Record<string, unknown>

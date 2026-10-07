@@ -2,6 +2,7 @@ import 'server-only'
 import { createECDH } from 'node:crypto'
 import webpush, { type PushSubscription, type WebPushError } from 'web-push'
 import { isNativeEndpoint, sendNative } from '@/lib/push-native'
+import { isWebPushEndpoint, NATIVE_TOKEN } from '@/lib/push-endpoint'
 
 let configured = false
 
@@ -64,6 +65,16 @@ export interface PushPayload {
 export async function sendPush(target: PushTarget, payload: PushPayload): Promise<PushOutcome> {
   // The Xtend Android and iOS apps: Firebase or Apple, not web push.
   if (isNativeEndpoint(target.endpoint)) {
+    const token = target.endpoint.slice(target.endpoint.indexOf(':') + 1)
+    if (!NATIVE_TOKEN.test(token)) {
+      return {
+        subscriptionId: target.id,
+        userId: target.user_id,
+        ok: false,
+        gone: true,
+        error: 'Not a device token',
+      }
+    }
     const outcome = await sendNative(target.endpoint, payload)
     return { subscriptionId: target.id, userId: target.user_id, ...outcome }
   }
@@ -75,6 +86,18 @@ export async function sendPush(target: PushTarget, payload: PushPayload): Promis
       ok: false,
       gone: false,
       error: 'Push is not configured on the server',
+    }
+  }
+
+  // Checked again here, not only when it was registered: an address that
+  // is not a push service is never sent to, and is retired.
+  if (!isWebPushEndpoint(target.endpoint)) {
+    return {
+      subscriptionId: target.id,
+      userId: target.user_id,
+      ok: false,
+      gone: true,
+      error: 'Not a push service address',
     }
   }
 

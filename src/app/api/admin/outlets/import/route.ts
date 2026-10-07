@@ -4,12 +4,13 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 import { locateAddress } from '@/lib/geocode'
+import { address, thingName } from '@/lib/fields'
 
 export const maxDuration = 60
 
 const rowSchema = z.object({
-  name: z.string().min(2).max(160),
-  address: z.string().max(400).nullable().optional(),
+  name: thingName(160, 'store name'),
+  address,
   // Coordinates may be supplied outright; then nothing is looked up.
   lat: z.number().min(-90).max(90).nullable().optional(),
   lng: z.number().min(-180).max(180).nullable().optional(),

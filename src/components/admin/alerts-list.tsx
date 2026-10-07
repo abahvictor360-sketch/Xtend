@@ -106,6 +106,7 @@ export function AlertsList({
                   <div className="flex w-full shrink-0 gap-2 sm:w-80">
                     <Input
                       placeholder="Resolution note"
+                      maxLength={1000}
                       value={notes[alert.id] ?? ''}
                       onChange={(e) => setNotes((n) => ({ ...n, [alert.id]: e.target.value }))}
                     />

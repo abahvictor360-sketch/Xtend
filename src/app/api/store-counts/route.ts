@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
+import { thingName } from '@/lib/fields'
 
 const schema = z.object({
   outlet_id: z.string().uuid(),
@@ -12,7 +13,8 @@ const schema = z.object({
   lines: z
     .array(
       z.object({
-        product_name: z.string().trim().min(1, 'Every product needs a name').max(120),
+        // "7UP" has two letters; "S26" only one, so one is enough.
+        product_name: thingName(120, 'product name', 1),
         in_store: z.number().int().min(0).max(1_000_000),
         sold: z.number().int().min(0).max(1_000_000),
       }),

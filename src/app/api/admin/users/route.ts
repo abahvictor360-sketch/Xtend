@@ -4,11 +4,12 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 import { deliverCredentials, generateTempPassword } from '@/lib/credentials'
+import { emailAddress, optionalPhone, personName } from '@/lib/fields'
 
 const createUserSchema = z.object({
-  full_name: z.string().min(2).max(120),
-  email: z.string().email().max(200),
-  phone: z.string().min(7).max(20).nullable().optional(),
+  full_name: personName,
+  email: emailAddress,
+  phone: optionalPhone,
   role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).default('merchandiser'),
   outlet_id: z.string().uuid().nullable().optional(),
   supervisor_id: z.string().uuid().nullable().optional(),

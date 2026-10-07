@@ -1,4 +1,5 @@
 import 'server-only'
+import { requestIp } from '@/lib/client-ip'
 
 /**
  * A fixed-window counter kept in this server process. Xtend runs as one
@@ -24,12 +25,7 @@ function sweep(now: number) {
   for (const [key, entry] of windows) if (entry.resetAt <= now) windows.delete(key)
 }
 
-/**
- * The caller's address. On the VPS, Nginx or Caddy puts it in
- * X-Forwarded-For; without a proxy that header could be made up, which is
- * why sign-in also limits attempts per account.
- */
+/** The caller's address, as the app's own proxy saw it (lib/client-ip.ts). */
 export function clientAddress(request: Request): string {
-  const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
-  return forwarded || request.headers.get('x-real-ip') || 'unknown'
+  return requestIp(request.headers) ?? 'unknown'
 }

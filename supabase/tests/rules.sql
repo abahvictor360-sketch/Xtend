@@ -261,8 +261,8 @@ begin
 
   -- The marketer files it instead.
   perform act_as(grace);
-  insert into public.reports (body, user_id, report_date)
-  values ('Busy morning', bala, date '2001-01-01')
+  insert into public.reports (body, sales_summary, stock_status, user_id, report_date)
+  values ('Busy morning', 'Twelve tubs sold', 'Shampoo running low', bala, date '2001-01-01')
   returning id into report_id;
 
   perform assert(
@@ -1639,9 +1639,20 @@ begin
     exception when others then
       perform assert(sqlerrm like '%Turn on Xtend notifications%', 'no clock-in with notifications off');
     end;
-    insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)
-    values (femi, 'https://example.com/made-up', 'k', 'a');
-    perform assert(not public.has_live_push(femi), 'a made-up notification address does not count');
+    -- The server POSTs to these addresses, so only real push services (038).
+    foreach used_path in array array[
+      'https://example.com/made-up', 'http://127.0.0.1:5432/', 'http://169.254.169.254/latest',
+      'https://fcm.googleapis.com@169.254.169.254/x', 'https://fcm.googleapis.com:8443/x'] loop
+      begin
+        insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)
+        values (femi, used_path, 'k', 'a');
+        perform assert(false, 'a notification address that is not a push service is refused: ' || used_path);
+      exception when check_violation then
+        null;
+      end;
+    end loop;
+    perform assert(not public.has_live_push(femi),
+      'a notification address that is not a push service is refused, and does not count');
     update public.profiles set push_exempt = true, outlet_id = null where id = femi;
     perform assert(
       (select not push_exempt and outlet_id = mall_id from public.profiles where id = femi),
@@ -1657,10 +1668,14 @@ begin
     insert into auth.users (id, email) values ('00000000-0000-4000-8000-0000000000a1', 'app@xpel.ng');
     insert into public.profiles (id, full_name, email, role, outlet_id)
     values ('00000000-0000-4000-8000-0000000000a1', 'App User', 'app@xpel.ng', 'merchandiser', mall_id);
-    insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)
-    values ('00000000-0000-4000-8000-0000000000a1', 'native-fcm:short', 'native', 'native');
-    perform assert(not public.has_live_push('00000000-0000-4000-8000-0000000000a1'),
-      'a made-up app token does not count');
+    begin
+      insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)
+      values ('00000000-0000-4000-8000-0000000000a1', 'native-fcm:short', 'native', 'native');
+      perform assert(false, 'a made-up app token is refused');
+    exception when check_violation then
+      perform assert(not public.has_live_push('00000000-0000-4000-8000-0000000000a1'),
+        'a made-up app token is refused, and does not count');
+    end;
     insert into public.push_subscriptions (user_id, endpoint, p256dh, auth)
     values ('00000000-0000-4000-8000-0000000000a1',
             'native-apns:' || repeat('a1b2c3d4', 8), 'native', 'native');
@@ -1834,7 +1849,10 @@ begin
       and not exists (select 1 from jsonb_array_elements(got->'contacts') c where c->>'what' = 'location'),
       'for an excuse, offline positions show the phone was on, not that it had network');
     perform assert(
-      exists (select 1 from jsonb_array_elements(public.movement_trail(femi, public.business_date())->'points') e
+      -- The day the offline positions were taken, which just after
+      -- midnight is yesterday.
+      exists (select 1 from jsonb_array_elements(public.movement_trail(femi,
+                (now() at time zone 'Africa/Lagos' - interval '15 minutes')::date)->'points') e
               where e->>'kind' = 'location_offline'),
       'the route marks positions that were saved offline');
 
@@ -2213,6 +2231,44 @@ begin
       not exists (select 1 from public.integrity_flags where user_id = lola and kind = 'late_clock_in'),
       'clocking in within the grace period is not flagged');
     perform act_as(boss);
+  end;
+
+  -- ---------------------------------------------------------------
+  -- What each field accepts (039).
+  -- ---------------------------------------------------------------
+  declare
+    bad text;
+  begin
+    perform act_as(boss);
+    foreach bad in array array['Chidi123', 'a', 'http://spam.com', '.....'] loop
+      begin
+        update public.profiles set full_name = bad where id = bala;
+        perform assert(false, 'a name that is not a name is refused: ' || bad);
+      exception when check_violation then null;
+      end;
+    end loop;
+    update public.profiles set full_name = 'Bala Yusuf-Ade' where id = bala;
+    perform assert((select full_name from public.profiles where id = bala) = 'Bala Yusuf-Ade',
+      'names with letters, spaces and hyphens are taken; others are refused');
+
+    foreach bad in array array['12345', '+2348031234567', '08031234567000', 'call me'] loop
+      begin
+        update public.profiles set phone = bad where id = bala;
+        perform assert(false, 'a phone that is not a mobile number is refused: ' || bad);
+      exception when check_violation then null;
+      end;
+    end loop;
+    update public.profiles set phone = '08031234567' where id = bala;
+    perform assert((select phone from public.profiles where id = bala) = '08031234567',
+      'a mobile number is kept as 0803…; anything else is refused');
+
+    perform assert(public.text_is_clean('Sold 40 tubs, shampoo low.'), 'plain text is clean');
+    perform assert(not public.text_is_clean('Promo at www.cheap.ng'), 'a link is not');
+    perform assert(not public.text_is_clean('buy now at deals.xyz'), 'nor is a bare domain');
+    perform assert(not public.text_has_words('ok', 10), 'two letters is not a report section');
+    perform assert(not public.text_has_words('..............', 10), 'nor are dots');
+    perform assert(not public.text_has_words('aaaaaaaaaaaaa', 10), 'nor one key held down');
+    perform assert(public.text_has_words('All in stock today', 10), 'a short real sentence is');
   end;
 
   raise notice 'ALL RULES PASSED';
