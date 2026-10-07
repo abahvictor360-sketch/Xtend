@@ -272,6 +272,88 @@ on conflict ((lower(btrim(name)))) do update
   set barcode = excluded.barcode, sheet_order = excluded.sheet_order, is_active = true;
 
 -- ---------------------------------------------------------------------
+-- Does a count add up? Compared with this person's previous count at the
+-- store. Raises flags, never refuses. Was inline in submit_store_count
+-- (022, 034); run only from there.
+-- ---------------------------------------------------------------------
+create or replace function public.check_store_count(p_outlet_id uuid, today date)
+returns void
+language plpgsql security definer set search_path = public as $$
+declare
+  missing jsonb;
+begin
+  -- A correction later the same day replaces today's flags rather than adding more.
+  delete from public.integrity_flags
+  where user_id = auth.uid() and outlet_id = p_outlet_id and flag_date = today
+    and kind like 'count_%' and reviewed_at is null;
+
+  with cur as (
+    select c.product_id, c.in_store, c.sold from public.store_counts c
+    where c.user_id = auth.uid() and c.outlet_id = p_outlet_id and c.count_date = today
+  ), prev as (
+    select distinct on (c.product_id) c.product_id, c.in_store, c.sold
+    from public.store_counts c
+    where c.user_id = auth.uid() and c.outlet_id = p_outlet_id and c.count_date < today
+    order by c.product_id, c.count_date desc
+  )
+  select jsonb_agg(jsonb_build_object(
+           'product', pr.name, 'last_left', prev.in_store, 'sold', cur.sold,
+           'expected_left', prev.in_store - cur.sold, 'left', cur.in_store,
+           'missing', prev.in_store - cur.sold - cur.in_store))
+    into missing
+  from cur join prev using (product_id) join public.products pr on pr.id = cur.product_id
+  -- Fewer units than last time minus what was sold: stock went somewhere.
+  -- More is fine: that is a delivery.
+  where prev.in_store - cur.sold - cur.in_store > greatest(2, 0.1 * prev.in_store);
+
+  if missing is not null then
+    insert into public.integrity_flags (user_id, kind, severity, summary, detail, outlet_id)
+    values (auth.uid(), 'count_units_missing', 'high',
+            format('%s product(s) have fewer units left than the last count minus sales',
+                   jsonb_array_length(missing)),
+            jsonb_build_object('products', missing), p_outlet_id);
+  end if;
+
+  if (select count(*) from public.store_counts c
+      where c.user_id = auth.uid() and c.outlet_id = p_outlet_id and c.count_date = today) >= 2
+     and not exists (
+       select 1 from public.store_counts cur
+       where cur.user_id = auth.uid() and cur.outlet_id = p_outlet_id and cur.count_date = today
+         and not exists (
+           select 1 from public.store_counts prev
+           where prev.user_id = cur.user_id and prev.outlet_id = cur.outlet_id
+             and prev.product_id = cur.product_id and prev.in_store = cur.in_store
+             and prev.sold = cur.sold
+             and prev.count_date = (select max(p2.count_date) from public.store_counts p2
+                                    where p2.user_id = cur.user_id and p2.outlet_id = cur.outlet_id
+                                      and p2.count_date < today)))
+  then
+    insert into public.integrity_flags (user_id, kind, severity, summary, outlet_id)
+    values (auth.uid(), 'count_identical', 'medium',
+            'Every number is exactly the same as the previous count', p_outlet_id);
+  end if;
+
+  if (select count(*) from public.store_counts c
+      where c.user_id = auth.uid() and c.outlet_id = p_outlet_id and c.count_date = today) >= 4
+     and not exists (
+       select 1 from public.store_counts c
+       where c.user_id = auth.uid() and c.outlet_id = p_outlet_id and c.count_date = today
+         and (c.in_store % 10 <> 0 or c.sold % 10 <> 0))
+     and exists (
+       select 1 from public.store_counts c
+       where c.user_id = auth.uid() and c.outlet_id = p_outlet_id and c.count_date = today
+         and (c.in_store > 0 or c.sold > 0))
+  then
+    insert into public.integrity_flags (user_id, kind, severity, summary, outlet_id)
+    values (auth.uid(), 'count_round_numbers', 'low',
+            'Every number in the count is a multiple of 10', p_outlet_id);
+  end if;
+end;
+$$;
+
+revoke all on function public.check_store_count(uuid, date) from public, anon, authenticated;
+
+-- ---------------------------------------------------------------------
 -- Store counts, back store and shop floor.
 -- ---------------------------------------------------------------------
 create or replace function public.submit_store_count(
@@ -290,7 +372,6 @@ declare
   store record;
   dist double precision;
   saved integer;
-  missing jsonb;
   lines jsonb;
 begin
   if not public.can_count_stock() then
@@ -411,73 +492,8 @@ begin
                 photo_path = excluded.photo_path, updated_at = now();
   get diagnostics saved = row_count;
 
-  -- B. Does it add up? Compared with this person's previous count at this store.
-  -- A correction later the same day replaces today's flags rather than adding more.
-  delete from public.integrity_flags
-  where user_id = auth.uid() and outlet_id = p_outlet_id and flag_date = today
-    and kind like 'count_%' and reviewed_at is null;
-
-  with cur as (
-    select c.product_id, c.in_store, c.sold from public.store_counts c
-    where c.user_id = auth.uid() and c.outlet_id = p_outlet_id and c.count_date = today
-  ), prev as (
-    select distinct on (c.product_id) c.product_id, c.in_store, c.sold
-    from public.store_counts c
-    where c.user_id = auth.uid() and c.outlet_id = p_outlet_id and c.count_date < today
-    order by c.product_id, c.count_date desc
-  )
-  select jsonb_agg(jsonb_build_object(
-           'product', pr.name, 'last_left', prev.in_store, 'sold', cur.sold,
-           'expected_left', prev.in_store - cur.sold, 'left', cur.in_store,
-           'missing', prev.in_store - cur.sold - cur.in_store))
-    into missing
-  from cur join prev using (product_id) join public.products pr on pr.id = cur.product_id
-  -- Fewer units than last time minus what was sold: stock went somewhere.
-  -- More is fine: that is a delivery.
-  where prev.in_store - cur.sold - cur.in_store > greatest(2, 0.1 * prev.in_store);
-
-  if missing is not null then
-    insert into public.integrity_flags (user_id, kind, severity, summary, detail, outlet_id)
-    values (auth.uid(), 'count_units_missing', 'high',
-            format('%s product(s) have fewer units left than the last count minus sales',
-                   jsonb_array_length(missing)),
-            jsonb_build_object('products', missing), p_outlet_id);
-  end if;
-
-  if (select count(*) from public.store_counts c
-      where c.user_id = auth.uid() and c.outlet_id = p_outlet_id and c.count_date = today) >= 2
-     and not exists (
-       select 1 from public.store_counts cur
-       where cur.user_id = auth.uid() and cur.outlet_id = p_outlet_id and cur.count_date = today
-         and not exists (
-           select 1 from public.store_counts prev
-           where prev.user_id = cur.user_id and prev.outlet_id = cur.outlet_id
-             and prev.product_id = cur.product_id and prev.in_store = cur.in_store
-             and prev.sold = cur.sold
-             and prev.count_date = (select max(p2.count_date) from public.store_counts p2
-                                    where p2.user_id = cur.user_id and p2.outlet_id = cur.outlet_id
-                                      and p2.count_date < today)))
-  then
-    insert into public.integrity_flags (user_id, kind, severity, summary, outlet_id)
-    values (auth.uid(), 'count_identical', 'medium',
-            'Every number is exactly the same as the previous count', p_outlet_id);
-  end if;
-
-  if (select count(*) from public.store_counts c
-      where c.user_id = auth.uid() and c.outlet_id = p_outlet_id and c.count_date = today) >= 4
-     and not exists (
-       select 1 from public.store_counts c
-       where c.user_id = auth.uid() and c.outlet_id = p_outlet_id and c.count_date = today
-         and (c.in_store % 10 <> 0 or c.sold % 10 <> 0))
-     and exists (
-       select 1 from public.store_counts c
-       where c.user_id = auth.uid() and c.outlet_id = p_outlet_id and c.count_date = today
-         and (c.in_store > 0 or c.sold > 0))
-  then
-    insert into public.integrity_flags (user_id, kind, severity, summary, outlet_id)
-    values (auth.uid(), 'count_round_numbers', 'low',
-            'Every number in the count is a multiple of 10', p_outlet_id);
-  end if;
+  -- B. Does it add up? (Flags, never refusals.)
+  perform public.check_store_count(p_outlet_id, today);
 
   return saved;
 end;
