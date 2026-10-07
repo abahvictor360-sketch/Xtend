@@ -202,18 +202,29 @@ export function StaffGuide() {
         <Steps
           items={[
             <>
-              Tap <Ui>Count</Ui> and count the products physically in your store.
+              Tap <Ui>Count</Ui>. You see the Xpel stock count sheet: every product, with its
+              barcode. Search by name or barcode to find one quickly.
             </>,
             <>
-              For each product, enter how many are <Ui>left</Ui> and how many were{' '}
-              <Ui>sold</Ui> since your last count.
+              Tap a product you have and enter how many are in the <Ui>Back store</Ui> and on
+              the <Ui>Shop floor</Ui>. Xtend adds up the <Ui>Total</Ui>. Add the{' '}
+              <Ui>Expiry date</Ui> and how many were <Ui>Sold</Ui> since your last count. Leave
+              out products you do not have.
             </>,
             <>
-              Take a <Ui>photo of the shelf</Ui> showing the products you counted, then save.
+              A product that is not on the sheet goes under <Ui>Products not on the sheet</Ui>.
+            </>,
+            <>
+              Tap <Ui>Submit count</Ui> and take a <Ui>photo of the shelf</Ui> showing the
+              products you counted.
             </>,
           ]}
         />
-        <Tip>Counts are done when your supervisor asks, and at the end of every month.</Tip>
+        <Tip>
+          Counts are done when your supervisor asks, and at the end of every month. Prefer paper?
+          Under <Ui>Count on paper</Ui>, download the month&apos;s sheet for your store, fill it
+          in, and upload it back as the Excel file, a PDF or a photo.
+        </Tip>
       </GuideSection>
 
       <GuideSection topic={T.clockOut} intro="At the end of your shift.">

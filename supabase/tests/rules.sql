@@ -1145,7 +1145,7 @@ begin
   perform assert(counted = 2, 'a merchandiser counts two products in their store');
   select id into cream from public.products where name = 'Xpel Cream 400ml';
   perform assert(cream is not null, 'a product typed for the first time is added, tidied up');
-  perform assert((select count(*) from public.products) = 2,
+  perform assert((select count(*) from public.products where sheet_order is null) = 2,
     'a product already known is reused, not added again');
   perform assert(
     (select count(*) from public.store_counts
@@ -1209,7 +1209,7 @@ begin
   end;
 
   perform assert(
-    (select count(*) from public.counted_product_names()) = 2,
+    (select count(*) from public.counted_product_names() n where n.name in ('Xpel Soap 100g', 'Xpel Cream 400ml')) = 2,
     'the names counted so far are offered as suggestions');
 
   perform act_as(tunde);
@@ -2074,9 +2074,9 @@ begin
     end;
     begin
       perform public.submit_count_sheet(shop, sade || '/sheet-2.txt', 'count.txt');
-      perform assert(false, 'only a PDF or a photo is accepted');
+      perform assert(false, 'only the Excel sheet, a PDF or a photo is accepted');
     exception when others then
-      perform assert(sqlerrm like '%as a PDF%', 'only a PDF or a photo is accepted');
+      perform assert(sqlerrm like '%as the Excel file, a PDF%', 'only the Excel sheet, a PDF or a photo is accepted');
     end;
     begin
       perform public.submit_count_sheet(shop, sade || '/sheet-3.pdf', 'big.pdf');
@@ -2099,6 +2099,17 @@ begin
     exception when others then
       perform assert(sqlerrm like '%already been sent%', 'the same file cannot be sent twice');
     end;
+
+    -- The Xpel sheet comes back as the Excel file it was downloaded as (038).
+    perform act_as(sade);
+    insert into storage.objects (bucket_id, name, metadata) values
+      ('reports', sade || '/sheet-4.xlsx',
+       '{"mimetype":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","size":30000}');
+    sheet := public.submit_count_sheet(shop, sade || '/sheet-4.xlsx', 'Xpel stock count.xlsx');
+    perform assert(
+      (select content_type from public.store_count_sheets where id = sheet)
+        = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'a filled Excel count sheet is accepted');
 
     -- The blank sheet comes from an admin, as a PDF.
     insert into storage.objects (bucket_id, name, metadata) values
@@ -2212,6 +2223,63 @@ begin
     perform assert(
       not exists (select 1 from public.integrity_flags where user_id = lola and kind = 'late_clock_in'),
       'clocking in within the grace period is not flagged');
+    perform act_as(boss);
+
+    -- ---------------------------------------------------------------
+    -- The Xpel stock count sheet (038).
+    -- ---------------------------------------------------------------
+    perform assert(
+      (select count(*) from public.products where sheet_order is not null) = 233,
+      'the products on the Xpel count sheet are the list to count');
+    perform assert(
+      (select barcode from public.products where name = 'Argan oil conditioner') = '5060120164087',
+      'sheet products carry their barcode');
+
+    perform public.request_store_count(array[lola], public.business_date() + 1, 'Sheet count');
+    perform act_as(lola);
+    perform count_here(early, jsonb_build_array(
+      jsonb_build_object('product_name', 'Argan oil conditioner', 'back_store', 4, 'shop_floor', 6,
+                         'sold', 2, 'expiry_date', '2027-03-31'),
+      jsonb_build_object('product_name', 'argan  OIL shampoo (12''s)', 'shop_floor', 3),
+      jsonb_build_object('product_name', 'A product not on the sheet', 'in_store', 5, 'sold', 1)));
+    perform assert(
+      (select in_store = 10 and back_store = 4 and shop_floor = 6 and sold = 2
+              and expiry_date = date '2027-03-31'
+       from public.store_count_detail
+       where user_id = lola and product_name = 'Argan oil conditioner'),
+      'a sheet line keeps back store, shop floor and expiry, and its total is what is in the store');
+    perform assert(
+      (select in_store = 3 and back_store is null and sold = 0
+       from public.store_count_detail
+       where user_id = lola and product_name = 'Argan oil shampoo (12''s)'),
+      'a sheet product typed differently lands on the sheet product, and a blank figure is not counted');
+    perform assert(
+      (select in_store = 5 and back_store is null and barcode is null
+       from public.store_count_detail
+       where user_id = lola and product_name = 'A product not on the sheet'),
+      'a product off the sheet can still be counted the old way');
+
+    begin
+      perform count_here(early, jsonb_build_array(
+        jsonb_build_object('product_name', 'Argan oil conditioner', 'back_store', 1.5, 'shop_floor', 1)));
+      perform assert(false, 'half units are refused');
+    exception when others then
+      perform assert(sqlerrm like '%whole numbers%', 'half units are refused');
+    end;
+    begin
+      perform count_here(early, jsonb_build_array(
+        jsonb_build_object('product_name', 'Argan oil conditioner', 'sold', 1)));
+      perform assert(false, 'a line with nothing counted is refused');
+    exception when others then
+      perform assert(sqlerrm like '%whole numbers%', 'a line with nothing counted is refused');
+    end;
+    begin
+      perform count_here(early, jsonb_build_array(
+        jsonb_build_object('product_name', 'Argan oil conditioner', 'back_store', 1, 'expiry_date', 'next year')));
+      perform assert(false, 'an expiry date that is not a date is refused');
+    exception when others then
+      perform assert(sqlerrm like '%real dates%', 'an expiry date that is not a date is refused');
+    end;
     perform act_as(boss);
   end;
 

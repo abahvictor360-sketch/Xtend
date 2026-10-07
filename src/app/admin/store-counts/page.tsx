@@ -24,6 +24,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { addDays, lagosDateString, longDate, metres } from '@/lib/utils'
+import { countMonth } from '@/lib/count-sheet'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Store counts — Xtend' }
@@ -33,6 +34,16 @@ type Search = Record<string, string | string[] | undefined>
 function one(search: Search, key: string) {
   const value = search[key]
   return (Array.isArray(value) ? value[0] : value) || null
+}
+
+/** 31 Mar 2027 */
+function shortDate(date: string) {
+  return new Date(`${date}T12:00:00Z`).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'UTC',
+  })
 }
 
 /** Units sold over the period, and what is in each store at its latest count. */
@@ -76,7 +87,7 @@ export default async function StoreCountsPage({
     problem = e instanceof Error ? e.message : 'The counts could not be loaded.'
   }
 
-  const [{ data: staff }, { data: requests }, { data: sheetRows }, { data: template }] = await Promise.all([
+  const [{ data: staff }, { data: requests }, { data: sheetRows }, { data: template }, { count: sheetCount }] = await Promise.all([
     // Everyone for an admin, the supervisor's own team for a supervisor.
     supabase.rpc('my_staff'),
     supabase
@@ -99,6 +110,12 @@ export default async function StoreCountsPage({
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle<{ file_name: string; created_at: string }>(),
+    // The products on the Xpel stock count sheet (migration 038).
+    supabase
+      .from('products')
+      .select('id', { count: 'exact', head: true })
+      .not('sheet_order', 'is', null)
+      .eq('is_active', true),
   ])
   const sheets = (sheetRows ?? []) as {
     id: string
@@ -155,13 +172,18 @@ export default async function StoreCountsPage({
       <div>
         <h1 className="text-xl font-semibold">Store counts</h1>
         <p className="text-sm text-muted-foreground">
-          Merchandisers count the products physically in their store and report how many are
-          left and how many were sold since their last count. They count when a supervisor
-          asks, and at the end of every month.
+          Merchandisers count every product on the Xpel stock count sheet: how many are in the
+          back store and on the shop floor, the expiry date, and how many sold since their last
+          count. They count when a supervisor asks, and at the end of every month.
         </p>
       </div>
 
-      <CountTemplateCard current={template ?? null} canUpload={isAdmin} />
+      <CountTemplateCard
+        month={countMonth(today)}
+        products={sheetCount ?? 0}
+        current={template ?? null}
+        canUpload={isAdmin}
+      />
 
       <CountRequests
         people={people}
@@ -215,7 +237,7 @@ export default async function StoreCountsPage({
                 <TableRow>
                   <TableHead>Product</TableHead>
                   <TableHead className="text-right">Sold (since last count)</TableHead>
-                  <TableHead className="text-right">Left (latest count)</TableHead>
+                  <TableHead className="text-right">In store (latest count)</TableHead>
                   <TableHead className="text-right">Stores</TableHead>
                 </TableRow>
               </TableHeader>
@@ -295,7 +317,10 @@ export default async function StoreCountsPage({
                   <TableHead>Staff</TableHead>
                   <TableHead>Store</TableHead>
                   <TableHead>Product</TableHead>
-                  <TableHead className="text-right">Left</TableHead>
+                  <TableHead className="text-right">Back store</TableHead>
+                  <TableHead className="text-right">Shop floor</TableHead>
+                  <TableHead className="text-right">Total</TableHead>
+                  <TableHead>Expiry</TableHead>
                   <TableHead className="text-right">Sold</TableHead>
                   <TableHead>Taken</TableHead>
                 </TableRow>
@@ -306,8 +331,18 @@ export default async function StoreCountsPage({
                     <TableCell className="whitespace-nowrap">{r.date}</TableCell>
                     <TableCell>{r.name}</TableCell>
                     <TableCell>{r.store}</TableCell>
-                    <TableCell>{r.product}</TableCell>
-                    <TableCell className="text-right tabular-nums">{r.in_store}</TableCell>
+                    <TableCell>
+                      {r.product}
+                      {r.barcode && (
+                        <span className="block font-mono text-[11px] text-muted-foreground">{r.barcode}</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{r.back_store ?? '—'}</TableCell>
+                    <TableCell className="text-right tabular-nums">{r.shop_floor ?? '—'}</TableCell>
+                    <TableCell className="text-right font-semibold tabular-nums">{r.in_store}</TableCell>
+                    <TableCell className="whitespace-nowrap">
+                      {r.expiry_date ? shortDate(r.expiry_date) : <span className="text-muted-foreground">—</span>}
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{r.sold}</TableCell>
                     <TableCell className="whitespace-nowrap text-xs">
                       {r.distance_m === null ? (

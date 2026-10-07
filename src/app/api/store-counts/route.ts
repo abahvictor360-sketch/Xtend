@@ -13,8 +13,17 @@ const schema = z.object({
     .array(
       z.object({
         product_name: z.string().trim().min(1, 'Every product needs a name').max(120),
-        in_store: z.number().int().min(0).max(1_000_000),
-        sold: z.number().int().min(0).max(1_000_000),
+        // The Xpel count sheet (038): back store and shop floor, whose total
+        // is what is in the store. Older phones send in_store alone.
+        back_store: z.number().int().min(0).max(1_000_000).nullable().optional(),
+        shop_floor: z.number().int().min(0).max(1_000_000).nullable().optional(),
+        in_store: z.number().int().min(0).max(1_000_000).optional(),
+        sold: z.number().int().min(0).max(1_000_000).default(0),
+        expiry_date: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, 'Expiry dates must be real dates')
+          .nullable()
+          .optional(),
       }),
     )
     .min(1, 'Count at least one product')
@@ -22,8 +31,8 @@ const schema = z.object({
 })
 
 /**
- * A store count: product names as the merchandiser typed them, how many are
- * left, how many sold. Whether a count is due, whether the store is theirs,
+ * A store count: for each product, how many are in the back store and on the
+ * shop floor, how many sold, and the expiry date. Whether a count is due, whether the store is theirs,
  * which day it is and who counted are all decided by submit_store_count().
  */
 export async function POST(request: Request) {

@@ -138,14 +138,21 @@ async function build(supabase: SupabaseClient, spec: ReportSpec): Promise<Built>
       const c = await storeCounts(supabase, spec.from, spec.to)
       return {
         period: period(c.from, c.to),
-        columns: ['Date', 'Staff', 'Store', 'Product', 'Left in store', 'Sold since last count'],
-        weights: [2, 4, 5, 6, 2, 2.4],
+        columns: [
+          'Date', 'Staff', 'Store', 'Barcode', 'Product',
+          'Back store', 'Shop floor', 'Total', 'Expiry date', 'Sold since last count',
+        ],
+        weights: [2, 3.4, 4, 3, 6, 1.6, 1.6, 1.4, 2, 2],
         rows: c.counts.map((x) => [
           x.date,
           x.name,
           x.store,
+          x.barcode ?? '',
           x.product,
+          x.back_store === null ? '' : String(x.back_store),
+          x.shop_floor === null ? '' : String(x.shop_floor),
           String(x.in_store),
+          x.expiry_date ?? '',
           String(x.sold),
         ]),
       }

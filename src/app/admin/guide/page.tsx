@@ -243,9 +243,16 @@ export default async function AdminGuidePage() {
 
         <GuideSection topic={T.counts} intro="Stock in each store.">
           <p>
-            Merchandisers count what is on the shelf at the end of every month, and whenever you
-            request a count on <Ui>Store counts</Ui>. Each count shows what is left, what was sold
-            and a shelf photo.
+            Merchandisers count against the Xpel stock count sheet at the end of every month, and
+            whenever you request a count on <Ui>Store counts</Ui>. For each product they enter the
+            back store and shop floor numbers (Xtend adds the total), the expiry date and how
+            many sold, with a shelf photo.
+          </p>
+          <p>
+            The sheet can also be downloaded as Excel, named for the month (for example “October
+            2026 stock count sheet”), with the store&apos;s name on it. Sheets filled on paper come
+            back as the Excel file, a PDF or a photo, and are listed under{' '}
+            <Ui>Count sheets</Ui>.
           </p>
         </GuideSection>
 

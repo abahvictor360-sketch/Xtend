@@ -17,27 +17,33 @@ export interface SentSheet {
   created_at: string
 }
 
+const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
 const ACCEPTED: Record<string, string> = {
   'application/pdf': 'pdf',
   'image/jpeg': 'jpg',
   'image/png': 'png',
+  [XLSX]: 'xlsx',
 }
 const MAX_BYTES = 10 * 1024 * 1024
 
 /**
- * Counting on paper: download the office's count sheet, fill it in (on the
- * phone, or printed and by pen), and send it back as a PDF or a photo. The
- * file is kept with the store's count for the office to open.
+ * Counting on paper: download the Xpel stock count sheet for the month (an
+ * Excel file with the store's name already on it), fill it in on the phone
+ * or print it and fill it by pen, and send it back as the Excel file, a PDF
+ * or a photo. The file is kept with the store's count for the office to open.
  */
 export function CountSheetPanel({
   stores,
   sent,
   hasTemplate,
+  month,
 }: {
   stores: { id: string; name: string }[]
   sent: SentSheet[]
-  /** Whether an admin has uploaded the blank count sheet yet. */
+  /** Whether there is a blank count sheet to download. */
   hasTemplate: boolean
+  /** The month being counted, e.g. "OCTOBER 2026". */
+  month: string
 }) {
   const router = useRouter()
   const input = useRef<HTMLInputElement>(null)
@@ -47,14 +53,18 @@ export function CountSheetPanel({
   const [notice, setNotice] = useState<string | null>(null)
 
   if (stores.length === 0) return null
+  // "OCTOBER 2026" reads as "October 2026" on screen.
+  const monthLabel = month.charAt(0) + month.slice(1).toLowerCase()
   const storeName = stores.find((s) => s.id === storeId)?.name ?? 'this store'
 
   async function send(file: File) {
     setError(null)
     setNotice(null)
-    const ext = ACCEPTED[file.type]
+    // Some phones give an Excel file no type; its name says what it is.
+    const type = file.type || (/\.xlsx$/i.test(file.name) ? XLSX : '')
+    const ext = ACCEPTED[type]
     if (!ext) {
-      setError('Send the count sheet as a PDF, or a photo of it (JPG or PNG).')
+      setError('Send the count sheet as the Excel file, a PDF, or a photo of it (JPG or PNG).')
       return
     }
     if (file.size > MAX_BYTES) {
@@ -69,7 +79,7 @@ export function CountSheetPanel({
       } = await client.auth.getUser()
       if (!user) throw new Error('You are signed out. Sign in and try again.')
       const path = `${user.id}/count-sheet-${crypto.randomUUID()}.${ext}`
-      const upload = await client.storage.from('reports').upload(path, file, { contentType: file.type })
+      const upload = await client.storage.from('reports').upload(path, file, { contentType: type })
       if (upload.error) throw new Error(upload.error.message)
 
       setBusy('Sending it')
@@ -101,8 +111,8 @@ export function CountSheetPanel({
           Count on paper
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
-          Download the count sheet, fill it in on your phone or print it and fill it by pen, then
-          upload it here as a PDF or a photo, for the store you counted.
+          Download the {monthLabel} stock count sheet for your store, fill it in on your phone or print
+          it and fill it by pen, then upload it here: the Excel file, a PDF or a photo.
         </p>
       </div>
 
@@ -125,16 +135,16 @@ export function CountSheetPanel({
       <div className="grid gap-2 sm:grid-cols-2">
         {hasTemplate ? (
           <a
-            href="/api/store-counts/template"
+            href={`/api/store-counts/template?store=${encodeURIComponent(storeId)}`}
             download
             className={buttonVariants({ variant: 'outline', className: 'h-11' })}
           >
             <Download className="h-4 w-4" />
-            Download sheet
+            Download {monthLabel.split(' ')[0]} sheet
           </a>
         ) : (
           <p className="flex items-center rounded-xl bg-muted px-3 text-xs text-muted-foreground">
-            The office has not uploaded the count sheet yet. You can still upload one you have.
+            The office has not set up the count sheet yet. You can still upload one you have.
           </p>
         )}
         <Button type="button" className="h-11" disabled={busy !== null} onClick={() => input.current?.click()}>
@@ -144,7 +154,7 @@ export function CountSheetPanel({
         <input
           ref={input}
           type="file"
-          accept="application/pdf,image/jpeg,image/png"
+          accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/pdf,image/jpeg,image/png"
           className="hidden"
           onChange={(e) => {
             const file = e.target.files?.[0]

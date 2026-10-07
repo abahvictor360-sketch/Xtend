@@ -55,6 +55,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0035_store_count_sheets.sql  # paper count sheets, downloaded and sent back
    supabase/migrations/0036_supervisor_alerts.sql  # late, early and flagged activity pushed to supervisors
    supabase/migrations/0037_profile_photos.sql  # staff profile photos and first-run onboarding
+   supabase/migrations/0038_xpel_count_sheet.sql  # the Xpel stock count sheet: products, back store, shop floor, expiry
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
