@@ -155,6 +155,14 @@ export default async function AdminGuidePage() {
             sign-in. From the same list you can reset a password, change someone&apos;s store or
             supervisor, or deactivate them: their history is kept.
           </p>
+          {isAdmin && (
+            <p>
+              <Ui>Login details (Word)</Ui> on Staff downloads every merchandiser&apos;s and
+              marketer&apos;s login, with their temporary password and how to install the app. It is
+              built fresh on each download, so anyone added since is in it. Once someone chooses
+              their own password, the sheet says <Ui>Chosen by them</Ui>.
+            </p>
+          )}
           <p>
             On <Ui>Teams</Ui>, pick <Ui>All</Ui>, <Ui>Merchandisers</Ui> or <Ui>Marketers</Ui>,
             tick people (or <Ui>Select all shown</Ui>), choose a supervisor and click{' '}

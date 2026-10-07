@@ -57,5 +57,6 @@ run supabase/migrations/0035_store_count_sheets.sql
 run supabase/migrations/0036_supervisor_alerts.sql
 run supabase/migrations/0037_profile_photos.sql
 run supabase/migrations/0038_xpel_count_sheet.sql
+run supabase/migrations/0039_staff_login_sheet.sql
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rules.sql 2>&1 | grep -E 'NOTICE|ERROR' | sed 's/^psql:[^ ]*: //'
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_counts.sql 2>&1 | grep -E 'NOTICE|ERROR|PASSED' | sed 's/^psql:[^ ]*: //'

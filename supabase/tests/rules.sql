@@ -2281,6 +2281,21 @@ begin
       perform assert(sqlerrm like '%real dates%', 'an expiry date that is not a date is refused');
     end;
     perform act_as(boss);
+
+    -- ---------------------------------------------------------------
+    -- Temporary passwords for the login sheet (039).
+    -- ---------------------------------------------------------------
+    insert into public.staff_temp_passwords (user_id, password) values (lola, 'ABC-2345-DEF');
+    update public.profiles set must_change_password = true where id = lola;
+    perform assert(
+      (select password from public.staff_temp_passwords where user_id = lola) = 'ABC-2345-DEF',
+      'a temporary password is kept while the person still has to change it');
+    perform act_as(lola);
+    update public.profiles set must_change_password = false where id = lola;
+    perform act_as(boss);
+    perform assert(
+      (select password is null from public.staff_temp_passwords where user_id = lola),
+      'choosing their own password clears the temporary one');
   end;
 
   raise notice 'ALL RULES PASSED';

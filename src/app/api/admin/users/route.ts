@@ -4,6 +4,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 import { deliverCredentials, generateTempPassword } from '@/lib/credentials'
+import { rememberTempPassword } from '@/lib/staff-logins'
 
 const createUserSchema = z.object({
   full_name: z.string().min(2).max(120),
@@ -95,6 +96,9 @@ export async function POST(request: Request) {
         { status: duplicate ? 409 : 400 },
       )
     }
+
+    // Kept for the staff login sheet until they choose their own (039).
+    await rememberTempPassword(admin, created.user.id, temp_password)
 
     const delivery = await deliverCredentials({
       full_name: input.full_name,

@@ -4,6 +4,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 import { deliverCredentials, generateTempPassword } from '@/lib/credentials'
+import { rememberTempPassword } from '@/lib/staff-logins'
 
 const rowSchema = z.object({
   full_name: z.string().min(2).max(120),
@@ -143,6 +144,7 @@ export async function POST(request: Request) {
         continue
       }
 
+      await rememberTempPassword(admin, created.user.id, temp_password)
       await deliverCredentials({
         full_name: row.full_name,
         email: row.email,
