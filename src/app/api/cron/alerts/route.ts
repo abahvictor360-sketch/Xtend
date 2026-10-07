@@ -1,5 +1,6 @@
 import { cronAuthorized } from '@/lib/cron'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
+import { runMetricsSweep } from '@/lib/metrics/server'
 
 export const maxDuration = 60
 
@@ -15,6 +16,8 @@ export async function GET(request: Request) {
   if (!cronAuthorized(request)) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  // X Metrics reconciliation and expiry checks, once an hour.
+  const metrics = new Date().getUTCMinutes() < 5 ? await runMetricsSweep() : null
   const sent = await flushFlagAlerts()
-  return Response.json({ sent, ran_at: new Date().toISOString() })
+  return Response.json({ sent, metrics, ran_at: new Date().toISOString() })
 }
