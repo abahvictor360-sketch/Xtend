@@ -74,6 +74,14 @@ export function StaffManager({
   const [error, setError] = useState<string | null>(null)
   const [issued, setIssued] = useState<{ name: string; password: string } | null>(null)
   const [search, setSearch] = useState(initialSearch)
+  // The person whose name, email and phone are being edited.
+  const [details, setDetails] = useState<{
+    id: string
+    full_name: string
+    email: string
+    phone: string
+  } | null>(null)
+  const [saved, setSaved] = useState<string | null>(null)
 
   const outletName = useMemo(
     () => new Map(outlets.map((outlet) => [outlet.id, outlet.name])),
@@ -127,7 +135,40 @@ export function StaffManager({
     }
   }
 
-  async function patch(id: string, changes: Record<string, unknown>) {
+  function editDetails(person: Profile) {
+    setError(null)
+    setSaved(null)
+    setDetails({
+      id: person.id,
+      full_name: person.full_name,
+      email: person.email ?? '',
+      phone: person.phone ?? '',
+    })
+  }
+
+  /** Sends only what changed; the server checks each field (lib/fields.ts). */
+  async function saveDetails(event: React.FormEvent) {
+    event.preventDefault()
+    if (!details) return
+    const person = staff.find((p) => p.id === details.id)
+    if (!person) return
+    const changes: Record<string, unknown> = {}
+    if (details.full_name.trim() !== person.full_name) changes.full_name = details.full_name
+    if (isAdmin && details.email.trim().toLowerCase() !== (person.email ?? '').toLowerCase()) {
+      changes.email = details.email
+    }
+    if (details.phone.trim() !== (person.phone ?? '')) changes.phone = details.phone.trim() || null
+    if (Object.keys(changes).length === 0) {
+      setDetails(null)
+      return
+    }
+    if (await patch(details.id, changes)) {
+      setSaved(`${details.full_name.trim()}'s details are saved.`)
+      setDetails(null)
+    }
+  }
+
+  async function patch(id: string, changes: Record<string, unknown>): Promise<boolean> {
     setBusy(true)
     setError(null)
     try {
@@ -139,13 +180,17 @@ export function StaffManager({
       const data = await res.json()
       if (!res.ok) {
         setError(data.error ?? 'That change did not save.')
-        return
+        return false
       }
       if (data.temp_password) {
         const person = staff.find((p) => p.id === id)
         setIssued({ name: person?.full_name ?? 'This user', password: data.temp_password })
       }
       router.refresh()
+      return true
+    } catch {
+      setError('No connection. Try again.')
+      return false
     } finally {
       setBusy(false)
     }
@@ -154,6 +199,66 @@ export function StaffManager({
   return (
     <div className="space-y-4">
       {error && <Alert variant="destructive">{error}</Alert>}
+
+      {saved && <Alert variant="success">{saved}</Alert>}
+
+      {details && (
+        <Card>
+          <CardContent className="pt-4">
+            <form onSubmit={saveDetails} className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <p className="text-sm font-semibold sm:col-span-3">
+                Edit {staff.find((p) => p.id === details.id)?.full_name}
+              </p>
+              <div className="space-y-1">
+                <Label htmlFor="edit-name">Full name</Label>
+                <Input
+                  id="edit-name"
+                  required
+                  autoFocus
+                  maxLength={80}
+                  value={details.full_name}
+                  onChange={(e) => setDetails({ ...details, full_name: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-email">Email (their login)</Label>
+                <Input
+                  id="edit-email"
+                  type="email"
+                  required
+                  maxLength={200}
+                  disabled={!isAdmin}
+                  value={details.email}
+                  onChange={(e) => setDetails({ ...details, email: e.target.value })}
+                />
+                {!isAdmin && (
+                  <p className="text-xs text-muted-foreground">Only an admin can change an email.</p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-phone">Phone (Nigerian mobile)</Label>
+                <Input
+                  id="edit-phone"
+                  type="tel"
+                  inputMode="tel"
+                  maxLength={18}
+                  placeholder="08012345678"
+                  value={details.phone}
+                  onChange={(e) => setDetails({ ...details, phone: e.target.value })}
+                />
+              </div>
+              <div className="flex gap-2 sm:col-span-3">
+                <Button type="submit" disabled={busy}>
+                  {busy ? 'Saving…' : 'Save details'}
+                </Button>
+                <Button type="button" variant="ghost" onClick={() => setDetails(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      )}
 
       {issued && (
         <Alert variant="success">
@@ -381,6 +486,14 @@ export function StaffManager({
                     size="sm"
                     variant="ghost"
                     disabled={busy}
+                    onClick={() => editDetails(person)}
+                  >
+                    Edit details
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={busy}
                     onClick={() => void patch(person.id, { reset_password: true })}
                   >
                     Reset password
@@ -497,6 +610,14 @@ export function StaffManager({
                   size="sm"
                   variant="outline"
                   disabled={busy}
+                  onClick={() => editDetails(person)}
+                >
+                  Edit details
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={busy}
                   onClick={() => void patch(person.id, { reset_password: true })}
                 >
                   Reset password
@@ -543,7 +664,7 @@ function ExemptButton({
 }: {
   person: Profile
   busy: boolean
-  patch: (id: string, body: Record<string, unknown>) => Promise<void>
+  patch: (id: string, body: Record<string, unknown>) => Promise<unknown>
 }) {
   return (
     <Button
