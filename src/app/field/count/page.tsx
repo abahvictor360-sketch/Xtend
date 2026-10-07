@@ -2,11 +2,12 @@ import { redirect } from 'next/navigation'
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { SheetScreen, HeaderField } from '@/components/field/screen'
-import { StoreCountForm, type CountLine } from '@/components/field/store-count-form'
+import { StoreCountForm, type CountLine, type SheetProduct } from '@/components/field/store-count-form'
 import { CountSheetPanel, type SentSheet } from '@/components/field/count-sheet-panel'
 import { Alert } from '@/components/ui/alert'
 import { getCountStatus } from '@/lib/store-count-status'
 import { longDate } from '@/lib/utils'
+import { countMonth } from '@/lib/count-sheet'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Store count — Xtend' }
@@ -32,18 +33,24 @@ export default async function StoreCountPage() {
   const { data: today } = await supabase.rpc('business_date')
   const businessDate = (today as string) ?? ''
 
-  // Today's figures, the products from their last count at each store, and
-  // every name counted so far, for suggestions while typing.
-  const [{ data: outlets }, { data: mine }, { data: names }, { data: sheets }, { count: templates }] =
+  // Today's figures, the Xpel count sheet's products (040), and every name
+  // counted so far, for suggestions when adding one not on the sheet.
+  const [{ data: outlets }, { data: mine }, { data: sheetProducts }, { data: names }, { data: sheets }, { count: templates }] =
     await Promise.all([
       supabase.rpc('my_outlets'),
       supabase
         .from('store_count_detail')
-        .select('outlet_id, product_name, in_store, sold, count_date')
+        .select('outlet_id, product_name, back_store, shop_floor, in_store, sold, expiry_date')
         .eq('user_id', session.userId)
-        .order('count_date', { ascending: false })
+        .eq('count_date', businessDate)
         .order('product_name')
         .limit(1000),
+      supabase
+        .from('products')
+        .select('name, barcode')
+        .not('sheet_order', 'is', null)
+        .eq('is_active', true)
+        .order('sheet_order'),
       supabase.rpc('counted_product_names'),
       // Paper count sheets sent today (migration 035).
       supabase
@@ -52,30 +59,31 @@ export default async function StoreCountPage() {
         .eq('user_id', session.userId)
         .eq('count_date', businessDate)
         .order('created_at', { ascending: false }),
-      // Whether an admin has uploaded the blank count sheet.
+      // Whether an admin has uploaded their own blank count sheet.
       supabase.from('count_sheet_templates').select('id', { count: 'exact', head: true }),
     ])
 
-  const rows = (mine ?? []) as {
-    outlet_id: string
-    product_name: string
-    in_store: number
-    sold: number
-    count_date: string
-  }[]
-  const todays: CountLine[] = rows
-    .filter((r) => r.count_date === businessDate)
-    .map((r) => ({ outlet_id: r.outlet_id, product: r.product_name, in_store: r.in_store, sold: r.sold }))
-  const previous: Record<string, string[]> = {}
-  const lastDate: Record<string, string> = {}
-  for (const r of rows) {
-    if (r.count_date === businessDate) continue
-    // Rows come newest first: the first date seen per store is its last count.
-    lastDate[r.outlet_id] ??= r.count_date
-    if (r.count_date === lastDate[r.outlet_id]) {
-      ;(previous[r.outlet_id] ??= []).push(r.product_name)
-    }
-  }
+  const todays: CountLine[] = (
+    (mine ?? []) as {
+      outlet_id: string
+      product_name: string
+      back_store: number | null
+      shop_floor: number | null
+      in_store: number
+      sold: number
+      expiry_date: string | null
+    }[]
+  ).map((r) => ({
+    outlet_id: r.outlet_id,
+    product: r.product_name,
+    back_store: r.back_store,
+    shop_floor: r.shop_floor,
+    in_store: r.in_store,
+    sold: r.sold,
+    expiry_date: r.expiry_date,
+  }))
+  const products = (sheetProducts ?? []) as SheetProduct[]
+  const onSheet = new Set(products.map((p) => p.name.toLowerCase()))
 
   const stores = ((outlets ?? []) as { id: string; name: string }[]).map((o) => ({
     id: o.id,
@@ -102,13 +110,16 @@ export default async function StoreCountPage() {
         <CountSheetPanel
           stores={stores}
           sent={(sheets ?? []) as SentSheet[]}
-          hasTemplate={(templates ?? 0) > 0}
+          hasTemplate={products.length > 0 || (templates ?? 0) > 0}
+          month={countMonth(businessDate)}
         />
         <StoreCountForm
           stores={stores}
+          products={products}
           today={todays}
-          previous={previous}
-          suggestions={((names ?? []) as { name: string }[]).map((n) => n.name)}
+          suggestions={((names ?? []) as { name: string }[])
+            .map((n) => n.name)
+            .filter((n) => !onSheet.has(n.toLowerCase()))}
         />
       </div>
     </SheetScreen>

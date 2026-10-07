@@ -11,12 +11,14 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     await requireApiSession(['admin'])
     const { id } = await ctx.params
     const parsed = schema.safeParse(await request.json())
-    if (!parsed.success) return Response.json({ error: 'Invalid note' }, { status: 400 })
+    if (!parsed.success) {
+      return Response.json({ error: parsed.error.issues[0]?.message ?? 'Invalid note' }, { status: 400 })
+    }
 
     const supabase = await createServerSupabase()
     const { error } = await supabase.rpc('resolve_alert', {
       p_alert_id: id,
-      p_note: parsed.data.note,
+      p_note: parsed.data.note ?? '',
     })
     if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
 

@@ -5,6 +5,7 @@ import { apiError, requireApiSession } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 import { deliverCredentials, generateTempPassword } from '@/lib/credentials'
 import { emailAddress, optionalPhone, personName } from '@/lib/fields'
+import { rememberTempPassword } from '@/lib/staff-logins'
 
 const rowSchema = z.object({
   full_name: personName,
@@ -151,6 +152,7 @@ export async function POST(request: Request) {
         continue
       }
 
+      await rememberTempPassword(admin, created.user.id, temp_password)
       await deliverCredentials({
         full_name: row.full_name,
         email: row.email,

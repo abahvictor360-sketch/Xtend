@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { FileText } from 'lucide-react'
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
@@ -72,9 +73,20 @@ export default async function UsersPage({
           </p>
         </div>
         {isAdmin && (
-          <Link href="/admin/users/import" className={buttonVariants({ variant: 'outline' })}>
-            Bulk import CSV
-          </Link>
+          <div className="flex flex-wrap justify-end gap-2">
+            {/* Built from the live list on every download (migration 041). */}
+            <a
+              href="/api/admin/staff-logins"
+              download
+              className={buttonVariants({ variant: 'outline' })}
+            >
+              <FileText className="h-4 w-4" />
+              Login details (Word)
+            </a>
+            <Link href="/admin/users/import" className={buttonVariants({ variant: 'outline' })}>
+              Bulk import CSV
+            </Link>
+          </div>
         )}
       </div>
 

@@ -148,7 +148,6 @@ export function ReportForm({
     event.preventDefault()
     setError(null)
     setNotice(null)
-
     // Checked here as the server will: a report saved offline is only sent
     // later, when a refusal would reach nobody.
     for (const s of SECTIONS) {

@@ -12,6 +12,9 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { Outlet, Profile, UserRole } from '@/lib/types'
+import { cn } from '@/lib/utils'
+import { emailAddress, personName, phoneNumber } from '@/lib/fields'
+import { problemWith } from '@/lib/field-check'
 
 interface Draft {
   full_name: string
@@ -21,6 +24,15 @@ interface Draft {
   outlet_id: string
   supervisor_id: string
 }
+
+type Category = 'all' | UserRole
+const CATEGORIES: { value: Category; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'merchandiser', label: 'Merchandisers' },
+  { value: 'marketer', label: 'Marketers' },
+  { value: 'supervisor', label: 'Supervisors' },
+  { value: 'admin', label: 'Admins' },
+]
 
 const EMPTY: Draft = {
   full_name: '',
@@ -74,6 +86,7 @@ export function StaffManager({
   const [error, setError] = useState<string | null>(null)
   const [issued, setIssued] = useState<{ name: string; password: string } | null>(null)
   const [search, setSearch] = useState(initialSearch)
+  const [category, setCategory] = useState<Category>('all')
   // The person whose name, email and phone are being edited.
   const [details, setDetails] = useState<{
     id: string
@@ -93,7 +106,16 @@ export function StaffManager({
     [supervisors],
   )
 
+  const roleCounts = useMemo(() => {
+    const counts = new Map<Category, number>([['all', staff.length]])
+    for (const p of staff) counts.set(p.role, (counts.get(p.role) ?? 0) + 1)
+    return counts
+  }, [staff])
+  // A category nobody is in is left out, so a supervisor sees only their team's.
+  const categories = CATEGORIES.filter((c) => c.value === 'all' || (roleCounts.get(c.value) ?? 0) > 0)
+
   const visible = staff.filter((person) => {
+    if (category !== 'all' && person.role !== category) return false
     const needle = search.trim().toLowerCase()
     if (!needle) return true
     return [person.full_name, person.email, person.phone].some((value) =>
@@ -103,9 +125,22 @@ export function StaffManager({
 
   async function create(event: React.FormEvent) {
     event.preventDefault()
-    setBusy(true)
     setError(null)
     setIssued(null)
+    // Say what is wrong before sending; the server checks the same rules.
+    const problem =
+      problemWith(personName, draft.full_name) ??
+      problemWith(emailAddress, draft.email) ??
+      (draft.phone.trim()
+        ? problemWith(phoneNumber, draft.phone)
+        : isField(draft.role)
+          ? 'Enter their phone number: merchandisers and marketers sign in with it.'
+          : null)
+    if (problem) {
+      setError(problem)
+      return
+    }
+    setBusy(true)
 
     try {
       const res = await fetch('/api/admin/users', {
@@ -265,10 +300,36 @@ export function StaffManager({
           <p className="font-medium">Temporary password for {issued.name}</p>
           <p className="mt-1 font-mono text-lg tracking-wide">{issued.password}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Shown once. Hand it over now; they must change it at first login. Wire
-            CREDENTIALS_WEBHOOK_URL to send it by SMS or email instead.
+            Hand it over now; they must change it at first login. Until they do, admins also
+            find it in Login details (Word) on this page.
           </p>
         </Alert>
+      )}
+
+      {categories.length > 2 && (
+        <div
+          role="tablist"
+          aria-label="Category"
+          className="flex w-full overflow-x-auto rounded-2xl bg-muted p-1 sm:inline-flex sm:w-auto"
+        >
+          {categories.map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              role="tab"
+              aria-selected={category === c.value}
+              onClick={() => setCategory(c.value)}
+              className={cn(
+                'flex-1 whitespace-nowrap rounded-xl px-2 py-2 text-[13px] font-semibold transition-colors sm:flex-none sm:px-4 sm:text-sm',
+                category === c.value
+                  ? 'bg-card text-foreground shadow-soft'
+                  : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {c.label} ({roleCounts.get(c.value) ?? 0})
+            </button>
+          ))}
+        </div>
       )}
 
       <div className="flex flex-wrap items-center gap-2">
@@ -289,8 +350,9 @@ export function StaffManager({
           <CardContent className="pt-4">
             <form onSubmit={create} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
               <div className="space-y-1">
-                <Label>Full name</Label>
+                <Label htmlFor="new-name">Full name</Label>
                 <Input
+                  id="new-name"
                   required
                   autoComplete="off"
                   maxLength={80}
@@ -300,8 +362,9 @@ export function StaffManager({
                 />
               </div>
               <div className="space-y-1">
-                <Label>Email</Label>
+                <Label htmlFor="new-email">Email</Label>
                 <Input
+                  id="new-email"
                   type="email"
                   required
                   autoComplete="off"
@@ -312,14 +375,18 @@ export function StaffManager({
                 />
               </div>
               <div className="space-y-1">
-                <Label>Phone (Nigerian mobile)</Label>
+                <Label htmlFor="new-phone">
+                  Phone (Nigerian mobile){isField(draft.role) ? '' : ', optional'}
+                </Label>
                 <Input
+                  id="new-phone"
                   type="tel"
                   inputMode="tel"
+                  required={isField(draft.role)}
                   autoComplete="off"
                   maxLength={18}
                   value={draft.phone}
-                  onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
+                  onChange={(e) => setDraft({ ...draft, phone: e.target.value.replace(/[^\d+ ]/g, '') })}
                   placeholder="08012345678"
                 />
               </div>

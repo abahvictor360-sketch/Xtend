@@ -57,6 +57,8 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0037_profile_photos.sql  # staff profile photos and first-run onboarding
    supabase/migrations/0038_push_endpoint_guard.sql  # notifications go only to real push services
    supabase/migrations/0039_field_rules.sql  # names, phones and reports must be what they say
+   supabase/migrations/0040_xpel_count_sheet.sql  # the Xpel stock count sheet: products, back store, shop floor, expiry
+   supabase/migrations/0041_staff_login_sheet.sql  # staff login sheet: temporary passwords kept until changed
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

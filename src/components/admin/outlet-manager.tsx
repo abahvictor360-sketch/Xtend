@@ -11,6 +11,8 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { cn } from '@/lib/utils'
 import type { Outlet } from '@/lib/types'
+import { address, thingName } from '@/lib/fields'
+import { problemWith } from '@/lib/field-check'
 
 interface Draft {
   name: string
@@ -97,8 +99,14 @@ export function OutletManager({
 
   async function save(event: React.FormEvent) {
     event.preventDefault()
-    setBusy(true)
     setError(null)
+    const problem =
+      problemWith(thingName(160, 'store name'), draft.name) ?? problemWith(address, draft.address)
+    if (problem) {
+      setError(problem)
+      return
+    }
+    setBusy(true)
 
     const payload = {
       name: draft.name,

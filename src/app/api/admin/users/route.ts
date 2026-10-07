@@ -5,6 +5,7 @@ import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 import { deliverCredentials, generateTempPassword } from '@/lib/credentials'
 import { emailAddress, optionalPhone, personName } from '@/lib/fields'
+import { rememberTempPassword } from '@/lib/staff-logins'
 
 const createUserSchema = z.object({
   full_name: personName,
@@ -55,6 +56,14 @@ export async function POST(request: Request) {
       ? (input.outlet_id ?? session.profile.outlet_id ?? null)
       : (input.outlet_id ?? null)
 
+    // Merchandisers and marketers sign in with their phone, so they need one.
+    if ((input.role === 'merchandiser' || input.role === 'marketer') && !input.phone) {
+      return Response.json(
+        { error: 'Enter their phone number: merchandisers and marketers sign in with it.' },
+        { status: 400 },
+      )
+    }
+
     const email = input.email.toLowerCase().trim()
     const temp_password = generateTempPassword()
 
@@ -96,6 +105,9 @@ export async function POST(request: Request) {
         { status: duplicate ? 409 : 400 },
       )
     }
+
+    // Kept for the staff login sheet until they choose their own (041).
+    await rememberTempPassword(admin, created.user.id, temp_password)
 
     const delivery = await deliverCredentials({
       full_name: input.full_name,

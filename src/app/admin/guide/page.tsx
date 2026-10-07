@@ -150,11 +150,20 @@ export default async function AdminGuidePage() {
 
         <GuideSection topic={T.staff} intro="People pages, under People in the menu.">
           <p>
-            On <Ui>Staff</Ui>, <Ui>Add staff</Ui> creates an account and shows a temporary
+            On <Ui>Staff</Ui>, the tabs show <Ui>All</Ui>, <Ui>Merchandisers</Ui>,{' '}
+            <Ui>Marketers</Ui>, <Ui>Supervisors</Ui> or <Ui>Admins</Ui>. <Ui>Add staff</Ui> creates an account and shows a temporary
             password (Xtend also tries to send it). The person chooses their own password at first
             sign-in. From the same list you can reset a password, change someone&apos;s store or
             supervisor, or deactivate them: their history is kept.
           </p>
+          {isAdmin && (
+            <p>
+              <Ui>Login details (Word)</Ui> on Staff downloads every merchandiser&apos;s and
+              marketer&apos;s login, with their temporary password and how to install the app. It is
+              built fresh on each download, so anyone added since is in it. Once someone chooses
+              their own password, the sheet says <Ui>Chosen by them</Ui>.
+            </p>
+          )}
           <p>
             On <Ui>Teams</Ui>, pick <Ui>All</Ui>, <Ui>Merchandisers</Ui> or <Ui>Marketers</Ui>,
             tick people (or <Ui>Select all shown</Ui>), choose a supervisor and click{' '}
@@ -243,9 +252,16 @@ export default async function AdminGuidePage() {
 
         <GuideSection topic={T.counts} intro="Stock in each store.">
           <p>
-            Merchandisers count what is on the shelf at the end of every month, and whenever you
-            request a count on <Ui>Store counts</Ui>. Each count shows what is left, what was sold
-            and a shelf photo.
+            Merchandisers count against the Xpel stock count sheet at the end of every month, and
+            whenever you request a count on <Ui>Store counts</Ui>. For each product they enter the
+            back store and shop floor numbers (Xtend adds the total), the expiry date and how
+            many sold, with a shelf photo.
+          </p>
+          <p>
+            The sheet can also be downloaded as Excel, named for the month (for example “October
+            2026 stock count sheet”), with the store&apos;s name on it. Sheets filled on paper come
+            back as the Excel file, a PDF or a photo, and are listed under{' '}
+            <Ui>Count sheets</Ui>.
           </p>
         </GuideSection>
 

@@ -21,7 +21,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { id } = await params
     const parsed = schema.safeParse(await request.json())
     if (!parsed.success) {
-      return Response.json({ error: 'Write a reply first.' }, { status: 400 })
+      return Response.json(
+        { error: parsed.error.issues[0]?.message ?? 'Write a reply first.' },
+        { status: 400 },
+      )
     }
 
     const supabase = await createServerSupabase()

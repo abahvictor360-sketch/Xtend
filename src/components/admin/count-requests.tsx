@@ -10,6 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { cn } from '@/lib/utils'
+import { note as noteRule } from '@/lib/fields'
+import { problemWith } from '@/lib/field-check'
 
 export interface CountPerson {
   id: string
@@ -83,9 +85,14 @@ export function CountRequests({
   }
 
   async function send() {
-    setBusy(true)
     setError(null)
     setNotice(null)
+    const problem = problemWith(noteRule(500), note)
+    if (problem) {
+      setError(problem)
+      return
+    }
+    setBusy(true)
     try {
       const res = await fetch('/api/admin/count-requests', {
         method: 'POST',

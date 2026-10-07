@@ -366,6 +366,12 @@ export interface StoreCountRow {
   store: string
   product: string
   sku: string | null
+  /** Barcode, back store, shop floor and expiry: the Xpel count sheet (040). */
+  barcode: string | null
+  back_store: number | null
+  shop_floor: number | null
+  expiry_date: string | null
+  /** The total in the store: back store plus shop floor. */
   in_store: number
   sold: number
   /** How far from the store it was submitted, and its shelf photo. Null before migration 022. */
@@ -400,8 +406,10 @@ export async function storeCounts(
   }
 
   const base = 'count_date, staff_name, outlet_name, product_name, sku, in_store, sold'
-  let result = await run(`${base}, distance_m, photo_path`)
-  // Until migration 022 is run the view has no location or photo columns.
+  let result = await run(`${base}, distance_m, photo_path, barcode, back_store, shop_floor, expiry_date`)
+  // Until migration 040 is run the view has no count sheet columns, and
+  // until 022 none for location or photo.
+  if (result.error?.code === '42703') result = await run(`${base}, distance_m, photo_path`)
   if (result.error?.code === '42703') result = await run(base)
   const { error } = result
   const data = result.data as unknown as Record<string, unknown>[] | null
@@ -418,6 +426,10 @@ export async function storeCounts(
       sku: (c.sku as string | null) ?? null,
       in_store: c.in_store as number,
       sold: c.sold as number,
+      barcode: (c.barcode as string | null) ?? null,
+      back_store: (c.back_store as number | null) ?? null,
+      shop_floor: (c.shop_floor as number | null) ?? null,
+      expiry_date: (c.expiry_date as string | null) ?? null,
       distance_m: (c.distance_m as number | null) ?? null,
       photo_path: (c.photo_path as string | null) ?? null,
     })),

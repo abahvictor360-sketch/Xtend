@@ -11,7 +11,9 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     await requireApiSession(['admin', 'supervisor'])
     const { id } = await ctx.params
     const parsed = schema.safeParse(await request.json().catch(() => ({})))
-    if (!parsed.success) return Response.json({ error: 'Invalid note' }, { status: 400 })
+    if (!parsed.success) {
+      return Response.json({ error: parsed.error.issues[0]?.message ?? 'Invalid note' }, { status: 400 })
+    }
 
     const supabase = await createServerSupabase()
     const { error } = await supabase.rpc('review_integrity_flag', {

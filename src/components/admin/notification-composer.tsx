@@ -12,6 +12,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import { thingName, writtenText } from '@/lib/fields'
+import { problemWith } from '@/lib/field-check'
 
 type Audience = 'everyone' | 'role' | 'outlet' | 'users'
 
@@ -90,9 +92,15 @@ export function NotificationComposer({
   }, [payload])
 
   async function send() {
-    setBusy(true)
     setError(null)
     setResult(null)
+    const problem = problemWith(thingName(80, 'title'), title) ??
+      problemWith(writtenText(400, 2, 'the message', true), body)
+    if (problem) {
+      setError(problem)
+      return
+    }
+    setBusy(true)
     try {
       const res = await fetch('/api/admin/notifications', {
         method: 'POST',

@@ -5,6 +5,7 @@ import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 import { generateTempPassword } from '@/lib/credentials'
 import { emailAddress, personName, phoneNumber } from '@/lib/fields'
+import { rememberTempPassword } from '@/lib/staff-logins'
 
 const patchSchema = z.object({
   full_name: personName.optional(),
@@ -117,6 +118,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       const { error } = await admin.auth.admin.updateUserById(id, { password: temp_password })
       if (error) return Response.json({ error: error.message }, { status: 400 })
       changes.must_change_password = true
+      await rememberTempPassword(admin, id, temp_password)
     }
 
     if (Object.keys(changes).length) {

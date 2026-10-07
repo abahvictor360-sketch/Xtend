@@ -20,7 +20,9 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
     await requireApiSession(['admin'])
     const { id } = await ctx.params
     const parsed = schema.safeParse(await request.json())
-    if (!parsed.success) return Response.json({ error: 'Invalid change' }, { status: 400 })
+    if (!parsed.success) {
+      return Response.json({ error: parsed.error.issues[0]?.message ?? 'Invalid change' }, { status: 400 })
+    }
 
     const supabase = await createServerSupabase()
     const { error } = await supabase.from('outlets').update(parsed.data).eq('id', id)
