@@ -1,8 +1,9 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
+import { note } from '@/lib/fields'
 
-const schema = z.object({ note: z.string().max(1000).default('') })
+const schema = z.object({ note: note(1000) })
 
 /** Resolution and its audit row are one database transaction. */
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {

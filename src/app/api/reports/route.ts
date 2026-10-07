@@ -1,13 +1,16 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, REPORTING_ROLES, dbErrorMessage } from '@/lib/auth'
+import { writtenText } from '@/lib/fields'
 
 const schema = z.object({
-  body: z.string().max(4000).default(''),
-  sales_summary: z.string().max(2000).default(''),
-  stock_status: z.string().max(2000).default(''),
-  competitor_activity: z.string().max(2000).default(''),
-  issues: z.string().max(2000).default(''),
+  // What the day, sales and stock were like must be said; competitors and
+  // issues may be left empty. All of it in words, without links.
+  body: writtenText(4000, 10, '"The day"'),
+  sales_summary: writtenText(2000, 10, '"Sales"'),
+  stock_status: writtenText(2000, 10, '"Stock"'),
+  competitor_activity: writtenText(2000, 0, '"Competitors"'),
+  issues: writtenText(2000, 0, '"Issues"'),
   photo_paths: z.array(z.string().min(1)).max(5).default([]),
 })
 

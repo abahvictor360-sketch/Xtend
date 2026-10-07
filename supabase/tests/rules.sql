@@ -261,8 +261,8 @@ begin
 
   -- The marketer files it instead.
   perform act_as(grace);
-  insert into public.reports (body, user_id, report_date)
-  values ('Busy morning', bala, date '2001-01-01')
+  insert into public.reports (body, sales_summary, stock_status, user_id, report_date)
+  values ('Busy morning', 'Twelve tubs sold', 'Shampoo running low', bala, date '2001-01-01')
   returning id into report_id;
 
   perform assert(
@@ -2231,6 +2231,44 @@ begin
       not exists (select 1 from public.integrity_flags where user_id = lola and kind = 'late_clock_in'),
       'clocking in within the grace period is not flagged');
     perform act_as(boss);
+  end;
+
+  -- ---------------------------------------------------------------
+  -- What each field accepts (039).
+  -- ---------------------------------------------------------------
+  declare
+    bad text;
+  begin
+    perform act_as(boss);
+    foreach bad in array array['Chidi123', 'a', 'http://spam.com', '.....'] loop
+      begin
+        update public.profiles set full_name = bad where id = bala;
+        perform assert(false, 'a name that is not a name is refused: ' || bad);
+      exception when check_violation then null;
+      end;
+    end loop;
+    update public.profiles set full_name = 'Bala Yusuf-Ade' where id = bala;
+    perform assert((select full_name from public.profiles where id = bala) = 'Bala Yusuf-Ade',
+      'names with letters, spaces and hyphens are taken; others are refused');
+
+    foreach bad in array array['12345', '+2348031234567', '08031234567000', 'call me'] loop
+      begin
+        update public.profiles set phone = bad where id = bala;
+        perform assert(false, 'a phone that is not a mobile number is refused: ' || bad);
+      exception when check_violation then null;
+      end;
+    end loop;
+    update public.profiles set phone = '08031234567' where id = bala;
+    perform assert((select phone from public.profiles where id = bala) = '08031234567',
+      'a mobile number is kept as 0803…; anything else is refused');
+
+    perform assert(public.text_is_clean('Sold 40 tubs, shampoo low.'), 'plain text is clean');
+    perform assert(not public.text_is_clean('Promo at www.cheap.ng'), 'a link is not');
+    perform assert(not public.text_is_clean('buy now at deals.xyz'), 'nor is a bare domain');
+    perform assert(not public.text_has_words('ok', 10), 'two letters is not a report section');
+    perform assert(not public.text_has_words('..............', 10), 'nor are dots');
+    perform assert(not public.text_has_words('aaaaaaaaaaaaa', 10), 'nor one key held down');
+    perform assert(public.text_has_words('All in stock today', 10), 'a short real sentence is');
   end;
 
   raise notice 'ALL RULES PASSED';

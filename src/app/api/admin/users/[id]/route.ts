@@ -4,10 +4,12 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 import { generateTempPassword } from '@/lib/credentials'
+import { personName, phoneNumber } from '@/lib/fields'
 
 const patchSchema = z.object({
-  full_name: z.string().min(2).max(120).optional(),
-  phone: z.string().min(7).max(20).nullable().optional(),
+  full_name: personName.optional(),
+  // Left out: unchanged. Empty or null: removed. Otherwise a mobile number.
+  phone: z.union([z.literal(''), z.null(), phoneNumber]).optional().transform((v) => (v === '' ? null : v)),
   role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).optional(),
   outlet_id: z.string().uuid().nullable().optional(),
   supervisor_id: z.string().uuid().nullable().optional(),

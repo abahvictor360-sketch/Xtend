@@ -3,13 +3,14 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { pushToUsers } from '@/lib/push-users'
 import { longDate } from '@/lib/utils'
+import { note } from '@/lib/fields'
 
 export const maxDuration = 60
 
 const schema = z.object({
   user_ids: z.array(z.string().uuid()).min(1, 'Pick at least one person').max(500),
   due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  note: z.string().trim().max(500).nullable().optional(),
+  note: note(500),
 })
 
 /**
@@ -32,7 +33,7 @@ export async function POST(request: Request) {
     const { data, error } = await supabase.rpc('request_store_count', {
       p_user_ids: input.user_ids,
       p_due_date: input.due_date,
-      p_note: input.note ?? null,
+      p_note: input.note || null,
     })
     if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
 

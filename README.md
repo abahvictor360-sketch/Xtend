@@ -56,6 +56,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0036_supervisor_alerts.sql  # late, early and flagged activity pushed to supervisors
    supabase/migrations/0037_profile_photos.sql  # staff profile photos and first-run onboarding
    supabase/migrations/0038_push_endpoint_guard.sql  # notifications go only to real push services
+   supabase/migrations/0039_field_rules.sql  # names, phones and reports must be what they say
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

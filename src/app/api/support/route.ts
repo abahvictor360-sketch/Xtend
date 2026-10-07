@@ -2,12 +2,13 @@ import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/auth'
 import { respondToSupportThread } from '@/lib/support-assistant'
+import { writtenText } from '@/lib/fields'
 
 export const maxDuration = 60
 
 const schema = z.object({
-  subject: z.string().trim().max(160).optional(),
-  body: z.string().trim().min(1).max(4000),
+  subject: writtenText(160, 0, 'the subject'),
+  body: writtenText(4000, 2, 'your message'),
 })
 
 /** A field member opens a new support thread; the AI answers it at once. */
@@ -24,7 +25,7 @@ export async function POST(request: Request) {
 
     const supabase = await createServerSupabase()
     const { data: threadId, error } = await supabase.rpc('open_support_thread', {
-      p_subject: parsed.data.subject ?? null,
+      p_subject: parsed.data.subject || null,
       p_body: parsed.data.body,
     })
     if (error || !threadId) {

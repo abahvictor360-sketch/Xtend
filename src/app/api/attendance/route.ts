@@ -5,6 +5,7 @@ import { notifyWatchers } from '@/lib/notify'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
 import { clientIp } from '@/lib/ip-geo'
 import { evaluateLocationIntegrity } from '@/lib/integrity-signals'
+import { mapText } from '@/lib/fields'
 
 /**
  * The client sends what it observed. distance_m, status, user_id and
@@ -16,8 +17,8 @@ const schema = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   accuracy_m: z.number().nonnegative(),
-  address: z.string().max(500).nullable().optional(),
-  place_name: z.string().max(200).nullable().optional(),
+  address: mapText(500),
+  place_name: mapText(200),
   place_source: z.enum(['outlet', 'known', 'google', 'osm', 'coordinates']).nullable().optional(),
   selfie_path: z.string().min(1).max(300),
   thumb_path: z.string().min(1).max(300).nullable().optional(),

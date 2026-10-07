@@ -187,6 +187,9 @@ export function StaffManager({
                 <Label>Full name</Label>
                 <Input
                   required
+                  autoComplete="off"
+                  maxLength={80}
+                  placeholder="Ada Okafor"
                   value={draft.full_name}
                   onChange={(e) => setDraft({ ...draft, full_name: e.target.value })}
                 />
@@ -196,13 +199,20 @@ export function StaffManager({
                 <Input
                   type="email"
                   required
+                  autoComplete="off"
+                  maxLength={200}
+                  placeholder="name@gmail.com"
                   value={draft.email}
                   onChange={(e) => setDraft({ ...draft, email: e.target.value })}
                 />
               </div>
               <div className="space-y-1">
-                <Label>Phone</Label>
+                <Label>Phone (Nigerian mobile)</Label>
                 <Input
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="off"
+                  maxLength={18}
                   value={draft.phone}
                   onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
                   placeholder="08012345678"
