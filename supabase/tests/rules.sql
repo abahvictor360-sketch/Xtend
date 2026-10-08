@@ -3058,6 +3058,67 @@ begin
       perform act_as(boss);
     end;
 
+    -- Store visits and alerts, advanced (052).
+    declare
+      lekki uuid;
+      a1 uuid;
+      a2 uuid;
+      a3 uuid;
+      n integer;
+      cov record;
+    begin
+      perform act_as(boss);
+      perform assert(exists (select 1 from public.store_visit_detail
+                             where departed_at is not null and departed_lat is not null
+                               and departed_label is not null),
+        'visits: the read model shows where somebody checked out');
+      perform assert(not exists (select 1 from public.store_visit_detail
+                                 where departed_at is null and departed_label is not null),
+        'visits: a visit still open has no departure place');
+      perform act_as(grace);
+      perform assert((select count(*) from public.my_store_visits()) >= 1,
+        'visits: functions returning the visit row still work after it grew');
+      perform act_as(boss);
+
+      select * into cov from public.store_coverage where name = 'Ikeja City Mall';
+      perform assert(cov.last_visit_at = (select max(arrived_at) from public.store_visits where outlet_id = cov.outlet_id)
+                     and cov.visits_30d = (select count(*) from public.store_visits where outlet_id = cov.outlet_id
+                                             and visit_date >= public.business_date() - 29)
+                     and cov.last_visit_by is not null,
+        'coverage: a store shows its last visit, who made it and its visits this month');
+      perform assert(cov.staff_assigned >= 1, 'coverage: a store counts the staff whose store it is');
+      insert into public.outlets (name, lat, lng) values ('Lekki Phase 1 Shop', 6.4474, 3.4720) returning id into lekki;
+      select * into cov from public.store_coverage where outlet_id = lekki;
+      perform assert(cov.last_visit_at is null and cov.visits_30d = 0 and cov.staff_assigned = 0,
+        'coverage: a store nobody has visited or covers says so');
+
+      insert into public.location_alerts (user_id, alert_type, distance_m) values (ada, 'left_geofence', 420) returning id into a1;
+      insert into public.location_alerts (user_id, alert_type, distance_m) values (ada, 'off_site_clock', 900) returning id into a2;
+      insert into public.location_alerts (user_id, alert_type, is_resolved, resolved_by, resolved_at, note)
+      values (ada, 'low_accuracy', true, boss, now() - interval '1 hour', 'Earlier note') returning id into a3;
+      perform act_as(ada);
+      begin
+        perform public.resolve_alerts(array[a1, a2], 'nope');
+        perform assert(false, 'alerts: a merchandiser must not resolve alerts together');
+      exception when others then
+        perform assert(sqlerrm like '%Admins only%', 'alerts: a merchandiser cannot resolve alerts together');
+      end;
+      perform act_as(boss);
+      n := public.resolve_alerts(array[a1, a2, a3], 'Spoke to Ada about the morning');
+      perform assert(n = 2, 'alerts: resolving together counts only the ones still open');
+      perform assert((select count(*) from public.location_alerts where id in (a1, a2) and is_resolved
+                        and resolved_by = boss and note = 'Spoke to Ada about the morning') = 2,
+        'alerts: each one is resolved with the one note');
+      perform assert((select note from public.location_alerts where id = a3) = 'Earlier note',
+        'alerts: one already resolved keeps its own note');
+      perform assert((select count(*) from public.audit_log where action = 'alert.resolve'
+                        and target_id in (a1, a2) and actor_id = boss) = 2
+                     and not exists (select 1 from public.audit_log where action = 'alert.resolve' and target_id = a3
+                                       and created_at > now() - interval '1 minute'),
+        'alerts: one audit row for each alert resolved, none for the one skipped');
+      perform assert(public.resolve_alerts(array[]::uuid[], 'x') = 0, 'alerts: an empty list resolves nothing');
+    end;
+
   end;
 
   raise notice 'ALL RULES PASSED';
