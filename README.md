@@ -61,6 +61,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0041_staff_login_sheet.sql  # staff login sheet: temporary passwords kept until changed
    supabase/migrations/0042_staff_roles.sql  # roles an admin adds, each working like a built-in role
    supabase/migrations/0043_x_metrics.sql  # X Metrics: supplies, batch counts, daily sales, reconciliation, expiry, grades
+   supabase/migrations/0044_xm_scoring_policy.sql  # X Metrics scoring policy, versioned; staff see their own score
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
@@ -134,6 +135,12 @@ existing staff, roles, store allocations and login.
 - **Grades**: sales vs target 40, stock accuracy 30, reporting consistency 20
   (sales and counts on the days the person clocked in), expiry handling 10.
   Poor below 40, Average to 69, Strong from 70.
+
+- **Scoring policy** (X Metrics → Scoring policy): admins write the policy
+  and guidelines staff are scored by. Each publish is a new version, the old
+  ones are kept, and the page shows who has read the current one. Staff read
+  it in the My score tab, next to their own score this month and the
+  weights and bands in force, and mark it read.
 
 Tolerance, weights, bands, alert windows and the rest are in X Metrics →
 Settings; every change keeps the earlier version. Nothing is overwritten:

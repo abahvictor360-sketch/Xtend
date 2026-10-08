@@ -2622,11 +2622,36 @@ begin
       end;
 
       perform act_as(kem);
+      perform assert((public.xm_grade(kem, d2)->>'user_id')::uuid = kem, 'xm: staff can see their own grade');
       begin
         perform public.xm_grade(bala, d2);
         perform assert(false, 'xm: staff cannot see another person''s grade');
       exception when others then
         perform assert(sqlerrm like '%own team%', 'xm: staff cannot see another person''s grade');
+      end;
+
+      -- Scoring policy (044): admins publish versions, staff mark them read.
+      declare
+        first_policy uuid := (select id from public.xm_current_policy);
+        pol uuid;
+      begin
+        perform assert(first_policy is not null, 'xm: there is a starting scoring policy');
+        perform act_as(kem);
+        begin
+          perform public.xm_publish_policy('My rules', 'Staff should not be able to write this policy.', null);
+          perform assert(false, 'xm: staff cannot publish the scoring policy');
+        exception when others then
+          perform assert(sqlerrm like '%Only an admin%', 'xm: staff cannot publish the scoring policy');
+        end;
+        perform public.xm_mark_policy_read(first_policy);
+        perform public.xm_mark_policy_read(first_policy);
+        perform assert((select count(*) from public.xm_policy_reads where user_id = kem) = 1,
+          'xm: reading the policy is recorded once');
+        perform act_as(boss);
+        pol := public.xm_publish_policy('Scoring policy 2', 'Counts are due every Monday and sales every working day.', 'Monday counts');
+        perform assert((select id from public.xm_current_policy) = pol
+                       and exists (select 1 from public.xm_policy_versions where id = first_policy),
+          'xm: a new policy version is current and the old one is kept');
       end;
 
       -- Voiding keeps the record and says why.
