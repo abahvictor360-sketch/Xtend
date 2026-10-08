@@ -25,6 +25,7 @@ import {
 } from '@/components/ui/table'
 import { addDays, lagosDateString, longDate, metres } from '@/lib/utils'
 import { countMonth } from '@/lib/count-sheet'
+import { takesStoreCounts, type BuiltInCounts, type CountingRole, type StaffRole } from '@/lib/staff-roles'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Store counts — Xtend' }
@@ -87,7 +88,15 @@ export default async function StoreCountsPage({
     problem = e instanceof Error ? e.message : 'The counts could not be loaded.'
   }
 
-  const [{ data: staff }, { data: requests }, { data: sheetRows }, { data: template }, { count: sheetCount }] = await Promise.all([
+  const [
+    { data: staff },
+    { data: requests },
+    { data: sheetRows },
+    { data: template },
+    { count: sheetCount },
+    { data: addedRoles },
+    { data: builtInRows },
+  ] = await Promise.all([
     // Everyone for an admin, the supervisor's own team for a supervisor.
     supabase.rpc('my_staff'),
     supabase
@@ -116,7 +125,17 @@ export default async function StoreCountsPage({
       .select('id', { count: 'exact', head: true })
       .not('sheet_order', 'is', null)
       .eq('is_active', true),
+    // Which roles take store counts (migration 044).
+    supabase.from('staff_roles').select('id, counts_stock'),
+    supabase.from('role_store_counts').select('role, counts_stock'),
   ])
+  const countingRoles = new Map(
+    ((addedRoles ?? []) as Pick<StaffRole, 'id' | 'counts_stock'>[]).map((r) => [r.id, r]),
+  )
+  const builtInCounts: BuiltInCounts = {}
+  for (const b of (builtInRows ?? []) as { role: CountingRole; counts_stock: boolean }[]) {
+    builtInCounts[b.role] = b.counts_stock
+  }
   const sheets = (sheetRows ?? []) as {
     id: string
     staff_name: string
@@ -131,7 +150,7 @@ export default async function StoreCountsPage({
   const people: CountPerson[] = ((staff ?? []) as Profile[])
     .filter(
       (p) =>
-        p.is_active && p.id !== session.userId && (p.role === 'merchandiser' || p.role === 'marketer'),
+        p.is_active && p.id !== session.userId && takesStoreCounts(p, countingRoles, builtInCounts),
     )
     .map((p) => ({ id: p.id, full_name: p.full_name, role: p.role }))
 

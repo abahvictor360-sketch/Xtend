@@ -11,6 +11,23 @@ export interface StaffRole {
   name: string
   base_role: Exclude<UserRole, 'admin'>
   is_active: boolean
+  /** Whether people with it take store counts (migration 044). */
+  counts_stock: boolean
+}
+
+/** Built-in roles that take store counts unless an admin turns it off (migration 044). */
+export type CountingRole = 'merchandiser' | 'marketer'
+export type BuiltInCounts = Partial<Record<CountingRole, boolean>>
+
+/** Whether a person takes store counts, as person_counts_stock() decides in Postgres. */
+export function takesStoreCounts(
+  person: { role: UserRole; staff_role_id?: string | null },
+  roles: Map<string, Pick<StaffRole, 'id' | 'counts_stock'>>,
+  builtIn: BuiltInCounts,
+) {
+  if (person.role !== 'merchandiser' && person.role !== 'marketer') return false
+  const added = person.staff_role_id ? roles.get(person.staff_role_id) : undefined
+  return added ? added.counts_stock : (builtIn[person.role] ?? true)
 }
 
 export const BUILT_IN_ROLES: { value: UserRole; label: string; plural: string }[] = [

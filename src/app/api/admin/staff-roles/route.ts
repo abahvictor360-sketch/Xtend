@@ -9,6 +9,7 @@ const schema = z.object({
   base_role: z.enum(['merchandiser', 'marketer', 'supervisor'], {
     errorMap: () => ({ message: 'Choose what the role works like' }),
   }),
+  counts_stock: z.boolean().default(true),
 })
 
 /** Adds a role (migration 042). Admins only; the table's policy agrees. */
