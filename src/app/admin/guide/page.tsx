@@ -260,6 +260,15 @@ export default async function AdminGuidePage() {
             downloads as PDF, Word or Excel.
           </p>
           <p>
+            In the Xtend app, a person&apos;s location keeps coming in until they clock out, even if
+            they close the app. On Android a small <Ui>Xtend · On shift</Ui> notification shows
+            meanwhile, and tracking resumes after the phone restarts when location is set to{' '}
+            <Ui>Allow all the time</Ui>. On iPhone, Apple only wakes a closed app when the phone
+            moves (about 500 m), so someone standing still with the app closed shows as a silence
+            until they move or open it. In a browser, Xtend must stay open. Some Android phones stop
+            apps to save battery; the app asks staff to lift that for Xtend.
+          </p>
+          <p>
             <Ui>Audit log</Ui> (admins) lists every change an admin or supervisor makes: who, what,
             when, where they were (from the browser when allowed, otherwise roughly from the IP
             address, named after the store or place it falls in) and on what device (phone or
