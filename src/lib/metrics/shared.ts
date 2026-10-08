@@ -27,6 +27,8 @@ export interface XmProduct {
   category: string | null
   unit: string
   is_active: boolean
+  /** Units in one carton, when known (047). */
+  units_per_carton?: number | null
 }
 
 export interface XmFactor {
