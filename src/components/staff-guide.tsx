@@ -131,7 +131,7 @@ export function StaffGuide() {
         />
         <GuideShot src="/guide/staff-clock.png" alt="The Clock in with selfie button" width={748} height={160} phone />
         <Tip>
-          In the Xtend app your location is shared until you clock out, even if you close the app
+          In the Xtend app, Xtend keeps working until you clock out, even if you close the app
           or the phone restarts (Android shows an “Xtend · On shift” notification meanwhile). Keep
           location on, and if your phone asks, let Xtend run without battery restrictions.
         </Tip>

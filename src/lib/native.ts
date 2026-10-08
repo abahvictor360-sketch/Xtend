@@ -149,14 +149,14 @@ export async function startShiftTracker(): Promise<ShiftTrackerState | null> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ platform }),
   })
-  if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? 'No tracking token')
+  if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? 'Location could not be started')
   const got = (await res.json()) as { token: string; endpoint: string; expires_at: string }
   return await callNative<ShiftTrackerState>('ShiftTracker', 'start', {
     token: got.token,
     endpoint: got.endpoint,
     expiresAt: Date.parse(got.expires_at),
     title: 'Xtend',
-    text: 'On shift: your location is shared until you clock out',
+    text: 'On shift until you clock out',
   })
 }
 

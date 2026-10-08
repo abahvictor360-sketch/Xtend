@@ -41,7 +41,7 @@ begin
   end if;
   if not exists (select 1 from public.profiles
                  where id = me and is_active and role in ('merchandiser', 'marketer')) then
-    raise exception 'Only field staff are tracked';
+    raise exception 'Only field staff use this';
   end if;
   if p_platform not in ('android', 'ios') then
     raise exception 'Unknown platform';
