@@ -26,6 +26,9 @@ export interface Sheet {
   widths: { xlsx: number[]; pdf: number[] }
   /** Column index whose cells become hyperlinks, if any. */
   linkColumn?: number
+  /** The words of those links, and of a row without one. */
+  linkText?: string
+  noLinkText?: string
   /** Column index printed in red whenever it is not "on_site". */
   statusColumn?: number
   /** File name without the extension. */
@@ -99,7 +102,7 @@ async function xlsx(sheet: Sheet) {
     const added = ws.addRow(row.values)
     if (sheet.linkColumn !== undefined && row.link) {
       const cell = added.getCell(sheet.linkColumn + 1)
-      cell.value = { text: 'Open selfie', hyperlink: row.link }
+      cell.value = { text: sheet.linkText ?? 'Open selfie', hyperlink: row.link }
       cell.font = { color: { argb: LINK }, underline: true }
     }
     if (sheet.statusColumn !== undefined && row.values[sheet.statusColumn] !== 'on_site') {
@@ -159,7 +162,7 @@ async function docx(sheet: Sheet) {
                       new ExternalHyperlink({
                         link: row.link!,
                         children: [
-                          new TextRun({ text: 'Open selfie', style: 'Hyperlink', size: 16 }),
+                          new TextRun({ text: sheet.linkText ?? 'Open selfie', style: 'Hyperlink', size: 16 }),
                         ],
                       }),
                     ]
@@ -306,10 +309,10 @@ async function pdf(sheet: Sheet) {
       const width = widths[i] ?? 60
       if (!isHeader && i === sheet.linkColumn) {
         if (link) {
-          page.drawText('Open selfie', { x: x + 2, y, size, font, color: rgb(0.11, 0.31, 0.85) })
+          page.drawText(sheet.linkText ?? 'Open selfie', { x: x + 2, y, size, font, color: rgb(0.11, 0.31, 0.85) })
           addLink(page, x + 2, y, width - 4, link)
         } else {
-          page.drawText('expired', { x: x + 2, y, size, font, color: rgb(0.45, 0.45, 0.5) })
+          page.drawText(sheet.noLinkText ?? 'expired', { x: x + 2, y, size, font, color: rgb(0.45, 0.45, 0.5) })
         }
         x += width
         return

@@ -396,7 +396,7 @@ begin
     perform public.write_audit('user.delete', 'profiles', boss, '{"forged":true}'::jsonb);
     perform assert(false, 'a merchandiser must not write an audit row');
   exception when others then
-    perform assert(sqlerrm like '%Admins only%', 'a merchandiser cannot write an audit row');
+    perform assert(sqlerrm like '%Admins and supervisors only%', 'a merchandiser cannot write an audit row');
   end;
 
   -- ---------------------------------------------------------------
@@ -2934,6 +2934,59 @@ begin
         perform assert(false, 'import: only admins import supplies');
       exception when others then
         perform assert(sqlerrm like '%Only an admin%', 'import: only admins import supplies');
+      end;
+      perform act_as(boss);
+    end;
+
+    -- ---------------------------------------------------------------
+    -- Where and on what admin actions are done (049).
+    -- ---------------------------------------------------------------
+    declare
+      aid uuid;
+      r record;
+    begin
+      perform act_as(boss);
+      aid := public.write_audit('test.where', 'outlets', null, '{"x":1}'::jsonb, jsonb_build_object(
+        'ip', '102.89.1.1', 'user_agent', 'Mozilla/5.0 (Linux; Android 14) Chrome/129',
+        'device', jsonb_build_object('browser', 'Chrome 129', 'os', 'Android 14', 'type', 'phone'),
+        'lat', 6.6018, 'lng', 3.3515, 'accuracy_m', 20, 'location_source', 'browser', 'country', 'NG', 'vpn', false));
+      select * into r from public.audit_log where id = aid;
+      perform assert(r.ip = '102.89.1.1' and r.device->>'os' = 'Android 14' and r.location_source = 'browser'
+                     and r.place = 'Ikeja City Mall' and r.country = 'NG' and r.vpn = false,
+        'audit: an action records its IP, device and location, named after the store it was in');
+      aid := public.write_audit('test.junk', null, null, '{}'::jsonb,
+        jsonb_build_object('lat', 'here', 'lng', 999, 'location_source', 'gps', 'device', 'phone'));
+      select * into r from public.audit_log where id = aid;
+      perform assert(r.lat is null and r.location_source is null and r.device is null,
+        'audit: malformed context is left out, the action still recorded');
+      insert into public.audit_log (actor_id, action, meta)
+      values (boss, 'test.direct', jsonb_build_object('n', 1, '_context', jsonb_build_object('ip', '41.58.2.2', 'vpn', true)))
+      returning id into aid;
+      select * into r from public.audit_log where id = aid;
+      perform assert(r.ip = '41.58.2.2' and r.vpn and not (r.meta ? '_context') and r.meta->>'n' = '1',
+        'audit: rows the server writes directly fill the same columns');
+      -- Rows written inside SQL functions read the x-xt-audit header.
+      perform set_config('request.headers', jsonb_build_object('x-xt-audit',
+        encode(convert_to('{"ip":"102.89.1.1","device":{"type":"phone","os":"Android 14","browser":"Chrome 128","app":false}}', 'utf8'), 'base64'))::text, true);
+      insert into public.audit_log (actor_id, action) values (boss, 'test.in_sql') returning id into aid;
+      select * into r from public.audit_log where id = aid;
+      perform assert(r.ip = '102.89.1.1' and r.device->>'os' = 'Android 14',
+        'audit: rows written inside database functions take the context from the request header');
+      perform set_config('request.headers', '{"x-xt-audit":"not base64!!"}', true);
+      insert into public.audit_log (actor_id, action) values (boss, 'test.bad_header') returning id into aid;
+      perform assert((select ip from public.audit_log where id = aid) is null,
+        'audit: a garbled header is ignored, the action still recorded');
+      perform set_config('request.headers', '', true);
+      perform act_as(tunde);
+      perform public.write_audit('test.supervisor', null, null, '{}'::jsonb, null);
+      perform assert(exists (select 1 from public.audit_log where action = 'test.supervisor' and actor_id = tunde),
+        'audit: supervisors'' actions are recorded too');
+      perform act_as(ada);
+      begin
+        perform public.write_audit('test.staff', null, null, '{}'::jsonb, null);
+        perform assert(false, 'audit: staff cannot write the audit log');
+      exception when others then
+        perform assert(sqlerrm like '%Admins and supervisors only%', 'audit: staff cannot write the audit log');
       end;
       perform act_as(boss);
     end;

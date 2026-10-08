@@ -3,6 +3,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
+import { auditContext } from '@/lib/audit-context'
 import { deliverCredentials, generateTempPassword } from '@/lib/credentials'
 import { emailAddress, optionalPhone, personName } from '@/lib/fields'
 import { rememberTempPassword } from '@/lib/staff-logins'
@@ -141,7 +142,7 @@ export async function POST(request: Request) {
         action: 'user.create',
         target_table: 'profiles',
         target_id: created.user.id,
-        meta,
+        meta: { ...meta, _context: await auditContext() },
       })
     } else {
       const supabase = await createServerSupabase()

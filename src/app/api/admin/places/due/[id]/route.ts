@@ -12,7 +12,7 @@ const schema = z.object({ reason: writtenText(300, 3, 'the reason') })
  */
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireApiSession(['admin', 'supervisor'])
+    await requireApiSession(['admin', 'supervisor'])
     const { id } = await ctx.params
     const parsed = schema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) {
@@ -21,9 +21,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     const supabase = await createServerSupabase()
     const { error } = await supabase.rpc('dismiss_place_due', { p_due: id, p_reason: parsed.data.reason })
     if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
-    if (session.profile.role === 'admin') {
-      await audit(supabase, 'place_due.dismiss', 'place_naming_due', id, parsed.data)
-    }
+    await audit(supabase, 'place_due.dismiss', 'place_naming_due', id, parsed.data)
     return Response.json({ ok: true })
   } catch (error) {
     return apiError(error)
