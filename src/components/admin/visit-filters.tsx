@@ -1,117 +1,145 @@
-'use client'
-
-import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { Download } from 'lucide-react'
+import Link from 'next/link'
 import { buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
+import { Select } from '@/components/ui/select'
+import { visitQueryString, type VisitFilter } from '@/lib/visit-review'
+import { addDays } from '@/lib/utils'
 
-const FORMATS = [
-  ['pdf', 'PDF'],
-  ['docx', 'Word'],
-  ['xlsx', 'Excel'],
-  ['csv', 'CSV'],
-] as const
+const pill = 'rounded-full border border-border bg-card px-3 py-1 font-semibold hover:border-brand hover:bg-tint'
 
 /**
- * Filters live in the URL, so the downloaded file is exactly the rounds on
- * screen — no second set of options to keep in step.
+ * Filters live in the URL (a plain GET form), so the downloaded file is
+ * exactly the rounds on screen — no second set of options to keep in step.
  */
 export function VisitFilters({
+  filter,
   staff,
   outlets,
+  teams,
+  today,
 }: {
+  filter: VisitFilter & { from: string; to: string }
   staff: { id: string; full_name: string }[]
   outlets: { id: string; name: string }[]
+  /** Supervisors, for an admin to pick a team. Null for a supervisor, who only has their own. */
+  teams: { id: string; full_name: string }[] | null
+  today: string
 }) {
-  const router = useRouter()
-  const pathname = usePathname()
-  const params = useSearchParams()
-
-  function set(key: string, value: string) {
-    const next = new URLSearchParams(params.toString())
-    if (!value || value === 'all') next.delete(key)
-    else next.set(key, value)
-    router.replace(`${pathname}?${next.toString()}`)
-  }
-
-  const query = params.toString()
+  const query = visitQueryString(filter)
+  const range = (from: string, to: string) => `?${visitQueryString({ ...filter, from, to })}`
+  const presets = [
+    { label: 'Today', href: range(today, today) },
+    { label: 'Yesterday', href: range(addDays(today, -1), addDays(today, -1)) },
+    { label: 'Last 7 days', href: range(addDays(today, -6), today) },
+    { label: 'Last 30 days', href: range(addDays(today, -29), today) },
+    { label: 'This month', href: range(`${today.slice(0, 8)}01`, today) },
+  ]
+  const coverage = filter.view === 'coverage'
 
   return (
-    <div className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-2 lg:grid-cols-6">
-      <Field label="From">
-        <Input
-          type="date"
-          value={params.get('from') ?? ''}
-          onChange={(e) => set('from', e.target.value)}
-        />
-      </Field>
-      <Field label="To">
-        <Input
-          type="date"
-          value={params.get('to') ?? ''}
-          onChange={(e) => set('to', e.target.value)}
-        />
-      </Field>
-      <Field label="Staff">
-        <Select
-          value={params.get('user_id') ?? 'all'}
-          onChange={(e) => set('user_id', e.target.value)}
-        >
-          <option value="all">Everyone</option>
-          {staff.map((person) => (
-            <option key={person.id} value={person.id}>
-              {person.full_name}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      <Field label="Store">
-        <Select
-          value={params.get('outlet_id') ?? 'all'}
-          onChange={(e) => set('outlet_id', e.target.value)}
-        >
-          <option value="all">All stores</option>
-          {outlets.map((outlet) => (
-            <option key={outlet.id} value={outlet.id}>
-              {outlet.name}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      <Field label="Arrival">
-        <Select value={params.get('status') ?? 'all'} onChange={(e) => set('status', e.target.value)}>
-          <option value="all">Any</option>
-          <option value="on_site">On site</option>
-          <option value="off_site">Off site</option>
-          <option value="flagged">Flagged</option>
-        </Select>
-      </Field>
-
-      <Field label="Download report">
-        <div className="flex flex-wrap gap-1">
-          {FORMATS.map(([format, label]) => (
-            <a
-              key={format}
-              href={`/api/admin/export/visits/${format}?${query}`}
-              className={buttonVariants({ variant: 'outline', size: 'sm' })}
-            >
-              <Download className="h-3.5 w-3.5" />
-              {label}
+    <form method="get" className="space-y-3">
+      {filter.view !== 'visits' && <input type="hidden" name="view" value={filter.view} />}
+      {filter.gap && <input type="hidden" name="gap" value={filter.gap} />}
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="from">From</Label>
+          <Input id="from" name="from" type="date" defaultValue={filter.from} max={today} className="h-10 w-40" />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="to">To</Label>
+          <Input id="to" name="to" type="date" defaultValue={filter.to} max={today} className="h-10 w-40" />
+        </div>
+        <div className="w-full space-y-1.5 sm:w-52">
+          <Label htmlFor="user_id">Who</Label>
+          <Select id="user_id" name="user_id" defaultValue={filter.user_id ?? 'all'} className="h-10 text-sm">
+            <option value="all">Everyone</option>
+            {staff.map((person) => (
+              <option key={person.id} value={person.id}>
+                {person.full_name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="w-full space-y-1.5 sm:w-52">
+          <Label htmlFor="outlet_id">Store</Label>
+          <Select id="outlet_id" name="outlet_id" defaultValue={filter.outlet_id ?? 'all'} className="h-10 text-sm">
+            <option value="all">All stores</option>
+            {outlets.map((outlet) => (
+              <option key={outlet.id} value={outlet.id}>
+                {outlet.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        {teams && teams.length > 0 && (
+          <div className="w-full space-y-1.5 sm:w-48">
+            <Label htmlFor="team">Team</Label>
+            <Select id="team" name="team" defaultValue={filter.team ?? 'all'} className="h-10 text-sm">
+              <option value="all">Every team</option>
+              {teams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.full_name}’s team
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
+        <div className="w-full space-y-1.5 sm:w-44">
+          <Label htmlFor="status">Arrival</Label>
+          <Select id="status" name="status" defaultValue={filter.status ?? 'all'} className="h-10 text-sm">
+            <option value="all">Any</option>
+            <option value="on_site">At the store</option>
+            <option value="off_site">Away from the store</option>
+            <option value="flagged">Location too rough</option>
+            <option value="none">A shop not on Xtend</option>
+          </Select>
+        </div>
+        <div className="w-full space-y-1.5 sm:w-40">
+          <Label htmlFor="short">How long</Label>
+          <Select id="short" name="short" defaultValue={filter.short ? String(filter.short) : 'all'} className="h-10 text-sm">
+            <option value="all">Any length</option>
+            {[5, 10, 15, 30].map((m) => (
+              <option key={m} value={m}>
+                Under {m} min
+              </option>
+            ))}
+          </Select>
+        </div>
+        <button type="submit" className={buttonVariants({ size: 'sm', className: 'h-10' })}>
+          Show
+        </button>
+      </div>
+      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+        {!coverage && (
+          <>
+            <span className="mr-1 font-semibold text-muted-foreground">Quick:</span>
+            {presets.map((p) => (
+              <Link key={p.label} href={p.href} className={pill}>
+                {p.label}
+              </Link>
+            ))}
+          </>
+        )}
+        {(filter.user_id || filter.outlet_id || filter.team || filter.status || filter.short) && (
+          <Link
+            href={`?${visitQueryString({ from: filter.from, to: filter.to, view: filter.view, gap: filter.gap })}`}
+            className="px-2 py-1 font-semibold text-muted-foreground hover:text-foreground"
+          >
+            Clear
+          </Link>
+        )}
+        <span className="ml-auto flex flex-wrap items-center gap-1.5">
+          <span className="font-semibold text-muted-foreground">
+            {coverage ? 'Download the store list:' : 'Download:'}
+          </span>
+          {(['xlsx', 'pdf', 'docx', 'csv'] as const).map((f) => (
+            <a key={f} href={`/api/admin/export/visits/${f}?${query}`} className={pill}>
+              {{ xlsx: 'Excel', pdf: 'PDF', docx: 'Word', csv: 'CSV' }[f]}
             </a>
           ))}
-        </div>
-      </Field>
-    </div>
-  )
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-1">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      {children}
-    </div>
+        </span>
+      </div>
+    </form>
   )
 }
