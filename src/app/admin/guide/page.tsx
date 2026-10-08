@@ -267,9 +267,13 @@ export default async function AdminGuidePage() {
               what you found.
             </li>
             <li>
-              <Ui>Check an excuse</Ui>: someone says their network was bad or their phone was off?
-              Pick who, when and what they said, and Xtend shows what it heard from their phone in
-              that time.
+              <Ui>Check an excuse</Ui>: someone says their network was bad, their phone was off, their
+              location would not work, they were at the store all along, or the app would not let them
+              clock in? Pick who, what they said and when (or tap a quick window such as{' '}
+              <Ui>Yesterday&apos;s shift</Ui>; up to 3 days). Xtend says whether it holds up, and shows a
+              timeline of what their phone did: when it had network, what it kept offline, where it was
+              against their store, what went wrong, and the battery. Click <Ui>Keep on record</Ui> with a
+              note to build up their history; the page warns when several excuses have not held up.
             </li>
           </ul>
         </GuideSection>

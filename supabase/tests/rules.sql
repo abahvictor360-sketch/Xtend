@@ -1768,7 +1768,34 @@ begin
       'the check lists every time the phone was heard from');
     perform assert(got->'before'->>'at' is not null and (got->>'has_push')::boolean,
       'with the last report before the gap, and whether the phone can be pushed');
+
+    -- The advanced check (048): every position with its accuracy and store
+    -- distance, location problems, refused photos, work kept waiting.
+    got := public.check_excuse_more(femi, now() - interval '2 days', now() + interval '1 minute');
+    perform assert(exists (select 1 from jsonb_array_elements(got->'positions') p where p->>'source' = 'clock_in')
+                   and got ? 'location_problems' and got ? 'photos_refused' and got ? 'queued' and got ? 'stores',
+      'excuse: the advanced check lists positions, location problems, refused photos and queued work');
+    perform assert((got->'queued'->>'most')::int >= 1, 'excuse: work kept waiting on the phone shows');
+    perform assert(jsonb_typeof(public.check_excuse(femi, now() - interval '2 days', now())) = 'object',
+      'excuse: a window of two days can be checked');
+    begin
+      perform public.check_excuse_more(femi, now() - interval '4 days', now());
+      perform assert(false, 'excuse: windows are at most three days');
+    exception when others then
+      perform assert(sqlerrm like '%up to 3 days%', 'excuse: windows are at most three days');
+    end;
+    perform public.record_excuse_check(femi, 'phone_off', now() - interval '2 hours', now(), 'false',
+      'Not true: the phone was on.', 'Told her we checked');
+    perform assert((select count(*) from public.excuse_check_detail where user_id = femi and checked_by = tunde
+                    and verdict = 'false' and note = 'Told her we checked') = 1,
+      'excuse: a check is kept with its verdict, who checked, and a note');
     perform act_as(ada);
+    begin
+      perform public.record_excuse_check(femi, 'no_network', now() - interval '1 hour', now(), 'fits', 'x', null);
+      perform assert(false, 'excuse: staff cannot keep checks on each other');
+    exception when others then
+      perform assert(sqlerrm like '%own team%', 'excuse: staff cannot keep checks on each other');
+    end;
     begin
       perform public.check_excuse(femi, now() - interval '1 hour', now());
       perform assert(false, 'staff cannot check each other');
