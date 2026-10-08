@@ -8,6 +8,7 @@ import { GreetingHeader } from '@/components/field/greeting-header'
 import { LocationGate } from '@/components/field/location-gate'
 import { useLocationGate } from '@/components/field/use-location-gate'
 import { useHeartbeat } from '@/components/field/heartbeat'
+import { ShiftTracker } from '@/components/field/shift-tracker'
 import { usePlace } from '@/components/field/use-place'
 import { OutboxBanner } from '@/components/field/outbox-banner'
 import { ClockPanel } from '@/components/field/clock-panel'
@@ -82,6 +83,8 @@ export function FieldHome({
       />
 
       <OutboxBanner onFlushed={() => router.refresh()} />
+
+      <ShiftTracker onShift={onShift} clockedOut={Boolean(day.closing)} />
 
       <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
         {tabs.map((item) => (

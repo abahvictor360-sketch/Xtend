@@ -147,8 +147,8 @@ export default async function AccountPage() {
           <SectionHeader title="Tips" />
           <TaskRow
             icon={<Clock className="h-5 w-5" />}
-            title="Keep Xtend open on shift"
-            meta="Keep location on and stay signed in while you work, so clocking in, check-ins and messages work smoothly."
+            title="Keep location on during your shift"
+            meta="In the Xtend app, keep location on until you clock out. In a browser, keep Xtend open."
           />
           <TaskRow
             icon={<Smartphone className="h-5 w-5" />}

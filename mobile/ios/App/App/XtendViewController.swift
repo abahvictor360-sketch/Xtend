@@ -5,5 +5,6 @@ import Capacitor
 class XtendViewController: CAPBridgeViewController {
     override open func capacitorDidLoad() {
         bridge?.registerPluginInstance(LocationIntegrity())
+        bridge?.registerPluginInstance(ShiftTracker())
     }
 }

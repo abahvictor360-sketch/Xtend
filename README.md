@@ -66,6 +66,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0047_supply_imports_cartons.sql  # supplies in cartons, and supplies imported from CSV, Excel, PDF or Word
    supabase/migrations/0048_excuse_check_advanced.sql  # check an excuse: GPS, at-store and app excuses, 3-day windows, checks kept on record
    supabase/migrations/0049_audit_context.sql          # audit log: location, device, IP and VPN for every action; supervisors' actions recorded
+   supabase/migrations/0050_background_tracking.sql    # location during a shift with the app closed: per-phone tracking tokens
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
@@ -331,7 +332,7 @@ Xtend settles them. None of it is visible to staff.
 ## Android and iOS apps
 
 `mobile/` wraps the live site in native Android and iOS apps (Capacitor)
-that add location with the screen off, native push, and Android's
+that add location for the whole shift (also with the app closed, 050), native push, and Android's
 mock-location flag plus a rooted / jailbroken check at clock-in (032).
 GitHub Actions builds them (`.github/workflows/mobile.yml`). Setup, signing
 and store steps: [`mobile/README.md`](mobile/README.md).

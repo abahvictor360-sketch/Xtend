@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { HEARTBEAT_INTERVAL_MS } from '@/lib/geo'
 import { countOutbox, enqueue } from '@/lib/offline/db'
 import { flushOutbox } from '@/lib/offline/sync'
-import { nativePostJson, watchBackgroundLocation } from '@/lib/native'
+import { hasShiftTracker, nativePostJson, watchBackgroundLocation } from '@/lib/native'
 
 /** Absent entirely on older Android WebViews, so it is read defensively. */
 type MaybeWakeLock = { request: (type: 'screen') => Promise<WakeLockSentinel> } | undefined
@@ -37,8 +37,9 @@ export interface HeartbeatStatus {
  * becomes visible again — and the server stamps every gap it does see.
  *
  * Inside the Xtend Android or iOS app (mobile/) there is no such gap: the
- * native location watcher keeps sending positions with the screen off and
- * the app in the background, for as long as the shift is open.
+ * native shift tracker (components/field/shift-tracker.tsx) keeps sending
+ * positions with the screen off, in the background, and with the app
+ * closed, for as long as the shift is open.
  */
 export function useHeartbeat(active: boolean): HeartbeatStatus {
   const timer = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -160,8 +161,10 @@ export function useHeartbeat(active: boolean): HeartbeatStatus {
   // In the Xtend app: positions keep coming with the screen off. One is
   // sent at most every 2.5 minutes, sooner after a move of 150 m or more;
   // without network it is kept with the time it was taken (migration 029).
+  // App builds with the shift tracker (ShiftTracker) send positions
+  // natively, also with the app closed; this watcher is for older builds.
   useEffect(() => {
-    if (!active) return
+    if (!active || hasShiftTracker()) return
     let last: { at: number; lat: number; lng: number } | null = null
     const stop = watchBackgroundLocation(async (loc) => {
       const now = Date.now()

@@ -9,12 +9,39 @@ What the apps add over the website:
 
 | | Website | App |
 |---|---|---|
-| Location during a shift | Only while Xtend is open on screen | **Also with the screen off or another app open** (Android shows a small "Xtend · On shift" notification while this runs, which Android requires) |
+| Location during a shift | Only while Xtend is open on screen | **Until clock-out, even with the app closed**: Android runs a foreground service ("Xtend · On shift" notification) that survives the app being swiped away and, with "Allow all the time", a restart; iPhone keeps sending in the background and, after the app is closed, iOS wakes it each time the phone moves (about 500 m) with "Always" location |
 | Notifications | Web push (not on iPhone unless added to the home screen) | **Native** push: Firebase on Android, Apple on iPhone |
 | Camera, location, sign-in | Same | Same (the site's own screens) |
 
 The site detects the app itself (`src/lib/native.ts`): nothing changes for
 people using a browser.
+
+## Location with the app closed
+
+`ShiftTracker` (Android: `ShiftTracker.java`, `ShiftTrackerService.java`,
+`ShiftTrackerBoot.java`; iOS: `ShiftTracker.swift`) is started by the site
+at clock-in with a tracking token for that phone (`/api/track/token`,
+migration `0050`). It keeps positions on the phone and sends them itself to
+`/api/track/device`, so it needs neither the web page nor its sign-in. The
+server stores them as the person's own, raises "left the store" as usual,
+flags positions Android marks as coming from a fake-location app, and
+answers `stop` once the person has clocked out; the token also expires
+after 18 hours and is retired at clock-out.
+
+What each phone allows:
+
+- **Android**: the service keeps running after the app is swiped away. It
+  restarts after a reboot when location is set to *Allow all the time*.
+  Some phone makers (Tecno, Infinix, Xiaomi, Samsung…) still stop apps to
+  save battery; the app asks staff to lift Xtend's battery restriction.
+- **iPhone**: Apple does not let any app run continuously once the person
+  closes it. With *Always* location, iOS wakes Xtend whenever the phone
+  moves about 500 m, so movement is still recorded; standing still with
+  the app closed sends nothing until they move or open Xtend. Staff should
+  not close the app during a shift.
+
+Builds from before the tracker existed keep using the background location
+plugin while the app is open or in the background.
 
 ## Building
 
