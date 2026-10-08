@@ -3058,6 +3058,92 @@ begin
       perform act_as(boss);
     end;
 
+    -- Integrity reviewed in bulk, and Ask Xtend conversations kept (054).
+    declare
+      kayode uuid := (select id from public.profiles where email = 'kayode@xpel.ng');
+      f1 uuid;
+      f2 uuid;
+      f3 uuid;
+      n integer;
+      conv uuid;
+    begin
+      insert into public.integrity_flags (user_id, kind, severity, summary)
+      values (kayode, 'perfect_accuracy', 'medium', 'test 054 one') returning id into f1;
+      insert into public.integrity_flags (user_id, kind, severity, summary)
+      values (kayode, 'repeated_exact_location', 'high', 'test 054 two') returning id into f2;
+      insert into public.integrity_flags (user_id, kind, severity, summary)
+      values (bala, 'perfect_accuracy', 'low', 'test 054 three') returning id into f3;
+
+      perform act_as(tunde);
+      perform assert(public.supervises_user(kayode) and not public.supervises_user(bala),
+        'bulk review: the supervisor has Kayode in his team and not Bala');
+      n := public.review_integrity_flags(array[f1, f2, f3], '  Spoke to him, GPS app removed  ');
+      perform assert(n = 2
+                     and (select count(*) from public.integrity_flags
+                          where id in (f1, f2) and reviewed_by = tunde
+                            and review_note = 'Spoke to him, GPS app removed') = 2,
+        'bulk review: a supervisor marks his team''s flags reviewed with one note');
+      perform assert((select reviewed_at from public.integrity_flags where id = f3) is null,
+        'bulk review: and cannot touch a flag outside his team');
+      n := public.review_integrity_flags(array[f1], 'Changed my mind');
+      perform assert(n = 0 and (select review_note from public.integrity_flags where id = f1) = 'Spoke to him, GPS app removed',
+        'bulk review: a reviewed flag keeps its first review');
+      perform act_as(boss);
+      n := public.review_integrity_flags(array[f3], null);
+      perform assert(n = 1
+                     and (select reviewed_by from public.integrity_flags where id = f3) = boss
+                     and (select review_note from public.integrity_flags where id = f3) is null,
+        'bulk review: an admin reviews anybody''s, a blank note is kept as none');
+      begin
+        perform public.review_integrity_flags(array[]::uuid[], 'x');
+        perform assert(false, 'bulk review: an empty list is refused');
+      exception when others then
+        perform assert(sqlerrm like '%at least one%', 'bulk review: an empty list is refused');
+      end;
+      perform act_as(ada);
+      begin
+        perform public.review_integrity_flags(array[f1], 'x');
+        perform assert(false, 'bulk review: field staff cannot review flags');
+      exception when others then
+        perform assert(sqlerrm like '%Only admins and supervisors%', 'bulk review: field staff cannot review flags');
+      end;
+
+      -- Conversations, under row level security as the API role.
+      grant usage on schema public, auth to authenticated;
+      grant execute on function auth.uid() to authenticated;
+      perform act_as(boss);
+      execute 'set local role authenticated';
+      insert into public.assistant_conversations (title, turns)
+      values ('Who was late', '[{"role":"user","content":"Who was late today?"},{"role":"assistant","content":"Nobody."}]')
+      returning id into conv;
+      perform assert((select user_id from public.assistant_conversations where id = conv) = boss
+                     and (select turn_count from public.assistant_conversations where id = conv) = 2,
+        'conversations: an admin keeps a chat as their own, with its turns counted');
+      perform act_as(tunde);
+      perform assert(not exists (select 1 from public.assistant_conversations where id = conv),
+        'conversations: nobody else sees it, not even a supervisor');
+      update public.assistant_conversations set title = 'Taken over' where id = conv;
+      delete from public.assistant_conversations where id = conv;
+      perform act_as(boss);
+      perform assert((select title from public.assistant_conversations where id = conv) = 'Who was late',
+        'conversations: nor renames or deletes it');
+      update public.assistant_conversations set title = 'Late this week', user_id = tunde where id = conv;
+      perform assert((select user_id from public.assistant_conversations where id = conv) = boss
+                     and (select title from public.assistant_conversations where id = conv) = 'Late this week',
+        'conversations: the owner renames it, and it stays theirs');
+      perform act_as(ada);
+      begin
+        insert into public.assistant_conversations (title) values ('Mine');
+        perform assert(false, 'conversations: field staff cannot keep chats');
+      exception when others then
+        perform assert(sqlerrm like '%row-level security%', 'conversations: field staff cannot keep chats');
+      end;
+      perform act_as(boss);
+      delete from public.assistant_conversations where id = conv;
+      perform assert(not exists (select 1 from public.assistant_conversations where id = conv),
+        'conversations: the owner deletes it');
+      reset role;
+    end;
   end;
 
   raise notice 'ALL RULES PASSED';

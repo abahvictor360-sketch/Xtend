@@ -107,5 +107,6 @@ export const PAGES = {
   x_metrics: { path: '/admin/metrics', label: 'X Metrics' },
   audit_log: { path: '/admin/audit', label: 'Audit log' },
   alerts: { path: '/admin/alerts', label: 'Alerts' },
+  support: { path: '/admin/support', label: 'Support' },
 } as const
 export type PageName = keyof typeof PAGES
