@@ -7,7 +7,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        // Mid-shift, iOS relaunches a closed Xtend in the background when the
+        // phone moves (significant location change): pick tracking up again.
+        if ShiftTrackerCore.shared.configured {
+            ShiftTrackerCore.shared.resume()
+        }
         return true
     }
 

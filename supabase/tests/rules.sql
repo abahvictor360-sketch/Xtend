@@ -2991,6 +2991,73 @@ begin
       perform act_as(boss);
     end;
 
+    -- Background tracking with the app closed (050).
+    declare
+      femi uuid := gen_random_uuid();
+      tok jsonb;
+      tok2 jsonb;
+      res jsonb;
+    begin
+      insert into auth.users (id, email) values (femi, 'kayode@xpel.ng');
+      insert into public.profiles (id, full_name, email, role, outlet_id, supervisor_id)
+      values (femi, 'Kayode Bello', 'kayode@xpel.ng', 'merchandiser',
+              (select id from public.outlets where name = 'Ikeja City Mall'), tunde);
+      perform notifications_on(femi);
+      perform act_as(femi);
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+      values ('opening', 6.6019, 3.3516, 12, fresh_photo('selfies', 'kayode-in.jpg'), now() - interval '10 minutes');
+      perform act_as(boss);
+      begin
+        perform public.issue_tracking_token('android');
+        perform assert(false, 'tracking: only field staff get a tracking token');
+      exception when others then
+        perform assert(sqlerrm like '%Only field staff%', 'tracking: only field staff get a tracking token');
+      end;
+      perform act_as(femi);
+      tok := public.issue_tracking_token('android');
+      perform assert(length(tok->>'token') = 64
+                     and not exists (select 1 from public.tracking_tokens where token_hash = tok->>'token'),
+        'tracking: a token is issued, and only its hash is kept');
+      perform set_config('request.jwt.claim.sub', '', false);  -- the server's call has no signed-in user
+      res := public.record_background_pings(tok->>'token', jsonb_build_array(
+        jsonb_build_object('lat', 6.7100, 'lng', 3.4100, 'accuracy_m', 9, 'captured_at', now()),
+        jsonb_build_object('lat', 6.7101, 'lng', 3.4101, 'accuracy_m', 9, 'captured_at', now() - interval '4 minutes', 'is_mock', true)),
+        now());
+      perform assert((res->>'ok')::boolean and (res->>'kept')::int = 2 and (res->>'user_id')::uuid = femi,
+        'tracking: positions from the closed app are stored as the person''s own');
+      perform assert(exists (select 1 from public.location_pings where user_id = femi and not offline and lat = 6.7100)
+                     and exists (select 1 from public.location_pings where user_id = femi and offline and lat = 6.7101
+                                 and created_at between now() - interval '5 minutes' and now() - interval '3 minutes'),
+        'tracking: a fresh one is live, one kept without network is stored at the time it was taken');
+      perform assert(exists (select 1 from public.integrity_flags where user_id = femi and kind = 'mock_location_confirmed'
+                             and detail->>'source' = 'background'),
+        'tracking: a fake-location position is flagged');
+      res := public.record_background_pings(tok->>'token', jsonb_build_array(
+        jsonb_build_object('lat', 6.7100, 'lng', 3.4100, 'accuracy_m', 9, 'captured_at', now())), now());
+      perform assert((res->>'kept')::int = 0, 'tracking: a resend is not stored twice');
+      perform assert(not (public.record_background_pings('not-a-token', '[]'::jsonb, now())->>'ok')::boolean,
+        'tracking: an unknown token is refused');
+      perform assert(not (public.record_background_pings(tok->>'token', jsonb_build_array(
+        jsonb_build_object('lat', 6.7, 'lng', 3.4, 'accuracy_m', 9, 'captured_at', now() - interval '3 hours')), now())->>'kept')::int > 0,
+        'tracking: nothing from before the token was issued');
+      perform assert((res->>'shift_open')::boolean, 'tracking: the phone is told the shift is still open');
+      perform act_as(femi);
+      tok2 := public.issue_tracking_token('android');
+      perform assert(not (public.record_background_pings(tok->>'token', '[]'::jsonb, now())->>'ok')::boolean,
+        'tracking: a new token on the phone retires the old one');
+      perform public.revoke_tracking_tokens();
+      perform assert(not (public.record_background_pings(tok2->>'token', '[]'::jsonb, now())->>'ok')::boolean,
+        'tracking: clocking out stops the token');
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+      values ('closing', 6.6019, 3.3516, 12, fresh_photo('selfies', 'kayode-out.jpg'), now());
+      tok2 := public.issue_tracking_token('android');
+      res := public.record_background_pings(tok2->>'token', '[]'::jsonb, now());
+      perform assert((res->>'ok')::boolean and not (res->>'shift_open')::boolean
+                     and not (public.record_background_pings(tok2->>'token', '[]'::jsonb, now())->>'ok')::boolean,
+        'tracking: after clock-out the phone is told to stop, and its token ends');
+      perform act_as(boss);
+    end;
+
   end;
 
   raise notice 'ALL RULES PASSED';

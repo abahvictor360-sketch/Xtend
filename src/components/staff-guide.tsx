@@ -80,7 +80,9 @@ export function StaffGuide() {
           items={[
             <>
               <Ui>Location:</Ui> when asked, tap Allow. In your phone’s settings, set location
-              to <Ui>High accuracy</Ui>.
+              to <Ui>High accuracy</Ui>. In the Xtend app, also set it to{' '}
+              <Ui>Allow all the time</Ui> (Android) or <Ui>Always</Ui> (iPhone): Xtend asks on your
+              first shift.
             </>,
             <>
               <Ui>Camera:</Ui> allow it when asked. Clocking in and out takes a selfie with
@@ -128,7 +130,11 @@ export function StaffGuide() {
           phone
         />
         <GuideShot src="/guide/staff-clock.png" alt="The Clock in with selfie button" width={748} height={160} phone />
-        <Tip>Keep location on and Xtend signed in during your shift, so you can check in, get messages and clock out.</Tip>
+        <Tip>
+          In the Xtend app your location is shared until you clock out, even if you close the app
+          or the phone restarts (Android shows an “Xtend · On shift” notification meanwhile). Keep
+          location on, and if your phone asks, let Xtend run without battery restrictions.
+        </Tip>
       </GuideSection>
 
       <GuideSection topic={T.visits} intro="Marketers who move between stores check in at each one.">

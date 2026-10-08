@@ -113,6 +113,72 @@ export function watchBackgroundLocation(
   }
 }
 
+// ---------------------------------------------------------------------------
+// The shift tracker (ShiftTracker, mobile/ native code): location for the
+// whole shift, also with the app closed. Builds from before it existed fall
+// back to the watcher above.
+// ---------------------------------------------------------------------------
+
+export interface ShiftTrackerState {
+  platform: NativePlatform
+  /** Holding a tracking token for a shift. */
+  active: boolean
+  /** The tracker is running now (Android: the foreground service). */
+  running: boolean
+  location: boolean
+  /** "Allow all the time": needed for tracking to come back on its own. */
+  always: boolean
+  /** Android: the battery saver will not stop it. Always true on iPhone. */
+  batteryUnrestricted: boolean
+  queued: number
+  lastSentAt?: number
+  lastError?: string | null
+}
+
+export const hasShiftTracker = () => isNativeApp() && hasPlugin('ShiftTracker')
+
+/**
+ * Starts the tracker for this shift with a fresh tracking token. Null in a
+ * browser or an app build without the tracker.
+ */
+export async function startShiftTracker(): Promise<ShiftTrackerState | null> {
+  const platform = nativePlatform()
+  if (!platform || !hasShiftTracker()) return null
+  const res = await fetch('/api/track/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ platform }),
+  })
+  if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? 'No tracking token')
+  const got = (await res.json()) as { token: string; endpoint: string; expires_at: string }
+  return await callNative<ShiftTrackerState>('ShiftTracker', 'start', {
+    token: got.token,
+    endpoint: got.endpoint,
+    expiresAt: Date.parse(got.expires_at),
+    title: 'Xtend',
+    text: 'On shift: your location is shared until you clock out',
+  })
+}
+
+export async function stopShiftTracker() {
+  if (!hasShiftTracker()) return
+  await callNative('ShiftTracker', 'stop').catch(() => {})
+  await fetch('/api/track/stop', { method: 'POST' }).catch(() => {})
+}
+
+export async function shiftTrackerState(): Promise<ShiftTrackerState | null> {
+  if (!hasShiftTracker()) return null
+  return await callNative<ShiftTrackerState>('ShiftTracker', 'status').catch(() => null)
+}
+
+export async function askAlwaysLocation() {
+  if (hasShiftTracker()) await callNative('ShiftTracker', 'requestBackground').catch(() => {})
+}
+
+export async function openBatterySettings() {
+  if (hasShiftTracker()) await callNative('ShiftTracker', 'openBatterySettings').catch(() => {})
+}
+
 /**
  * A POST that keeps working with the app in the background. On Android the
  * WebView's own requests are throttled after five minutes there, so the
