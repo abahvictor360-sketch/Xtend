@@ -62,6 +62,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0042_staff_roles.sql  # roles an admin adds, each working like a built-in role
    supabase/migrations/0043_x_metrics.sql  # X Metrics: supplies, batch counts, daily sales, reconciliation, expiry, grades
    supabase/migrations/0044_xm_scoring_policy.sql  # X Metrics scoring policy, versioned; staff see their own score
+   supabase/migrations/0045_mandatory_place_naming.sql  # an unknown place must be added (sign photo + selfie with product) before other work
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

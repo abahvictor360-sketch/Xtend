@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
+import { apiError, requireApiSession, dbErrorMessage, dbErrorResponse } from '@/lib/auth'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
 import { mapText } from '@/lib/fields'
 
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
       p_photo_path: body.photo_path,
       p_captured_at: body.captured_at,
     })
-    if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
+    if (error) return dbErrorResponse(error)
     await flushFlagAlerts()
     return Response.json({ id: data }, { status: 201 })
   } catch (error) {

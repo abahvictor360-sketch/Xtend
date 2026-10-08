@@ -807,8 +807,10 @@ begin
     'and reads on_site');
   perform public.end_store_visit(visit_id, 9.0766, 7.3987, 10, null, null);
 
-  -- A shop Xtend has never heard of is a perfectly good visit.
+  -- A shop Xtend has never heard of is a perfectly good visit. The map
+  -- names it first, as the app's lookup does before the visit is saved.
   select count(*) into alert_count from public.location_alerts where user_id = grace;
+  perform public.learn_place(6.4500, 3.4000, 'Justrite Superstore Bariga', null, 'google');
   insert into public.store_visits
     (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at, arrived_place_name)
   values (6.4500, 3.4000, 10, now(), 'Justrite Superstore Bariga')
@@ -830,6 +832,7 @@ begin
   perform assert(
     (select departed_status from public.store_visits where id = visit_id) is null,
     'checking out of it is just a time, too');
+  delete from public.known_places where name = 'Justrite Superstore Bariga';
 
   -- Naming a store and not being at it still means something.
   insert into public.store_visits
@@ -899,6 +902,12 @@ begin
   perform assert(
     (select count(*) from public.location_alerts where user_id = grace) = alert_count,
     'and nobody is interrupted about it');
+  -- But they must name the spot before their next store visit (045).
+  perform assert((select count(*) from public.my_place_due()) = 1,
+    'clocking in somewhere nobody can name asks them to name it');
+  perform act_as(boss);
+  perform public.dismiss_place_due((select id from public.place_naming_due where user_id = grace), 'Test: not a shop');
+  perform act_as(grace);
 
   -- ---------------------------------------------------------------
   -- The map names the store when they are not in one of their own
@@ -2671,6 +2680,97 @@ begin
       exception when others then
         perform assert(sqlerrm like '%already voided%', 'xm: a record is voided once');
       end;
+    end;
+
+    -- ---------------------------------------------------------------
+    -- Naming an unknown place is mandatory (045).
+    -- ---------------------------------------------------------------
+    declare
+      zed   uuid := gen_random_uuid();
+      yemi  uuid := gen_random_uuid();
+      due   uuid;
+      front text;
+      selfie text;
+      named uuid;
+    begin
+      perform act_as(boss);
+      insert into auth.users (id, email) values (zed, 'place-test@xpel.ng'), (yemi, 'place-test2@xpel.ng');
+      insert into public.profiles (id, full_name, email, role) values
+        (zed, 'Zainab Bello', 'place-test@xpel.ng', 'marketer'),
+        (yemi, 'Yemi Ade', 'place-test2@xpel.ng', 'marketer');
+      perform notifications_on(zed);
+      perform notifications_on(yemi);
+
+      perform act_as(zed);
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+      values ('opening', 7.1000, 4.1000, 150, fresh_photo('selfies', 'pl-rough.jpg'), now());
+      perform assert(not exists (select 1 from public.my_place_due()),
+        'place: a rough fix does not ask for a name');
+      delete from public.attendance where user_id = zed;
+
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+      values ('opening', 7.1000, 4.1000, 10, fresh_photo('selfies', 'pl-in.jpg'), now());
+      due := (select id from public.my_place_due());
+      perform assert(due is not null, 'place: clocking in somewhere unknown asks for its name');
+
+      begin
+        insert into public.store_visits (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
+        values (7.1000, 4.1000, 10, now());
+        perform assert(false, 'place: other work waits until the place is named');
+      exception when others then
+        perform assert(sqlerrm like 'Name the place%', 'place: other work waits until the place is named');
+      end;
+
+      front := place_photo('pl-front.jpg');
+      begin
+        perform public.name_place(due, 'Ojota Plaza', 7.1001, 4.1001, 10, front, fresh_photo('reports', 'pl-shelf.jpg'));
+        perform assert(false, 'place: the selfie must be one with our product');
+      exception when others then
+        perform assert(sqlerrm like '%selfie holding our product%', 'place: the selfie must be one with our product');
+      end;
+
+      selfie := fresh_photo('reports', 'pl-selfie.jpg');
+      update public.photo_checks set kind = 'product_selfie' where path = selfie;
+      begin
+        perform public.name_place(due, 'Ojota Plaza', 7.1100, 4.1000, 10, front, selfie);
+        perform assert(false, 'place: it is named from where it was found');
+      exception when others then
+        perform assert(sqlerrm like '%from where you clocked in%', 'place: it is named from where it was found');
+      end;
+      begin
+        perform public.name_place(due, 'Ojota Plaza', 7.1001, 4.1001, 300, front, selfie);
+        perform assert(false, 'place: the position must be accurate');
+      exception when others then
+        perform assert(sqlerrm like '%not accurate enough%', 'place: the position must be accurate');
+      end;
+
+      named := public.name_place(due, '  Ojota   Plaza ', 7.1001, 4.1001, 10, front, selfie);
+      perform assert((select name = 'Ojota Plaza' and source = 'staff' and named_by = zed
+                             and photo_path = front and selfie_path = selfie
+                             and abs(lat - 7.1001) < 1e-9
+                      from public.known_places where id = named),
+        'place: it is saved with its name, both photos and the phone''s position');
+      perform assert(not exists (select 1 from public.my_place_due()),
+        'place: once named, nothing is waiting');
+      insert into public.store_visits (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
+      values (7.1001, 4.1001, 10, now());
+      perform assert(true, 'place: and work goes on');
+
+      perform act_as(yemi);
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+      values ('opening', 7.10015, 4.10015, 12, fresh_photo('selfies', 'pl-yemi.jpg'), now());
+      perform assert(not exists (select 1 from public.my_place_due())
+                     and public.place_is_recognised(7.10015, 4.10015),
+        'place: the next person there is recognised, and not asked');
+
+      perform act_as(yemi);
+      begin
+        perform public.dismiss_place_due(due, 'Trying it on');
+        perform assert(false, 'place: staff cannot let themselves off');
+      exception when others then
+        perform assert(sqlerrm like '%Only an admin%' or sqlerrm like '%already%', 'place: staff cannot let themselves off');
+      end;
+      perform act_as(boss);
     end;
 
   end;

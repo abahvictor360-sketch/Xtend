@@ -295,7 +295,9 @@ function CountForm({ stores, products, batches }: { stores: Store[]; products: X
         })),
       })
       s.setNotice(
-        result.queued
+        result.queued && 'waitingForPlace' in result && result.waitingForPlace
+          ? `The count for ${store.name} is saved on this phone. It is sent as soon as you add the place above.`
+          : result.queued
           ? `No signal: the count for ${store.name} is saved on this phone and will be sent when you are back online (within 3 days).`
           : `Count for ${store.name} sent: ${counted.length} line${counted.length === 1 ? '' : 's'}.`,
       )
@@ -524,7 +526,9 @@ function SalesForm({
         lines: entered.map(([product_id, v]) => ({ product_id, units: Number(v.trim()) })),
       })
       s.setNotice(
-        result.queued
+        result.queued && 'waitingForPlace' in result && result.waitingForPlace
+          ? `The sales for ${longDate(date)} are saved on this phone. They are sent as soon as you add the place above.`
+          : result.queued
           ? `No signal: the sales for ${longDate(date)} are saved on this phone and will be sent when you are back online.`
           : `Sales for ${longDate(date)} sent. Sending this day again replaces them.`,
       )

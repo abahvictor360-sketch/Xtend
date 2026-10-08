@@ -138,6 +138,21 @@ export function dbErrorMessage(
   return fallback
 }
 
+/**
+ * The response for a refused write. A place waiting to be named (045) is
+ * 423, not 400: the submission is fine and is sent again once the place is
+ * named, so the phone keeps it rather than discarding it.
+ */
+export function dbErrorResponse(
+  error: { code?: string; message: string; hint?: string | null },
+  fallback?: string,
+) {
+  if (error.hint === 'place_naming_due') {
+    return Response.json({ error: error.message, code: 'name_place' }, { status: 423 })
+  }
+  return Response.json({ error: dbErrorMessage(error, fallback) }, { status: 400 })
+}
+
 /** The roles that use the phone app: they clock in, out and are tracked. */
 export const FIELD_ROLES: UserRole[] = ['merchandiser', 'marketer', 'admin']
 

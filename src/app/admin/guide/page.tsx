@@ -130,15 +130,28 @@ export default async function AdminGuidePage() {
             <Ui>Confirm store location</Ui>. Or edit the store and add its location yourself.
           </Tip>
 
-          <p className="pt-2 font-semibold">Places your staff named</p>
+          <p className="pt-2 font-semibold">Places your staff add</p>
           <p>
-            When staff clock in or check in at a shop no map knows, Xtend asks them for its name and
-            a photo of the shop front. These appear on <Ui>Places</Ui> (admins only):
+            When staff clock in or check in at a shop or plaza that no store, learned place or map can
+            name, they must add it before they go on. Standing outside, they type the name on the sign
+            and take two photos with the camera in Xtend (never from the gallery): the building with
+            its sign showing, and a selfie holding one of our products. The position is read from their
+            phone&apos;s GPS, not typed, and must be where they clocked in. From then on Xtend
+            recognises the place for everyone. Until it is added, that day&apos;s store visits, store
+            counts, X Metrics counts and sales and daily report wait; clocking out never does.
+          </p>
+          <p>
+            These appear on <Ui>Places</Ui> (admins only):
           </p>
           <ul className="list-disc space-y-1.5 pl-5">
             <li>
-              <Ui>Names to check</Ui>: correct the spelling if needed, then click{' '}
-              <Ui>Save and verify</Ui> (or <Ui>Verify</Ui>).
+              <Ui>Places staff had to add</Ui>: the last 7 days, who and where, and whether each was
+              added. If someone clocked in somewhere that is not a shop (a depot gate, say), click{' '}
+              <Ui>Dismiss</Ui> and give the reason so they can carry on.
+            </li>
+            <li>
+              <Ui>Names to check</Ui>: open <Ui>Photo of the place</Ui> and <Ui>Selfie with product</Ui>,
+              correct the spelling if needed, then click <Ui>Save and verify</Ui> (or <Ui>Verify</Ui>).
             </li>
             <li>
               <Ui>Make it a store</Ui>: turns the place into one of your outlets, so staff can be

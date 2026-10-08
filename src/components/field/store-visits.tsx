@@ -15,7 +15,6 @@ import { GeoBlocked, haversineMetres, requireFix, type Fix } from '@/lib/geo'
 import { processSelfie } from '@/lib/image'
 import { supabase } from '@/lib/supabase/client'
 import { checkPhoto } from '@/lib/offline/sync'
-import { NamePlace } from '@/components/field/name-place'
 import { formatLagos, metres } from '@/lib/utils'
 
 export interface VisitOutlet {
@@ -91,8 +90,6 @@ export function StoreVisits({
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  // A spot no store, learned place or map could name: ask them to name it.
-  const [unnamed, setUnnamed] = useState<{ lat: number; lng: number } | null>(null)
 
   // Nearest store first: the one they are standing in should be the easy tap.
   const sorted = useMemo(() => {
@@ -228,7 +225,6 @@ export function StoreVisits({
               ? `Checked in, but you are ${metres(distance)} from ${nearest}.`
               : `Checked in at ${label}.`,
         )
-        setUnnamed(place.name || data.visit?.outlet_name ? null : { lat: fix.lat, lng: fix.lng })
         router.refresh()
       } catch (err) {
         if (err instanceof GeoBlocked) setError(err.message)
@@ -294,7 +290,6 @@ export function StoreVisits({
 
       {error && <Alert variant="destructive">{error}</Alert>}
       {notice && <Alert variant="success">{notice}</Alert>}
-      {unnamed && <NamePlace lat={unnamed.lat} lng={unnamed.lng} />}
 
       {open ? (
         <Card className="border border-brand/30">
