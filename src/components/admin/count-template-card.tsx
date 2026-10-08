@@ -109,9 +109,9 @@ export function CountTemplateCard({
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
             {current
-              ? `Staff download "${current.file_name}", uploaded ${formatLagos(current.created_at)}, fill it in and send it back from the store count screen.`
+              ? `Staff download "${current.file_name}", uploaded ${formatLagos(current.created_at)}, fill it in and send it back from the stock count screen.`
               : canUpload
-                ? 'Upload your blank count sheet as a PDF. Staff download it from the store count screen, fill it in and send it back.'
+                ? 'Upload your blank count sheet as a PDF. Staff download it from the stock count screen, fill it in and send it back.'
                 : 'No count sheet has been uploaded yet. An admin uploads it here.'}
           </p>
         </div>

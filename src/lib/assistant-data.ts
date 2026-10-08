@@ -436,7 +436,7 @@ export async function storeCounts(
   }
 }
 
-/** Store count requests: who asked, by when, and who has not counted yet. */
+/** Stock count requests: who asked, by when, and who has not counted yet. */
 export async function countRequests(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from('count_request_progress')
@@ -446,7 +446,7 @@ export async function countRequests(supabase: SupabaseClient) {
   if (error) throw new Error(error.message)
   return {
     how_counts_work:
-      'Store counts are taken when a supervisor or admin asks for one, and by everyone in the last three days of each month.',
+      'Stock counts are taken when a supervisor or admin asks for one, and by everyone in the last three days of each month.',
     requests: (data ?? []).map((r) => ({
       asked_by: r.requested_by_name,
       asked_on: formatLagos(r.created_at as string),
@@ -460,7 +460,7 @@ export async function countRequests(supabase: SupabaseClient) {
   }
 }
 
-/** Integrity flags: signs of a faked location and store counts that do not add up. */
+/** Integrity flags: signs of a faked location and stock counts that do not add up. */
 export async function integrityFlags(supabase: SupabaseClient, fromDate: unknown, toDate: unknown) {
   const { from, to } = checkRange(fromDate, toDate, 30)
   const { data, error } = await supabase

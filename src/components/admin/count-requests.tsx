@@ -75,7 +75,7 @@ function dayLabel(date: string) {
 }
 
 /**
- * Asking for a store count, and seeing who has done it. Outside a request,
+ * Asking for a stock count, and seeing who has done it. Outside a request,
  * merchandisers only count in the last days of the month.
  */
 export function CountRequests({

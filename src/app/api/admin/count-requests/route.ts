@@ -14,7 +14,7 @@ const schema = z.object({
 })
 
 /**
- * Asks people to take a store count by a date. Who may ask whom is decided
+ * Asks people to take a stock count by a date. Who may ask whom is decided
  * by request_store_count(); this route then tells the people on their phones.
  */
 export async function POST(request: Request) {
@@ -38,9 +38,9 @@ export async function POST(request: Request) {
     if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
 
     const notified = await pushToUsers(input.user_ids, {
-      title: 'Store count requested',
+      title: 'Stock count requested',
       body:
-        `${session.profile.full_name} asked for a store count by ${longDate(input.due_date)}.` +
+        `${session.profile.full_name} asked for a stock count by ${longDate(input.due_date)}.` +
         (input.note ? ` ${input.note}` : ''),
       url: '/field/count',
     })

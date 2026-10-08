@@ -111,7 +111,7 @@ export function RoleManager({
                 checked={countsStock}
                 onChange={(e) => setCountsStock(e.target.checked)}
               />
-              Takes store counts
+              Takes stock counts
             </label>
           )}
         </CardContent>
@@ -223,8 +223,8 @@ export function RoleManager({
 
 function countNotice(name: string, on: boolean) {
   return on
-    ? `${name} now take store counts.`
-    : `${name} no longer take store counts: the count form is gone from their app.`
+    ? `${name} now take stock counts.`
+    : `${name} no longer take stock counts: the count form is gone from their app.`
 }
 
 interface CountRow {
@@ -235,7 +235,7 @@ interface CountRow {
   save: (on: boolean) => Promise<boolean>
 }
 
-/** Which roles take the month-end store count and counts a supervisor asks for. */
+/** Which roles take the month-end stock count and counts a supervisor asks for. */
 function StoreCountSettings({ rows, busy }: { rows: CountRow[]; busy: string | null }) {
   return (
     <Card>
@@ -243,7 +243,7 @@ function StoreCountSettings({ rows, busy }: { rows: CountRow[]; busy: string | n
         <div>
           <p className="font-semibold">Stock count</p>
           <p className="text-xs text-muted-foreground">
-            Choose which roles take the month-end store count and counts a supervisor asks for.
+            Choose which roles take the month-end stock count and counts a supervisor asks for.
             Roles that are off do not see the count form, and cannot be asked to count.
           </p>
         </div>
@@ -258,7 +258,7 @@ function StoreCountSettings({ rows, busy }: { rows: CountRow[]; busy: string | n
                 type="button"
                 role="switch"
                 aria-checked={row.on}
-                aria-label={`${row.name} take store counts`}
+                aria-label={`${row.name} take stock counts`}
                 disabled={busy !== null}
                 onClick={() => void row.save(!row.on)}
                 className={
