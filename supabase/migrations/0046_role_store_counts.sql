@@ -1,5 +1,5 @@
 -- =====================================================================
--- XTEND migration 044 — which roles take store counts
+-- XTEND migration 046 — which roles take store counts
 --
 -- An admin chooses, per role, whether its people take store counts (the
 -- month-end count and counts a supervisor asks for). Plaza roles such as

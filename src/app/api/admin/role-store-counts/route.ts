@@ -8,7 +8,7 @@ const schema = z.object({
   counts_stock: z.boolean(),
 })
 
-/** Whether built-in merchandisers or marketers take store counts (migration 044). Admins only. */
+/** Whether built-in merchandisers or marketers take store counts (migration 046). Admins only. */
 export async function PATCH(request: Request) {
   try {
     await requireApiSession(['admin'])

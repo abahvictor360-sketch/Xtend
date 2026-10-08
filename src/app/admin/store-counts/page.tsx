@@ -125,7 +125,7 @@ export default async function StoreCountsPage({
       .select('id', { count: 'exact', head: true })
       .not('sheet_order', 'is', null)
       .eq('is_active', true),
-    // Which roles take store counts (migration 044).
+    // Which roles take store counts (migration 046).
     supabase.from('staff_roles').select('id, counts_stock'),
     supabase.from('role_store_counts').select('role, counts_stock'),
   ])

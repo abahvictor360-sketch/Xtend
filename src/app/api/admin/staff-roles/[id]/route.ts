@@ -8,7 +8,7 @@ const schema = z.object({
   name: roleName.optional(),
   /** Retired roles stay on the people who have them, but cannot be given. */
   is_active: z.boolean().optional(),
-  /** Whether people with it take store counts (migration 044). */
+  /** Whether people with it take store counts (migration 046). */
   counts_stock: z.boolean().optional(),
 })
 

@@ -11,11 +11,11 @@ export interface StaffRole {
   name: string
   base_role: Exclude<UserRole, 'admin'>
   is_active: boolean
-  /** Whether people with it take store counts (migration 044). */
+  /** Whether people with it take store counts (migration 046). */
   counts_stock: boolean
 }
 
-/** Built-in roles that take store counts unless an admin turns it off (migration 044). */
+/** Built-in roles that take store counts unless an admin turns it off (migration 046). */
 export type CountingRole = 'merchandiser' | 'marketer'
 export type BuiltInCounts = Partial<Record<CountingRole, boolean>>
 

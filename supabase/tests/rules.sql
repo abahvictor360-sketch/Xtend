@@ -2648,7 +2648,7 @@ begin
       end;
     end;
     -- ---------------------------------------------------------------
-    -- Which roles take store counts (044).
+    -- Which roles take store counts (046).
     -- ---------------------------------------------------------------
     declare
       rep   uuid;
