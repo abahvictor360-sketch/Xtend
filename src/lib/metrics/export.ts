@@ -155,7 +155,7 @@ async function discrepancySheet(db: SupabaseClient, month: string, outlet: strin
 async function suppliesSheet(db: SupabaseClient, month: string, outlet: string | null): Promise<Sheet> {
   let q = db
     .from('xm_supply_detail')
-    .select('supplied_on, outlet_name, product_name, quantity, batch, expiry_date, note, logged_by_name, voided_at, void_reason')
+    .select('supplied_on, outlet_name, product_name, quantity, cartons, units_per_carton, batch, expiry_date, note, logged_by_name, import_file, voided_at, void_reason')
     .gte('supplied_on', month)
     .lte('supplied_on', monthEnd(month))
     .order('supplied_on')
@@ -169,21 +169,22 @@ async function suppliesSheet(db: SupabaseClient, month: string, outlet: string |
     title: `X Metrics supplies: ${monthLabel(month)}`,
     subtitle: `${rows.length - voided} deliveries${voided ? `, ${voided} voided` : ''}.`,
     sheetName: 'Supplies',
-    columns: ['Supplied', 'Store', 'Product', 'Quantity', 'Batch', 'Expiry', 'Logged by', 'Note', 'Status'],
+    columns: ['Supplied', 'Store', 'Product', 'Units', 'Cartons', 'Batch', 'Expiry', 'Logged by', 'Note', 'Status'],
     rows: rows.map((r) => ({
       values: [
         r.supplied_on,
         r.outlet_name,
         r.product_name,
         String(r.quantity),
+        r.cartons ? `${r.cartons} × ${r.units_per_carton}` : '',
         r.batch || '—',
         r.expiry_date ?? '',
         r.logged_by_name ?? '',
-        r.note ?? '',
+        [r.note, r.import_file && `From ${r.import_file}`].filter(Boolean).join(' · '),
         r.voided_at ? `Voided: ${r.void_reason}` : 'Live',
       ],
     })),
-    widths: { xlsx: [11, 22, 22, 9, 10, 11, 20, 28, 20], pdf: [52, 95, 95, 45, 50, 55, 85, 110, 80] },
+    widths: { xlsx: [11, 22, 22, 9, 11, 10, 11, 20, 30, 20], pdf: [50, 90, 90, 40, 50, 45, 52, 80, 105, 75] },
     wrap: true,
     fileBase: `xmetrics-supplies-${month.slice(0, 7)}`,
   }

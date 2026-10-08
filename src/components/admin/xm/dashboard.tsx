@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { ArrowDownRight, ArrowUpRight, Boxes, ClipboardCheck, PackageCheck, ShoppingBag, Timer, Truck } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { DEEP, SOLD, SUPPLIED, TRACK } from '@/lib/metrics/colours'
+import { BRAND, DEEP, SOLD, SUPPLIED, TRACK } from '@/lib/metrics/colours'
 import type { Activity, CategoryShare, Kpi, MonthBar, StoreBar } from '@/lib/metrics/dashboard'
 
 /* ------------------------------------------------------------------ */
@@ -20,7 +20,7 @@ function ChangePill({ kpi, onDeep }: { kpi: Kpi; onDeep?: boolean }) {
     <span
       className={cn(
         'inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-bold',
-        kpi.tone === 'down' ? 'bg-[#fde3dc] text-[#a3301a]' : kpi.tone === 'up' ? 'bg-[#dcf5cf] text-[#21570f]' : 'bg-muted text-muted-foreground',
+        kpi.tone === 'down' ? 'bg-[#efe6e1] text-[#52281a]' : kpi.tone === 'up' ? 'bg-[#fde1cc] text-[#8a3a12]' : 'bg-muted text-muted-foreground',
       )}
     >
       {kpi.tone !== 'flat' && <Icon className="h-3 w-3" />}
@@ -40,12 +40,12 @@ export function KpiCards({ kpis }: { kpis: Kpi[] }) {
           <div
             key={k.label}
             className={cn('rounded-3xl p-5 shadow-sm', deep ? 'text-white' : 'border border-border bg-card')}
-            style={deep ? { background: DEEP } : undefined}
+            style={deep ? { background: `linear-gradient(150deg, ${BRAND} 0%, ${DEEP} 100%)` } : undefined}
           >
             <div className="flex items-start gap-3">
               <span
-                className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl', deep ? 'bg-white text-[#1f5f47]' : 'text-white')}
-                style={deep ? undefined : { background: [SOLD, '#1d9a8a', '#3b82c4', '#c98500'][i] }}
+                className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl', deep ? 'bg-white text-[#9b3517]' : 'text-white')}
+                style={deep ? undefined : { background: [BRAND, SUPPLIED, SOLD, '#c26a1e'][i] }}
               >
                 <Icon className="h-5 w-5" />
               </span>
@@ -128,7 +128,7 @@ export function SalesOverviewChart({ months }: { months: MonthBar[] }) {
                   onClick={() => setPicked(i)}
                   aria-label={`${mo.label}: ${mo.sold} units sold, ${mo.supplied} units supplied`}
                 >
-                  <div className={cn('flex w-full flex-1 items-end justify-center gap-[3px] rounded-xl px-0.5 transition-colors', on && 'bg-[#eef6f1]')}>
+                  <div className={cn('flex w-full flex-1 items-end justify-center gap-[3px] rounded-xl px-0.5 transition-colors', on && 'bg-[#fdf0e7]')}>
                     {(
                       [
                         [mo.sold, SOLD],
@@ -231,29 +231,32 @@ export function StockRings({
 }) {
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-4">
-        <svg viewBox="-60 -60 120 120" className="h-40 w-40 shrink-0 rotate-90" role="img" aria-label={`Stock accuracy ${accuracy.pct ?? 'not known'}%, sales ${salesVsTarget.pct ?? 'no'}% of target`}>
+      <div className="flex items-center gap-4">
+        <svg
+          viewBox="-60 -60 120 120"
+          className="h-32 w-32 shrink-0 rotate-90 sm:h-36 sm:w-36"
+          role="img"
+          aria-label={`Stock accuracy ${accuracy.pct ?? 'not known'}%, sales ${salesVsTarget.pct ?? 'no'}% of target`}
+        >
           <Arc r={50} pct={accuracy.pct ?? 0} colour={SOLD} width={9} />
           <Arc r={36} pct={salesVsTarget.pct ?? 0} colour={SUPPLIED} width={9} />
         </svg>
-        <div className="space-y-3">
-          <div>
-            <p className="text-4xl font-bold tabular-nums tracking-tight">{accuracy.pct === null ? '—' : `${accuracy.pct}%`}</p>
-            <p className="text-xs text-muted-foreground">Stock accuracy this month</p>
-          </div>
-          <div className="space-y-1 text-xs">
-            <p className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: SOLD }} />
-              {accuracy.checked ? `${accuracy.checked - accuracy.gaps} of ${accuracy.checked} counts matched` : 'No counts checked yet'}
-            </p>
-            <p className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: SUPPLIED }} />
-              {salesVsTarget.target
-                ? `${salesVsTarget.pct}% of store targets (${salesVsTarget.sold.toLocaleString('en-GB')} / ${salesVsTarget.target.toLocaleString('en-GB')})`
-                : 'No store targets this month'}
-            </p>
-          </div>
+        <div>
+          <p className="text-4xl font-bold tabular-nums tracking-tight">{accuracy.pct === null ? '—' : `${accuracy.pct}%`}</p>
+          <p className="text-xs text-muted-foreground">Stock accuracy this month</p>
         </div>
+      </div>
+      <div className="space-y-1 text-xs">
+        <p className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: SOLD }} />
+          {accuracy.checked ? `${accuracy.checked - accuracy.gaps} of ${accuracy.checked} counts matched` : 'No counts checked yet'}
+        </p>
+        <p className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: SUPPLIED }} />
+          {salesVsTarget.target
+            ? `${salesVsTarget.pct}% of store targets (${salesVsTarget.sold.toLocaleString('en-GB')} / ${salesVsTarget.target.toLocaleString('en-GB')})`
+            : 'No store targets this month'}
+        </p>
       </div>
 
       <div className="space-y-2 border-t border-border pt-3">
@@ -263,12 +266,12 @@ export function StockRings({
         ) : (
           categories.map((c) => (
             <div key={c.name} className="flex items-center gap-3 text-sm">
-              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#eef6f1] text-[#1f5f47]">
+              <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-[#fdf0e7] text-[#9b3517]">
                 <PackageCheck className="h-4 w-4" />
               </span>
               <span className="flex-1 truncate font-medium">{c.name}</span>
               <span className="tabular-nums">{c.units.toLocaleString('en-GB')}</span>
-              <span className="w-14 rounded-full bg-[#dcf5cf] py-0.5 text-center text-[11px] font-bold text-[#21570f]">{c.share}%</span>
+              <span className="w-14 rounded-full bg-[#fde1cc] py-0.5 text-center text-[11px] font-bold text-[#8a3a12]">{c.share}%</span>
             </div>
           ))
         )}
@@ -282,9 +285,9 @@ export function StockRings({
 /* ------------------------------------------------------------------ */
 
 const TONE: Record<Activity['status']['tone'], string> = {
-  good: 'bg-[#e3f3ea] text-[#1f5f47]',
+  good: 'bg-[#fde1cc] text-[#8a3a12]',
   warn: 'bg-[#fdf1d6] text-[#7a5200]',
-  bad: 'bg-[#fde3dc] text-[#a3301a]',
+  bad: 'bg-[#52281a] text-white',
   neutral: 'bg-muted text-muted-foreground',
 }
 
@@ -311,7 +314,7 @@ export function RecentActivity({ items }: { items: Activity[] }) {
               <tr key={`${a.kind}-${a.id}`} className="border-b border-border last:border-0">
                 <td className="py-3">
                   <Link href={a.href} className="flex items-center gap-3 hover:underline">
-                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#eef6f1] text-[#1f5f47]">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#fdf0e7] text-[#9b3517]">
                       <Icon className="h-4 w-4" />
                     </span>
                     <span className="font-medium">{a.what}</span>
@@ -351,7 +354,7 @@ export function TopStores({ stores }: { stores: StoreBar[] }) {
             <Link href={`/admin/metrics/stores/${s.id}`} className="block space-y-1.5 hover:opacity-90">
               <div className="flex items-baseline justify-between gap-2 text-sm">
                 <span className="flex min-w-0 items-center gap-2">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#eef6f1] text-[11px] font-bold text-[#1f5f47]">{i + 1}</span>
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#fdf0e7] text-[11px] font-bold text-[#9b3517]">{i + 1}</span>
                   <span className="truncate font-medium">{s.name}</span>
                 </span>
                 <span className="shrink-0 text-xs tabular-nums text-muted-foreground">

@@ -147,7 +147,7 @@ export function OverviewView({
             title: 'Everyone assigned is in',
             body: 'Nobody is missing and there are no open alerts. Stock counts and visits are worth a look.',
             href: '/admin/store-counts',
-            cta: 'Stock counts',
+            cta: 'Stock count',
           }
 
   return (

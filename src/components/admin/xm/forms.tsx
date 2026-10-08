@@ -57,11 +57,25 @@ function Field({ id, label, children }: { id: string; label: string; children: R
 /* ------------------------------------------------------------------ */
 
 export function SupplyForm({ stores, products, today }: { stores: Option[]; products: XmProduct[]; today: string }) {
-  const blank = { outlet_id: '', product_id: '', quantity: '', batch: '', expiry_date: '', supplied_on: today, note: '' }
+  const blank = {
+    outlet_id: '',
+    product_id: '',
+    unit: 'units' as 'units' | 'cartons',
+    quantity: '',
+    per_carton: '',
+    batch: '',
+    expiry_date: '',
+    supplied_on: today,
+    note: '',
+  }
   const [f, setF] = useState(blank)
   const s = useSubmit()
   const set = (k: keyof typeof blank) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setF((v) => ({ ...v, [k]: e.target.value }))
+  const product = products.find((p) => p.id === f.product_id)
+  // A product that knows its carton size fills it in; it can be changed.
+  const per = f.per_carton || (product?.units_per_carton ? String(product.units_per_carton) : '')
+  const totalUnits = f.unit === 'cartons' && /^\d+$/.test(f.quantity) && /^\d+$/.test(per) ? Number(f.quantity) * Number(per) : null
 
   if (!stores.length || !products.length) {
     return <Alert variant="info">Add products and stores to X Metrics first (Products & stores).</Alert>
@@ -75,13 +89,19 @@ export function SupplyForm({ stores, products, today }: { stores: Option[]; prod
           '/api/admin/metrics/supplies',
           'POST',
           {
-            ...f,
-            quantity: Number(f.quantity),
+            outlet_id: f.outlet_id,
+            product_id: f.product_id,
+            quantity: f.unit === 'units' ? Number(f.quantity) : null,
+            cartons: f.unit === 'cartons' ? Number(f.quantity) : null,
+            units_per_carton: f.unit === 'cartons' && per ? Number(per) : null,
+            batch: f.batch,
             expiry_date: f.expiry_date || null,
+            supplied_on: f.supplied_on,
+            note: f.note,
           },
           'Supply logged.',
         )
-        if (ok) setF({ ...blank, outlet_id: f.outlet_id, supplied_on: f.supplied_on })
+        if (ok) setF({ ...blank, outlet_id: f.outlet_id, supplied_on: f.supplied_on, unit: f.unit })
       }}
     >
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -101,9 +121,34 @@ export function SupplyForm({ stores, products, today }: { stores: Option[]; prod
             ))}
           </Select>
         </Field>
-        <Field id="sup-qty" label="Quantity">
-          <Input id="sup-qty" inputMode="numeric" value={f.quantity} onChange={set('quantity')} required placeholder="0" />
+        <Field id="sup-qty" label={f.unit === 'cartons' ? 'Cartons supplied' : 'Units supplied'}>
+          <div className="flex gap-2">
+            <Input id="sup-qty" inputMode="numeric" value={f.quantity} onChange={set('quantity')} required placeholder="0" className="min-w-0" />
+            <Select aria-label="Units or cartons" value={f.unit} onChange={set('unit')} className="w-32 shrink-0">
+              <option value="units">Units</option>
+              <option value="cartons">Cartons</option>
+            </Select>
+          </div>
         </Field>
+        {f.unit === 'cartons' && (
+          <Field id="sup-per" label={`Units in one carton${product ? ` of ${product.name}` : ''}`}>
+            <Input
+              id="sup-per"
+              inputMode="numeric"
+              value={per}
+              onChange={set('per_carton')}
+              required
+              placeholder="e.g. 24"
+            />
+            <p className="text-xs text-muted-foreground">
+              {totalUnits !== null
+                ? `${f.quantity} cartons × ${per} = ${totalUnits.toLocaleString('en-GB')} ${/s$/i.test(product?.unit ?? 'units') ? product?.unit ?? 'units' : `${product?.unit}s`}`
+                : product && !product.units_per_carton
+                  ? 'Saved on the product for next time.'
+                  : 'Cartons are turned into units for stock checks.'}
+            </p>
+          </Field>
+        )}
         <Field id="sup-date" label="Date supplied">
           <Input id="sup-date" type="date" max={today} value={f.supplied_on} onChange={set('supplied_on')} required />
         </Field>
@@ -195,22 +240,39 @@ export function TargetForm({ month, people, stores }: { month: string; people: O
 
 /* ------------------------------------------------------------------ */
 
-type ProductDraft = { name: string; sku: string; category: string; unit: string }
+type ProductDraft = { name: string; sku: string; category: string; unit: string; per_carton: string }
 const toDraft = (p?: XmProduct): ProductDraft => ({
   name: p?.name ?? '',
   sku: p?.sku ?? '',
   category: p?.category ?? '',
   unit: p?.unit ?? 'unit',
+  per_carton: p?.units_per_carton ? String(p.units_per_carton) : '',
+})
+/** What the products route takes: the carton size as a number, or none. */
+const productBody = (d: ProductDraft) => ({
+  name: d.name,
+  sku: d.sku,
+  category: d.category,
+  unit: d.unit,
+  units_per_carton: /^\d+$/.test(d.per_carton.trim()) ? Number(d.per_carton.trim()) : null,
 })
 
 function ProductFields({ d, set, prefix }: { d: ProductDraft; set: (d: ProductDraft) => void; prefix: string }) {
   const on = (k: keyof ProductDraft) => (e: React.ChangeEvent<HTMLInputElement>) => set({ ...d, [k]: e.target.value })
   return (
-    <div className="grid gap-2 sm:grid-cols-4">
+    <div className="grid gap-2 sm:grid-cols-5">
       <Input aria-label="Product name" id={`${prefix}-name`} value={d.name} onChange={on('name')} placeholder="Name" maxLength={120} required />
       <Input aria-label="SKU" value={d.sku} onChange={on('sku')} placeholder="SKU" maxLength={40} />
       <Input aria-label="Category" value={d.category} onChange={on('category')} placeholder="Category" maxLength={60} />
       <Input aria-label="Unit" value={d.unit} onChange={on('unit')} placeholder="Unit (bottle, tub…)" maxLength={30} required />
+      <Input
+        aria-label="Units per carton"
+        inputMode="numeric"
+        value={d.per_carton}
+        onChange={on('per_carton')}
+        placeholder="Units per carton"
+        maxLength={6}
+      />
     </div>
   )
 }
@@ -232,7 +294,7 @@ export function ProductManager({ products }: { products: XmProduct[] }) {
         className="space-y-2"
         onSubmit={async (e) => {
           e.preventDefault()
-          if (await add.run('/api/admin/metrics/products', 'POST', draft, `${draft.name} added.`)) setDraft(toDraft())
+          if (await add.run('/api/admin/metrics/products', 'POST', productBody(draft), `${draft.name} added.`)) setDraft(toDraft())
         }}
       >
         <ProductFields d={draft} set={setDraft} prefix="new" />
@@ -252,7 +314,7 @@ export function ProductManager({ products }: { products: XmProduct[] }) {
                 className="space-y-2"
                 onSubmit={async (e) => {
                   e.preventDefault()
-                  await change.run(`/api/admin/metrics/products/${p.id}`, 'PATCH', edit, 'Saved.')
+                  await change.run(`/api/admin/metrics/products/${p.id}`, 'PATCH', productBody(edit), 'Saved.')
                 }}
               >
                 <ProductFields d={edit} set={setEdit} prefix={p.id} />
@@ -265,7 +327,10 @@ export function ProductManager({ products }: { products: XmProduct[] }) {
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span>
                   <span className="font-semibold">{p.name}</span>
-                  <span className="text-muted-foreground"> · {[p.sku, p.category, p.unit].filter(Boolean).join(' · ')}</span>
+                  <span className="text-muted-foreground">
+                    {' '}
+                    · {[p.sku, p.category, p.unit, p.units_per_carton ? `${p.units_per_carton} per carton` : null].filter(Boolean).join(' · ')}
+                  </span>
                   {!p.is_active && <Badge variant="outline" className="ml-2">Retired</Badge>}
                 </span>
                 <span className="flex gap-1">

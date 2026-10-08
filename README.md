@@ -63,6 +63,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0043_x_metrics.sql  # X Metrics: supplies, batch counts, daily sales, reconciliation, expiry, grades
    supabase/migrations/0044_xm_scoring_policy.sql  # X Metrics scoring policy, versioned; staff see their own score
    supabase/migrations/0045_mandatory_place_naming.sql  # an unknown place must be added (sign photo + selfie with product) before other work
+   supabase/migrations/0047_supply_imports_cartons.sql  # supplies in cartons, and supplies imported from CSV, Excel, PDF or Word
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
@@ -127,6 +128,14 @@ existing staff, roles, store allocations and login.
   analytics; finalise and review monthly grades; export grades, stock,
   reconciliation and supplies to Excel, Word, PDF or CSV. Supervisors see
   their own team, read-only.
+- **Supplies**: logged by hand in units or cartons (a product keeps its
+  units per carton; cartons are turned into units for stock checks and kept
+  on the record), or imported from a file. A CSV or Excel sheet with column
+  headings (product or SKU, quantity or cartons, store, batch, expiry) is
+  read directly; a PDF or Word invoice is read by Claude (needs
+  `ANTHROPIC_API_KEY`). Every line is matched to a product and store and
+  checked by the admin before anything is logged, all together; each import
+  is kept with its file name.
 - **Reconciliation**: expected = last count + supplied since − sold since. A
   count off by more than the tolerance (5% to start) is an integrity flag on
   the person and the store.

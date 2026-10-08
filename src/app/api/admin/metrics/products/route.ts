@@ -6,7 +6,13 @@ export async function POST(request: Request) {
   return xmAdminAction(request, productSchema, async (body, db) => {
     const { data, error } = await db
       .from('products')
-      .insert({ name: body.name, sku: body.sku ?? null, category: body.category ?? null, unit: body.unit })
+      .insert({
+        name: body.name,
+        sku: body.sku ?? null,
+        category: body.category ?? null,
+        unit: body.unit,
+        units_per_carton: body.units_per_carton ?? null,
+      })
       .select('id')
       .single<{ id: string }>()
     return { data, error, audit: ['xm.product.create', 'products', data?.id ?? null] }
