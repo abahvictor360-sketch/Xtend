@@ -5,6 +5,8 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ExportLinks, RunChecksButton, XmHeader } from '@/components/admin/xm/widgets'
+import { KpiCards, RecentActivity, SalesOverviewChart, StockRings, TopStores } from '@/components/admin/xm/dashboard'
+import { loadXmDashboard } from '@/lib/metrics/dashboard'
 import { addDays, lagosDateString, longDate } from '@/lib/utils'
 import { monthStart, windowLabel } from '@/lib/metrics/shared'
 
@@ -82,6 +84,8 @@ export default async function MetricsOverview() {
     .sort((a, b) => a.name.localeCompare(b.name))
   const pull = ((expiry ?? []) as ExpiryRow[]).filter((e) => e.consider_pulling).length
 
+  const dash = await loadXmDashboard(supabase, today)
+
   return (
     <div className="space-y-5">
       <XmHeader
@@ -95,13 +99,51 @@ export default async function MetricsOverview() {
         <ExportLinks kind="stock" label="Stock on hand" />
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat label="Stores in X Metrics" value={storeRows.length} href={readOnly ? undefined : '/admin/metrics/setup'} />
-        <Stat label="Stock gaps, last 30 days" value={(gaps ?? []).length} tone={(gaps ?? []).length ? 'destructive' : undefined} />
-        <Stat label="Open expiry alerts" value={expiryCount ?? 0} href="/admin/metrics/expiry" tone={expiryCount ? 'warning' : undefined} />
-        <Stat label="Consider pulling (shown)" value={pull} href="/admin/metrics/expiry" tone={pull ? 'destructive' : undefined} />
+      <KpiCards kpis={dash.kpis} />
+
+      <div className="grid gap-5 xl:grid-cols-3">
+        <Card className="min-w-0 xl:col-span-2">
+          <CardHeader>
+            <CardTitle>Sales overview</CardTitle>
+            <CardDescription>Units sold and supplied across all X Metrics stores, last 12 months.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SalesOverviewChart months={dash.months} />
+          </CardContent>
+        </Card>
+        <Card className="min-w-0">
+          <CardHeader>
+            <CardTitle>Stock statistic</CardTitle>
+            <CardDescription>How well counts match, and sales against store targets, this month.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <StockRings accuracy={dash.accuracy} salesVsTarget={dash.salesVsTarget} categories={dash.categories} />
+          </CardContent>
+        </Card>
       </div>
 
+      <div className="grid gap-5 xl:grid-cols-3">
+        <Card className="min-w-0 xl:col-span-2">
+          <CardHeader>
+            <CardTitle>Recent activity</CardTitle>
+            <CardDescription>The latest counts, daily sales and supplies.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <RecentActivity items={dash.activity} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Top stores</CardTitle>
+            <CardDescription>Units sold this month{dash.stores.some((s) => s.target) ? ', against each store\'s target' : ''}.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <TopStores stores={dash.stores} />
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-5 xl:grid-cols-2">
       <Card>
         <CardHeader>
           <CardTitle>Stock gaps</CardTitle>
@@ -189,6 +231,8 @@ export default async function MetricsOverview() {
         </CardContent>
       </Card>
 
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle>Stores</CardTitle>
@@ -230,16 +274,4 @@ export default async function MetricsOverview() {
       </Card>
     </div>
   )
-}
-
-function Stat({ label, value, href, tone }: { label: string; value: number; href?: string; tone?: 'warning' | 'destructive' }) {
-  const body = (
-    <Card className="h-full">
-      <CardContent className="p-4">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-        <p className={`mt-1 text-2xl font-bold ${tone === 'destructive' ? 'text-destructive' : tone === 'warning' ? 'text-warning' : ''}`}>{value}</p>
-      </CardContent>
-    </Card>
-  )
-  return href ? <Link href={href}>{body}</Link> : body
 }
