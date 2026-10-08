@@ -4,7 +4,8 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { SheetScreen } from '@/components/field/screen'
 import { Alert } from '@/components/ui/alert'
 import { XmFieldForms, type XmBatch, type XmRecent } from '@/components/field/xm-forms'
-import type { XmProduct } from '@/lib/metrics/shared'
+import { monthStart, type XmGrade, type XmProduct, type XmSettings } from '@/lib/metrics/shared'
+import type { XmPolicy } from '@/components/metrics/policy'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'X Metrics — Xtend' }
@@ -35,7 +36,7 @@ export default async function FieldMetricsPage({
         .order('name')
         .limit(2000),
       supabase.rpc('business_date'),
-      supabase.from('xm_settings').select('sales_photo_required').maybeSingle<{ sales_photo_required: boolean }>(),
+      supabase.from('xm_settings').select('*').maybeSingle<XmSettings>(),
     ])
 
   const inXm = new Set(((enrolled ?? []) as { outlet_id: string }[]).map((s) => s.outlet_id))
@@ -44,6 +45,15 @@ export default async function FieldMetricsPage({
     .map((o) => ({ id: o.id, name: o.name }))
   const ids = stores.map((s) => s.id)
   const businessDate = (today as string) ?? new Date().toISOString().slice(0, 10)
+
+  // Their own score this month, and the scoring policy (044).
+  const [{ data: grade }, { data: policy }] = await Promise.all([
+    supabase.rpc('xm_grade', { p_user: session.userId, p_month: monthStart(businessDate) }),
+    supabase.from('xm_current_policy').select('id, title, body, change_note, published_at').maybeSingle<XmPolicy>(),
+  ])
+  const { data: readRow } = policy
+    ? await supabase.from('xm_policy_reads').select('policy_id').eq('policy_id', policy.id).eq('user_id', session.userId).maybeSingle()
+    : { data: null }
   const weekAgo = new Date(Date.parse(businessDate) - 7 * 86_400_000).toISOString().slice(0, 10)
 
   // The batches last counted at each store, to start the next count from;
@@ -88,13 +98,17 @@ export default async function FieldMetricsPage({
         </Alert>
       ) : (
         <XmFieldForms
-          initialTab={tab === 'sales' ? 'sales' : 'count'}
+          initialTab={tab === 'sales' ? 'sales' : tab === 'score' ? 'score' : 'count'}
           stores={stores}
           products={(products ?? []) as XmProduct[]}
           batches={(onHand ?? []) as XmBatch[]}
           businessDate={businessDate}
           salesPhotoRequired={settings?.sales_photo_required !== false}
           recent={recent}
+          grade={(grade as XmGrade | null) ?? null}
+          settings={settings ?? null}
+          policy={policy ?? null}
+          policyRead={!!readRow}
         />
       )}
     </SheetScreen>

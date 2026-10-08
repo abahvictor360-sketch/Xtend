@@ -143,8 +143,8 @@ export function StaffGuide() {
               only be checked in at one store at a time.
             </>,
             <>
-              If Xtend does not know the place, it asks you to <Ui>name it</Ui> and take a
-              photo of the shop front.
+              If Xtend does not know the place, you must <Ui>add it</Ui> before you go on. See{' '}
+              <Ui>Adding a place</Ui> below.
             </>,
           ]}
         />
@@ -152,25 +152,37 @@ export function StaffGuide() {
 
       <GuideSection
         topic={T.place}
-        intro="Sometimes Xtend does not know the shop you are in. It then asks you for its name."
+        intro="When you clock in or check in at a shop or plaza Xtend does not know yet, you must add it before you carry on. You only do this once: after that, Xtend recognises the place for you and everyone else."
       >
+        <p>
+          You will see <Ui>Add this place before you go on</Ui> at the top of the screen. Until you
+          add it, store visits, store counts, X Metrics counts and sales, and your daily report
+          wait. You can still clock out at any time.
+        </p>
         <Steps
           items={[
             <>
-              After you clock in or check in, look for <Ui>What is the name of this shop?</Ui> on
-              the home screen.
+              Go outside and stand where you can see the building and its sign. Keep location on.
             </>,
             <>
-              Type the name exactly as it is written on the shop&apos;s sign, for example “Mama
-              Nkechi Provisions”.
+              Type the name exactly as it is written on the sign, for example “Ojota Shopping
+              Plaza” or “Mama Nkechi Provisions”.
             </>,
             <>
-              Tap <Ui>Photo and save</Ui> and take a clear photo of the <Ui>shop front, sign or
-              entrance</Ui>, standing outside so the sign can be read.
+              Under <Ui>Photo of the building from outside, with the sign showing</Ui>, tap{' '}
+              <Ui>Open the camera</Ui>. Stand still for a few seconds while Xtend locks your
+              location from several GPS readings, then take the photo. The camera reads your
+              location again as you take it; if the two do not match, Xtend asks you to take it
+              again. That location is where the place is saved, so take it at the place.
             </>,
             <>
-              Wait while Xtend checks the photo. When you see <Ui>Saved. Thank you.</Ui>, you are
-              done.
+              Under <Ui>Selfie holding one of our products</Ui>, tap <Ui>Open the camera</Ui>{' '}
+              and take a selfie with the product held up next to your face.
+            </>,
+            <>
+              Tap <Ui>Save this place</Ui> and wait while Xtend checks both photos. When you see{' '}
+              <Ui>Xtend will recognise this place from now on</Ui>, you are done, and anything
+              that was waiting on your phone is sent.
             </>,
           ]}
         />
@@ -180,8 +192,15 @@ export function StaffGuide() {
           <Ui>Here</Ui> are the ones you are standing in.
         </p>
         <Tip>
-          The photo must show a shop. A photo of a house or the inside of a room is not accepted. If
-          the shop has no sign, photograph the entrance and type the name people know it by.
+          Both photos are taken with the camera in Xtend. You cannot upload a picture from your
+          gallery. The building photo must show a shop or plaza, not a house or the inside of a
+          room. The selfie must show your face and one of our products. If a photo is not
+          accepted, Xtend tells you why: tap the photo again to retake it. You need signal to save
+          the place.
+        </Tip>
+        <Tip>
+          Clocked in somewhere that is not a shop, such as the depot gate? Ask the office: they can
+          let you carry on without adding it.
         </Tip>
       </GuideSection>
 

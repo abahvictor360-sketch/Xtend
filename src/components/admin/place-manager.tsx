@@ -33,6 +33,8 @@ export interface KnownPlace {
   named_by_name: string | null
   /** From migration 025; absent before it. */
   photo_path?: string | null
+  /** The selfie with our product, taken when staff added it (045). */
+  selfie_path?: string | null
   visitor_count?: number | null
   only_namer_visits?: boolean | null
   /** Stores waiting for a location that this spot could be (034). */
@@ -154,6 +156,7 @@ export function PlaceManager({
         {visible.map((p) => {
           const draft = names[p.id] ?? p.name
           const photo = p.photo_path ? photoUrls[p.photo_path] : undefined
+          const selfie = p.selfie_path ? photoUrls[p.selfie_path] : undefined
           // Somebody's house, named as a shop, is visited by nobody else.
           const suspect = !p.verified && p.only_namer_visits && p.times_seen >= 3
           // The stores this spot could be first, then any other waiting store.
@@ -204,6 +207,16 @@ export function PlaceManager({
                       className="flex items-center gap-1 text-xs font-semibold text-brand"
                     >
                       Photo of the place <ImageIcon className="h-3 w-3" />
+                    </a>
+                  )}
+                  {selfie && (
+                    <a
+                      href={selfie}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-1 text-xs font-semibold text-brand"
+                    >
+                      Selfie with product <ImageIcon className="h-3 w-3" />
                     </a>
                   )}
                   <a

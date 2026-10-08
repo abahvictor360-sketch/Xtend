@@ -24,6 +24,7 @@ const TABS = [
   { href: '/admin/metrics', label: 'Overview' },
   { href: '/admin/metrics/expiry', label: 'Expiry' },
   { href: '/admin/metrics/grades', label: 'Grades' },
+  { href: '/admin/metrics/policy', label: 'Scoring policy' },
   { href: '/admin/metrics/supplies', label: 'Supplies', adminOnly: true },
   { href: '/admin/metrics/targets', label: 'Targets', adminOnly: true },
   { href: '/admin/metrics/setup', label: 'Products & stores', adminOnly: true },
