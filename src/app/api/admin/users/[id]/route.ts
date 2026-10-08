@@ -3,6 +3,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
+import { auditContext } from '@/lib/audit-context'
 import { generateTempPassword } from '@/lib/credentials'
 import { emailAddress, personName, phoneNumber } from '@/lib/fields'
 import { rememberTempPassword } from '@/lib/staff-logins'
@@ -162,7 +163,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
         action,
         target_table: 'profiles',
         target_id: id,
-        meta: changes,
+        meta: { ...changes, _context: await auditContext() },
       })
     } else {
       const supabase = await createServerSupabase()

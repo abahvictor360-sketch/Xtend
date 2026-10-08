@@ -440,7 +440,7 @@ export async function storeCounts(
 export async function countRequests(supabase: SupabaseClient) {
   const { data, error } = await supabase
     .from('count_request_progress')
-    .select('requested_by_name, due_date, note, created_at, is_open, people, counted, waiting_on')
+    .select('id, requested_by_name, due_date, note, created_at, is_open, people, counted, waiting_on')
     .order('created_at', { ascending: false })
     .limit(20)
   if (error) throw new Error(error.message)
@@ -448,6 +448,7 @@ export async function countRequests(supabase: SupabaseClient) {
     how_counts_work:
       'Stock counts are taken when a supervisor or admin asks for one, and by everyone in the last three days of each month.',
     requests: (data ?? []).map((r) => ({
+      id: r.id as string,
       asked_by: r.requested_by_name,
       asked_on: formatLagos(r.created_at as string),
       due: r.due_date,
@@ -465,7 +466,7 @@ export async function integrityFlags(supabase: SupabaseClient, fromDate: unknown
   const { from, to } = checkRange(fromDate, toDate, 30)
   const { data, error } = await supabase
     .from('integrity_flag_detail')
-    .select('staff_name, kind, severity, summary, detail, outlet_name, flag_date, reviewed_at, review_note')
+    .select('id, staff_name, kind, severity, summary, detail, outlet_name, flag_date, reviewed_at, review_note')
     .gte('flag_date', from)
     .lte('flag_date', to)
     .order('created_at', { ascending: false })
@@ -475,6 +476,7 @@ export async function integrityFlags(supabase: SupabaseClient, fromDate: unknown
     from,
     to,
     flags: (data ?? []).map((f) => ({
+      id: f.id as string,
       name: f.staff_name,
       kind: f.kind,
       severity: f.severity,

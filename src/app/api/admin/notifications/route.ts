@@ -4,6 +4,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { pushConfigured, sendPush, type PushTarget } from '@/lib/push'
 import { thingName, writtenText } from '@/lib/fields'
+import { auditContext } from '@/lib/audit-context'
 
 export const maxDuration = 60
 
@@ -185,9 +186,8 @@ export async function POST(request: Request) {
       .update({ delivered, failed })
       .eq('id', notification.id)
 
-    // write_audit() is admin-only by design, and supervisors send too, so
-    // the row goes in directly with the sender as the actor. Every send is
-    // audited regardless of who made it.
+    // The row goes in directly with the sender as the actor, with where and
+    // on what device it was sent. Every send is audited, whoever made it.
     await admin.from('audit_log').insert({
       actor_id: session.userId,
       action: 'notification.send',
@@ -200,6 +200,7 @@ export async function POST(request: Request) {
         delivered,
         failed,
         title: input.title,
+        _context: await auditContext(),
       },
     })
 

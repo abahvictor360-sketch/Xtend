@@ -248,10 +248,25 @@ export default async function AdminGuidePage() {
 
         <GuideSection topic={T.movement} intro="Where people are during their shift.">
           <p>
-            <Ui>Movement</Ui> shows everyone on shift on a map, and any one person&apos;s day as a
-            route: clock-in, positions while on shift, store check-ins and clock-out.{' '}
+            <Ui>Movement</Ui> shows everyone on shift on a map, with how many are in a store, away
+            from it, or not heard from. Pick a person and up to 7 days (or tap <Ui>Yesterday</Ui>,{' '}
+            <Ui>Last 3 days</Ui>, <Ui>Last 7 days</Ui>) to see their journey: the stops they made (at
+            their store or somewhere else, by name), the travel between them, and the times nothing
+            was heard. A strip per day shows it at a glance, with totals for time at stores, elsewhere,
+            travelling and silent. <Ui>Worth a look</Ui> points out impossible jumps (faster than
+            150 km/h, which a fake-location app makes), long silences (with a link to check an excuse
+            for them) and long stays away. The journey downloads as Excel, PDF, Word or CSV.{' '}
             <Ui>Store visits</Ui> lists each person&apos;s rounds: which stores, for how long, and
             downloads as PDF, Word or Excel.
+          </p>
+          <p>
+            <Ui>Audit log</Ui> (admins) lists every change an admin or supervisor makes: who, what,
+            when, where they were (from the browser when allowed, otherwise roughly from the IP
+            address, named after the store or place it falls in) and on what device (phone or
+            computer, system, browser, the Xtend app or the web), with the IP address. Actions from a
+            VPN, a new device or a new location are marked. Filter by person, kind of action, dates
+            or a search; tick <Ui>Only VPN, new device or new location</Ui> to see just those; open a
+            row for the full detail; download it as Excel, PDF, Word or CSV.
           </p>
         </GuideSection>
 
@@ -267,9 +282,13 @@ export default async function AdminGuidePage() {
               what you found.
             </li>
             <li>
-              <Ui>Check an excuse</Ui>: someone says their network was bad or their phone was off?
-              Pick who, when and what they said, and Xtend shows what it heard from their phone in
-              that time.
+              <Ui>Check an excuse</Ui>: someone says their network was bad, their phone was off, their
+              location would not work, they were at the store all along, or the app would not let them
+              clock in? Pick who, what they said and when (or tap a quick window such as{' '}
+              <Ui>Yesterday&apos;s shift</Ui>; up to 3 days). Xtend says whether it holds up, and shows a
+              timeline of what their phone did: when it had network, what it kept offline, where it was
+              against their store, what went wrong, and the battery. Click <Ui>Keep on record</Ui> with a
+              note to build up their history; the page warns when several excuses have not held up.
             </li>
           </ul>
         </GuideSection>
@@ -311,6 +330,16 @@ export default async function AdminGuidePage() {
             <Ui>Ask Xtend</Ui> answers plain questions such as “who clocked in late today?” or
             “who has not clocked out?”. <Ui>Analytics</Ui> shows lateness and attendance over a
             period, measured against each store&apos;s shift start.
+          </p>
+          <p>
+            Ask it to do something and it prepares it for you: “remind everyone who has not clocked in
+            to clock in now”, “ask all merchandisers for a stock count by Friday”, “check Ada&apos;s
+            phone”, “mark those flags reviewed”, “set Ikeja Mall&apos;s target to 500 units for
+            October”, “deactivate Bala”, or “show me Ada&apos;s movement yesterday”. A card says
+            exactly what will happen, to whom, and any catch (such as people with notifications off).
+            Nothing is done until you press its button, and it goes through the same checks as the
+            button on the page, so a supervisor can only act on their own team. It is recorded in the
+            audit log like any other change.
           </p>
         </GuideSection>
 

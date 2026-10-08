@@ -2,6 +2,7 @@ import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { assistantConfigured } from '@/lib/assistant'
 import { AdminFrame } from '@/components/admin/admin-frame'
+import { AdminLocation } from '@/components/admin/admin-location'
 
 export const dynamic = 'force-dynamic'
 
@@ -34,6 +35,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       openAlerts={openAlerts}
       assistant={assistantConfigured()}
     >
+      <AdminLocation />
       {children}
     </AdminFrame>
   )

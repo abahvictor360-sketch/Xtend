@@ -16,13 +16,17 @@ import {
 } from '@/lib/assistant-data'
 import { AllocationContext } from '@/lib/assistant-allocate'
 import type { ChangePlan } from '@/lib/assistant-plan'
+import { ActionBuilder } from '@/lib/assistant-actions'
+import { PAGES, type PageLink, type ProposedAction } from '@/lib/assistant-action-types'
 import { buildReportSheet } from '@/lib/assistant-report'
 import { REPORT_KINDS, reportSpecSchema, type ReportSpec } from '@/lib/assistant-report-spec'
 
 /**
  * "Ask Xtend": an admin or supervisor types a question ("who hasn't clocked
  * in?", "give me this week's attendance report") and Claude answers it by
- * calling the read-only tools below.
+ * calling the read-only tools below. Asked to do something (send a
+ * notification, ask for a stock count, check a phone…), it proposes the
+ * action as a card; only the person's Apply button carries it out.
  *
  * Every tool queries through the caller's own Supabase client, so RLS decides
  * what the model can see: a supervisor's assistant only ever knows about that
@@ -43,6 +47,10 @@ export interface AssistantReply {
   reports: ReportSpec[]
   /** Changes proposed this turn; the chat shows each with an Apply button. */
   plans: ChangePlan[]
+  /** Dashboard actions proposed this turn, each with its own Apply button. */
+  actions: ProposedAction[]
+  /** Pages to open, as buttons. */
+  links: PageLink[]
 }
 
 export interface Asker {
@@ -54,7 +62,7 @@ export function assistantConfigured() {
   return Boolean(process.env.ANTHROPIC_API_KEY)
 }
 
-const SYSTEM = `You are Xtend's assistant for Xpel Beauty. Office staff (admins and supervisors) ask you about field staff: who clocked in, who clocked out, who has not clocked in or out, who was late, who clocked in away from their store, a person's history, the daily reports marketers file, store visits, and stock counts (merchandisers count the products physically in their store and report, product by product, how many are left and how many were sold since their previous count; product names are as they typed them). Stock counts are taken when a supervisor or admin asks for one, and by everyone in the last three days of each month. You also produce downloadable reports, and you prepare store allocations and team changes for the user to approve.
+const SYSTEM = `You are Xtend's assistant for Xpel Beauty. Office staff (admins and supervisors) ask you about field staff: who clocked in, who clocked out, who has not clocked in or out, who was late, who clocked in away from their store, a person's history, the daily reports marketers file, store visits, and stock counts (merchandisers count the products physically in their store and report, product by product, how many are left and how many were sold since their previous count; product names are as they typed them). Stock counts are taken when a supervisor or admin asks for one, and by everyone in the last three days of each month. You also produce downloadable reports, prepare store allocations and team changes for the user to approve, and carry out dashboard actions (notifications, stock count requests, phone checks, reviews, targets) once the user approves them.
 
 Answer only from what the tools return. Never guess a time, a name or a count; if the tools return nothing, say so. Call a tool for every question about the data, even one you think you answered earlier, because the data changes through the day.
 
@@ -82,6 +90,18 @@ Allocations and teams: the user may paste a list or attach a file (CSV, Excel, P
 Only admins can change who somebody reports to; for a supervisor, say so and prepare only store allocations. If the user just asks for an allocation in words ("give Ada Ikeja Mall"), follow the same steps.
 
 Excuses: when someone says a person blames their network or their phone ("she said her network was bad", "he says his phone died"), call check_excuse with the claim and the time window, then give the headline first and the two or three strongest pieces of evidence, in plain words. Say "Xtend heard from the phone at…" rather than technical terms. Never tell the user this evidence is shown to staff: it is not.
+
+Doing things on the dashboard: when the user asks you to do something rather than tell them something, propose it with the matching tool. The user sees a card saying exactly what will happen and presses Apply; never say it is done. You can:
+- propose_notification: send a push notification to everyone, a role, everyone at a store, or named people.
+- propose_count_request: ask people (named, all merchandisers, all marketers, or both) for a stock count by a date.
+- propose_close_count_request: close an open count request early (R… reference from count_requests).
+- propose_phone_check: check right now whether someone's phone is on and has network.
+- propose_flag_review: mark integrity flags as reviewed, with a note (F… references from integrity_flags).
+- propose_sales_target (admins): set a person's or store's X Metrics sales target for a month.
+- propose_xmetrics_store (admins): add a store to X Metrics or take it out.
+- propose_deactivate: stop someone signing in (their records are kept).
+- open_page: give the user a button to a dashboard page, filtered to the person and dates (for "show me", "take me to", "open"). Opening a page changes nothing, so no Apply is needed.
+People and stores always come from match_names first (P… and S… references); never guess one. If a name is ambiguous, ask which one. If the request is unclear (no date, no message), ask rather than invent it; for a notification, you may write the title and message yourself from what the user said, keeping their meaning. Propose each action once. After proposing, reply in one or two sentences: what the card will do and that nothing happens until they press its button. Only admins can do the admin-marked ones; say so to a supervisor. Things you cannot do (delete records, change passwords, change roles, edit stores): say so and give an open_page button to where they can.
 
 Resolve relative dates ("today", "yesterday", "last Monday", "this week", "last month") against today's date, given below, and pass them as YYYY-MM-DD. A week runs Monday to Sunday.
 
@@ -304,6 +324,141 @@ const tools: Anthropic.Beta.BetaTool[] = [
       additionalProperties: false,
     },
   },
+  {
+    name: 'propose_notification',
+    description:
+      'Proposes a push notification. audience: "everyone", "role" (set role), "store" (set store to an S… reference) or "people" (set people to P… references). Shows the user the message and how many it reaches, with a Send button.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'At most 80 characters.' },
+        message: { type: 'string', description: 'At most 400 characters.' },
+        audience: { type: 'string', enum: ['everyone', 'role', 'store', 'people'] },
+        role: {
+          type: ['string', 'null'],
+          description: 'For audience "role": merchandiser, marketer, supervisor or admin. Otherwise null.',
+        },
+        store: { type: ['string', 'null'], description: 'An S… reference, for audience "store".' },
+        people: { ...nameList, description: 'P… references, for audience "people". Otherwise empty.' },
+        open_page: {
+          type: ['string', 'null'],
+          description: 'An Xtend path the notification opens, e.g. "/field/count". Null for none.',
+        },
+      },
+      required: ['title', 'message', 'audience', 'role', 'store', 'people', 'open_page'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_count_request',
+    description:
+      'Proposes asking people for a stock count by a date. group: "people" (set people), "all_merchandisers", "all_marketers" or "all_field_staff". Shows who and when, with a Request button; they are told on their phones.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        group: { type: 'string', enum: ['people', 'all_merchandisers', 'all_marketers', 'all_field_staff'] },
+        people: { ...nameList, description: 'P… references, for group "people". Otherwise empty.' },
+        due_date: { type: ['string', 'null'], description: 'YYYY-MM-DD. Null for tomorrow.' },
+        note: { type: 'string', description: 'A short note for them, or empty.' },
+      },
+      required: ['group', 'people', 'due_date', 'note'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_close_count_request',
+    description: 'Proposes closing an open stock count request early. Use an R… reference from count_requests.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: { request: { type: 'string' } },
+      required: ['request'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_phone_check',
+    description: "Proposes checking right now whether a person's phone is on and has network (a silent push the phone answers).",
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: { person: { type: 'string', description: 'A P… reference.' } },
+      required: ['person'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_flag_review',
+    description: 'Proposes marking integrity flags as reviewed, with a note. Use F… references from integrity_flags.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        flags: { ...nameList, description: 'F… references.' },
+        note: { type: 'string', description: 'What was found or decided; may be empty.' },
+      },
+      required: ['flags', 'note'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_sales_target',
+    description: "Admins only. Proposes a month's X Metrics sales target in units, for one person (P…) or one store (S…).",
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        month: { type: 'string', description: 'YYYY-MM.' },
+        person: { type: ['string', 'null'] },
+        store: { type: ['string', 'null'] },
+        units: { type: 'integer' },
+      },
+      required: ['month', 'person', 'store', 'units'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_xmetrics_store',
+    description: 'Admins only. Proposes adding a store (S…) to X Metrics scoring (enrol true) or taking it out (enrol false).',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: { store: { type: 'string' }, enrol: { type: 'boolean' } },
+      required: ['store', 'enrol'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_deactivate',
+    description: 'Proposes deactivating a person (P…): they can no longer sign in; their records are kept.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: { person: { type: 'string' } },
+      required: ['person'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'open_page',
+    description:
+      'Gives the user a button to a dashboard page. person (P…) and from/to filter movement, excuse, attendance and visits; from/to filter the audit log. Changes nothing.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        page: { type: 'string', enum: Object.keys(PAGES) },
+        person: { type: ['string', 'null'] },
+        from: { type: ['string', 'null'], description: 'YYYY-MM-DD or null.' },
+        to: { type: ['string', 'null'], description: 'YYYY-MM-DD or null.' },
+        label: { type: 'string', description: 'The button text, e.g. "Ada\'s movement yesterday".' },
+      },
+      required: ['page', 'person', 'from', 'to', 'label'],
+      additionalProperties: false,
+    },
+  },
 ]
 
 type Input = Record<string, unknown>
@@ -311,8 +466,22 @@ type Input = Record<string, unknown>
 interface Turn {
   supabase: SupabaseClient
   allocation: AllocationContext
+  actions: ActionBuilder
   reports: ReportSpec[]
   plans: ChangePlan[]
+  proposed: ProposedAction[]
+  links: PageLink[]
+}
+
+const PROPOSE: Record<string, keyof ActionBuilder> = {
+  propose_notification: 'notify',
+  propose_count_request: 'countRequest',
+  propose_close_count_request: 'closeCountRequest',
+  propose_phone_check: 'phoneCheck',
+  propose_flag_review: 'reviewFlags',
+  propose_sales_target: 'salesTarget',
+  propose_xmetrics_store: 'xmStore',
+  propose_deactivate: 'deactivate',
 }
 
 async function runTool(
@@ -342,12 +511,23 @@ async function runTool(
       case 'store_counts':
         result = await storeCounts(supabase, input.from, input.to)
         break
-      case 'integrity_flags':
-        result = await integrityFlags(supabase, input.from, input.to)
+      case 'integrity_flags': {
+        // Ids become F… references, for propose_flag_review.
+        const got = await integrityFlags(supabase, input.from, input.to)
+        result = { ...got, flags: got.flags.map(({ id, ...f }) => ({ ref: turn.allocation.refFor('flag', id), ...f })) }
         break
-      case 'count_requests':
-        result = await countRequests(supabase)
+      }
+      case 'count_requests': {
+        const got = await countRequests(supabase)
+        result = { ...got, requests: got.requests.map(({ id, ...r }) => ({ ref: turn.allocation.refFor('request', id), ...r })) }
         break
+      }
+      case 'open_page': {
+        const link = await turn.actions.link(input)
+        turn.links.push(link)
+        result = { shown_to_user_as: 'a button', ...link }
+        break
+      }
       case 'check_excuse':
         result = await checkExcuse(supabase, input.name, input.date, input.from, input.to, input.claim)
         break
@@ -383,8 +563,17 @@ async function runTool(
         result = { created: true, rows: sheet.rows.length, shown_to_user_as: 'download buttons' }
         break
       }
-      default:
-        throw new Error(`Unknown tool ${block.name}`)
+      default: {
+        const method = PROPOSE[block.name]
+        if (!method) throw new Error(`Unknown tool ${block.name}`)
+        const action = await (turn.actions[method] as (i: Input) => Promise<ProposedAction>).call(turn.actions, input)
+        turn.proposed.push(action)
+        result = {
+          shown_to_user: true,
+          card: { title: action.title, lines: action.lines, warning: action.warning },
+          note: `Nothing happens until the user presses "${action.verb}".`,
+        }
+      }
     }
     return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) }
   } catch (error) {
@@ -406,13 +595,17 @@ export async function askAssistant(
 ): Promise<AssistantReply> {
   const client = new Anthropic()
   const today = lagosDateString()
+  const allocation = new AllocationContext(supabase, asker.role === 'admin')
   const turn: Turn = {
     supabase,
-    allocation: new AllocationContext(supabase, asker.role === 'admin'),
+    allocation,
+    actions: new ActionBuilder(supabase, allocation, asker.role === 'admin'),
     reports: [],
     plans: [],
+    proposed: [],
+    links: [],
   }
-  const { reports, plans } = turn
+  const { reports, plans, proposed: actions, links } = turn
 
   const messages: Anthropic.Beta.BetaMessageParam[] = history.map((t, i) =>
     // A file rides with the question it was attached to, the last one.
@@ -444,6 +637,8 @@ export async function askAssistant(
         answer: "I can't help with that one. Try asking about who clocked in or out.",
         reports,
         plans,
+        actions,
+        links,
       }
     }
 
@@ -459,13 +654,15 @@ export async function askAssistant(
       return {
         answer:
           text ||
-          (plans.length
-            ? 'Review the changes below and press Apply to make them.'
+          (plans.length || actions.length
+            ? 'Check the card below and press its button to go ahead.'
             : reports.length
               ? 'Your report is ready.'
               : "I couldn't find an answer to that."),
         reports,
         plans,
+        actions,
+        links,
       }
     }
 
@@ -480,5 +677,7 @@ export async function askAssistant(
       : 'That took too many lookups. Try a narrower question, such as one day or one person.',
     reports,
     plans,
+    actions,
+    links,
   }
 }

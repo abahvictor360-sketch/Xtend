@@ -64,6 +64,8 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0044_xm_scoring_policy.sql  # X Metrics scoring policy, versioned; staff see their own score
    supabase/migrations/0045_mandatory_place_naming.sql  # an unknown place must be added (sign photo + selfie with product) before other work
    supabase/migrations/0047_supply_imports_cartons.sql  # supplies in cartons, and supplies imported from CSV, Excel, PDF or Word
+   supabase/migrations/0048_excuse_check_advanced.sql  # check an excuse: GPS, at-store and app excuses, 3-day windows, checks kept on record
+   supabase/migrations/0049_audit_context.sql          # audit log: location, device, IP and VPN for every action; supervisors' actions recorded
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
