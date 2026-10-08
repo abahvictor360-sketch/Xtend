@@ -11,11 +11,10 @@ import { CameraCapture } from '@/components/field/camera-capture'
 import { SectionHeader } from '@/components/field/screen'
 import { TaskRow } from '@/components/field/task-row'
 import { deviceInfo } from '@/lib/device'
-import { GeoBlocked, haversineMetres, requireFix, type Fix } from '@/lib/geo'
+import { GeoBlocked, haversineMetres, positionCheck, requireFix, type Fix, type SampledFix } from '@/lib/geo'
 import { processSelfie } from '@/lib/image'
 import { supabase } from '@/lib/supabase/client'
 import { checkPhoto } from '@/lib/offline/sync'
-import { NamePlace } from '@/components/field/name-place'
 import { formatLagos, metres } from '@/lib/utils'
 
 export interface VisitOutlet {
@@ -91,8 +90,6 @@ export function StoreVisits({
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
-  // A spot no store, learned place or map could name: ask them to name it.
-  const [unnamed, setUnnamed] = useState<{ lat: number; lng: number } | null>(null)
 
   // Nearest store first: the one they are standing in should be the easy tap.
   const sorted = useMemo(() => {
@@ -146,7 +143,7 @@ export function StoreVisits({
   }, [])
 
   const checkIn = useCallback(
-    async (photo: Blob) => {
+    async (photo: Blob, at: SampledFix | null = null) => {
       const started = pending
       setPending(null)
       if (!started) return
@@ -208,7 +205,8 @@ export function StoreVisits({
             place_name: place.name,
             selfie_path,
             thumb_path,
-            device_info: { ...deviceInfo(), selfie_source: 'in_app_camera' },
+            // Where the phone was first, and at the shutter (045).
+            device_info: { ...deviceInfo(), selfie_source: 'in_app_camera', position: positionCheck(fix, at) },
             client_captured_at: fix.captured_at,
           }),
         })
@@ -228,7 +226,6 @@ export function StoreVisits({
               ? `Checked in, but you are ${metres(distance)} from ${nearest}.`
               : `Checked in at ${label}.`,
         )
-        setUnnamed(place.name || data.visit?.outlet_name ? null : { lat: fix.lat, lng: fix.lng })
         router.refresh()
       } catch (err) {
         if (err instanceof GeoBlocked) setError(err.message)
@@ -294,7 +291,6 @@ export function StoreVisits({
 
       {error && <Alert variant="destructive">{error}</Alert>}
       {notice && <Alert variant="success">{notice}</Alert>}
-      {unnamed && <NamePlace lat={unnamed.lat} lng={unnamed.lng} />}
 
       {open ? (
         <Card className="border border-brand/30">
@@ -399,8 +395,9 @@ export function StoreVisits({
               : 'Check in'
         }
         subtitle={pending?.place.name ?? pending?.place.address ?? null}
-        onCapture={(photo) => void checkIn(photo)}
+        onCapture={(photo, at) => void checkIn(photo, at)}
         onClose={() => setPending(null)}
+        locate
       />
 
       {done.map((visit) => (

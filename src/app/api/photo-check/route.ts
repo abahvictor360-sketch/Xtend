@@ -12,8 +12,11 @@ const schema = z.object({
   path: z.string().min(1).max(300),
   /** The selfie's thumbnail, which takes the same verdict. */
   thumb_path: z.string().min(1).max(300).nullable().optional(),
-  /** A photo in the reports bucket is a shelf photo unless it names a place. */
-  kind: z.enum(['shelf', 'storefront']).optional(),
+  /**
+   * A photo in the reports bucket is a shelf photo unless it names a place:
+   * the store sign from outside, or a selfie holding a product (045).
+   */
+  kind: z.enum(['shelf', 'storefront', 'product_selfie']).optional(),
 })
 
 /**
@@ -129,6 +132,7 @@ const NOUN: Record<PhotoKind, string> = {
   selfie: 'selfie',
   shelf: 'shelf photo',
   storefront: 'photo of a place being named',
+  product_selfie: 'selfie with a product',
 }
 
 function describe(problem: string | null) {
@@ -145,6 +149,8 @@ function describe(problem: string | null) {
       return 'no products in the shelf photo'
     case 'not_a_business':
       return 'it shows a home, not a business'
+    case 'no_product':
+      return 'no product is being held'
     case 'blurry':
       return 'too blurry'
     case 'too_dark':

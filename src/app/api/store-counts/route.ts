@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
+import { apiError, requireApiSession, dbErrorMessage, dbErrorResponse } from '@/lib/auth'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
 import { thingName } from '@/lib/fields'
 
@@ -62,7 +62,7 @@ export async function POST(request: Request) {
       p_accuracy_m: parsed.data.accuracy_m,
       p_photo_path: parsed.data.photo_path,
     })
-    if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
+    if (error) return dbErrorResponse(error)
 
     // Any flag this raised goes to the person's admins and supervisor now.
     await flushFlagAlerts()

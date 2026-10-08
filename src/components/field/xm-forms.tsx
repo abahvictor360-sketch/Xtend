@@ -15,7 +15,9 @@ import { GeoBlocked, requireFix, type Fix } from '@/lib/geo'
 import { processReportPhoto } from '@/lib/image'
 import { PermanentJobError, submitOrQueue } from '@/lib/offline/sync'
 import { cn, longDate } from '@/lib/utils'
-import type { XmProduct } from '@/lib/metrics/shared'
+import type { XmGrade, XmProduct, XmSettings } from '@/lib/metrics/shared'
+import type { XmPolicy } from '@/components/metrics/policy'
+import { XmMyScore } from '@/components/field/xm-score'
 
 export interface XmBatch {
   outlet_id: string
@@ -72,14 +74,22 @@ export function XmFieldForms({
   businessDate,
   salesPhotoRequired,
   recent,
+  grade,
+  settings,
+  policy,
+  policyRead,
 }: {
-  initialTab: 'count' | 'sales'
+  initialTab: 'count' | 'sales' | 'score'
   stores: Store[]
   products: XmProduct[]
   batches: XmBatch[]
   businessDate: string
   salesPhotoRequired: boolean
   recent: XmRecent[]
+  grade: XmGrade | null
+  settings: XmSettings | null
+  policy: XmPolicy | null
+  policyRead: boolean
 }) {
   const router = useRouter()
   const [tab, setTab] = useState(initialTab)
@@ -94,9 +104,23 @@ export function XmFieldForms({
         <Chip active={tab === 'sales'} onClick={() => setTab('sales')}>
           Daily sales
         </Chip>
+        <Chip active={tab === 'score'} onClick={() => setTab('score')}>
+          My score{policy && !policyRead ? ' •' : ''}
+        </Chip>
       </div>
 
-      {products.length === 0 ? (
+      {policy && !policyRead && tab !== 'score' && (
+        <Alert variant="info">
+          The scoring policy has been updated.{' '}
+          <button type="button" className="font-semibold underline" onClick={() => setTab('score')}>
+            Read it
+          </button>
+        </Alert>
+      )}
+
+      {tab === 'score' ? (
+        <XmMyScore grade={grade} settings={settings} policy={policy} read={policyRead} />
+      ) : products.length === 0 ? (
         <Alert variant="info">There are no products in X Metrics yet. The office adds them.</Alert>
       ) : tab === 'count' ? (
         <CountForm stores={stores} products={products} batches={batches} />
@@ -271,7 +295,9 @@ function CountForm({ stores, products, batches }: { stores: Store[]; products: X
         })),
       })
       s.setNotice(
-        result.queued
+        result.queued && 'waitingForPlace' in result && result.waitingForPlace
+          ? `The count for ${store.name} is saved on this phone. It is sent as soon as you add the place above.`
+          : result.queued
           ? `No signal: the count for ${store.name} is saved on this phone and will be sent when you are back online (within 3 days).`
           : `Count for ${store.name} sent: ${counted.length} line${counted.length === 1 ? '' : 's'}.`,
       )
@@ -500,7 +526,9 @@ function SalesForm({
         lines: entered.map(([product_id, v]) => ({ product_id, units: Number(v.trim()) })),
       })
       s.setNotice(
-        result.queued
+        result.queued && 'waitingForPlace' in result && result.waitingForPlace
+          ? `The sales for ${longDate(date)} are saved on this phone. They are sent as soon as you add the place above.`
+          : result.queued
           ? `No signal: the sales for ${longDate(date)} are saved on this phone and will be sent when you are back online.`
           : `Sales for ${longDate(date)} sent. Sending this day again replaces them.`,
       )

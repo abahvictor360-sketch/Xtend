@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession, REPORTING_ROLES, dbErrorMessage } from '@/lib/auth'
+import { apiError, requireApiSession, REPORTING_ROLES, dbErrorMessage, dbErrorResponse } from '@/lib/auth'
 import { notifyWatchers } from '@/lib/notify'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
 import { mapText } from '@/lib/fields'
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
           { status: 400 },
         )
       }
-      return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
+      return dbErrorResponse(error)
     }
 
     // The store is whatever the row ended up with: a known outlet if they

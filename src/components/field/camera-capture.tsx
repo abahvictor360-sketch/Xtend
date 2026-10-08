@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Camera, MapPin, RefreshCw, SwitchCamera, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { assessFrame } from '@/lib/photo-quality'
+import { followPosition, type SampledFix } from '@/lib/geo'
 
 type Facing = 'user' | 'environment'
 
@@ -18,6 +19,7 @@ export function CameraCapture({
   subtitle,
   onCapture,
   onClose,
+  locate = false,
   facing: startFacing = 'user',
 }: {
   open: boolean
@@ -26,7 +28,13 @@ export function CameraCapture({
   title: string
   /** Where the location was read as, shown so it can be checked before the shot. */
   subtitle?: string | null
-  onCapture: (photo: Blob) => void
+  /**
+   * The second argument is where the photo was taken, read from the GPS at
+   * the shutter when `locate` is set: null if no reading came in time.
+   */
+  onCapture: (photo: Blob, at: SampledFix | null) => void
+  /** Follow the GPS while the camera is open, and stamp the photo with it. */
+  locate?: boolean
   onClose: () => void
 }) {
   const video = useRef<HTMLVideoElement | null>(null)
@@ -86,6 +94,17 @@ export function CameraCapture({
     return stop
   }, [open, start, stop])
 
+  // The GPS runs while the camera is open, so the shot knows where it was.
+  const position = useRef<ReturnType<typeof followPosition> | null>(null)
+  useEffect(() => {
+    if (!open || !locate) return
+    position.current = followPosition()
+    return () => {
+      position.current?.stop()
+      position.current = null
+    }
+  }, [open, locate])
+
   // Freeze the current frame and hand it back as a JPEG.
   const shoot = useCallback(() => {
     const el = video.current
@@ -113,15 +132,22 @@ export function CameraCapture({
       }
       setHint(null)
 
+      // Where the shutter was pressed: read now, before anyone can walk off.
+      const where = locate && position.current ? position.current.atShutter() : Promise.resolve(null)
       canvas.toBlob(
         (blob) => {
-          setBusy(false)
           if (!blob) {
+            setBusy(false)
             setError('That frame could not be saved. Try again.')
             return
           }
-          stop()
-          onCapture(blob)
+          void where
+            .catch(() => null)
+            .then((at) => {
+              setBusy(false)
+              stop()
+              onCapture(blob, at)
+            })
         },
         'image/jpeg',
         0.92,
@@ -130,7 +156,7 @@ export function CameraCapture({
       setBusy(false)
       setError('That frame could not be saved. Try again.')
     }
-  }, [onCapture, ready, stop])
+  }, [locate, onCapture, ready, stop])
 
   if (!open) return null
 

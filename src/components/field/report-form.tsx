@@ -169,7 +169,9 @@ export function ReportForm({
       })
 
       setNotice(
-        result.queued
+        result.queued && 'waitingForPlace' in result && result.waitingForPlace
+          ? 'Your report is saved on this phone. It is sent as soon as you add the place at the top of the screen.'
+          : result.queued
           ? 'No data right now. Your report is saved on this phone and will send itself when you get signal.'
           : 'Report saved. You can keep editing it until midnight.',
       )

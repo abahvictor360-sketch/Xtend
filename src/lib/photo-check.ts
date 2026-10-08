@@ -9,7 +9,7 @@ import Anthropic from '@anthropic-ai/sdk'
  * is worse than letting a doubtful one through to the integrity flags.
  */
 
-export type PhotoKind = 'selfie' | 'shelf' | 'storefront'
+export type PhotoKind = 'selfie' | 'shelf' | 'storefront' | 'product_selfie'
 
 /** Where the photo was taken, as far as the background shows. */
 export type PhotoSetting = 'shop' | 'market' | 'street' | 'office' | 'home' | 'unclear'
@@ -24,6 +24,7 @@ export interface PhotoVerdict {
     | 'face_unclear'
     | 'not_a_shelf'
     | 'not_a_business'
+    | 'no_product'
     | 'blurry'
     | 'too_dark'
     | 'other'
@@ -48,6 +49,7 @@ const SCHEMA = {
         'face_unclear',
         'not_a_shelf',
         'not_a_business',
+        'no_product',
         'blurry',
         'too_dark',
         'other',
@@ -81,12 +83,18 @@ This should be a photo of a store shelf, display or stock room showing products,
 
 This should be a photo of the front, sign or entrance of a business, taken to name the place where the worker is standing: a shop, pharmacy, supermarket, mall, plaza, market, salon, kiosk or similar, inside or outside. The worker will name the place from it, and the office relies on it being a real business and not somebody's house.
 Reject as "not_a_business" when it plainly shows a home and no business: a house front, gate or compound with nothing for sale and no sign, a bedroom, sitting room or kitchen, or a residential estate street. Also reject as "not_a_business" a photo with no place in it at all (a face, the sky, the floor, a blank photo). A small kiosk, a stall, or a shop built into the front of a house is a business: pass it.`,
+  product_selfie: `${COMMON}
+
+This should be a selfie taken live outside a shop or plaza the worker is naming: the worker's own face, clearly visible, holding one of the brand's products (a skincare, body or hair care product: a jar, tub, tube, bottle or pack) up to the camera. It proves they were there in person with the product.
+Reject as "no_face" if there is no human face, and as "face_unclear" if the face is covered, turned away, cut off or too small to recognise.
+Reject as "no_product" if no product is being held or shown at all. Do not reject because the brand name cannot be read, or because it may be another brand's product: the label is often turned away or too small.`,
 }
 
 const ASK: Record<PhotoKind, string> = {
   selfie: 'Check this clock-in selfie.',
   shelf: 'Check this shelf photo.',
   storefront: 'Check this photo of the place being named.',
+  product_selfie: 'Check this selfie with a product.',
 }
 
 export function photoCheckConfigured() {

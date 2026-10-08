@@ -34,6 +34,9 @@ function uuid() {
 
 export class PermanentJobError extends Error {}
 
+/** A place is waiting to be named (045): keep the job, send it after. */
+export class NamePlaceFirstError extends Error {}
+
 /**
  * Asks the server to check a photo just uploaded: a live selfie, or a real
  * shelf, not a picture of a screen. A rejection is final for that photo
@@ -44,7 +47,7 @@ export async function checkPhoto(
   bucket: 'selfies' | 'reports',
   path: string,
   thumbPath?: string | null,
-  kind?: 'shelf' | 'storefront',
+  kind?: 'shelf' | 'storefront' | 'product_selfie',
 ) {
   const res = await fetch('/api/photo-check', {
     method: 'POST',
@@ -96,6 +99,9 @@ async function postJson(url: string, body: unknown) {
       }
       throw new Error(data.error ?? 'Log in again')
     }
+    // 423: a place is waiting to be named (045). The payload is fine; keep
+    // it and send it once the place is named.
+    if (res.status === 423) throw new NamePlaceFirstError(data.error ?? 'Add the place first')
     // 4xx means the server will never accept this payload. Do not retry it.
     if (res.status >= 400 && res.status < 500) {
       throw new PermanentJobError(data.error ?? `Rejected (${res.status})`)
@@ -336,6 +342,6 @@ export async function submitOrQueue(job: Parameters<typeof enqueue>[0]) {
   } catch (error) {
     if (error instanceof PermanentJobError) throw error
     await enqueue(job)
-    return { queued: true as const }
+    return { queued: true as const, waitingForPlace: error instanceof NamePlaceFirstError }
   }
 }

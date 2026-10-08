@@ -4,7 +4,6 @@ import { useCallback, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, Camera, CheckCircle2, CloudUpload, LogIn, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { NamePlace } from '@/components/field/name-place'
 import { NotificationGate } from '@/components/field/notification-gate'
 import { usePush } from '@/components/field/use-push'
 import { CameraCapture } from '@/components/field/camera-capture'
@@ -12,7 +11,7 @@ import { Alert } from '@/components/ui/alert'
 import { processSelfie } from '@/lib/image'
 import { deviceInfo } from '@/lib/device'
 import { nativeDeviceSignals } from '@/lib/native'
-import { requireFix, GeoBlocked, haversineMetres, type Fix } from '@/lib/geo'
+import { requireFix, GeoBlocked, haversineMetres, positionCheck, type Fix, type SampledFix } from '@/lib/geo'
 import { submitOrQueue, PermanentJobError } from '@/lib/offline/sync'
 import { formatLagos, metres } from '@/lib/utils'
 import type { AttendanceType, DayState } from '@/lib/types'
@@ -64,8 +63,6 @@ export function ClockPanel({
   const [outcome, setOutcome] = useState<Outcome | null>(null)
   // Set after a clock-out: the day's login is over.
   const [endsLogin, setEndsLogin] = useState(false)
-  // A spot no store, learned place or map could name: ask them to name it.
-  const [unnamed, setUnnamed] = useState<{ lat: number; lng: number } | null>(null)
 
   const nextType: AttendanceType | null = !day.opening ? 'opening' : !day.closing ? 'closing' : null
   // Clocking in needs notifications on (migration 027); clocking out never
@@ -87,7 +84,6 @@ export function ClockPanel({
   const start = useCallback(async (type: AttendanceType) => {
     setError(null)
     setOutcome(null)
-    setUnnamed(null)
     try {
       setBusyStep('Getting your location')
       const fix = await requireFix()
@@ -105,7 +101,7 @@ export function ClockPanel({
   }, [])
 
   const onSelfie = useCallback(
-    async (photo: Blob) => {
+    async (photo: Blob, at: SampledFix | null) => {
       const started = pending
       setPending(null)
       if (!started) return
@@ -145,6 +141,9 @@ export function ClockPanel({
           device_info: {
             ...deviceInfo(),
             selfie_source: 'in_app_camera',
+            // Where the phone was first, and at the shutter: the server
+            // checks they agree before asking anyone to add a place.
+            position: positionCheck(fix, at),
             gps: {
               altitude: fix.altitude,
               altitude_accuracy: fix.altitude_accuracy,
@@ -189,7 +188,6 @@ export function ClockPanel({
           })
         } else {
           const signOut = (result.data as { sign_out?: boolean }).sign_out === true
-          if (!resolved.name) setUnnamed({ lat: fix.lat, lng: fix.lng })
           const record = (
             result.data as {
               attendance: {
@@ -275,7 +273,6 @@ export function ClockPanel({
         </Alert>
       )}
 
-      {unnamed && <NamePlace lat={unnamed.lat} lng={unnamed.lng} />}
 
       {endsLogin && (
         <Alert variant="info" className="animate-fade-up">
@@ -300,8 +297,9 @@ export function ClockPanel({
         open={pending !== null}
         title={pending?.type === 'closing' ? 'Clock out selfie' : 'Clock in selfie'}
         subtitle={pending?.place.label ?? null}
-        onCapture={(photo) => void onSelfie(photo)}
+        onCapture={(photo, at) => void onSelfie(photo, at)}
         onClose={() => setPending(null)}
+        locate
       />
 
       {needsNotifications ? (
