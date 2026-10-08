@@ -24,6 +24,7 @@ select id as bala  from auth.users where email = 'bala@xpel.ng'  \gset
 select id as boss  from auth.users where email = 'boss@xpel.ng'  \gset
 select id as grace from auth.users where email = 'grace@xpel.ng' \gset
 select id as tunde from auth.users where email = 'tunde@xpel.ng' \gset
+select id as funke from auth.users where email = 'funke.support@xpel.ng' \gset
 
 set role authenticated;
 
@@ -94,6 +95,68 @@ begin
 exception when insufficient_privilege then
   perform assert(true, 'rls: requests cannot be written directly');
 end $$;
+
+-- Support inbox, quick replies, templates, schedules and who got a
+-- notification (0053).
+select set_config('request.jwt.claim.sub', :'ada', false);
+select assert(not exists (select 1 from public.support_inbox where user_id <> :'ada'),
+  'rls: a merchandiser sees only their own support threads in the inbox');
+select assert((select count(*) from public.support_quick_replies) = 0
+                and (select count(*) from public.notification_templates) = 0
+                and (select count(*) from public.scheduled_notifications) = 0,
+  'rls: staff see no quick replies, templates or schedules');
+select assert(not exists (select 1 from public.notification_deliveries where user_id <> :'ada'),
+  'rls: staff see only their own deliveries');
+do $$
+begin
+  insert into public.support_quick_replies (title, body) values ('Mine', 'Written by staff');
+  perform assert(false, 'rls: staff cannot add a quick reply');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: staff cannot add a quick reply');
+end $$;
+
+select set_config('request.jwt.claim.sub', :'tunde', false);
+select assert(exists (select 1 from public.support_inbox where user_id = :'funke')
+                and not exists (select 1 from public.support_inbox where user_id = :'ada'),
+  'rls: a supervisor''s inbox holds their team''s threads, not others''');
+select assert((select assigned_name from public.support_inbox where user_id = :'funke' limit 1) = 'Tunde Bello',
+  'rls: and names who has the thread');
+select assert((select count(*) from public.notification_deliveries d
+               join public.notifications n on n.id = d.notification_id
+               where n.sender_id = :'tunde') >= 1,
+  'rls: a supervisor sees who got the notifications they sent');
+select assert(not exists (select 1 from public.notification_deliveries d
+                          where d.user_id <> :'tunde' and not public.notification_sent_by_me(d.notification_id)),
+  'rls: but not who got anybody else''s');
+select assert((select count(*) from public.support_quick_replies) >= 5
+                and (select count(*) from public.notification_templates) >= 4,
+  'rls: a supervisor uses the quick replies and templates');
+select assert(not exists (select 1 from public.scheduled_notifications where created_by <> :'tunde')
+                and exists (select 1 from public.scheduled_notifications),
+  'rls: a supervisor sees only their own schedules');
+delete from public.support_quick_replies where created_by is null;
+select assert((select count(*) from public.support_quick_replies where created_by is null) >= 5,
+  'rls: a supervisor cannot delete the shared quick replies');
+insert into public.notification_templates (title, body) values ('Depot meeting', 'Meet at the depot at 4pm.');
+select assert(exists (select 1 from public.notification_templates where title = 'Depot meeting' and created_by = :'tunde'),
+  'rls: a supervisor saves their own template');
+delete from public.notification_templates where title = 'Depot meeting';
+select assert(not exists (select 1 from public.notification_templates where title = 'Depot meeting'),
+  'rls: and can delete it');
+do $$
+begin
+  insert into public.scheduled_notifications (created_by, title, body, audience, user_ids, send_at)
+  values (auth.uid(), 'Sneaky', 'To everyone at all', 'everyone', array[auth.uid()], now() + interval '1 hour');
+  perform assert(false, 'rls: schedules cannot be written directly');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: schedules cannot be written directly');
+end $$;
+
+select set_config('request.jwt.claim.sub', :'boss', false);
+select assert((select count(*) from public.support_inbox) = (select count(*) from public.support_threads),
+  'rls: an admin sees every support thread');
+select assert((select count(*) from public.notification_log) = (select count(*) from public.notifications),
+  'rls: and the whole notification history');
 
 reset role;
 select 'ALL RLS CHECKS PASSED';

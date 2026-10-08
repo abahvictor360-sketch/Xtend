@@ -43,7 +43,7 @@ export function AssistantLauncher() {
         <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
           <div>
             <p className="text-sm font-semibold">Ask Xtend</p>
-            <p className="text-xs text-muted-foreground">Who clocked in, who clocked out, who hasn&apos;t</p>
+            <p className="text-xs text-muted-foreground">Attendance, visits, stock, integrity and more</p>
           </div>
           <div className="flex items-center gap-1">
             <Link

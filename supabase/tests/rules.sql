@@ -3058,6 +3058,334 @@ begin
       perform act_as(boss);
     end;
 
+    -- Store visits and alerts, advanced (052).
+    declare
+      lekki uuid;
+      a1 uuid;
+      a2 uuid;
+      a3 uuid;
+      n integer;
+      cov record;
+    begin
+      perform act_as(boss);
+      perform assert(exists (select 1 from public.store_visit_detail
+                             where departed_at is not null and departed_lat is not null
+                               and departed_label is not null),
+        'visits: the read model shows where somebody checked out');
+      perform assert(not exists (select 1 from public.store_visit_detail
+                                 where departed_at is null and departed_label is not null),
+        'visits: a visit still open has no departure place');
+      perform act_as(grace);
+      perform assert((select count(*) from public.my_store_visits()) >= 1,
+        'visits: functions returning the visit row still work after it grew');
+      perform act_as(boss);
+
+      select * into cov from public.store_coverage where name = 'Ikeja City Mall';
+      perform assert(cov.last_visit_at = (select max(arrived_at) from public.store_visits where outlet_id = cov.outlet_id)
+                     and cov.visits_30d = (select count(*) from public.store_visits where outlet_id = cov.outlet_id
+                                             and visit_date >= public.business_date() - 29)
+                     and cov.last_visit_by is not null,
+        'coverage: a store shows its last visit, who made it and its visits this month');
+      perform assert(cov.staff_assigned >= 1, 'coverage: a store counts the staff whose store it is');
+      insert into public.outlets (name, lat, lng) values ('Lekki Phase 1 Shop', 6.4474, 3.4720) returning id into lekki;
+      select * into cov from public.store_coverage where outlet_id = lekki;
+      perform assert(cov.last_visit_at is null and cov.visits_30d = 0 and cov.staff_assigned = 0,
+        'coverage: a store nobody has visited or covers says so');
+
+      insert into public.location_alerts (user_id, alert_type, distance_m) values (ada, 'left_geofence', 420) returning id into a1;
+      insert into public.location_alerts (user_id, alert_type, distance_m) values (ada, 'off_site_clock', 900) returning id into a2;
+      insert into public.location_alerts (user_id, alert_type, is_resolved, resolved_by, resolved_at, note)
+      values (ada, 'low_accuracy', true, boss, now() - interval '1 hour', 'Earlier note') returning id into a3;
+      perform act_as(ada);
+      begin
+        perform public.resolve_alerts(array[a1, a2], 'nope');
+        perform assert(false, 'alerts: a merchandiser must not resolve alerts together');
+      exception when others then
+        perform assert(sqlerrm like '%Admins only%', 'alerts: a merchandiser cannot resolve alerts together');
+      end;
+      perform act_as(boss);
+      n := public.resolve_alerts(array[a1, a2, a3], 'Spoke to Ada about the morning');
+      perform assert(n = 2, 'alerts: resolving together counts only the ones still open');
+      perform assert((select count(*) from public.location_alerts where id in (a1, a2) and is_resolved
+                        and resolved_by = boss and note = 'Spoke to Ada about the morning') = 2,
+        'alerts: each one is resolved with the one note');
+      perform assert((select note from public.location_alerts where id = a3) = 'Earlier note',
+        'alerts: one already resolved keeps its own note');
+      perform assert((select count(*) from public.audit_log where action = 'alert.resolve'
+                        and target_id in (a1, a2) and actor_id = boss) = 2
+                     and not exists (select 1 from public.audit_log where action = 'alert.resolve' and target_id = a3
+                                       and created_at > now() - interval '1 minute'),
+        'alerts: one audit row for each alert resolved, none for the one skipped');
+      perform assert(public.resolve_alerts(array[]::uuid[], 'x') = 0, 'alerts: an empty list resolves nothing');
+    end;
+
+    -- Integrity reviewed in bulk, and Ask Xtend conversations kept (054).
+    declare
+      kayode uuid := (select id from public.profiles where email = 'kayode@xpel.ng');
+      f1 uuid;
+      f2 uuid;
+      f3 uuid;
+      n integer;
+      conv uuid;
+    begin
+      insert into public.integrity_flags (user_id, kind, severity, summary)
+      values (kayode, 'perfect_accuracy', 'medium', 'test 054 one') returning id into f1;
+      insert into public.integrity_flags (user_id, kind, severity, summary)
+      values (kayode, 'repeated_exact_location', 'high', 'test 054 two') returning id into f2;
+      insert into public.integrity_flags (user_id, kind, severity, summary)
+      values (bala, 'perfect_accuracy', 'low', 'test 054 three') returning id into f3;
+
+      perform act_as(tunde);
+      perform assert(public.supervises_user(kayode) and not public.supervises_user(bala),
+        'bulk review: the supervisor has Kayode in his team and not Bala');
+      n := public.review_integrity_flags(array[f1, f2, f3], '  Spoke to him, GPS app removed  ');
+      perform assert(n = 2
+                     and (select count(*) from public.integrity_flags
+                          where id in (f1, f2) and reviewed_by = tunde
+                            and review_note = 'Spoke to him, GPS app removed') = 2,
+        'bulk review: a supervisor marks his team''s flags reviewed with one note');
+      perform assert((select reviewed_at from public.integrity_flags where id = f3) is null,
+        'bulk review: and cannot touch a flag outside his team');
+      n := public.review_integrity_flags(array[f1], 'Changed my mind');
+      perform assert(n = 0 and (select review_note from public.integrity_flags where id = f1) = 'Spoke to him, GPS app removed',
+        'bulk review: a reviewed flag keeps its first review');
+      perform act_as(boss);
+      n := public.review_integrity_flags(array[f3], null);
+      perform assert(n = 1
+                     and (select reviewed_by from public.integrity_flags where id = f3) = boss
+                     and (select review_note from public.integrity_flags where id = f3) is null,
+        'bulk review: an admin reviews anybody''s, a blank note is kept as none');
+      begin
+        perform public.review_integrity_flags(array[]::uuid[], 'x');
+        perform assert(false, 'bulk review: an empty list is refused');
+      exception when others then
+        perform assert(sqlerrm like '%at least one%', 'bulk review: an empty list is refused');
+      end;
+      perform act_as(ada);
+      begin
+        perform public.review_integrity_flags(array[f1], 'x');
+        perform assert(false, 'bulk review: field staff cannot review flags');
+      exception when others then
+        perform assert(sqlerrm like '%Only admins and supervisors%', 'bulk review: field staff cannot review flags');
+      end;
+
+      -- Conversations, under row level security as the API role.
+      grant usage on schema public, auth to authenticated;
+      grant execute on function auth.uid() to authenticated;
+      perform act_as(boss);
+      execute 'set local role authenticated';
+      insert into public.assistant_conversations (title, turns)
+      values ('Who was late', '[{"role":"user","content":"Who was late today?"},{"role":"assistant","content":"Nobody."}]')
+      returning id into conv;
+      perform assert((select user_id from public.assistant_conversations where id = conv) = boss
+                     and (select turn_count from public.assistant_conversations where id = conv) = 2,
+        'conversations: an admin keeps a chat as their own, with its turns counted');
+      perform act_as(tunde);
+      perform assert(not exists (select 1 from public.assistant_conversations where id = conv),
+        'conversations: nobody else sees it, not even a supervisor');
+      update public.assistant_conversations set title = 'Taken over' where id = conv;
+      delete from public.assistant_conversations where id = conv;
+      perform act_as(boss);
+      perform assert((select title from public.assistant_conversations where id = conv) = 'Who was late',
+        'conversations: nor renames or deletes it');
+      update public.assistant_conversations set title = 'Late this week', user_id = tunde where id = conv;
+      perform assert((select user_id from public.assistant_conversations where id = conv) = boss
+                     and (select title from public.assistant_conversations where id = conv) = 'Late this week',
+        'conversations: the owner renames it, and it stays theirs');
+      perform act_as(ada);
+      begin
+        insert into public.assistant_conversations (title) values ('Mine');
+        perform assert(false, 'conversations: field staff cannot keep chats');
+      exception when others then
+        perform assert(sqlerrm like '%row-level security%', 'conversations: field staff cannot keep chats');
+      end;
+      perform act_as(boss);
+      delete from public.assistant_conversations where id = conv;
+      perform assert(not exists (select 1 from public.assistant_conversations where id = conv),
+        'conversations: the owner deletes it');
+      reset role;
+    end;
+    -- ---------------------------------------------------------------
+    -- Support inbox, quick replies, notification history and schedules (0053).
+    -- ---------------------------------------------------------------
+    declare
+      kemi uuid := gen_random_uuid();
+      tid  uuid;
+      sid  uuid;
+      sid2 uuid;
+      nid  uuid;
+      ids  uuid[];
+      n    integer;
+      w    timestamptz;
+    begin
+      insert into auth.users (id, email) values (kemi, 'funke.support@xpel.ng');
+      insert into public.profiles (id, full_name, email, role, outlet_id, supervisor_id)
+      values (kemi, 'Funke Alabi', 'funke.support@xpel.ng', 'merchandiser', null, tunde);
+
+      perform act_as(kemi);
+      tid := public.open_support_thread('Cannot clock in', 'The app says I am off site but I am inside the store.');
+      perform assert((select waiting_since from public.support_inbox where id = tid) is not null,
+        'support: a new thread is waiting for an answer');
+
+      -- The helper passed it to the office three hours ago.
+      update public.support_messages set created_at = now() - interval '3 hours' where thread_id = tid;
+      insert into public.support_messages (thread_id, sender_id, sender_role, body, created_at)
+      values (tid, null, 'ai', 'I have passed this to the office.', now() - interval '179 minutes');
+      update public.support_threads set status = 'escalated', escalated_at = now() - interval '179 minutes' where id = tid;
+      perform assert((select waiting_since from public.support_inbox where id = tid) = now() - interval '3 hours',
+        'support: the wait runs from the member''s message, not the helper''s reply');
+
+      perform act_as(tunde);
+      perform public.post_support_message(tid, 'Hello Kemi, we are looking into it.');
+      select i.waiting_since, i.office_replies into w, n from public.support_inbox i where i.id = tid;
+      perform assert(w is null and n = 1
+                     and (select last_sender from public.support_inbox where id = tid) = 'supervisor',
+        'support: once a person answers, nothing is waiting');
+      insert into public.support_messages (thread_id, sender_id, sender_role, body, created_at)
+      values (tid, kemi, 'staff', 'It is still not working.', now() + interval '1 second');
+      update public.support_threads set status = 'open' where id = tid;
+      perform assert((select waiting_since from public.support_inbox where id = tid) = now() + interval '1 second',
+        'support: writing again after the answer starts a new wait');
+
+      perform assert(exists (select 1 from public.support_assignees(tid) where user_id = tunde)
+                     and exists (select 1 from public.support_assignees(tid) where user_id = boss)
+                     and not exists (select 1 from public.support_assignees(tid) where user_id = kemi),
+        'support: a thread can go to the member''s supervisor or an admin, not to the member');
+      perform public.assign_support_thread(tid, tunde);
+      perform assert((select assigned_name from public.support_inbox where id = tid) = 'Tunde Bello',
+        'support: the supervisor takes the thread');
+      begin
+        perform public.assign_support_thread(tid, bala);
+        perform assert(false, 'support: a thread cannot go to someone outside the office');
+      exception when others then
+        perform assert(sqlerrm like '%cannot take%', 'support: a thread cannot go to someone outside the office');
+      end;
+
+      perform act_as(bala);
+      begin
+        perform public.assign_support_thread(tid, null);
+        perform assert(false, 'support: staff cannot hand threads around');
+      exception when others then
+        perform assert(sqlerrm like '%not yours%', 'support: staff cannot hand threads around');
+      end;
+
+      perform act_as(boss);
+      perform public.resolve_support_thread(tid);
+      perform public.reopen_support_thread(tid);
+      perform assert((select status from public.support_threads where id = tid) = 'escalated'
+                     and (select resolved_at from public.support_threads where id = tid) is null
+                     and (select waiting_since from public.support_inbox where id = tid) is not null,
+        'support: a closed thread reopened goes back to the office, waiting');
+      begin
+        perform public.reopen_support_thread(tid);
+        perform assert(false, 'support: only a closed thread is reopened');
+      exception when others then
+        perform assert(sqlerrm like '%not closed%', 'support: only a closed thread is reopened');
+      end;
+      perform public.resolve_support_thread(tid);
+      perform act_as(kemi);
+      begin
+        perform public.reopen_support_thread(tid);
+        perform assert(false, 'support: the member cannot reopen from the office side');
+      exception when others then
+        perform assert(sqlerrm like '%not yours%', 'support: the member cannot reopen from the office side');
+      end;
+
+      perform assert((select count(*) from public.support_quick_replies where created_by is null) >= 5
+                     and (select count(*) from public.notification_templates where created_by is null) >= 4,
+        'support: starter quick replies and notification templates are there');
+
+      -- Scheduling: the audience is fixed with the sender's own reach.
+      perform act_as(tunde);
+      sid := public.schedule_notification('Team meeting', 'Meet at the depot at 4pm today.', '/field',
+                                          'everyone', '{}'::jsonb, now() + interval '1 hour');
+      select user_ids into ids from public.scheduled_notifications where id = sid;
+      perform assert(kemi = any (ids) and not boss = any (ids) and not tunde = any (ids)
+                     and not exists (select 1 from unnest(ids) u
+                                     where not exists (select 1 from public.alert_watchers(u) aw where aw.user_id = tunde)),
+        'notifications: a supervisor''s schedule reaches their own team only');
+      begin
+        perform public.schedule_notification('Late', 'Too late now.', null, 'everyone', '{}'::jsonb, now() - interval '1 hour');
+        perform assert(false, 'notifications: cannot schedule in the past');
+      exception when others then
+        perform assert(sqlerrm like '%few minutes from now%', 'notifications: cannot schedule in the past');
+      end;
+      perform act_as(kemi);
+      begin
+        perform public.schedule_notification('Hi', 'Hello all of you.', null, 'everyone', '{}'::jsonb, now() + interval '1 hour');
+        perform assert(false, 'notifications: staff cannot schedule');
+      exception when others then
+        perform assert(sqlerrm like '%Admins and supervisors only%', 'notifications: staff cannot schedule');
+      end;
+      perform act_as(bala);
+      begin
+        perform public.cancel_scheduled_notification(sid);
+        perform assert(false, 'notifications: only the sender or an admin cancels');
+      exception when others then
+        perform assert(sqlerrm like '%not yours%', 'notifications: only the sender or an admin cancels');
+      end;
+      perform act_as(tunde);
+      perform public.cancel_scheduled_notification(sid);
+      perform assert((select status from public.scheduled_notifications where id = sid) = 'cancelled',
+        'notifications: the sender cancels their schedule');
+      begin
+        perform public.cancel_scheduled_notification(sid);
+        perform assert(false, 'notifications: a cancelled one cannot be cancelled again');
+      exception when others then
+        perform assert(sqlerrm like '%already gone%', 'notifications: a cancelled one cannot be cancelled again');
+      end;
+
+      perform act_as(boss);
+      sid2 := public.schedule_notification('Clock in on time', 'Please clock in by 8:00 today.', null,
+                                           'role', '{"role":"merchandiser"}'::jsonb, now() + interval '10 minutes');
+      update public.scheduled_notifications set send_at = now() - interval '1 minute' where id = sid2;
+      perform set_config('request.jwt.claim.sub', '', false);  -- the job has no signed-in user
+      perform assert((select count(*) from public.claim_due_notifications(10) c where c.id = sid2) = 1,
+        'notifications: the job takes a due schedule');
+      perform assert((select status from public.scheduled_notifications where id = sid2) = 'sending',
+        'notifications: and marks it as being sent');
+      perform assert((select count(*) from public.claim_due_notifications(10) c where c.id = sid2) = 0,
+        'notifications: and only once');
+      update public.scheduled_notifications set claimed_at = now() - interval '20 minutes' where id = sid2;
+      perform public.claim_due_notifications(10);
+      perform assert((select status from public.scheduled_notifications where id = sid2) = 'failed',
+        'notifications: one left half-sent is marked failed, never sent twice');
+
+      perform act_as(tunde);
+      sid := public.schedule_notification('Reminder', 'Daily report before you leave.', null,
+                                          'everyone', '{}'::jsonb, now() + interval '2 hours');
+      perform assert((select count(*) from public.claim_scheduled_notification(sid)) = 1,
+        'notifications: the sender can send a schedule now');
+      begin
+        perform public.claim_scheduled_notification(sid);
+        perform assert(false, 'notifications: and it cannot go twice');
+      exception when others then
+        perform assert(sqlerrm like '%already gone%', 'notifications: and it cannot go twice');
+      end;
+
+      -- The history: who sent what, and the sender can see who got it.
+      insert into public.notifications (sender_id, title, body, audience, audience_detail, recipients, delivered)
+      values (tunde, 'Team meeting', 'Meet at the depot at 4pm.', 'users',
+              jsonb_build_object('user_ids', jsonb_build_array(kemi)), 1, 1)
+      returning id into nid;
+      insert into public.notification_deliveries (notification_id, user_id, status, read_at)
+      values (nid, kemi, 'sent', now());
+      perform assert(public.notification_sent_by_me(nid), 'notifications: the sender is recognised');
+      perform assert((select kind from public.notification_log where id = nid) = 'message'
+                     and (select sender_name from public.notification_log where id = nid) = 'Tunde Bello'
+                     and (select read_count from public.notification_log where id = nid) = 1,
+        'notifications: the log names the sender and counts who read it');
+      perform act_as(boss);
+      perform assert(not public.notification_sent_by_me(nid), 'notifications: somebody else is not the sender');
+      insert into public.notifications (sender_id, title, body, audience, audience_detail, recipients)
+      values (null, 'Ada: no show', 'Not clocked in.', 'users', '{"kind":"no_show","system":true}'::jsonb, 1),
+             (boss, 'Reply from the office', 'Cannot clock in: fixed.', 'users', '{"kind":"support_reply"}'::jsonb, 1);
+      perform assert((select kind from public.notification_log where title = 'Ada: no show') = 'alert'
+                     and (select kind from public.notification_log where title = 'Reply from the office'
+                          and body = 'Cannot clock in: fixed.') = 'support',
+        'notifications: automatic alerts and support replies are told apart from messages');
+    end;
+
   end;
 
   raise notice 'ALL RULES PASSED';

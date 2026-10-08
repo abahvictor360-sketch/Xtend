@@ -240,9 +240,21 @@ export default async function AdminGuidePage() {
 
         <GuideSection topic={T.attendance} intro="Every clock-in and clock-out, with filters.">
           <p>
-            On <Ui>Attendance</Ui>, filter by dates, person, outlet, status and type, then export
-            the same view as <Ui>Excel</Ui>, <Ui>Word</Ui>, <Ui>PDF</Ui> or <Ui>CSV</Ui>. Records
-            cannot be edited or deleted. Times are Lagos time.
+            <Ui>Attendance</Ui> shows each person&apos;s day: when they clocked in and out, whether they
+            were on time, at their store, and whether they clocked out. Use the quick ranges and filters
+            (person, store, team, role, kind of day), read the cards and <Ui>Worth a look</Ui> (repeat
+            absences, lateness, off-site clock-ins, missing clock-outs), then tap a square in the
+            calendar or a row in the table. An open row shows the photo, the map, the distance from the
+            store and the phone used, with links to Movement and Check an excuse for that day. A working
+            day without a clock-in counts as absent; Sundays only count if you tick{' '}
+            <Ui>Sundays are working days</Ui>.
+          </p>
+          <p>
+            <Ui>Analytics</Ui> compares any period with the same number of days just before it: trends,
+            on time by weekday, clock-in times, who stands out by person, store or team, and how well
+            each store was covered. Every table downloads as <Ui>Excel</Ui>, <Ui>Word</Ui>,{' '}
+            <Ui>PDF</Ui> or <Ui>CSV</Ui>, exactly as filtered. Records cannot be edited or deleted.
+            Times are Lagos time.
           </p>
         </GuideSection>
 
@@ -256,8 +268,16 @@ export default async function AdminGuidePage() {
             travelling and silent. <Ui>Worth a look</Ui> points out impossible jumps (faster than
             150 km/h, which a fake-location app makes), long silences (with a link to check an excuse
             for them) and long stays away. The journey downloads as Excel, PDF, Word or CSV.{' '}
-            <Ui>Store visits</Ui> lists each person&apos;s rounds: which stores, for how long, and
-            downloads as PDF, Word or Excel.
+          </p>
+          <p>
+            <Ui>Store visits</Ui> shows each person&apos;s rounds for any dates, with filters for
+            person, store, team, arrival and short visits; tap a visit to see where they checked in and
+            out, how far from the store, the map and the check-in photo while it is kept.{' '}
+            <Ui>Worth a look</Ui> points out very short visits, check-ins away from the store, and two
+            visits back to back too far apart for anyone to have travelled between them. The{' '}
+            <Ui>By store</Ui> and <Ui>By person</Ui> views add up visits and time, and{' '}
+            <Ui>Store coverage</Ui> lists every store by how long it has gone without a visit, so you
+            can see which shops nobody has been to in 7, 14 or 30 days.
           </p>
           <p>
             In the Xtend app, a person&apos;s location keeps coming in until they clock out, even if
@@ -283,12 +303,19 @@ export default async function AdminGuidePage() {
           <ul className="list-disc space-y-2 pl-5">
             <li>
               <Ui>Alerts</Ui>: someone left their store during a shift, clocked in away from it,
-              or had location off. Check, then resolve each one.
+              or had location off. Filter by kind, open or resolved, person, store and dates; each
+              alert shows how long it has been open and links to Movement, Check an excuse and a phone
+              check. People with three or more alerts are listed at the top. Admins can tick several
+              and resolve them together with one note; each is still written to the audit log.
             </li>
             <li>
               <Ui>Integrity</Ui>: signs of a fake-location app, a rooted phone, a VPN, or store
-              counts that do not add up. A flag is a reason to ask, not proof; mark it reviewed with
-              what you found.
+              counts that do not add up. A flag is a reason to ask, not proof. Pick any dates (up to
+              120 days) and narrow by person, store, kind of check, severity and whether it has been
+              reviewed. <Ui>Who to look at first</Ui> ranks people by their open flags and says why in
+              one line. Tap a flag to read what happened in plain words, open the GPS point on a map,
+              or check whether their phone is on now. Tick several and mark them reviewed together with
+              one note.
             </li>
             <li>
               <Ui>Check an excuse</Ui>: someone says their network was bad, their phone was off, their
@@ -319,26 +346,36 @@ export default async function AdminGuidePage() {
 
         <GuideSection topic={T.support} intro="Problems staff raise in the app.">
           <p>
-            The Xtend helper answers simple questions. Anything marked{' '}
-            <Ui>With the office</Ui> needs a person: open it on <Ui>Support</Ui> and reply. The
-            staff member gets your reply in their app.
+            The Xtend helper answers simple questions. <Ui>Support</Ui> opens on the threads that
+            need a person, longest waiting first, each showing how long they have waited. Open one to
+            see who they are, their store and supervisor, whether they have clocked in today, and links
+            to their Movement and Check an excuse. Reply in your own words or with a quick reply
+            ({'{name}'} becomes their first name), pass it to a colleague under{' '}
+            <Ui>Who answers</Ui>, and close it when it is sorted; it reopens by itself if they write
+            again. The staff member gets your reply in their app.
           </p>
         </GuideSection>
 
         <GuideSection topic={T.notify} intro="Reach staff phones directly.">
           <p>
-            On <Ui>Notifications</Ui>, write a message and send it.{' '}
+            On <Ui>Notifications</Ui>, write a message (or start from a template), check{' '}
+            <Ui>See who</Ui>, and send it now or choose <Ui>Later</Ui> to send at a set time such as
+            7:45 tomorrow.{' '}
             {isAdmin
               ? 'Admins can reach everyone, one role, one outlet, or named people.'
-              : 'As a supervisor you reach the staff at your own outlet.'}
+              : 'As a supervisor you reach the staff at your own outlet.'}{' '}
+            The history shows who got each message, who read it and who has notifications off, and{' '}
+            <Ui>Send again</Ui> reaches the people it missed.
           </p>
         </GuideSection>
 
         <GuideSection topic={T.ask} intro="Answers without digging.">
           <p>
             <Ui>Ask Xtend</Ui> answers plain questions such as “who clocked in late today?” or
-            “who has not clocked out?”. <Ui>Analytics</Ui> shows lateness and attendance over a
-            period, measured against each store&apos;s shift start.
+            “who has not clocked out?”, and about alerts, support issues, notifications sent, X Metrics
+            sales against target and stores nobody visited. Every chat is kept under{' '}
+            <Ui>Earlier chats</Ui> for you alone, where you can reopen, rename or delete it, or start a
+            new one; each answer has a <Ui>Copy</Ui> button.
           </p>
           <p>
             Ask it to do something and it prepares it for you: “remind everyone who has not clocked in

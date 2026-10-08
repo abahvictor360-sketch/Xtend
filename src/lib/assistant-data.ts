@@ -4,6 +4,7 @@ import type { AttendanceDetail, Profile } from '@/lib/types'
 import { FIELD_ROLES } from '@/lib/auth'
 import { addDays, formatLagos, lagosDateString, longDate } from '@/lib/utils'
 import { CLAIMS, judgeExcuse, lagosInstant, type Claim, type ExcuseEvidence } from '@/lib/excuse'
+import { detailText, fetchIntegrity, parseIntegrityFilter, personRisk } from '@/lib/integrity-review'
 
 /**
  * The lookups behind Ask Xtend: what the assistant reads to answer a
@@ -483,7 +484,7 @@ export async function integrityFlags(supabase: SupabaseClient, fromDate: unknown
       summary: f.summary,
       store: f.outlet_name,
       date: f.flag_date,
-      detail: f.detail,
+      detail: detailText(f.kind as string, f.detail as Record<string, unknown> | null),
       reviewed: Boolean(f.reviewed_at),
       review_note: f.review_note,
     })),
@@ -539,5 +540,343 @@ export async function checkExcuse(
     headline: judged.headline,
     evidence: judged.points,
     live_check: 'A supervisor can check whether the phone is on right now on the Check an excuse page.',
+  }
+}
+
+const clipText = (v: unknown, max: number) => {
+  const text = typeof v === 'string' ? v.trim().replace(/\s+/g, ' ') : ''
+  return text.length > max ? `${text.slice(0, max - 1)}…` : text
+}
+
+/** Lagos midnight of a date, as an instant, for timestamp columns. */
+const lagosStart = (d: string) => `${d}T00:00:00+01:00`
+
+/** People ranked by their open integrity flags, with the reason in a sentence (lib/integrity-review.ts). */
+export async function integrityRisk(supabase: SupabaseClient, fromDate: unknown, toDate: unknown) {
+  const { from, to } = checkRange(fromDate, toDate, 30)
+  const { rows } = await fetchIntegrity(supabase, { ...parseIntegrityFilter({}), from, to, status: 'all' }, 3000)
+  const people = personRisk(rows)
+  return {
+    from,
+    to,
+    how_ranked:
+      'Open (not reviewed) flags only. High counts 5, medium 2, low 1; older than a week counts half; proof from the phone (fake GPS confirmed, rooted phone, faked clock time) adds 5. "act" means look today.',
+    open_flags: rows.filter((r) => !r.reviewed_at).length,
+    people: people.slice(0, 15).map((p) => ({
+      name: p.name,
+      level: p.level,
+      open_flags: p.open,
+      high: p.high,
+      medium: p.medium,
+      low: p.low,
+      last_flag_day: p.lastDate,
+      reason: p.reason,
+    })),
+    more_people: Math.max(0, people.length - 15),
+  }
+}
+
+const ALERT_WORDS: Record<string, string> = {
+  left_geofence: 'left the store while on shift',
+  low_accuracy: 'location too rough to trust',
+  permission_denied: 'location permission turned off',
+  off_site_clock: 'clocked in or out away from the store',
+}
+
+/** Location alerts: someone left their store, clocked in away from it, or switched location off. */
+export async function locationAlerts(supabase: SupabaseClient, fromDate: unknown, toDate: unknown, onlyOpen: unknown) {
+  const { from, to } = checkRange(fromDate, toDate)
+  let query = supabase
+    .from('alert_detail')
+    .select('staff_name, outlet_name, alert_type, distance_m, is_resolved, note, created_at, resolved_by_name, location_label')
+    .gte('created_at', lagosStart(from))
+    .lt('created_at', lagosStart(addDays(to, 1)))
+    .order('created_at', { ascending: false })
+    .limit(300)
+  if (onlyOpen === true) query = query.eq('is_resolved', false)
+  const { data, error } = await query
+  if (error) throw new Error(error.message)
+  const rows = data ?? []
+  const byType = new Map<string, number>()
+  for (const r of rows) byType.set(r.alert_type as string, (byType.get(r.alert_type as string) ?? 0) + 1)
+  return {
+    from,
+    to,
+    total: rows.length,
+    open: rows.filter((r) => !r.is_resolved).length,
+    by_type: Object.fromEntries([...byType].map(([k, n]) => [ALERT_WORDS[k] ?? k, n])),
+    alerts: rows.slice(0, 120).map((r) => ({
+      when: formatLagos(r.created_at as string),
+      name: r.staff_name,
+      store: r.outlet_name,
+      what: ALERT_WORDS[r.alert_type as string] ?? r.alert_type,
+      metres_away: r.distance_m != null ? Math.round(r.distance_m as number) : null,
+      where: r.location_label,
+      resolved: r.is_resolved
+        ? `by ${r.resolved_by_name ?? 'someone'}${r.note ? `: ${clipText(r.note, 120)}` : ''}`
+        : false,
+    })),
+    more: Math.max(0, rows.length - 120),
+  }
+}
+
+/** Issues field staff raised in the app's help chat, newest activity first. */
+export async function supportThreads(supabase: SupabaseClient, status: unknown) {
+  let query = supabase
+    .from('support_thread_detail')
+    .select('subject, status, staff_name, outlet_name, created_at, last_message_at, message_count, last_body')
+    .order('last_message_at', { ascending: false })
+    .limit(60)
+  if (status === 'open') query = query.in('status', ['open', 'escalated'])
+  if (status === 'escalated') query = query.eq('status', 'escalated')
+  const { data, error } = await query
+  if (error) throw new Error(error.message)
+  const rows = data ?? []
+  return {
+    how_support_works:
+      'Staff raise issues in the app. The Xtend helper answers simple ones; "escalated" means it was passed to the office and needs a person to reply on the Support page.',
+    open: rows.filter((r) => r.status === 'open').length,
+    escalated: rows.filter((r) => r.status === 'escalated').length,
+    threads: rows.map((r) => ({
+      subject: clipText(r.subject, 120),
+      status: r.status,
+      name: r.staff_name,
+      store: r.outlet_name,
+      started: formatLagos(r.created_at as string),
+      last_message: formatLagos(r.last_message_at as string),
+      messages: r.message_count,
+      latest: clipText(r.last_body, 200),
+    })),
+  }
+}
+
+/** Push notifications the office sent: to whom, and how many phones got them. */
+export async function notificationsSent(supabase: SupabaseClient, fromDate: unknown, toDate: unknown) {
+  const { from, to } = checkRange(fromDate, toDate)
+  const { data, error } = await supabase
+    .from('notifications')
+    .select('title, body, audience, recipients, delivered, failed, created_at, profiles(full_name)')
+    .gte('created_at', lagosStart(from))
+    .lt('created_at', lagosStart(addDays(to, 1)))
+    .order('created_at', { ascending: false })
+    .limit(100)
+  if (error) throw new Error(error.message)
+  return {
+    from,
+    to,
+    note: 'delivered = phones the push service accepted it for; failed = phones it could not reach (notifications off or the app removed).',
+    notifications: (data ?? []).map((n) => ({
+      when: formatLagos(n.created_at as string),
+      sent_by: embeddedName(n.profiles, 'full_name'),
+      title: clipText(n.title, 80),
+      message: clipText(n.body, 160),
+      audience: n.audience,
+      recipients: n.recipients,
+      delivered: n.delivered,
+      failed: n.failed,
+    })),
+  }
+}
+
+/** The first day of the month after a YYYY-MM month. */
+export function nextMonthStart(month: string) {
+  const [y, m] = month.split('-').map(Number)
+  return m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`
+}
+
+/** X Metrics for a month: units sold per enrolled store against target, counts that did not add up, expiry alerts. */
+export async function xMetricsMonth(supabase: SupabaseClient, monthValue: unknown) {
+  const month =
+    typeof monthValue === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(monthValue) ? monthValue : lagosDateString().slice(0, 7)
+  const first = `${month}-01`
+  const next = nextMonthStart(month)
+  const [stores, sales, targets, gaps, expiry] = await Promise.all([
+    supabase.from('xm_stores').select('outlet_id, outlets(name)').eq('is_active', true),
+    supabase.from('xm_live_sale_lines').select('outlet_id, user_id, units').gte('sale_date', first).lt('sale_date', next).limit(50000),
+    supabase.from('xm_current_targets').select('outlet_id, user_id, target_units').eq('month', first),
+    supabase
+      .from('xm_reconciliation_detail')
+      .select('count_date, outlet_name, staff_name, product_name, expected_units, actual_units, variance_pct')
+      .eq('flagged', true)
+      .gte('count_date', first)
+      .lt('count_date', next)
+      .order('variance_pct', { ascending: false })
+      .limit(200),
+    supabase
+      .from('xm_expiry_alert_detail')
+      .select('outlet_name, product_name, expiry_date, units_on_hand, consider_pulling')
+      .is('acknowledged_at', null)
+      .order('expiry_date')
+      .limit(30),
+  ])
+  const failed = [stores, sales, targets, gaps, expiry].find((r) => r.error)
+  if (failed?.error) {
+    if (failed.error.code === '42P01' || failed.error.code === 'PGRST205') {
+      return { month, note: 'X Metrics is not set up yet (migration 043).' }
+    }
+    throw new Error(failed.error.message)
+  }
+
+  const names = new Map<string, string>()
+  for (const s of stores.data ?? []) names.set(s.outlet_id as string, embeddedName(s.outlets, 'name') ?? 'Store')
+  const soldByStore = new Map<string, number>()
+  const soldByPerson = new Map<string, number>()
+  for (const l of (sales.data ?? []) as { outlet_id: string; user_id: string | null; units: number }[]) {
+    soldByStore.set(l.outlet_id, (soldByStore.get(l.outlet_id) ?? 0) + l.units)
+    if (l.user_id) soldByPerson.set(l.user_id, (soldByPerson.get(l.user_id) ?? 0) + l.units)
+  }
+  const storeTarget = new Map<string, number>()
+  const personTarget = new Map<string, number>()
+  for (const t of (targets.data ?? []) as { outlet_id: string | null; user_id: string | null; target_units: number }[]) {
+    if (t.outlet_id) storeTarget.set(t.outlet_id, t.target_units)
+    if (t.user_id) personTarget.set(t.user_id, t.target_units)
+  }
+  const roster = personTarget.size ? await fetchRoster(supabase) : []
+  const pct = (sold: number, target: number | undefined) => (target ? Math.round((sold / target) * 100) : null)
+  const gapRows = gaps.data ?? []
+
+  return {
+    month,
+    enrolled_stores: names.size,
+    units_sold: [...soldByStore.values()].reduce((a, b) => a + b, 0),
+    stores: [...names]
+      .map(([id, name]) => ({
+        store: name,
+        units_sold: soldByStore.get(id) ?? 0,
+        target: storeTarget.get(id) ?? null,
+        percent_of_target: pct(soldByStore.get(id) ?? 0, storeTarget.get(id)),
+      }))
+      .sort((a, b) => b.units_sold - a.units_sold),
+    people_with_targets: [...personTarget]
+      .map(([id, target]) => ({ person: roster.find((p) => p.id === id), id, target }))
+      .filter((p) => p.person)
+      .map(({ person, id, target }) => ({
+        name: person!.full_name,
+        units_sold: soldByPerson.get(id) ?? 0,
+        target,
+        percent_of_target: pct(soldByPerson.get(id) ?? 0, target),
+      })),
+    counts_that_did_not_add_up: {
+      total: gapRows.length,
+      worst: gapRows.slice(0, 8).map((g) => ({
+        date: g.count_date,
+        store: g.outlet_name,
+        name: g.staff_name,
+        product: g.product_name,
+        expected: g.expected_units,
+        counted: g.actual_units,
+        off_by_percent: g.variance_pct,
+      })),
+    },
+    expiry_alerts_open: (expiry.data ?? []).map((e) => ({
+      store: e.outlet_name,
+      product: e.product_name,
+      expires: e.expiry_date,
+      units: e.units_on_hand,
+      consider_pulling: e.consider_pulling,
+    })),
+  }
+}
+
+export interface CoveragePerson {
+  name: string
+  role: string
+  stores_allocated: number
+  allocated_visited: number
+  coverage_percent: number | null
+  visits: number
+  not_visited: string[]
+  not_visited_more: number
+  visited_outside_allocation: string[]
+}
+
+/**
+ * Store coverage, pure: for each person, the stores allocated to them and
+ * which of those they visited. Sorted worst coverage first.
+ */
+export function coverage(
+  roster: Pick<Roster, 'id' | 'full_name' | 'role'>[],
+  allocated: { user_id: string; outlet_id: string; name: string }[],
+  visits: { user_id: string; outlet_id: string | null; name: string | null }[],
+) {
+  const mine = new Map<string, Map<string, string>>()
+  for (const a of allocated) {
+    const m = mine.get(a.user_id) ?? new Map<string, string>()
+    m.set(a.outlet_id, a.name)
+    mine.set(a.user_id, m)
+  }
+  const seen = new Map<string, Map<string, { visits: number; name: string }>>()
+  const anyone = new Set<string>()
+  for (const v of visits) {
+    if (!v.outlet_id) continue
+    anyone.add(v.outlet_id)
+    const m = seen.get(v.user_id) ?? new Map<string, { visits: number; name: string }>()
+    const s = m.get(v.outlet_id) ?? { visits: 0, name: v.name ?? 'Store' }
+    s.visits++
+    m.set(v.outlet_id, s)
+    seen.set(v.user_id, m)
+  }
+
+  const people: CoveragePerson[] = roster
+    .filter((p) => mine.has(p.id) || seen.has(p.id))
+    .map((p) => {
+      const stores = mine.get(p.id) ?? new Map<string, string>()
+      const went = seen.get(p.id) ?? new Map<string, { visits: number; name: string }>()
+      const missed = [...stores].filter(([id]) => !went.has(id)).map(([, n]) => n)
+      return {
+        name: p.full_name,
+        role: p.role,
+        stores_allocated: stores.size,
+        allocated_visited: stores.size - missed.length,
+        coverage_percent: stores.size ? Math.round(((stores.size - missed.length) / stores.size) * 100) : null,
+        visits: [...went.values()].reduce((a, s) => a + s.visits, 0),
+        not_visited: missed.slice(0, 12),
+        not_visited_more: Math.max(0, missed.length - 12),
+        visited_outside_allocation: [...went].filter(([id]) => !stores.has(id)).map(([, s]) => s.name).slice(0, 6),
+      }
+    })
+    .sort((a, b) => (a.coverage_percent ?? 101) - (b.coverage_percent ?? 101) || a.name.localeCompare(b.name))
+
+  const allAllocated = new Map<string, string>()
+  for (const m of mine.values()) for (const [id, n] of m) allAllocated.set(id, n)
+  const nobody = [...allAllocated].filter(([id]) => !anyone.has(id)).map(([, n]) => n).sort()
+  return { allocated_stores: allAllocated.size, stores_nobody_visited: nobody, people }
+}
+
+/** Store coverage over a range, through the caller's RLS. */
+export async function visitCoverage(supabase: SupabaseClient, fromDate: unknown, toDate: unknown) {
+  const { from, to } = checkRange(fromDate, toDate)
+  const [roster, allocated, visits] = await Promise.all([
+    fetchRoster(supabase),
+    supabase.from('staff_outlets').select('user_id, outlet_id, outlets(name)').limit(10000),
+    supabase
+      .from('store_visit_detail')
+      .select('user_id, outlet_id, outlet_name')
+      .gte('visit_date', from)
+      .lte('visit_date', to)
+      .limit(10000),
+  ])
+  if (allocated.error) throw new Error(allocated.error.message)
+  if (visits.error) throw new Error(visits.error.message)
+  const got = coverage(
+    roster,
+    (allocated.data ?? []).map((a) => ({
+      user_id: a.user_id as string,
+      outlet_id: a.outlet_id as string,
+      name: embeddedName(a.outlets, 'name') ?? 'Store',
+    })),
+    (visits.data ?? []).map((v) => ({
+      user_id: v.user_id as string,
+      outlet_id: (v.outlet_id as string | null) ?? null,
+      name: (v.outlet_name as string | null) ?? null,
+    })),
+  )
+  return {
+    from,
+    to,
+    allocated_stores: got.allocated_stores,
+    stores_nobody_visited: got.stores_nobody_visited.slice(0, 30),
+    stores_nobody_visited_total: got.stores_nobody_visited.length,
+    people: got.people.slice(0, 60),
   }
 }

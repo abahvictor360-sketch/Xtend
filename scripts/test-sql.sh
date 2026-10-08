@@ -69,5 +69,8 @@ run supabase/migrations/0047_supply_imports_cartons.sql
 run supabase/migrations/0048_excuse_check_advanced.sql
 run supabase/migrations/0049_audit_context.sql
 run supabase/migrations/0050_background_tracking.sql
+run supabase/migrations/0052_visits_alerts.sql
+run supabase/migrations/0053_support_notifications.sql
+run supabase/migrations/0054_integrity_ask.sql
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rules.sql 2>&1 | grep -E 'NOTICE|ERROR' | sed 's/^psql:[^ ]*: //'
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_counts.sql 2>&1 | grep -E 'NOTICE|ERROR|PASSED' | sed 's/^psql:[^ ]*: //'

@@ -1,10 +1,11 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { createAdminSupabase } from '@/lib/supabase/admin'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
-import { pushConfigured, sendPush, type PushTarget } from '@/lib/push'
+import { pushConfigured } from '@/lib/push'
 import { thingName, writtenText } from '@/lib/fields'
-import { auditContext } from '@/lib/audit-context'
+import { audit } from '@/lib/audit'
+import { deliverNotification } from '@/lib/notification-send'
+import { scheduleProblem } from '@/lib/notification-log'
 
 export const maxDuration = 60
 
@@ -26,6 +27,10 @@ const schema = z.object({
   user_ids: z.array(z.string().uuid()).max(500).optional(),
   /** Resolve and count the audience without sending anything. */
   preview: z.boolean().default(false),
+  /** Send later instead of now (an ISO instant). */
+  send_at: z.string().datetime({ offset: true }).nullable().optional(),
+  /** This send repeats an earlier one to the people it did not reach. */
+  resend_of: z.string().uuid().nullable().optional(),
 })
 
 interface TargetRow {
@@ -64,6 +69,7 @@ export async function POST(request: Request) {
     if (input.audience === 'role') detail.role = input.role
     if (input.audience === 'outlet') detail.outlet_id = input.outlet_id
     if (input.audience === 'users') detail.user_ids = input.user_ids
+    if (input.resend_of && !input.preview) detail.resend_of = input.resend_of
 
     const supabase = await createServerSupabase()
     const { data: targetData, error: targetError } = await supabase.rpc(
@@ -92,6 +98,32 @@ export async function POST(request: Request) {
     if (targets.length === 0) {
       return Response.json({ error: 'That audience matches nobody.' }, { status: 400 })
     }
+
+    // Later: the database fixes the audience now, with this sender's reach,
+    // and the five-minute job sends it when it is due.
+    if (input.send_at) {
+      const when = new Date(input.send_at)
+      const problem = scheduleProblem(when, new Date())
+      if (problem) return Response.json({ error: problem }, { status: 400 })
+      const { data: scheduledId, error } = await supabase.rpc('schedule_notification', {
+        p_title: input.title,
+        p_body: input.body,
+        p_url: input.url || null,
+        p_audience: input.audience,
+        p_detail: detail,
+        p_send_at: when.toISOString(),
+      })
+      if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
+      await audit(supabase, 'notification.schedule', 'scheduled_notifications', scheduledId as string, {
+        audience: input.audience,
+        detail,
+        recipients: targets.length,
+        title: input.title,
+        send_at: when.toISOString(),
+      })
+      return Response.json({ scheduled_id: scheduledId, recipients: targets.length, send_at: when.toISOString() })
+    }
+
     if (!pushConfigured()) {
       return Response.json(
         { error: 'Push is not configured: set NEXT_PUBLIC_VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.' },
@@ -99,118 +131,18 @@ export async function POST(request: Request) {
       )
     }
 
-    // The service role is needed to read other people's device rows and to
-    // write the delivery log; the audience above was already narrowed to
-    // what this sender is allowed to reach.
-    const admin = createAdminSupabase()
-    const userIds = targets.map((t) => t.user_id)
-
-    const { data: subs, error: subsError } = await admin
-      .from('push_subscriptions')
-      .select('id, user_id, endpoint, p256dh, auth')
-      .in('user_id', userIds)
-      .eq('is_active', true)
-    if (subsError) return Response.json({ error: dbErrorMessage(subsError) }, { status: 400 })
-
-    const { data: notification, error: insertError } = await admin
-      .from('notifications')
-      .insert({
-        sender_id: session.userId,
+    const result = await deliverNotification(
+      {
+        senderId: session.userId,
         title: input.title,
         body: input.body,
         url: input.url || null,
         audience: input.audience,
-        audience_detail: detail,
-        recipients: targets.length,
-      })
-      .select('id')
-      .single<{ id: string }>()
-    if (insertError) return Response.json({ error: dbErrorMessage(insertError) }, { status: 400 })
-
-    const devices = (subs ?? []) as PushTarget[]
-    const results = await Promise.all(
-      devices.map((device) =>
-        sendPush(device, {
-          title: input.title,
-          body: input.body,
-          url: input.url || '/field',
-          notificationId: notification.id,
-        }),
-      ),
-    )
-
-    // Retire subscriptions the push service says are gone.
-    const dead = results.filter((r) => r.gone).map((r) => r.subscriptionId)
-    if (dead.length) {
-      await admin.from('push_subscriptions').update({ is_active: false }).in('id', dead)
-    }
-
-    // One delivery row per person: sent if any of their devices took it,
-    // no_device if they have none registered, failed otherwise.
-    const byUser = new Map<string, { ok: number; failed: number; error?: string }>()
-    for (const result of results) {
-      const entry = byUser.get(result.userId) ?? { ok: 0, failed: 0 }
-      if (result.ok) entry.ok += 1
-      else {
-        entry.failed += 1
-        entry.error = result.error
-      }
-      byUser.set(result.userId, entry)
-    }
-
-    const deliveries = targets.map((target) => {
-      const entry = byUser.get(target.user_id)
-      if (!entry) {
-        return {
-          notification_id: notification.id,
-          user_id: target.user_id,
-          status: 'no_device' as const,
-          detail: 'No device has notifications turned on',
-        }
-      }
-      return {
-        notification_id: notification.id,
-        user_id: target.user_id,
-        status: entry.ok > 0 ? ('sent' as const) : ('failed' as const),
-        detail: entry.ok > 0 ? null : (entry.error ?? 'Delivery failed'),
-      }
-    })
-
-    await admin.from('notification_deliveries').insert(deliveries)
-
-    const delivered = deliveries.filter((d) => d.status === 'sent').length
-    const failed = deliveries.filter((d) => d.status === 'failed').length
-
-    await admin
-      .from('notifications')
-      .update({ delivered, failed })
-      .eq('id', notification.id)
-
-    // The row goes in directly with the sender as the actor, with where and
-    // on what device it was sent. Every send is audited, whoever made it.
-    await admin.from('audit_log').insert({
-      actor_id: session.userId,
-      action: 'notification.send',
-      target_table: 'notifications',
-      target_id: notification.id,
-      meta: {
-        audience: input.audience,
         detail,
-        recipients: targets.length,
-        delivered,
-        failed,
-        title: input.title,
-        _context: await auditContext(),
       },
-    })
-
-    return Response.json({
-      notification_id: notification.id,
-      recipients: targets.length,
-      delivered,
-      failed,
-      no_device: deliveries.filter((d) => d.status === 'no_device').length,
-    })
+      targets.map((t) => t.user_id),
+    )
+    return Response.json(result)
   } catch (error) {
     return apiError(error)
   }

@@ -277,6 +277,10 @@ export class ActionBuilder {
       if (person && page !== 'audit_log') q.set('person', person.id)
       if (from) q.set(page === 'audit_log' ? 'from' : 'date', from)
       if (to) q.set(page === 'audit_log' ? 'to' : 'until', to)
+    } else if (page === 'integrity') {
+      if (person) q.set('person', person.id)
+      if (from) q.set('from', from)
+      if (to) q.set('to', to)
     } else if (page === 'attendance' || page === 'visits') {
       if (person) q.set('user_id', person.id)
       if (from) q.set('from', from)

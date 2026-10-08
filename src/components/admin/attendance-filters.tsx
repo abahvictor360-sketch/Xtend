@@ -1,107 +1,192 @@
-'use client'
-
-import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { Download } from 'lucide-react'
+import Link from 'next/link'
 import { buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
+import { Select } from '@/components/ui/select'
+import { STATUS_FILTERS, type Preset } from '@/lib/attendance-report'
+import type { Choices, ReportFilter } from '@/lib/attendance-server'
 
-const FORMATS = [
-  ['xlsx', 'Excel'],
-  ['docx', 'Word'],
-  ['pdf', 'PDF'],
-  ['csv', 'CSV'],
-] as const
+const FORMATS = { xlsx: 'Excel', pdf: 'PDF', docx: 'Word', csv: 'CSV' } as const
+const CHIP = 'rounded-full border border-border bg-card px-3 py-1 font-semibold hover:border-brand hover:bg-tint'
 
-/** Filters live in the URL, so an export is exactly what is on screen. */
-export function AttendanceFilters({
-  staff,
-  outlets,
-}: {
-  staff: { id: string; full_name: string }[]
-  outlets: { id: string; name: string }[]
-}) {
-  const router = useRouter()
-  const pathname = usePathname()
-  const params = useSearchParams()
-
-  function set(key: string, value: string) {
-    const next = new URLSearchParams(params.toString())
-    if (!value || value === 'all') next.delete(key)
-    else next.set(key, value)
-    router.replace(`${pathname}?${next.toString()}`)
-  }
-
-  const query = params.toString()
-
-  return (
-    <div className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-2 lg:grid-cols-7">
-      <Field label="From">
-        <Input type="date" value={params.get('from') ?? ''} onChange={(e) => set('from', e.target.value)} />
-      </Field>
-      <Field label="To">
-        <Input type="date" value={params.get('to') ?? ''} onChange={(e) => set('to', e.target.value)} />
-      </Field>
-      <Field label="Staff">
-        <Select value={params.get('user_id') ?? 'all'} onChange={(e) => set('user_id', e.target.value)}>
-          <option value="all">Everyone</option>
-          {staff.map((person) => (
-            <option key={person.id} value={person.id}>
-              {person.full_name}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      <Field label="Outlet">
-        <Select value={params.get('outlet_id') ?? 'all'} onChange={(e) => set('outlet_id', e.target.value)}>
-          <option value="all">All outlets</option>
-          {outlets.map((outlet) => (
-            <option key={outlet.id} value={outlet.id}>
-              {outlet.name}
-            </option>
-          ))}
-        </Select>
-      </Field>
-      <Field label="Status">
-        <Select value={params.get('status') ?? 'all'} onChange={(e) => set('status', e.target.value)}>
-          <option value="all">Any status</option>
-          <option value="on_site">On site</option>
-          <option value="off_site">Off site</option>
-          <option value="flagged">Flagged</option>
-        </Select>
-      </Field>
-      <Field label="Type">
-        <Select value={params.get('type') ?? 'all'} onChange={(e) => set('type', e.target.value)}>
-          <option value="all">In and out</option>
-          <option value="opening">Clock in</option>
-          <option value="closing">Clock out</option>
-        </Select>
-      </Field>
-
-      <Field label="Export">
-        <div className="flex flex-wrap gap-1">
-          {FORMATS.map(([format, label]) => (
-            <a
-              key={format}
-              href={`/api/admin/export/${format}?${query}`}
-              className={buttonVariants({ variant: 'outline', size: 'sm' })}
-            >
-              <Download className="h-3.5 w-3.5" />
-              {label}
-            </a>
-          ))}
-        </div>
-      </Field>
-    </div>
-  )
+export interface Download {
+  label: string
+  /** The export route, without the format. */
+  base: string
+  query: string
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+/**
+ * The filters as a plain GET form, so the address bar holds the whole view
+ * and every download is exactly what is on screen. Attendance shows the
+ * person and status pickers; Analytics shows "group by" instead.
+ */
+export function AttendanceFilters({
+  mode,
+  filter,
+  choices,
+  presets,
+  presetHref,
+  downloads,
+  today,
+}: {
+  mode: 'attendance' | 'analytics'
+  filter: ReportFilter
+  choices: Choices
+  presets: Preset[]
+  presetHref: (p: Preset) => string
+  downloads: Download[]
+  today: string
+}) {
+  const active = choices.people.filter((p) => p.active)
+  const inactive = choices.people.filter((p) => !p.active)
+  const isPreset = (p: Preset) => p.from === filter.from && p.to === filter.to
+  const narrowed = filter.user_id || filter.outlet_id || filter.team || filter.role || filter.status
+
   return (
-    <div className="space-y-1">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      {children}
-    </div>
+    <form method="get" className="space-y-3">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="from">From</Label>
+          <Input id="from" name="from" type="date" defaultValue={filter.from} max={today} className="h-10 w-40" />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="to">To</Label>
+          <Input id="to" name="to" type="date" defaultValue={filter.to} max={today} className="h-10 w-40" />
+        </div>
+        {mode === 'attendance' && (
+          <div className="w-full space-y-1.5 sm:w-52">
+            <Label htmlFor="user_id">Who</Label>
+            <Select id="user_id" name="user_id" defaultValue={filter.user_id ?? 'all'} className="h-10 text-sm">
+              <option value="all">Everyone</option>
+              {active.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+              {inactive.length > 0 && (
+                <optgroup label="Switched off">
+                  {inactive.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </Select>
+          </div>
+        )}
+        <div className="w-full space-y-1.5 sm:w-52">
+          <Label htmlFor="outlet_id">Store</Label>
+          <Select id="outlet_id" name="outlet_id" defaultValue={filter.outlet_id ?? 'all'} className="h-10 text-sm">
+            <option value="all">All stores</option>
+            {choices.stores.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </Select>
+        </div>
+        {choices.teams.length > 1 && (
+          <div className="w-full space-y-1.5 sm:w-48">
+            <Label htmlFor="team">Team</Label>
+            <Select id="team" name="team" defaultValue={filter.team ?? 'all'} className="h-10 text-sm">
+              <option value="all">All teams</option>
+              {choices.teams.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+              <option value="none">Reports to nobody</option>
+            </Select>
+          </div>
+        )}
+        {choices.roles.length > 1 && (
+          <div className="w-full space-y-1.5 sm:w-44">
+            <Label htmlFor="role">Role</Label>
+            <Select id="role" name="role" defaultValue={filter.role ?? 'all'} className="h-10 text-sm">
+              <option value="all">All roles</option>
+              {choices.roles.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+        )}
+        {mode === 'attendance' ? (
+          <div className="w-full space-y-1.5 sm:w-44">
+            <Label htmlFor="status">Show days</Label>
+            <Select id="status" name="status" defaultValue={filter.status ?? 'all'} className="h-10 text-sm">
+              <option value="all">All days</option>
+              {Object.entries(STATUS_FILTERS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </Select>
+          </div>
+        ) : (
+          <div className="w-full space-y-1.5 sm:w-40">
+            <Label htmlFor="by">Compare by</Label>
+            <Select id="by" name="by" defaultValue={filter.by} className="h-10 text-sm">
+              <option value="person">Person</option>
+              <option value="store">Store</option>
+              <option value="team">Team</option>
+            </Select>
+          </div>
+        )}
+        <label className="flex h-10 items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            name="sundays"
+            value="1"
+            defaultChecked={filter.sundays}
+            className="h-4 w-4 accent-[hsl(var(--brand))]"
+          />
+          Sundays are working days
+        </label>
+        <button type="submit" className={buttonVariants({ size: 'sm', className: 'h-10' })}>
+          Show
+        </button>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1.5 text-xs">
+        <span className="mr-1 font-semibold text-muted-foreground">Quick:</span>
+        {presets.map((p) => (
+          <Link
+            key={p.key}
+            href={presetHref(p)}
+            className={isPreset(p) ? 'rounded-full border border-brand bg-brand px-3 py-1 font-semibold text-primary-foreground' : CHIP}
+          >
+            {p.label}
+          </Link>
+        ))}
+        {narrowed && (
+          <Link
+            href={`?from=${filter.from}&to=${filter.to}`}
+            className="px-2 py-1 font-semibold text-muted-foreground hover:text-foreground"
+          >
+            Clear filters
+          </Link>
+        )}
+      </div>
+
+      {downloads.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          {downloads.map((d) => (
+            <span key={d.label} className="flex flex-wrap items-center gap-1.5">
+              <span className="font-semibold text-muted-foreground">{d.label}:</span>
+              {(Object.keys(FORMATS) as (keyof typeof FORMATS)[]).map((f) => (
+                <a key={f} href={`${d.base}/${f}${d.query ? `?${d.query}` : ''}`} className={CHIP}>
+                  {FORMATS[f]}
+                </a>
+              ))}
+              <span className="mx-1 hidden text-border sm:inline">|</span>
+            </span>
+          ))}
+        </div>
+      )}
+    </form>
   )
 }
