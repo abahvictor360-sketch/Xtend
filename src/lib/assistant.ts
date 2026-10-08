@@ -13,6 +13,12 @@ import {
   checkExcuse,
   storeCounts,
   storeVisits,
+  integrityRisk,
+  locationAlerts,
+  supportThreads,
+  notificationsSent,
+  xMetricsMonth,
+  visitCoverage,
 } from '@/lib/assistant-data'
 import { AllocationContext } from '@/lib/assistant-allocate'
 import type { ChangePlan } from '@/lib/assistant-plan'
@@ -102,6 +108,8 @@ Doing things on the dashboard: when the user asks you to do something rather tha
 - propose_deactivate: stop someone signing in (their records are kept).
 - open_page: give the user a button to a dashboard page, filtered to the person and dates (for "show me", "take me to", "open"). Opening a page changes nothing, so no Apply is needed.
 People and stores always come from match_names first (P… and S… references); never guess one. If a name is ambiguous, ask which one. If the request is unclear (no date, no message), ask rather than invent it; for a notification, you may write the title and message yourself from what the user said, keeping their meaning. Propose each action once. After proposing, reply in one or two sentences: what the card will do and that nothing happens until they press its button. Only admins can do the admin-marked ones; say so to a supervisor. Things you cannot do (delete records, change passwords, change roles, edit stores): say so and give an open_page button to where they can.
+
+More you can read: integrity_risk (who to look at first among the integrity flags, and why, in one sentence each), location_alerts (someone left their store on shift, clocked in away from it, or switched location off), support_threads (issues staff raised in the app; "escalated" ones are waiting for an office reply), notifications_sent (what the office sent and how many phones it reached), x_metrics (a month's units sold against target per enrolled store and person, stock counts that did not add up, and open expiry alerts) and store_coverage (which allocated stores each person visited in a range, and which no one visited). For "who should I worry about" or "who is cheating", start with integrity_risk and give each person's reason. When an answer names a person and a day, offer an open_page button to their movement or the excuse check when it would help.
 
 Resolve relative dates ("today", "yesterday", "last Monday", "this week", "last month") against today's date, given below, and pass them as YYYY-MM-DD. A week runs Monday to Sunday.
 
@@ -198,6 +206,81 @@ const tools: Anthropic.Beta.BetaTool[] = [
     name: 'integrity_flags',
     description:
       'Integrity flags over a date range (at most 62 days; null for the last 30): signs of a fake-location app (the same GPS point on different days, too-perfect accuracy, impossible journeys), rejected photos, selfies taken at home, self-named places, clock times faked on the phone or sent late despite network, and stock counts that do not add up (units missing since the last count, a count identical to the last, only round numbers). Each has the person, store, date, and whether a supervisor has reviewed it. A flag is a reason to check, not proof.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: range,
+      required: ['from', 'to'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'integrity_risk',
+    description:
+      'People ranked by their open (not reviewed) integrity flags over a date range (null for the last 30 days), each with a level (act, watch, note), counts by severity, the last day flagged, and a one-sentence reason such as "3 high flags this week: Same GPS point again on 2 different days, VPN or proxy". Use for "who should I look at", "who is faking location", "who is most suspicious".',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: range,
+      required: ['from', 'to'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'location_alerts',
+    description:
+      'Location alerts over a date range: someone left their store while on shift, clocked in or out away from it, had location too rough to trust, or turned location permission off. Each has the person, store, when, how far away, where, and whether it was resolved and by whom. Includes totals by type.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        ...range,
+        only_open: { type: 'boolean', description: 'True for unresolved alerts only.' },
+      },
+      required: ['from', 'to', 'only_open'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'support_threads',
+    description:
+      'Issues field staff raised in the app help chat, newest activity first: subject, status (open, escalated to the office, resolved), who, store, when, message count and the latest message. Use for "any complaints", "what problems are staff having", "who is waiting for a reply".',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: { status: { type: 'string', enum: ['open', 'escalated', 'all'] } },
+      required: ['status'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'notifications_sent',
+    description:
+      'Push notifications sent from the dashboard over a date range: who sent it, title, message, audience, how many it went to, and how many phones it was delivered to or failed on.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: range,
+      required: ['from', 'to'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'x_metrics',
+    description:
+      'X Metrics for one month: each enrolled store\'s units sold against its target, people\'s units against their targets, stock counts that did not add up (worst first), and open expiry alerts.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: { month: { type: ['string', 'null'], description: 'YYYY-MM. Null for this month.' } },
+      required: ['month'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'store_coverage',
+    description:
+      'Store visit coverage over a date range: for each person, how many of their allocated stores they visited, which they did not, and stores they visited outside their allocation; plus the allocated stores nobody visited. Worst coverage first.',
     strict: true,
     input_schema: {
       type: 'object',
@@ -444,7 +527,7 @@ const tools: Anthropic.Beta.BetaTool[] = [
   {
     name: 'open_page',
     description:
-      'Gives the user a button to a dashboard page. person (P…) and from/to filter movement, excuse, attendance and visits; from/to filter the audit log. Changes nothing.',
+      'Gives the user a button to a dashboard page. person (P…) and from/to filter movement, excuse, attendance, visits and integrity; from/to filter the audit log. Changes nothing.',
     strict: true,
     input_schema: {
       type: 'object',
@@ -517,6 +600,24 @@ async function runTool(
         result = { ...got, flags: got.flags.map(({ id, ...f }) => ({ ref: turn.allocation.refFor('flag', id), ...f })) }
         break
       }
+      case 'integrity_risk':
+        result = await integrityRisk(supabase, input.from, input.to)
+        break
+      case 'location_alerts':
+        result = await locationAlerts(supabase, input.from, input.to, input.only_open)
+        break
+      case 'support_threads':
+        result = await supportThreads(supabase, input.status)
+        break
+      case 'notifications_sent':
+        result = await notificationsSent(supabase, input.from, input.to)
+        break
+      case 'x_metrics':
+        result = await xMetricsMonth(supabase, input.month)
+        break
+      case 'store_coverage':
+        result = await visitCoverage(supabase, input.from, input.to)
+        break
       case 'count_requests': {
         const got = await countRequests(supabase)
         result = { ...got, requests: got.requests.map(({ id, ...r }) => ({ ref: turn.allocation.refFor('request', id), ...r })) }

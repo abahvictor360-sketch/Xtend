@@ -90,4 +90,41 @@ export const FLAG_KINDS: Record<string, { label: string; meaning: string }> = {
     meaning:
       'The clock-in came from a rooted (Android) or jailbroken (iOS) phone, where location and app checks can be bypassed. Treat its location as untrusted.',
   },
+  late_clock_in: {
+    label: 'Late clock-in',
+    meaning: 'Clocked in more than 15 minutes after the shift started.',
+  },
+  early_clock_out: {
+    label: 'Early clock-out',
+    meaning: 'Clocked out more than 15 minutes before the shift ended.',
+  },
+  stock_discrepancy: {
+    label: 'Stock does not add up',
+    meaning:
+      'An X Metrics count is far from what the last count, the supplies and the sales say should be on the shelf.',
+  },
+}
+
+/** Which part of the job a kind of flag is about, for grouping. */
+export const FLAG_AREAS = {
+  location: ['repeated_exact_location', 'perfect_accuracy', 'impossible_journey', 'own_named_place', 'vpn_suspected', 'ip_location_mismatch', 'gps_mock_fingerprint', 'mock_location_confirmed'],
+  phone: ['backdated_clock', 'phone_clock_wrong', 'late_sync_with_network', 'timezone_mismatch', 'device_integrity_failed'],
+  photos: ['photo_rejected', 'photo_unchecked', 'selfie_at_home'],
+  stock: ['count_units_missing', 'count_identical', 'count_round_numbers', 'stock_discrepancy'],
+  time: ['late_clock_in', 'early_clock_out'],
+} as const
+
+export const AREA_LABEL: Record<keyof typeof FLAG_AREAS, string> = {
+  location: 'Location',
+  phone: 'Phone and clock',
+  photos: 'Photos',
+  stock: 'Stock counts',
+  time: 'Punctuality',
+}
+
+export function flagArea(kind: string): keyof typeof FLAG_AREAS | 'other' {
+  for (const [area, kinds] of Object.entries(FLAG_AREAS)) {
+    if ((kinds as readonly string[]).includes(kind)) return area as keyof typeof FLAG_AREAS
+  }
+  return 'other'
 }
