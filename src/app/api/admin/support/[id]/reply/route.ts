@@ -4,6 +4,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { notifyUsers } from '@/lib/notify'
 import { writtenText } from '@/lib/fields'
+import { audit } from '@/lib/audit'
 
 export const maxDuration = 60
 
@@ -37,6 +38,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (parsed.data.resolve) {
       await supabase.rpc('resolve_support_thread', { p_thread: id })
     }
+    await audit(supabase, 'support.reply', 'support_threads', id, {
+      resolve: parsed.data.resolve,
+      length: parsed.data.body.length,
+    })
 
     // Tell the member, using the service role to read the thread owner.
     const admin = createAdminSupabase()
