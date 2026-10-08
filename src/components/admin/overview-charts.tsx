@@ -19,7 +19,7 @@ export interface DayCount {
   late: number
 }
 
-function niceMax(value: number) {
+export function niceMax(value: number) {
   if (value <= 4) return 4
   const step = Math.pow(10, Math.floor(Math.log10(value)))
   // Steps that halve to a whole number, so the middle gridline reads cleanly.
