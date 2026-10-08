@@ -1,7 +1,12 @@
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Donut } from '@/components/admin/overview-charts'
+import { LATE, ON_TIME } from '@/lib/chart-colours'
+import { ScoreBars } from '@/components/admin/score-bars'
 import { lagosDateString, metres } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
@@ -42,6 +47,19 @@ export default async function AnalyticsPage({
     Math.round((new Date(end).getTime() - new Date(start).getTime()) / 86400000) + 1,
   )
 
+  const totalPresent = rows.reduce((sum, r) => sum + r.days_present, 0)
+  const totalLate = rows.reduce((sum, r) => sum + r.days_late, 0)
+  const teamRate = totalPresent ? Math.round(((totalPresent - totalLate) / totalPresent) * 100) : null
+  const byRate = rows
+    .map((r) => ({
+      key: r.user_id,
+      label: r.full_name,
+      value: r.days_present ? ((r.days_present - r.days_late) / r.days_present) * 100 : null,
+      detail: `${r.days_present} days present, ${r.days_late} late`,
+      href: `/admin/metrics/staff/${r.user_id}`,
+    }))
+    .sort((a, b) => (b.value ?? -1) - (a.value ?? -1) || a.label.localeCompare(b.label))
+
   return (
     <div className="space-y-5">
       <div>
@@ -76,6 +94,34 @@ export default async function AnalyticsPage({
         </button>
       </form>
 
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Clock-ins</CardTitle>
+            <CardDescription>Every day someone clocked in, on time or late</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Donut
+              parts={[
+                { label: 'On time', value: totalPresent - totalLate, colour: ON_TIME },
+                { label: 'Late', value: totalLate, colour: LATE },
+              ]}
+              centre={teamRate === null ? '—' : `${teamRate}%`}
+              centreLabel="on time"
+            />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Punctuality by person</CardTitle>
+            <CardDescription>Tap a name to see their X Metrics</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ScoreBars rows={byRate} />
+          </CardContent>
+        </Card>
+      </div>
+
       <div className="rounded-lg border border-border">
         <Table>
           <TableHeader>
@@ -95,7 +141,11 @@ export default async function AnalyticsPage({
               const rate = row.days_present ? Math.round((onTime / row.days_present) * 100) : null
               return (
                 <TableRow key={row.user_id}>
-                  <TableCell className="font-medium">{row.full_name}</TableCell>
+                  <TableCell className="font-medium">
+                    <Link href={`/admin/metrics/staff/${row.user_id}`} className="hover:text-brand hover:underline">
+                      {row.full_name}
+                    </Link>
+                  </TableCell>
                   <TableCell>{row.outlet_name ?? '—'}</TableCell>
                   <TableCell className="tabular-nums">{row.days_present}</TableCell>
                   <TableCell className="tabular-nums">{row.days_late}</TableCell>
