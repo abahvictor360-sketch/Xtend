@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Chip } from '@/components/ui/chip'
 import { Textarea } from '@/components/ui/textarea'
 import { PlanCard } from '@/components/admin/assistant-plan-card'
+import { ActionCard, PageLinks } from '@/components/admin/assistant-action-card'
+import type { PageLink, ProposedAction } from '@/lib/assistant-action-types'
 import { cn } from '@/lib/utils'
 import { REPORT_FORMATS, reportDownloadUrl, type ReportSpec } from '@/lib/assistant-report-spec'
 import type { ChangePlan } from '@/lib/assistant-plan'
@@ -18,6 +20,8 @@ interface Turn {
   file?: string
   reports?: ReportSpec[]
   plans?: ChangePlan[]
+  actions?: ProposedAction[]
+  links?: PageLink[]
 }
 
 interface Attached {
@@ -37,6 +41,8 @@ const SUGGESTIONS = [
   'Weekly attendance report for this week',
   "Summarise this week's field reports",
   "Show today's stock counts",
+  'Remind everyone who has not clocked in to clock in now',
+  'Ask all merchandisers for a stock count by Friday',
 ]
 
 /** Only the most recent turns go back to the server; older ones add cost, not answers. */
@@ -121,6 +127,8 @@ export function AttendanceAssistant({
         answer?: string
         reports?: ReportSpec[]
         plans?: ChangePlan[]
+        actions?: ProposedAction[]
+        links?: PageLink[]
         error?: string
       }
       if (!res.ok || !json.answer) {
@@ -133,7 +141,14 @@ export function AttendanceAssistant({
       }
       setTurns([
         ...next,
-        { role: 'assistant', content: json.answer, reports: json.reports, plans: json.plans },
+        {
+          role: 'assistant',
+          content: json.answer,
+          reports: json.reports,
+          plans: json.plans,
+          actions: json.actions,
+          links: json.links,
+        },
       ])
     } catch (e) {
       // Put the unanswered question, and its file, back so it can be resent.
@@ -190,7 +205,7 @@ export function AttendanceAssistant({
                   turn.role === 'user'
                     ? 'bg-brand text-primary-foreground'
                     : 'border border-border bg-card text-foreground shadow-soft',
-                  turn.plans?.length && 'w-full max-w-full',
+                  (turn.plans?.length || turn.actions?.length) && 'w-full max-w-full',
                 )}
               >
                 {turn.file && (
@@ -202,6 +217,8 @@ export function AttendanceAssistant({
                 {turn.content}
                 {turn.reports?.map((report, r) => <ReportCard key={r} report={report} />)}
                 {turn.plans?.map((plan, p) => <PlanCard key={p} plan={plan} />)}
+                {turn.actions?.map((action) => <ActionCard key={action.key} action={action} />)}
+                {turn.links?.length ? <PageLinks links={turn.links} /> : null}
               </div>
             </div>
           ))}

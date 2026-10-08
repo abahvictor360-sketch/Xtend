@@ -30,7 +30,7 @@ interface Supervisor {
   role: string
 }
 
-type Ref = { kind: 'person' | 'store' | 'supervisor'; id: string }
+type Ref = { kind: 'person' | 'store' | 'supervisor' | 'flag' | 'request'; id: string }
 
 export class AllocationContext {
   private loaded: Promise<void> | null = null
@@ -39,7 +39,7 @@ export class AllocationContext {
   supervisors: Supervisor[] = []
   private refs = new Map<string, Ref>()
   private refOf = new Map<string, string>()
-  private counters = { person: 0, store: 0, supervisor: 0 }
+  private counters = { person: 0, store: 0, supervisor: 0, flag: 0, request: 0 }
 
   constructor(
     private readonly supabase: SupabaseClient,
@@ -85,11 +85,16 @@ export class AllocationContext {
     return this.loaded
   }
 
+  /** A short reference for an id, for tools other than match_names (F…, R…). */
+  refFor(kind: Ref['kind'], id: string) {
+    return this.ref(kind, id)
+  }
+
   private ref(kind: Ref['kind'], id: string) {
     const key = `${kind}:${id}`
     const existing = this.refOf.get(key)
     if (existing) return existing
-    const prefix = kind === 'person' ? 'P' : kind === 'store' ? 'S' : 'V'
+    const prefix = { person: 'P', store: 'S', supervisor: 'V', flag: 'F', request: 'R' }[kind]
     const ref = `${prefix}${++this.counters[kind]}`
     this.refs.set(ref, { kind, id })
     this.refOf.set(key, ref)
@@ -99,7 +104,8 @@ export class AllocationContext {
   resolve(ref: unknown, kind: Ref['kind']) {
     const found = typeof ref === 'string' ? this.refs.get(ref.trim().toUpperCase()) : undefined
     if (!found || found.kind !== kind) {
-      throw new Error(`"${String(ref)}" is not a ${kind} reference from match_names`)
+      const from = kind === 'flag' ? 'integrity_flags' : kind === 'request' ? 'count_requests' : 'match_names'
+      throw new Error(`"${String(ref)}" is not a ${kind} reference from ${from}`)
     }
     return found.id
   }
