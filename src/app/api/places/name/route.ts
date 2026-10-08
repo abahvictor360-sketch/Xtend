@@ -12,7 +12,26 @@ const schema = z.object({
   accuracy_m: z.number().nonnegative(),
   storefront_path: z.string().min(1).max(300),
   selfie_path: z.string().min(1).max(300),
+  /** Where the phone was when naming began and at each photo (045). */
+  evidence: z
+    .object({
+      first: z.unknown().optional(),
+      sign: z.unknown().optional(),
+      selfie: z.unknown().optional(),
+    })
+    .optional(),
 })
+
+const point = z
+  .object({
+    lat: z.number().min(-90).max(90),
+    lng: z.number().min(-180).max(180),
+    accuracy_m: z.number().nonnegative(),
+    captured_at: z.string().max(40).optional(),
+    samples: z.number().int().nonnegative().optional(),
+  })
+  .nullable()
+  .catch(null)
 
 /**
  * Names a place nobody could recognise (045): the store sign from outside
@@ -41,6 +60,14 @@ export async function POST(request: Request) {
       p_accuracy_m: b.accuracy_m,
       p_storefront_path: b.storefront_path,
       p_selfie_path: b.selfie_path,
+      // Only well-formed positions are passed on; anything else is dropped.
+      p_evidence: b.evidence
+        ? {
+            first: point.parse(b.evidence.first ?? null),
+            sign: point.parse(b.evidence.sign ?? null),
+            selfie: point.parse(b.evidence.selfie ?? null),
+          }
+        : null,
     })
     if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
     return Response.json({ place_id: data }, { status: 201 })

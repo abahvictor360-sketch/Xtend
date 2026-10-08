@@ -2708,8 +2708,22 @@ begin
         'place: a rough fix does not ask for a name');
       delete from public.attendance where user_id = zed;
 
-      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
-      values ('opening', 7.1000, 4.1000, 10, fresh_photo('selfies', 'pl-in.jpg'), now());
+      -- The selfie's own position is a kilometre from the first fix: the
+      -- spot is not certain, so nobody is asked to save it.
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, device_info)
+      values ('opening', 7.1000, 4.1000, 10, fresh_photo('selfies', 'pl-jump.jpg'), now(),
+              jsonb_build_object('position', jsonb_build_object(
+                'shutter', jsonb_build_object('lat', 7.1100, 'lng', 4.1000, 'accuracy_m', 10))));
+      perform assert(not exists (select 1 from public.my_place_due()),
+        'place: when the photo''s position disagrees with the first fix, nothing is asked');
+      delete from public.attendance where user_id = zed;
+
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, device_info)
+      values ('opening', 7.1000, 4.1000, 25, fresh_photo('selfies', 'pl-in.jpg'), now(),
+              jsonb_build_object('position', jsonb_build_object(
+                'shutter', jsonb_build_object('lat', 7.10005, 'lng', 4.10005, 'accuracy_m', 8))));
+      perform assert((select accuracy_m from public.place_naming_due where user_id = zed) = 8,
+        'place: when they agree, the surer of the two readings is kept');
       due := (select id from public.my_place_due());
       perform assert(due is not null, 'place: clocking in somewhere unknown asks for its name');
 
@@ -2744,10 +2758,27 @@ begin
         perform assert(sqlerrm like '%not accurate enough%', 'place: the position must be accurate');
       end;
 
-      named := public.name_place(due, '  Ojota   Plaza ', 7.1001, 4.1001, 10, front, selfie);
+      begin
+        perform public.name_place(due, 'Ojota Plaza', 7.1001, 4.1001, 10, front, selfie,
+          jsonb_build_object('sign', jsonb_build_object('lat', 7.1050, 'lng', 4.1001, 'accuracy_m', 10)));
+        perform assert(false, 'place: the sign photo is taken where the place is saved');
+      exception when others then
+        perform assert(sqlerrm like '%moved while you took the photo%', 'place: the sign photo is taken where the place is saved');
+      end;
+      begin
+        perform public.name_place(due, 'Ojota Plaza', 7.1001, 4.1001, 10, front, selfie,
+          jsonb_build_object('selfie', jsonb_build_object('lat', 7.1030, 'lng', 4.1001, 'accuracy_m', 10)));
+        perform assert(false, 'place: the selfie is taken at the place');
+      exception when others then
+        perform assert(sqlerrm like '%selfie at the place%', 'place: the selfie is taken at the place');
+      end;
+
+      named := public.name_place(due, '  Ojota   Plaza ', 7.1001, 4.1001, 10, front, selfie,
+        jsonb_build_object('sign', jsonb_build_object('lat', 7.10012, 'lng', 4.10008, 'accuracy_m', 9),
+                           'selfie', jsonb_build_object('lat', 7.10014, 'lng', 4.10011, 'accuracy_m', 12)));
       perform assert((select name = 'Ojota Plaza' and source = 'staff' and named_by = zed
                              and photo_path = front and selfie_path = selfie
-                             and abs(lat - 7.1001) < 1e-9
+                             and abs(lat - 7.1001) < 1e-9 and position_evidence ? 'sign'
                       from public.known_places where id = named),
         'place: it is saved with its name, both photos and the phone''s position');
       perform assert(not exists (select 1 from public.my_place_due()),

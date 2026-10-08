@@ -23,8 +23,9 @@ alter table public.photo_checks drop constraint if exists photo_checks_kind_chec
 alter table public.photo_checks add constraint photo_checks_kind_check
   check (kind in ('selfie', 'shelf', 'storefront', 'product_selfie'));
 
--- A named place keeps both photos.
+-- A named place keeps both photos, and where the phone was for each.
 alter table public.known_places add column if not exists selfie_path text;
+alter table public.known_places add column if not exists position_evidence jsonb;
 
 create table if not exists public.place_naming_due (
   id              uuid primary key default gen_random_uuid(),
@@ -60,15 +61,54 @@ returns boolean language sql stable security definer set search_path = public as
       or exists (select 1 from public.known_place_at(p_lat, p_lng) k where k.source <> 'clock_in');
 $$;
 
+-- A position the phone sent as {lat, lng, accuracy_m}, or null.
+create or replace function public.position_point(p jsonb)
+returns table (lat double precision, lng double precision, accuracy_m double precision)
+language sql immutable as $$
+  select (p->>'lat')::float8, (p->>'lng')::float8, (p->>'accuracy_m')::float8
+  where jsonb_typeof(p) = 'object'
+    and jsonb_typeof(p->'lat') = 'number' and jsonb_typeof(p->'lng') = 'number'
+    and jsonb_typeof(p->'accuracy_m') = 'number'
+    and abs((p->>'lat')::float8) <= 90 and abs((p->>'lng')::float8) <= 180
+    and (p->>'accuracy_m')::float8 >= 0;
+$$;
+
+-- p_position is device_info.position: the first fix and the one read at
+-- the camera's shutter. Someone is only asked to add a place where the two
+-- agree; a fix that jumped between them is not a place to save.
 create or replace function public.raise_place_due(
   p_user uuid, p_lat double precision, p_lng double precision, p_accuracy double precision,
-  p_kind text, p_source uuid
+  p_kind text, p_source uuid, p_position jsonb default null
 ) returns void language plpgsql security definer set search_path = public as $$
+declare
+  shot record;
+  apart double precision;
+  at_lat double precision := p_lat;
+  at_lng double precision := p_lng;
+  at_acc double precision := p_accuracy;
 begin
   -- A rough fix cannot say which building; that is flagged elsewhere.
   if p_lat is null or p_lng is null or coalesce(p_accuracy, 1000) > 100 then
     return;
   end if;
+
+  select * into shot from public.position_point(p_position->'shutter');
+  if shot.lat is not null then
+    apart := public.distance_metres(p_lat, p_lng, shot.lat, shot.lng);
+    -- The two readings disagree: the spot is not certain enough to save.
+    if apart > greatest(30, coalesce(p_accuracy, 0) + coalesce(shot.accuracy_m, 0)) then
+      return;
+    end if;
+    -- Either reading inside a store or a known place: it is recognised.
+    if public.place_is_recognised(shot.lat, shot.lng) then
+      return;
+    end if;
+    -- The surer of the two is where the place is.
+    if shot.accuracy_m < p_accuracy then
+      at_lat := shot.lat; at_lng := shot.lng; at_acc := shot.accuracy_m;
+    end if;
+  end if;
+
   if public.place_is_recognised(p_lat, p_lng) then
     return;
   end if;
@@ -77,22 +117,24 @@ begin
   if exists (select 1 from public.place_naming_due d
              where d.user_id = p_user and d.due_date = public.business_date()
                and d.named_at is null
-               and public.distance_metres(p_lat, p_lng, d.lat, d.lng) <= 150) then
+               and public.distance_metres(at_lat, at_lng, d.lat, d.lng) <= 150) then
     return;
   end if;
   insert into public.place_naming_due (user_id, lat, lng, accuracy_m, source_kind, source_id, due_date)
-  values (p_user, p_lat, p_lng, p_accuracy, p_kind, p_source, public.business_date())
+  values (p_user, at_lat, at_lng, at_acc, p_kind, p_source, public.business_date())
   on conflict do nothing;
 end;
 $$;
-revoke all on function public.raise_place_due(uuid, double precision, double precision, double precision, text, uuid)
+drop function if exists public.raise_place_due(uuid, double precision, double precision, double precision, text, uuid);
+revoke all on function public.raise_place_due(uuid, double precision, double precision, double precision, text, uuid, jsonb)
   from public, anon, authenticated;
 
 create or replace function public.attendance_place_due()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if new.type = 'opening' then
-    perform public.raise_place_due(new.user_id, new.lat, new.lng, new.accuracy_m, 'clock_in', new.id);
+    perform public.raise_place_due(new.user_id, new.lat, new.lng, new.accuracy_m, 'clock_in', new.id,
+                                   new.device_info->'position');
   end if;
   return null;
 end;
@@ -108,7 +150,7 @@ returns trigger language plpgsql security definer set search_path = public as $$
 begin
   if new.outlet_id is null then
     perform public.raise_place_due(new.user_id, new.arrived_lat, new.arrived_lng, new.arrived_accuracy_m,
-                                   'visit', new.id);
+                                   'visit', new.id, new.device_info->'position');
   end if;
   return null;
 end;
@@ -156,11 +198,16 @@ end $$;
 
 -- Names the place: both photos taken just now in the app and checked, the
 -- phone's own fix, standing where the place was found.
+-- p_evidence is where the phone was: {first, sign, selfie}, each
+-- {lat, lng, accuracy_m}, read when the naming began and at each photo's
+-- shutter. When the phone could read them, they must agree.
 create or replace function public.name_place(
   p_due uuid, p_name text, p_lat double precision, p_lng double precision, p_accuracy_m double precision,
-  p_storefront_path text, p_selfie_path text
+  p_storefront_path text, p_selfie_path text, p_evidence jsonb default null
 ) returns uuid language plpgsql security definer set search_path = public as $$
 declare
+  sign_at record;
+  selfie_at record;
   me uuid := auth.uid();
   due public.place_naming_due;
   clean text := regexp_replace(btrim(coalesce(p_name, '')), '\s+', ' ', 'g');
@@ -184,6 +231,21 @@ begin
   end if;
   if public.distance_metres(p_lat, p_lng, due.lat, due.lng) > 200 then
     raise exception 'Name the place from where you clocked in: you are % m away', round(public.distance_metres(p_lat, p_lng, due.lat, due.lng)::numeric);
+  end if;
+
+  -- The sign photo was taken where the place is being saved, and the
+  -- selfie close by.
+  select * into sign_at from public.position_point(p_evidence->'sign');
+  if sign_at.lat is not null
+     and public.distance_metres(p_lat, p_lng, sign_at.lat, sign_at.lng)
+         > greatest(30, p_accuracy_m + coalesce(sign_at.accuracy_m, 0)) then
+    raise exception 'Your location moved while you took the photo of the sign. Stand still outside and take it again';
+  end if;
+  select * into selfie_at from public.position_point(p_evidence->'selfie');
+  if selfie_at.lat is not null
+     and public.distance_metres(p_lat, p_lng, selfie_at.lat, selfie_at.lng)
+         > greatest(100, p_accuracy_m + coalesce(selfie_at.accuracy_m, 0)) then
+    raise exception 'Take the selfie at the place, next to the sign';
   end if;
 
   if p_storefront_path is null or not public.photo_is_fresh('reports', p_storefront_path, 30)
@@ -219,7 +281,7 @@ begin
     -- The guess from a clock-in (034) gets its real name and photos.
     update public.known_places
     set name = clean, source = 'staff', named_by = me, photo_path = p_storefront_path,
-        selfie_path = p_selfie_path, lat = p_lat, lng = p_lng, last_seen_at = now(),
+        selfie_path = p_selfie_path, position_evidence = p_evidence, lat = p_lat, lng = p_lng, last_seen_at = now(),
         visitors = case when me = any(visitors) then visitors else visitors || me end
     where id = here.id;
     place := here.id;
@@ -228,7 +290,7 @@ begin
     place := here.id;
   elsif public.outlet_containing(p_lat, p_lng) is null then
     place := public.learn_place(p_lat, p_lng, clean, null, 'staff', p_storefront_path);
-    update public.known_places set selfie_path = p_selfie_path where id = place;
+    update public.known_places set selfie_path = p_selfie_path, position_evidence = p_evidence where id = place;
   end if;
 
   update public.place_naming_due
@@ -238,9 +300,10 @@ begin
   return place;
 end;
 $$;
-revoke all on function public.name_place(uuid, text, double precision, double precision, double precision, text, text)
+drop function if exists public.name_place(uuid, text, double precision, double precision, double precision, text, text);
+revoke all on function public.name_place(uuid, text, double precision, double precision, double precision, text, text, jsonb)
   from public, anon;
-grant execute on function public.name_place(uuid, text, double precision, double precision, double precision, text, text)
+grant execute on function public.name_place(uuid, text, double precision, double precision, double precision, text, text, jsonb)
   to authenticated, service_role;
 
 -- An admin, or the person's supervisor, lets them off (not a shop, say).

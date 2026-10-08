@@ -11,7 +11,7 @@ import { Alert } from '@/components/ui/alert'
 import { processSelfie } from '@/lib/image'
 import { deviceInfo } from '@/lib/device'
 import { nativeDeviceSignals } from '@/lib/native'
-import { requireFix, GeoBlocked, haversineMetres, type Fix } from '@/lib/geo'
+import { requireFix, GeoBlocked, haversineMetres, positionCheck, type Fix, type SampledFix } from '@/lib/geo'
 import { submitOrQueue, PermanentJobError } from '@/lib/offline/sync'
 import { formatLagos, metres } from '@/lib/utils'
 import type { AttendanceType, DayState } from '@/lib/types'
@@ -101,7 +101,7 @@ export function ClockPanel({
   }, [])
 
   const onSelfie = useCallback(
-    async (photo: Blob) => {
+    async (photo: Blob, at: SampledFix | null) => {
       const started = pending
       setPending(null)
       if (!started) return
@@ -141,6 +141,9 @@ export function ClockPanel({
           device_info: {
             ...deviceInfo(),
             selfie_source: 'in_app_camera',
+            // Where the phone was first, and at the shutter: the server
+            // checks they agree before asking anyone to add a place.
+            position: positionCheck(fix, at),
             gps: {
               altitude: fix.altitude,
               altitude_accuracy: fix.altitude_accuracy,
@@ -294,8 +297,9 @@ export function ClockPanel({
         open={pending !== null}
         title={pending?.type === 'closing' ? 'Clock out selfie' : 'Clock in selfie'}
         subtitle={pending?.place.label ?? null}
-        onCapture={(photo) => void onSelfie(photo)}
+        onCapture={(photo, at) => void onSelfie(photo, at)}
         onClose={() => setPending(null)}
+        locate
       />
 
       {needsNotifications ? (

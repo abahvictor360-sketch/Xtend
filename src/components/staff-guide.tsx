@@ -170,8 +170,10 @@ export function StaffGuide() {
             </>,
             <>
               Under <Ui>Photo of the building from outside, with the sign showing</Ui>, tap{' '}
-              <Ui>Open the camera</Ui> and take the photo. Xtend reads your location from your
-              phone at this moment: that is where the place is saved, so take it at the place.
+              <Ui>Open the camera</Ui>. Stand still for a few seconds while Xtend locks your
+              location from several GPS readings, then take the photo. The camera reads your
+              location again as you take it; if the two do not match, Xtend asks you to take it
+              again. That location is where the place is saved, so take it at the place.
             </>,
             <>
               Under <Ui>Selfie holding one of our products</Ui>, tap <Ui>Open the camera</Ui>{' '}

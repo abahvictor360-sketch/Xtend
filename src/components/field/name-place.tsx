@@ -7,7 +7,7 @@ import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { CameraCapture } from '@/components/field/camera-capture'
-import { GeoBlocked, requireFix, type Fix } from '@/lib/geo'
+import { GeoBlocked, bestFix, combineFixes, fixesAgree, haversineMetres, type SampledFix } from '@/lib/geo'
 import { processReportPhoto } from '@/lib/image'
 import { supabase } from '@/lib/supabase/client'
 import { checkPhoto, flushOutbox } from '@/lib/offline/sync'
@@ -38,7 +38,10 @@ export interface PlaceDue {
 export function NamePlace({ due }: { due: PlaceDue }) {
   const router = useRouter()
   const [name, setName] = useState('')
-  const [fix, setFix] = useState<Fix | null>(null)
+  // Where the phone was when naming began, then at each photo's shutter.
+  const [fix, setFix] = useState<SampledFix | null>(null)
+  const [signAt, setSignAt] = useState<SampledFix | null>(null)
+  const [selfieAt, setSelfieAt] = useState<SampledFix | null>(null)
   const [front, setFront] = useState<Blob | null>(null)
   const [selfie, setSelfie] = useState<Blob | null>(null)
   const [camera, setCamera] = useState<'front' | 'selfie' | null>(null)
@@ -49,10 +52,16 @@ export function NamePlace({ due }: { due: PlaceDue }) {
 
   async function takeFront() {
     setError(null)
-    setStep('Reading your location')
+    setStep('Locking your location')
     try {
-      // The location of the place is where the phone is, now.
-      setFix(await requireFix())
+      // The place is saved where the phone is, so take time to get it right:
+      // several readings, aiming for 15 m, combined.
+      setFix(await bestFix({ targetAccuracyM: 15, minSamples: 3, settleMs: 15000, timeoutMs: 30000 }))
+      setFront(null)
+      setSignAt(null)
+      // The selfie is checked against the sign's position: take it again too.
+      setSelfie(null)
+      setSelfieAt(null)
       setCamera('front')
     } catch (e) {
       setError(e instanceof GeoBlocked ? e.message : 'Your location could not be read. Turn on location and try again.')
@@ -83,8 +92,15 @@ export function NamePlace({ due }: { due: PlaceDue }) {
     return path
   }
 
+  /** The place's position: the first fix and the sign photo's, combined. */
+  function placePosition() {
+    if (!fix) return null
+    return signAt ? combineFixes([fix, signAt]) : fix
+  }
+
   async function save() {
-    if (!fix || !front || !selfie || nameProblem) return
+    const at = placePosition()
+    if (!fix || !at || !front || !selfie || nameProblem) return
     setError(null)
     try {
       if (typeof navigator !== 'undefined' && navigator.onLine === false) {
@@ -101,11 +117,17 @@ export function NamePlace({ due }: { due: PlaceDue }) {
         body: JSON.stringify({
           due_id: due.id,
           name,
-          lat: fix.lat,
-          lng: fix.lng,
-          accuracy_m: fix.accuracy_m,
+          lat: at.lat,
+          lng: at.lng,
+          accuracy_m: at.accuracy_m,
           storefront_path,
           selfie_path,
+          // Where the phone was at each step, for the server to check.
+          evidence: {
+            first: brief(fix),
+            sign: signAt ? brief(signAt) : null,
+            selfie: selfieAt ? brief(selfieAt) : null,
+          },
         }),
       })
       const json = (await res.json().catch(() => ({}))) as { error?: string }
@@ -182,7 +204,9 @@ export function NamePlace({ due }: { due: PlaceDue }) {
 
       {fix && (
         <p className="text-xs text-muted-foreground">
-          Location read by your phone: accurate to about {Math.round(fix.accuracy_m)} m.
+          Location locked from {fix.used} of {fix.samples} GPS reading{fix.samples === 1 ? '' : 's'}, accurate to about{' '}
+          {Math.round(placePosition()?.accuracy_m ?? fix.accuracy_m)} m
+          {signAt ? '; the photo of the sign was taken at the same spot' : ''}.
         </p>
       )}
       {error && <Alert variant="destructive">{error}</Alert>}
@@ -196,9 +220,22 @@ export function NamePlace({ due }: { due: PlaceDue }) {
         facing="environment"
         title="The building and its sign"
         subtitle="Stand outside so the sign is in the photo"
-        onCapture={(photo) => {
-          setFront(photo)
+        locate
+        onCapture={(photo, at) => {
           setCamera(null)
+          // The camera's own reading must agree with the one taken first;
+          // if the position jumped, neither can be trusted.
+          if (fix && at) {
+            const { apart, agree } = fixesAgree(fix, at)
+            if (!agree) {
+              setError(
+                `Your location jumped ${Math.round(apart)} m while you took the photo. Stand still outside, wait a moment, and take it again.`,
+              )
+              return
+            }
+          }
+          setSignAt(at)
+          setFront(photo)
         }}
         onClose={() => setCamera(null)}
       />
@@ -207,9 +244,16 @@ export function NamePlace({ due }: { due: PlaceDue }) {
         facing="user"
         title="Selfie with our product"
         subtitle="Hold the product up next to your face"
-        onCapture={(photo) => {
-          setSelfie(photo)
+        locate
+        onCapture={(photo, at) => {
           setCamera(null)
+          const place = placePosition()
+          if (place && at && haversineMetres(place.lat, place.lng, at.lat, at.lng) > Math.max(100, place.accuracy_m + at.accuracy_m)) {
+            setError('Take the selfie at the place, next to the sign.')
+            return
+          }
+          setSelfieAt(at)
+          setSelfie(photo)
         }}
         onClose={() => setCamera(null)}
       />
@@ -251,4 +295,8 @@ function Step({
       </Button>
     </li>
   )
+}
+
+function brief(f: SampledFix) {
+  return { lat: f.lat, lng: f.lng, accuracy_m: f.accuracy_m, captured_at: f.captured_at, samples: f.samples }
 }

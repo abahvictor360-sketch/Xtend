@@ -136,7 +136,10 @@ export default async function AdminGuidePage() {
             name, they must add it before they go on. Standing outside, they type the name on the sign
             and take two photos with the camera in Xtend (never from the gallery): the building with
             its sign showing, and a selfie holding one of our products. The position is read from their
-            phone&apos;s GPS, not typed, and must be where they clocked in. From then on Xtend
+            phone&apos;s GPS, not typed: several readings are combined, the camera reads the position
+            again at each photo, and the readings must agree with each other and with where they clocked
+            in. Nobody is asked to add a place when the clock-in&apos;s own readings disagree, since that
+            spot cannot be trusted. From then on Xtend
             recognises the place for everyone. Until it is added, that day&apos;s store visits, store
             counts, X Metrics counts and sales and daily report wait; clocking out never does.
           </p>

@@ -11,7 +11,7 @@ import { CameraCapture } from '@/components/field/camera-capture'
 import { SectionHeader } from '@/components/field/screen'
 import { TaskRow } from '@/components/field/task-row'
 import { deviceInfo } from '@/lib/device'
-import { GeoBlocked, haversineMetres, requireFix, type Fix } from '@/lib/geo'
+import { GeoBlocked, haversineMetres, positionCheck, requireFix, type Fix, type SampledFix } from '@/lib/geo'
 import { processSelfie } from '@/lib/image'
 import { supabase } from '@/lib/supabase/client'
 import { checkPhoto } from '@/lib/offline/sync'
@@ -143,7 +143,7 @@ export function StoreVisits({
   }, [])
 
   const checkIn = useCallback(
-    async (photo: Blob) => {
+    async (photo: Blob, at: SampledFix | null = null) => {
       const started = pending
       setPending(null)
       if (!started) return
@@ -205,7 +205,8 @@ export function StoreVisits({
             place_name: place.name,
             selfie_path,
             thumb_path,
-            device_info: { ...deviceInfo(), selfie_source: 'in_app_camera' },
+            // Where the phone was first, and at the shutter (045).
+            device_info: { ...deviceInfo(), selfie_source: 'in_app_camera', position: positionCheck(fix, at) },
             client_captured_at: fix.captured_at,
           }),
         })
@@ -394,8 +395,9 @@ export function StoreVisits({
               : 'Check in'
         }
         subtitle={pending?.place.name ?? pending?.place.address ?? null}
-        onCapture={(photo) => void checkIn(photo)}
+        onCapture={(photo, at) => void checkIn(photo, at)}
         onClose={() => setPending(null)}
+        locate
       />
 
       {done.map((visit) => (
