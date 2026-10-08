@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -474,7 +475,7 @@ export function StaffManager({
                 <TableCell className="font-medium">
                   <span className="flex items-center gap-2.5">
                     <PersonPhoto name={person.full_name} url={photos[person.id]} />
-                    {person.full_name}
+                    <PersonName person={person} />
                   </span>
                 </TableCell>
                 <TableCell className="text-xs text-muted-foreground">
@@ -599,7 +600,7 @@ export function StaffManager({
               <div className="flex items-start justify-between gap-2">
                 <PersonPhoto name={person.full_name} url={photos[person.id]} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold">{person.full_name}</p>
+                  <p className="truncate font-semibold"><PersonName person={person} /></p>
                   <p className="truncate text-xs text-muted-foreground">{person.email}</p>
                   <p className="text-xs text-muted-foreground">{person.phone ?? 'No phone'}</p>
                 </div>
@@ -775,5 +776,15 @@ function PersonPhoto({ name, url }: { name: string; url?: string }) {
         .map((w) => w[0]?.toUpperCase())
         .join('')}
     </span>
+  )
+}
+
+/** Field staff open their X Metrics; anyone else is just named. */
+function PersonName({ person }: { person: { id: string; full_name: string; role: UserRole } }) {
+  if (person.role !== 'merchandiser' && person.role !== 'marketer') return <>{person.full_name}</>
+  return (
+    <Link href={`/admin/metrics/staff/${person.id}`} className="hover:text-brand hover:underline" title="See their X Metrics">
+      {person.full_name}
+    </Link>
   )
 }

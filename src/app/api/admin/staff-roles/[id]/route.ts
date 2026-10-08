@@ -8,9 +8,11 @@ const schema = z.object({
   name: roleName.optional(),
   /** Retired roles stay on the people who have them, but cannot be given. */
   is_active: z.boolean().optional(),
+  /** Whether people with it take store counts (migration 046). */
+  counts_stock: z.boolean().optional(),
 })
 
-/** Renames, retires or brings back a role. Admins only. */
+/** Renames, retires or brings back a role, or sets whether it counts stock. Admins only. */
 export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     await requireApiSession(['admin'])

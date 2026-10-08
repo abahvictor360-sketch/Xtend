@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { problemWith } from '@/lib/field-check'
-import { BASE_LABEL, roleName, type StaffRole } from '@/lib/staff-roles'
+import { BASE_LABEL, roleName, type BuiltInCounts, type CountingRole, type StaffRole } from '@/lib/staff-roles'
 
 const WORKS_LIKE: { value: StaffRole['base_role']; label: string; hint: string }[] = [
   { value: 'merchandiser', label: 'Merchandiser', hint: 'Clocks in and out with a selfie at one store or office.' },
@@ -19,10 +19,19 @@ const WORKS_LIKE: { value: StaffRole['base_role']; label: string; hint: string }
   { value: 'supervisor', label: 'Supervisor', hint: 'Uses the dashboard for their own team.' },
 ]
 
-export function RoleManager({ roles, counts }: { roles: StaffRole[]; counts: Record<string, number> }) {
+export function RoleManager({
+  roles,
+  counts,
+  builtInCounts,
+}: {
+  roles: StaffRole[]
+  counts: Record<string, number>
+  builtInCounts: BuiltInCounts
+}) {
   const router = useRouter()
   const [name, setName] = useState('')
   const [base, setBase] = useState<StaffRole['base_role']>('merchandiser')
+  const [countsStock, setCountsStock] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -55,8 +64,10 @@ export function RoleManager({ roles, counts }: { roles: StaffRole[]; counts: Rec
     event.preventDefault()
     const problem = problemWith(roleName, name)
     if (problem) return setError(problem)
-    if (await send('/api/admin/staff-roles', 'POST', { name, base_role: base }, `Added "${name.trim()}".`, 'new')) {
+    const body = { name, base_role: base, counts_stock: base !== 'supervisor' && countsStock }
+    if (await send('/api/admin/staff-roles', 'POST', body, `Added "${name.trim()}".`, 'new')) {
       setName('')
+      setCountsStock(true)
     }
   }
 
@@ -92,11 +103,46 @@ export function RoleManager({ roles, counts }: { roles: StaffRole[]; counts: Rec
             </Button>
           </form>
           <p className="mt-2 text-xs text-muted-foreground">{WORKS_LIKE.find((w) => w.value === base)?.hint}</p>
+          {base !== 'supervisor' && (
+            <label className="mt-3 flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="h-4 w-4 accent-[hsl(var(--primary))]"
+                checked={countsStock}
+                onChange={(e) => setCountsStock(e.target.checked)}
+              />
+              Takes store counts
+            </label>
+          )}
         </CardContent>
       </Card>
 
       {error && <Alert variant="destructive">{error}</Alert>}
       {notice && <Alert variant="success">{notice}</Alert>}
+
+      <StoreCountSettings
+        rows={[
+          ...(['merchandiser', 'marketer'] as CountingRole[]).map((role) => ({
+            key: role,
+            name: BASE_LABEL[role],
+            note: 'Built-in role',
+            on: builtInCounts[role] ?? true,
+            save: (on: boolean) =>
+              send('/api/admin/role-store-counts', 'PATCH', { role, counts_stock: on }, countNotice(BASE_LABEL[role], on), role),
+          })),
+          ...roles
+            .filter((r) => r.base_role !== 'supervisor' && r.is_active)
+            .map((r) => ({
+              key: r.id,
+              name: r.name,
+              note: `Works like a ${BASE_LABEL[r.base_role].toLowerCase()}`,
+              on: r.counts_stock,
+              save: (on: boolean) =>
+                send(`/api/admin/staff-roles/${r.id}`, 'PATCH', { counts_stock: on }, countNotice(r.name, on), r.id),
+            })),
+        ]}
+        busy={busy}
+      />
 
       {roles.length === 0 ? (
         <p className="text-sm text-muted-foreground">No roles added yet.</p>
@@ -172,5 +218,66 @@ export function RoleManager({ roles, counts }: { roles: StaffRole[]; counts: Rec
         </ul>
       )}
     </div>
+  )
+}
+
+function countNotice(name: string, on: boolean) {
+  return on
+    ? `${name} now take store counts.`
+    : `${name} no longer take store counts: the count form is gone from their app.`
+}
+
+interface CountRow {
+  key: string
+  name: string
+  note: string
+  on: boolean
+  save: (on: boolean) => Promise<boolean>
+}
+
+/** Which roles take the month-end store count and counts a supervisor asks for. */
+function StoreCountSettings({ rows, busy }: { rows: CountRow[]; busy: string | null }) {
+  return (
+    <Card>
+      <CardContent className="space-y-3 pt-5">
+        <div>
+          <p className="font-semibold">Store counts</p>
+          <p className="text-xs text-muted-foreground">
+            Choose which roles take the month-end store count and counts a supervisor asks for.
+            Roles that are off do not see the count form, and cannot be asked to count.
+          </p>
+        </div>
+        <ul className="divide-y divide-border rounded-xl border border-border">
+          {rows.map((row) => (
+            <li key={row.key} className="flex items-center gap-3 px-3 py-2.5">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium">{row.name}</p>
+                <p className="text-xs text-muted-foreground">{row.note}</p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={row.on}
+                aria-label={`${row.name} take store counts`}
+                disabled={busy !== null}
+                onClick={() => void row.save(!row.on)}
+                className={
+                  'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ' +
+                  (row.on ? 'bg-primary' : 'bg-muted')
+                }
+              >
+                <span
+                  className={
+                    'inline-block h-5 w-5 rounded-full bg-white shadow transition-transform ' +
+                    (row.on ? 'translate-x-5' : 'translate-x-0.5')
+                  }
+                />
+              </button>
+              <span className="w-8 text-xs font-semibold text-muted-foreground">{row.on ? 'Yes' : 'No'}</span>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
   )
 }

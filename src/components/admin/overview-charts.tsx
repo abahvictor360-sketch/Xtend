@@ -2,19 +2,11 @@
 
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { LATE, NOT_IN, ON_TIME } from '@/lib/chart-colours'
 
-/*
- * Chart colours, from the brand's own orange family, checked with the
- * data-viz palette validator (lightness band, chroma, colour-blind and
- * normal-vision separation, contrast on white):
- *   on time #d1511a · late #c98500 · not in #8a3a12
- * Gold's contrast on white is 2.99:1, so every part is also labelled with
- * its count. Days not picked in the week chart fall back to greys, so the
- * colour marks the one day being read (as in the reference).
- */
-export const ON_TIME = '#d1511a'
-export const LATE = '#c98500'
-export const NOT_IN = '#8a3a12'
+export { LATE, NOT_IN, ON_TIME }
+
+/* Days not picked in the week chart fall back to greys, so the colour marks the one day being read. */
 const IDLE = ['#e6e2de', '#efece9']
 
 export interface DayCount {
@@ -229,6 +221,88 @@ export function Gauge({ pct, label }: { pct: number; label: string }) {
         <span className="text-3xl font-bold tabular-nums tracking-tight">{value}%</span>
         <span className="text-xs text-muted-foreground">{label}</span>
       </div>
+    </div>
+  )
+}
+
+/**
+ * A ring cut into parts, with a 2px gap between them and the headline
+ * figure in the middle, then the parts listed with their count and share
+ * so no part is read by colour alone. Pointing at a part names it.
+ */
+export function Donut({ parts, centre, centreLabel }: { parts: Part[]; centre: string; centreLabel: string }) {
+  const [picked, setPicked] = useState<number | null>(null)
+  const total = parts.reduce((s, p) => s + p.value, 0)
+  const r = 70
+  const width = 26
+  const around = 2 * Math.PI * r
+  const gap = parts.filter((p) => p.value > 0).length > 1 ? 2 : 0
+  let start = 0
+
+  return (
+    <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center">
+      <div className="relative w-full max-w-[12rem] shrink-0">
+        <svg viewBox="0 0 180 180" className="w-full -rotate-90" role="img" aria-label={`${centre} ${centreLabel}`}>
+          <circle cx="90" cy="90" r={r} fill="none" stroke="hsl(var(--muted))" strokeWidth={width} />
+          {total > 0 &&
+            parts.map((p, i) => {
+              if (p.value <= 0) return null
+              const length = (p.value / total) * around
+              const dash = Math.max(length - gap, 1)
+              const offset = -start
+              start += length
+              return (
+                <circle
+                  key={p.label}
+                  cx="90"
+                  cy="90"
+                  r={r}
+                  fill="none"
+                  stroke={p.colour}
+                  strokeWidth={picked === i ? width + 4 : width}
+                  strokeDasharray={`${dash} ${around - dash}`}
+                  strokeDashoffset={offset}
+                  className="cursor-pointer transition-[stroke-width]"
+                  onMouseEnter={() => setPicked(i)}
+                  onMouseLeave={() => setPicked(null)}
+                  onClick={() => setPicked(picked === i ? null : i)}
+                >
+                  <title>{`${p.label}: ${p.value} (${Math.round((p.value / total) * 100)}%)`}</title>
+                </circle>
+              )
+            })}
+        </svg>
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center text-center">
+          {picked !== null && total > 0 ? (
+            <>
+              <span className="text-2xl font-bold tabular-nums">{parts[picked].value}</span>
+              <span className="px-6 text-xs text-muted-foreground">{parts[picked].label}</span>
+            </>
+          ) : (
+            <>
+              <span className="text-2xl font-bold tabular-nums">{centre}</span>
+              <span className="px-6 text-xs text-muted-foreground">{centreLabel}</span>
+            </>
+          )}
+        </div>
+      </div>
+      <ul className="w-full space-y-2.5 text-sm">
+        {parts.map((p, i) => (
+          <li
+            key={p.label}
+            className={cn('flex items-center gap-2.5 rounded-md px-1', picked === i && 'bg-muted')}
+            onMouseEnter={() => setPicked(i)}
+            onMouseLeave={() => setPicked(null)}
+          >
+            <span className="h-3 w-3 shrink-0 rounded-[4px]" style={{ background: p.colour }} />
+            <span className="flex-1">{p.label}</span>
+            <span className="font-semibold tabular-nums">{p.value}</span>
+            <span className="w-10 text-right tabular-nums text-muted-foreground">
+              {total ? Math.round((p.value / total) * 100) : 0}%
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   )
 }

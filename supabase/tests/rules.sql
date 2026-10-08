@@ -2681,6 +2681,46 @@ begin
         perform assert(sqlerrm like '%already voided%', 'xm: a record is voided once');
       end;
     end;
+    -- ---------------------------------------------------------------
+    -- Which roles take store counts (046).
+    -- ---------------------------------------------------------------
+    declare
+      rep   uuid;
+      tola  uuid := gen_random_uuid();
+      femi  uuid := gen_random_uuid();
+    begin
+      perform act_as(boss);
+      insert into public.staff_roles (name, base_role, counts_stock) values ('Sales Rep', 'merchandiser', false) returning id into rep;
+      insert into auth.users (id, email) values (tola, 'rep-test@xpel.ng'), (femi, 'mk-test@xpel.ng');
+      insert into public.profiles (id, full_name, email, role, staff_role_id)
+      values (tola, 'Rep Tester', 'rep-test@xpel.ng', 'merchandiser', rep);
+      insert into public.profiles (id, full_name, email, role)
+      values (femi, 'Marketer Tester', 'mk-test@xpel.ng', 'marketer');
+
+      perform act_as(tola);
+      perform assert(not public.can_count_stock(), 'a role set not to count cannot take store counts');
+      perform assert(public.store_count_status()->>'reason' = 'not_allowed', 'the count form stays closed for a role that does not count');
+      perform assert(public.xm_can_submit(), 'a role that does not count can still send X Metrics');
+
+      perform act_as(femi);
+      perform assert(public.can_count_stock(), 'built-in marketers count by default');
+      update public.role_store_counts set counts_stock = false where role = 'marketer';
+      perform assert(not public.can_count_stock(), 'turning a built-in role off stops its people counting');
+      update public.role_store_counts set counts_stock = true where role = 'marketer';
+
+      perform act_as(boss);
+      perform assert(public.can_count_stock(), 'admins still count');
+      begin
+        perform public.request_store_count(array[tola], public.business_date(), null);
+        perform assert(false, 'nobody is asked to count in a role that does not count');
+      exception when others then
+        perform assert(sqlerrm like '%does not take store counts%', 'nobody is asked to count in a role that does not count');
+      end;
+      update public.staff_roles set counts_stock = true where id = rep;
+      perform act_as(tola);
+      perform assert(public.can_count_stock(), 'turning a role back on lets its people count');
+      perform act_as(boss);
+    end;
 
     -- ---------------------------------------------------------------
     -- Naming an unknown place is mandatory (045).

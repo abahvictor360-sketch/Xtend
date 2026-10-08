@@ -7,6 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { MonthPicker, VoidButton, XmHeader } from '@/components/admin/xm/widgets'
 import { DayBars } from '@/components/admin/xm/day-bars'
+import { Donut } from '@/components/admin/overview-charts'
+import { ScoreBars } from '@/components/admin/score-bars'
+import { LATE, ON_TIME } from '@/lib/chart-colours'
 import { longDate } from '@/lib/utils'
 import { bandVariant, fmtScore, monthLabel, monthStart, type XmGrade } from '@/lib/metrics/shared'
 
@@ -66,6 +69,38 @@ export default async function StaffMetricsPage({
             detail={`${g.consistency.days_present} days present: sales on time ${g.consistency.sales_on_time}, count in time ${g.consistency.counts_in_time}`} />
           <Factor title={`Expiry (${g.weights.expiry})`} score={g.expiry.score}
             detail={`${g.expiry.expiry_recorded} of ${g.expiry.lines_counted} lines dated, ${g.expiry.expired_on_shelf} expired on shelf`} />
+        </div>
+      )}
+
+      {g && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Card>
+            <CardHeader><CardTitle>Grade breakdown</CardTitle></CardHeader>
+            <CardContent>
+              <ScoreBars
+                unit=""
+                rows={[
+                  { key: 'sales', label: 'Sales vs target', value: g.sales.score },
+                  { key: 'accuracy', label: 'Stock accuracy', value: g.accuracy.score },
+                  { key: 'consistency', label: 'Reporting', value: g.consistency.score },
+                  { key: 'expiry', label: 'Expiry handling', value: g.expiry.score },
+                ]}
+              />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle>Stock counts reconciled</CardTitle></CardHeader>
+            <CardContent>
+              <Donut
+                parts={[
+                  { label: 'Within tolerance', value: g.accuracy.within_tolerance, colour: ON_TIME },
+                  { label: 'Off by more', value: g.accuracy.reconciliations - g.accuracy.within_tolerance, colour: LATE },
+                ]}
+                centre={g.accuracy.reconciliations ? `${Math.round((g.accuracy.within_tolerance / g.accuracy.reconciliations) * 100)}%` : '—'}
+                centreLabel="accurate"
+              />
+            </CardContent>
+          </Card>
         </div>
       )}
 

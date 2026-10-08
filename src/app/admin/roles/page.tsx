@@ -1,7 +1,7 @@
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { RoleManager } from '@/components/admin/role-manager'
-import type { StaffRole } from '@/lib/staff-roles'
+import type { BuiltInCounts, StaffRole } from '@/lib/staff-roles'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Roles — Xtend' }
@@ -10,10 +10,15 @@ export const metadata = { title: 'Roles — Xtend' }
 export default async function RolesPage() {
   await requireSession(['admin'])
   const supabase = await createServerSupabase()
-  const [{ data: roles }, { data: people }] = await Promise.all([
-    supabase.from('staff_roles').select('id, name, base_role, is_active').order('name'),
+  const [{ data: roles }, { data: people }, { data: builtIn }] = await Promise.all([
+    supabase.from('staff_roles').select('id, name, base_role, is_active, counts_stock').order('name'),
     supabase.from('profiles').select('staff_role_id').not('staff_role_id', 'is', null).eq('is_active', true),
+    supabase.from('role_store_counts').select('role, counts_stock'),
   ])
+  const builtInCounts: BuiltInCounts = {}
+  for (const b of (builtIn ?? []) as { role: 'merchandiser' | 'marketer'; counts_stock: boolean }[]) {
+    builtInCounts[b.role] = b.counts_stock
+  }
   const counts: Record<string, number> = {}
   for (const p of (people ?? []) as { staff_role_id: string }[]) {
     counts[p.staff_role_id] = (counts[p.staff_role_id] ?? 0) + 1
@@ -29,7 +34,7 @@ export default async function RolesPage() {
           Teams and the login details. Give someone a role on the Staff page.
         </p>
       </div>
-      <RoleManager roles={(roles ?? []) as StaffRole[]} counts={counts} />
+      <RoleManager roles={(roles ?? []) as StaffRole[]} counts={counts} builtInCounts={builtInCounts} />
     </div>
   )
 }
