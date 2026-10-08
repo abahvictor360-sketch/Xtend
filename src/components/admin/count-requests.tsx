@@ -42,7 +42,7 @@ function dayLabel(date: string) {
 }
 
 /**
- * Asking for a store count, and seeing who has done it. Outside a request,
+ * Asking for a stock count, and seeing who has done it. Outside a request,
  * merchandisers only count in the last days of the month.
  */
 export function CountRequests({
@@ -134,7 +134,7 @@ export function CountRequests({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <ClipboardList className="h-4 w-4 text-brand" />
-          Ask for a store count
+          Ask for a stock count
         </CardTitle>
         <p className="text-sm text-muted-foreground">
           Merchandisers count when you ask, and at the end of every month (from{' '}

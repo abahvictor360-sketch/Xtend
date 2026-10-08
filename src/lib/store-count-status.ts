@@ -2,7 +2,7 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**
- * Whether the signed-in person may take a store count right now, and why.
+ * Whether the signed-in person may take a stock count right now, and why.
  * Counts happen when a supervisor asks for one, or at the end of the month;
  * store_count_status() in Postgres is the authority on which.
  */

@@ -3,7 +3,7 @@ import { ChevronRight, ClipboardList } from 'lucide-react'
 import type { CountStatus } from '@/lib/store-count-status'
 import { longDate } from '@/lib/utils'
 
-/** A reminder on the home screen while a store count is due. */
+/** A reminder on the home screen while a stock count is due. */
 export function CountDueBanner({ status }: { status: Extract<CountStatus, { open: true }> }) {
   return (
     <Link
@@ -15,7 +15,7 @@ export function CountDueBanner({ status }: { status: Extract<CountStatus, { open
       </span>
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-bold">
-          {status.reason === 'request' ? 'Store count requested' : 'Month-end store count'}
+          {status.reason === 'request' ? 'Stock count requested' : 'Month-end stock count'}
         </span>
         <span className="block text-xs text-white/85">
           {status.reason === 'request' ? `By ${status.requested_by} · ` : ''}

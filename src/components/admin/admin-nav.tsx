@@ -62,7 +62,7 @@ const GROUPS: { title: string | null; links: NavLink[] }[] = [
   {
     title: 'Stock',
     links: [
-      { href: '/admin/store-counts', label: 'Store counts', icon: PackageSearch, adminOnly: false },
+      { href: '/admin/store-counts', label: 'Stock counts', icon: PackageSearch, adminOnly: false },
       { href: '/admin/metrics', label: 'X Metrics', icon: Gauge, adminOnly: false },
     ],
   },

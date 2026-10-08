@@ -33,7 +33,7 @@ const schema = z.object({
 })
 
 /**
- * A store count: for each product, how many are in the back store and on the
+ * A stock count: for each product, how many are in the back store and on the
  * shop floor, how many sold, and the expiry date. Whether a count is due, whether the store is theirs,
  * which day it is and who counted are all decided by submit_store_count().
  */

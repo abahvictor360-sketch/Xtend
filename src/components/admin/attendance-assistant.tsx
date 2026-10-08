@@ -36,7 +36,7 @@ const SUGGESTIONS = [
   "Make today's attendance report",
   'Weekly attendance report for this week',
   "Summarise this week's field reports",
-  "Show today's store counts",
+  "Show today's stock counts",
 ]
 
 /** Only the most recent turns go back to the server; older ones add cost, not answers. */

@@ -54,7 +54,7 @@ export function assistantConfigured() {
   return Boolean(process.env.ANTHROPIC_API_KEY)
 }
 
-const SYSTEM = `You are Xtend's assistant for Xpel Beauty. Office staff (admins and supervisors) ask you about field staff: who clocked in, who clocked out, who has not clocked in or out, who was late, who clocked in away from their store, a person's history, the daily reports marketers file, store visits, and store counts (merchandisers count the products physically in their store and report, product by product, how many are left and how many were sold since their previous count; product names are as they typed them). Store counts are taken when a supervisor or admin asks for one, and by everyone in the last three days of each month. You also produce downloadable reports, and you prepare store allocations and team changes for the user to approve.
+const SYSTEM = `You are Xtend's assistant for Xpel Beauty. Office staff (admins and supervisors) ask you about field staff: who clocked in, who clocked out, who has not clocked in or out, who was late, who clocked in away from their store, a person's history, the daily reports marketers file, store visits, and stock counts (merchandisers count the products physically in their store and report, product by product, how many are left and how many were sold since their previous count; product names are as they typed them). Stock counts are taken when a supervisor or admin asks for one, and by everyone in the last three days of each month. You also produce downloadable reports, and you prepare store allocations and team changes for the user to approve.
 
 Answer only from what the tools return. Never guess a time, a name or a count; if the tools return nothing, say so. Call a tool for every question about the data, even one you think you answered earlier, because the data changes through the day.
 
@@ -165,7 +165,7 @@ const tools: Anthropic.Beta.BetaTool[] = [
   {
     name: 'store_counts',
     description:
-      "Merchandisers' store counts over a date range: for each store and product, how many units were left in the store and how many sold since that person's previous count, and who counted.",
+      "Merchandisers' stock counts over a date range: for each store and product, how many units were left in the store and how many sold since that person's previous count, and who counted.",
     strict: true,
     input_schema: {
       type: 'object',
@@ -177,7 +177,7 @@ const tools: Anthropic.Beta.BetaTool[] = [
   {
     name: 'integrity_flags',
     description:
-      'Integrity flags over a date range (at most 62 days; null for the last 30): signs of a fake-location app (the same GPS point on different days, too-perfect accuracy, impossible journeys), rejected photos, selfies taken at home, self-named places, clock times faked on the phone or sent late despite network, and store counts that do not add up (units missing since the last count, a count identical to the last, only round numbers). Each has the person, store, date, and whether a supervisor has reviewed it. A flag is a reason to check, not proof.',
+      'Integrity flags over a date range (at most 62 days; null for the last 30): signs of a fake-location app (the same GPS point on different days, too-perfect accuracy, impossible journeys), rejected photos, selfies taken at home, self-named places, clock times faked on the phone or sent late despite network, and stock counts that do not add up (units missing since the last count, a count identical to the last, only round numbers). Each has the person, store, date, and whether a supervisor has reviewed it. A flag is a reason to check, not proof.',
     strict: true,
     input_schema: {
       type: 'object',
@@ -207,7 +207,7 @@ const tools: Anthropic.Beta.BetaTool[] = [
   {
     name: 'count_requests',
     description:
-      'Recent store count requests: who asked, the due date, whether it is still open, how many of the people asked have counted, and who is still waiting to count.',
+      'Recent stock count requests: who asked, the due date, whether it is still open, how many of the people asked have counted, and who is still waiting to count.',
     strict: true,
     input_schema: { type: 'object', properties: {}, required: [], additionalProperties: false },
   },

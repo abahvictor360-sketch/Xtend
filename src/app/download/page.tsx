@@ -123,7 +123,7 @@ export default async function DownloadPage() {
               What you do without network is kept and sent when you are back online.
             </Benefit>
             <Benefit icon={BellRing} title="Never miss a count">
-              Notifications when a store count is due or your supervisor needs you.
+              Notifications when a stock count is due or your supervisor needs you.
             </Benefit>
           </section>
 

@@ -107,7 +107,7 @@ export function Onboarding({ name, photoUrl }: { name: string; photoUrl: string 
             <ul className="mt-5 space-y-2.5">
               <Item icon={LogIn} title="Clock in" text="At your store, with a quick selfie." />
               <Item icon={Store} title="Work your store" text="Marketers check in at each store they visit." />
-              <Item icon={ClipboardList} title="Report and count" text="A daily report or a store count when asked." />
+              <Item icon={ClipboardList} title="Report and count" text="A daily report or a stock count when asked." />
               <Item icon={LogOut} title="Clock out" text="At the end of your shift, with a selfie." />
             </ul>
           </>
@@ -155,7 +155,7 @@ export function Onboarding({ name, photoUrl }: { name: string; photoUrl: string 
           <>
             <Title
               title="Turn on notifications"
-              text="You need them to clock in. Xtend uses them for store counts and messages from the office."
+              text="You need them to clock in. Xtend uses them for stock counts and messages from the office."
             />
             <div className="surface mt-6 space-y-4 p-5 text-sm">
               <StatusButton

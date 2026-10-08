@@ -33,7 +33,7 @@ export const STAFF_TOPICS = {
   visits: { id: 'store-visits', title: 'Store visits (marketers)', icon: Store },
   place: { id: 'add-a-place', title: 'Adding a place', icon: MapPinPlus },
   report: { id: 'daily-report', title: 'Daily report', icon: FileText },
-  count: { id: 'store-count', title: 'Store count', icon: ClipboardList },
+  count: { id: 'store-count', title: 'Stock count', icon: ClipboardList },
   clockOut: { id: 'clock-out', title: 'Clock out', icon: LogOut },
   offline: { id: 'no-network', title: 'No network', icon: WifiOff },
   history: { id: 'history', title: 'History and your account', icon: CalendarDays },
@@ -156,7 +156,7 @@ export function StaffGuide() {
       >
         <p>
           You will see <Ui>Add this place before you go on</Ui> at the top of the screen. Until you
-          add it, store visits, store counts, X Metrics counts and sales, and your daily report
+          add it, store visits, stock counts, X Metrics counts and sales, and your daily report
           wait. You can still clock out at any time.
         </p>
         <Steps
@@ -217,7 +217,7 @@ export function StaffGuide() {
         />
       </GuideSection>
 
-      <GuideSection topic={T.count} intro="When a store count is due, a Count tab appears and the home screen tells you.">
+      <GuideSection topic={T.count} intro="When a stock count is due, a Count tab appears and the home screen tells you.">
         <Steps
           items={[
             <>

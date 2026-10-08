@@ -10,7 +10,7 @@ import { longDate } from '@/lib/utils'
 import { countMonth } from '@/lib/count-sheet'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Store count — Xtend' }
+export const metadata = { title: 'Stock count — Xtend' }
 
 export default async function StoreCountPage() {
   const session = await requireSession()
@@ -21,9 +21,9 @@ export default async function StoreCountPage() {
 
   if (!status.open) {
     return (
-      <SheetScreen title="Store count" back="/field">
+      <SheetScreen title="Stock count" back="/field">
         <Alert variant="info">
-          No store count is due. You count when your supervisor asks for one, and at the end of
+          No stock count is due. You count when your supervisor asks for one, and at the end of
           every month. The next month-end count opens on {longDate(status.next_month_end)}.
         </Alert>
       </SheetScreen>
@@ -92,7 +92,7 @@ export default async function StoreCountPage() {
 
   return (
     <SheetScreen
-      title={status.reason === 'request' ? 'Requested store count' : 'Month-end store count'}
+      title={status.reason === 'request' ? 'Requested stock count' : 'Month-end stock count'}
       back="/field"
       header={
         <>
