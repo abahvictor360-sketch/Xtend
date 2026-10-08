@@ -67,6 +67,9 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0048_excuse_check_advanced.sql  # check an excuse: GPS, at-store and app excuses, 3-day windows, checks kept on record
    supabase/migrations/0049_audit_context.sql          # audit log: location, device, IP and VPN for every action; supervisors' actions recorded
    supabase/migrations/0050_background_tracking.sql    # location during a shift with the app closed: per-phone tracking tokens
+   supabase/migrations/0052_visits_alerts.sql          # store visits: departure places, store coverage; alerts resolved in bulk
+   supabase/migrations/0053_support_notifications.sql  # support inbox, quick replies, assigning; notification templates, history, scheduling; fixes office replies
+   supabase/migrations/0054_integrity_ask.sql          # integrity flags reviewed in bulk; Ask Xtend chats kept
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
