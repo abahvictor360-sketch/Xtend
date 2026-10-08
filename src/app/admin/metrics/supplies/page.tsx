@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ExportLinks, MonthPicker, VoidButton, XmHeader } from '@/components/admin/xm/widgets'
 import { SupplyForm } from '@/components/admin/xm/forms'
+import { SupplyImport } from '@/components/admin/xm/supply-import'
 import { lagosDateString, longDate } from '@/lib/utils'
 import { monthLabel, monthStart, type XmProduct } from '@/lib/metrics/shared'
 
@@ -17,6 +18,10 @@ interface Supply {
   outlet_name: string
   product_name: string
   quantity: number
+  cartons: number | null
+  units_per_carton: number | null
+  import_file: string | null
+  unit: string
   batch: string
   expiry_date: string | null
   note: string | null
@@ -36,7 +41,7 @@ export default async function SuppliesPage({ searchParams }: { searchParams: Pro
 
   const [{ data: stores }, { data: products }, { data: supplies }] = await Promise.all([
     supabase.from('xm_stores').select('outlet_id, outlets(name)').eq('is_active', true),
-    supabase.from('products').select('id, name, sku, category, unit, is_active').eq('is_active', true).order('name'),
+    supabase.from('products').select('id, name, sku, category, unit, is_active, units_per_carton').eq('is_active', true).order('name'),
     supabase.from('xm_supply_detail').select('*').gte('supplied_on', month).lte('supplied_on', end).order('supplied_on', { ascending: false }).order('created_at', { ascending: false }).limit(1000),
   ])
   const storeOptions = ((stores ?? []) as unknown as { outlet_id: string; outlets: { name: string } | { name: string }[] | null }[])
@@ -48,7 +53,7 @@ export default async function SuppliesPage({ searchParams }: { searchParams: Pro
     <div className="space-y-5">
       <XmHeader
         title="Supplies"
-        intro="Every delivery to a store, by batch. Reconciliation adds them to the last count. A mistake is voided with a reason, never edited or deleted."
+        intro="Every delivery to a store, by batch, in units or cartons. Log one by hand, or import an invoice or supply sheet. Reconciliation adds them to the last count. A mistake is voided with a reason, never edited or deleted."
       />
       <Card>
         <CardHeader>
@@ -56,6 +61,15 @@ export default async function SuppliesPage({ searchParams }: { searchParams: Pro
         </CardHeader>
         <CardContent>
           <SupplyForm stores={storeOptions} products={(products ?? []) as XmProduct[]} today={lagosDateString()} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Import supplies from a file</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <SupplyImport stores={storeOptions} products={(products ?? []) as XmProduct[]} today={lagosDateString()} />
         </CardContent>
       </Card>
 
@@ -90,11 +104,19 @@ export default async function SuppliesPage({ searchParams }: { searchParams: Pro
                       {r.product_name}
                       {r.note && <span className="block text-xs text-muted-foreground">{r.note}</span>}
                     </TableCell>
-                    <TableCell className="text-right">{r.quantity}</TableCell>
+                    <TableCell className="text-right">
+                      {r.quantity.toLocaleString('en-GB')}
+                      {r.cartons && (
+                        <span className="block text-xs text-muted-foreground">
+                          {r.cartons} ctn × {r.units_per_carton}
+                        </span>
+                      )}
+                    </TableCell>
                     <TableCell>{r.batch || '—'}</TableCell>
                     <TableCell>{r.expiry_date ? longDate(r.expiry_date) : '—'}</TableCell>
                     <TableCell className="text-xs">
                       {r.logged_by_name}
+                      {r.import_file && <span className="block text-muted-foreground">From {r.import_file}</span>}
                       <span className="block text-muted-foreground">{new Date(r.created_at).toLocaleString('en-GB', { timeZone: 'Africa/Lagos' })}</span>
                     </TableCell>
                     <TableCell>

@@ -14,4 +14,6 @@ export const productSchema = z.object({
     .optional(),
   category: thingName(60, 'category', 1).nullable().optional().or(z.literal('').transform(() => null)),
   unit: thingName(30, 'unit', 1).default('unit'),
+  /** How many units come in a carton, for supplies logged in cartons. */
+  units_per_carton: z.number().int('Whole units only').min(1).max(100_000).nullable().optional(),
 })

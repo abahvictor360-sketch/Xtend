@@ -37,7 +37,8 @@ const TABLES: Record<string, unknown[]> = {
     variance_units: -100 + i, variance_pct: 25, tolerance_pct: 5, flagged: i % 2 === 0,
   })),
   xm_supply_detail: Array.from({ length: 20 }, (_, i) => ({
-    supplied_on: '2026-09-10', outlet_name: 'Wuse Kiosk', product_name: 'Hair Gel', quantity: 300, batch: 'G7',
+    supplied_on: '2026-09-10', outlet_name: 'Wuse Kiosk', product_name: 'Hair Gel', quantity: 300,
+    cartons: i % 2 ? 12 : null, units_per_carton: i % 2 ? 25 : null, import_file: i % 3 ? null : 'invoice-0042.pdf', batch: 'G7',
     expiry_date: '2027-03-01', note: i % 3 ? null : 'Waybill 4471', logged_by_name: 'Ngozi Eze',
     voided_at: i === 4 ? '2026-09-11T10:00:00Z' : null, void_reason: i === 4 ? 'Logged twice' : null,
   })),

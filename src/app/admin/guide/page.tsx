@@ -38,7 +38,7 @@ const T = {
   attendance: { id: 'attendance', title: 'Attendance and exports', icon: ClipboardList },
   movement: { id: 'movement', title: 'Movement and store visits', icon: Route },
   alerts: { id: 'alerts', title: 'Alerts and checks', icon: ShieldAlert },
-  counts: { id: 'store-counts', title: 'Store counts', icon: PackageSearch },
+  counts: { id: 'store-counts', title: 'Stock count', icon: PackageSearch },
   support: { id: 'support', title: 'Support messages', icon: Headset },
   notify: { id: 'notifications', title: 'Notifications', icon: Bell },
   ask: { id: 'ask', title: 'Ask Xtend and analytics', icon: MessageSquareText },
@@ -277,7 +277,7 @@ export default async function AdminGuidePage() {
         <GuideSection topic={T.counts} intro="Stock in each store.">
           <p>
             Merchandisers count against the Xpel stock count sheet at the end of every month, and
-            whenever you request a count on <Ui>Store counts</Ui>. For each product they enter the
+            whenever you request a count on <Ui>Stock count</Ui>. For each product they enter the
             back store and shop floor numbers (Xtend adds the total), the expiry date and how
             many sold, with a shelf photo.
           </p>

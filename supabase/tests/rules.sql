@@ -2844,6 +2844,73 @@ begin
       perform act_as(boss);
     end;
 
+    -- ---------------------------------------------------------------
+    -- Supplies in cartons, and from a file (047).
+    -- ---------------------------------------------------------------
+    declare
+      depot  uuid;
+      argan  uuid;
+      soap2  uuid;
+      imp    uuid;
+      sup    uuid;
+      n      integer;
+    begin
+      perform act_as(boss);
+      insert into public.outlets (name, lat, lng, geofence_radius_m) values ('Carton Test Store', 6.40, 3.40, 100)
+      returning id into depot;
+      perform public.xm_set_store(depot, true);
+      insert into public.products (name, sku, unit) values ('Argan Oil 100ml', 'ARG-100', 'bottle') returning id into argan;
+      insert into public.products (name, sku, unit, units_per_carton) values ('Black Soap', 'BSP-1', 'bar', 48) returning id into soap2;
+
+      begin
+        perform public.xm_log_supply(depot, argan, null, 'A1', null, public.business_date(), null, 10);
+        perform assert(false, 'cartons: a product with no carton size needs one');
+      exception when others then
+        perform assert(sqlerrm like '%units are in a carton of Argan Oil%', 'cartons: a product with no carton size needs one');
+      end;
+
+      sup := public.xm_log_supply(depot, argan, null, 'A1', null, public.business_date(), null, 10, 24);
+      perform assert((select quantity = 240 and cartons = 10 and units_per_carton = 24 from public.xm_supplies where id = sup),
+        'cartons: 10 cartons of 24 is logged as 240 units, and the cartons are kept');
+      perform assert((select units_per_carton = 24 from public.products where id = argan),
+        'cartons: the product learns its carton size');
+      sup := public.xm_log_supply(depot, soap2, null, '', null, public.business_date(), null, 3);
+      perform assert((select quantity from public.xm_supplies where id = sup) = 144,
+        'cartons: the product''s own carton size is used when none is given');
+      sup := public.xm_log_supply(depot, soap2, 50, '', null, public.business_date(), null);
+      perform assert((select quantity = 50 and cartons is null from public.xm_supplies where id = sup),
+        'cartons: units can still be logged as units');
+
+      imp := public.xm_create_supply_import('invoice-0042.pdf', 'pdf', 'claude', 'Xpel Distributors', 'INV-0042', public.business_date(), 2);
+      begin
+        perform public.xm_log_supply_import(imp, jsonb_build_array(
+          jsonb_build_object('outlet_id', depot, 'product_id', argan, 'cartons', 2, 'supplied_on', public.business_date()),
+          jsonb_build_object('outlet_id', depot, 'product_id', soap2, 'quantity', 0, 'supplied_on', public.business_date())));
+        perform assert(false, 'import: a bad line stops the whole import');
+      exception when others then
+        perform assert(sqlerrm like 'Line 2:%', 'import: a bad line stops the whole import, and says which');
+      end;
+      perform assert(not exists (select 1 from public.xm_supplies where import_id = imp),
+        'import: nothing from a failed import is logged');
+
+      n := public.xm_log_supply_import(imp, jsonb_build_array(
+        jsonb_build_object('outlet_id', depot, 'product_id', argan, 'cartons', 2, 'batch', 'A2', 'supplied_on', public.business_date()),
+        jsonb_build_object('outlet_id', depot, 'product_id', soap2, 'quantity', 30, 'supplied_on', public.business_date())));
+      perform assert(n = 2 and (select rows_logged from public.xm_supply_imports where id = imp) = 2
+                     and (select sum(quantity) from public.xm_supplies where import_id = imp) = 78
+                     and (select import_file from public.xm_supply_detail where import_id = imp limit 1) = 'invoice-0042.pdf',
+        'import: the checked lines are logged together, tied to the file');
+
+      perform act_as(bala);
+      begin
+        perform public.xm_create_supply_import('x.csv', 'csv', 'table', null, null, null, 1);
+        perform assert(false, 'import: only admins import supplies');
+      exception when others then
+        perform assert(sqlerrm like '%Only an admin%', 'import: only admins import supplies');
+      end;
+      perform act_as(boss);
+    end;
+
   end;
 
   raise notice 'ALL RULES PASSED';

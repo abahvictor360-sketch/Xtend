@@ -241,7 +241,7 @@ function StoreCountSettings({ rows, busy }: { rows: CountRow[]; busy: string | n
     <Card>
       <CardContent className="space-y-3 pt-5">
         <div>
-          <p className="font-semibold">Store counts</p>
+          <p className="font-semibold">Stock count</p>
           <p className="text-xs text-muted-foreground">
             Choose which roles take the month-end store count and counts a supervisor asks for.
             Roles that are off do not see the count form, and cannot be asked to count.
