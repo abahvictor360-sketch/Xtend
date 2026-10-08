@@ -28,7 +28,7 @@ import { countMonth } from '@/lib/count-sheet'
 import { takesStoreCounts, type BuiltInCounts, type CountingRole, type StaffRole } from '@/lib/staff-roles'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Store counts — Xtend' }
+export const metadata = { title: 'Stock count — Xtend' }
 
 type Search = Record<string, string | string[] | undefined>
 
@@ -183,13 +183,13 @@ export default async function StoreCountsPage({
       // Without the service key the table still shows, just without photos.
     }
   }
-  const title = from === to ? `Store counts, ${longDate(from)}` : `Store counts, ${longDate(from)} to ${longDate(to)}`
+  const title = from === to ? `Stock count, ${longDate(from)}` : `Stock count, ${longDate(from)} to ${longDate(to)}`
   const spec = { kind: 'store_counts' as const, from, to, name: null, title, summary: '' }
 
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-semibold">Store counts</h1>
+        <h1 className="text-xl font-semibold">Stock count</h1>
         <p className="text-sm text-muted-foreground">
           Merchandisers count every product on the Xpel stock count sheet: how many are in the
           back store and on the shop floor, the expiry date, and how many sold since their last
