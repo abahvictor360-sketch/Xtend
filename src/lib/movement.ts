@@ -138,3 +138,182 @@ export function duration(minutes: number) {
   const m = Math.round(minutes % 60)
   return m ? `${h} h ${m} min` : `${h} h`
 }
+
+/* ------------------------------------------------------------------ */
+/* The journey: positions turned into stops, travel and silences.      */
+/* ------------------------------------------------------------------ */
+
+/** Readings this close together (and close in time) are one stop. */
+export const STOP_RADIUS_M = 150
+/** Staying this long in one spot makes it a stop rather than a pause. */
+export const STOP_MINUTES = 8
+/** Faster than this between two good readings is not a real journey. */
+export const JUMP_KMH = 150
+
+export interface StopLeg {
+  kind: 'stop'
+  from: string
+  to: string
+  minutes: number
+  lat: number
+  lng: number
+  name: string
+  storeId: string | null
+  inStore: boolean
+  readings: number
+}
+export interface MoveLeg {
+  kind: 'move'
+  from: string
+  to: string
+  minutes: number
+  distanceM: number
+  kmh: number | null
+}
+export interface GapLeg {
+  kind: 'gap' | 'off'
+  from: string
+  to: string
+  minutes: number
+}
+export type Leg = StopLeg | MoveLeg | GapLeg
+
+export interface Jump {
+  from: string
+  to: string
+  distanceM: number
+  kmh: number
+  fromPlace: string | null
+  toPlace: string | null
+}
+
+export interface Journey {
+  legs: Leg[]
+  jumps: Jump[]
+  totals: { storeMinutes: number; elsewhereMinutes: number; movingMinutes: number; silentMinutes: number }
+  stores: string[]
+}
+
+const STOP_KINDS = new Set<PointKind>(['clock_in', 'clock_out', 'visit_in', 'visit_out'])
+
+/** Several days of trails as one, the stores listed once. */
+export function mergeTrails(trails: Trail[]): Trail {
+  const stores = new Map<string, TrailStore>()
+  for (const t of trails) for (const s of t.stores) stores.set(s.id, s)
+  return {
+    person: trails.find((t) => t.person)?.person ?? null,
+    date: trails[0]?.date ?? '',
+    points: trails.flatMap((t) => t.points).sort((a, b) => Date.parse(a.at) - Date.parse(b.at)),
+    stores: [...stores.values()],
+  }
+}
+
+/**
+ * Groups good readings into places the person stayed, the travel between
+ * them, and the silences. Rough readings are left out: they would scatter
+ * one stop into many. Time after a clock-out until the next reading is
+ * "off", not a silence.
+ */
+export function journey(trail: Trail): Journey {
+  const good = trail.points
+    .filter((p) => (p.accuracy_m ?? 0) <= ROUGH_M)
+    .sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+
+  type Cluster = { pts: TrailPoint[]; lat: number; lng: number; store: TrailStore | null }
+  const clusters: Cluster[] = []
+  for (const p of good) {
+    const cur = clusters[clusters.length - 1]
+    const last = cur?.pts[cur.pts.length - 1]
+    const store = storeAt(p, trail.stores)
+    const together =
+      cur &&
+      last!.kind !== 'clock_out' &&
+      minutesBetween(last!.at, p.at) < GAP_MINUTES &&
+      (store && cur.store ? store.id === cur.store.id : metresBetween(cur.lat, cur.lng, p.lat, p.lng) <= STOP_RADIUS_M)
+    if (together) {
+      cur.pts.push(p)
+      cur.lat += (p.lat - cur.lat) / cur.pts.length
+      cur.lng += (p.lng - cur.lng) / cur.pts.length
+      cur.store = cur.store ?? store
+    } else {
+      clusters.push({ pts: [p], lat: p.lat, lng: p.lng, store })
+    }
+  }
+
+  const raw: Leg[] = []
+  clusters.forEach((c, i) => {
+    const first = c.pts[0]
+    const last = c.pts[c.pts.length - 1]
+    const minutes = minutesBetween(first.at, last.at)
+    const isStop = minutes >= STOP_MINUTES || c.pts.some((p) => STOP_KINDS.has(p.kind))
+    if (isStop) {
+      const named = c.pts.map((p) => p.place).filter(Boolean) as string[]
+      const common = named.sort((a, b) => named.filter((n) => n === b).length - named.filter((n) => n === a).length)[0]
+      raw.push({
+        kind: 'stop',
+        from: first.at,
+        to: last.at,
+        minutes,
+        lat: c.lat,
+        lng: c.lng,
+        name: c.store?.name ?? common ?? 'Unnamed spot',
+        storeId: c.store?.id ?? null,
+        inStore: Boolean(c.store),
+        readings: c.pts.length,
+      })
+    } else {
+      let d = 0
+      for (let k = 1; k < c.pts.length; k++) d += metresBetween(c.pts[k - 1].lat, c.pts[k - 1].lng, c.pts[k].lat, c.pts[k].lng)
+      raw.push({ kind: 'move', from: first.at, to: last.at, minutes, distanceM: d, kmh: null })
+    }
+    const next = clusters[i + 1]
+    if (!next) return
+    const a = last
+    const b = next.pts[0]
+    const between = minutesBetween(a.at, b.at)
+    if (a.kind === 'clock_out') raw.push({ kind: 'off', from: a.at, to: b.at, minutes: between })
+    else if (between >= GAP_MINUTES) raw.push({ kind: 'gap', from: a.at, to: b.at, minutes: between })
+    else raw.push({ kind: 'move', from: a.at, to: b.at, minutes: between, distanceM: metresBetween(a.lat, a.lng, b.lat, b.lng), kmh: null })
+  })
+
+  // Back-to-back travel is one journey.
+  const legs: Leg[] = []
+  for (const leg of raw) {
+    const prev = legs[legs.length - 1]
+    if (leg.kind === 'move' && prev?.kind === 'move') {
+      prev.to = leg.to
+      prev.minutes += leg.minutes
+      prev.distanceM += leg.distanceM
+    } else {
+      legs.push({ ...leg })
+    }
+  }
+  for (const leg of legs) {
+    if (leg.kind === 'move') leg.kmh = leg.minutes >= 1 ? leg.distanceM / 1000 / (leg.minutes / 60) : null
+  }
+
+  const jumps: Jump[] = []
+  for (let i = 1; i < good.length; i++) {
+    const a = good[i - 1]
+    const b = good[i]
+    const d = metresBetween(a.lat, a.lng, b.lat, b.lng)
+    const hours = Math.max(minutesBetween(a.at, b.at), 0.5) / 60
+    const kmh = d / 1000 / hours
+    if (d > 2000 && kmh > JUMP_KMH) {
+      jumps.push({ from: a.at, to: b.at, distanceM: d, kmh, fromPlace: a.place ?? storeAt(a, trail.stores)?.name ?? null, toPlace: b.place ?? storeAt(b, trail.stores)?.name ?? null })
+    }
+  }
+
+  const sum = (f: (l: Leg) => boolean) => Math.round(legs.filter(f).reduce((t, l) => t + l.minutes, 0))
+  return {
+    legs,
+    jumps,
+    totals: {
+      storeMinutes: sum((l) => l.kind === 'stop' && l.inStore),
+      elsewhereMinutes: sum((l) => l.kind === 'stop' && !l.inStore),
+      movingMinutes: sum((l) => l.kind === 'move'),
+      silentMinutes: sum((l) => l.kind === 'gap'),
+    },
+    stores: [...new Set(legs.filter((l): l is StopLeg => l.kind === 'stop' && l.inStore).map((l) => l.name))],
+  }
+}
