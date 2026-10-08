@@ -17,6 +17,39 @@ export interface CountPerson {
   id: string
   full_name: string
   role: string
+  /** The role as shown: an added role's own name, or Merchandiser / Marketer. */
+  role_label?: string
+  /** Their team: the supervisor's id and name. */
+  team_id?: string | null
+  team_name?: string | null
+}
+
+interface Group {
+  key: string
+  label: string
+  ids: string[]
+}
+
+/** Everyone, each role, and each team: groups to pick in one tap. */
+function groupsOf(people: CountPerson[]): { roles: Group[]; teams: Group[] } {
+  const roles = new Map<string, Group>()
+  const teams = new Map<string, Group>()
+  for (const p of people) {
+    const role = p.role_label ?? p.role
+    const r = roles.get(role) ?? { key: `role:${role}`, label: role, ids: [] }
+    r.ids.push(p.id)
+    roles.set(role, r)
+    const teamKey = p.team_id ?? 'none'
+    const t = teams.get(teamKey) ?? {
+      key: `team:${teamKey}`,
+      label: p.team_id ? `${p.team_name}'s team` : 'No team',
+      ids: [],
+    }
+    t.ids.push(p.id)
+    teams.set(teamKey, t)
+  }
+  const byName = (a: Group, b: Group) => a.label.localeCompare(b.label)
+  return { roles: [...roles.values()].sort(byName), teams: [...teams.values()].sort(byName) }
 }
 
 export interface CountRequestRow {
@@ -74,6 +107,26 @@ export function CountRequests({
     return needle ? people.filter((p) => p.full_name.toLowerCase().includes(needle)) : people
   }, [people, search])
   const allChosen = people.length > 0 && chosen.size === people.length
+  const groups = useMemo(() => groupsOf(people), [people])
+  const [listGroup, setListGroup] = useState<string | null>(null)
+  const shown = useMemo(() => {
+    const g = [...groups.roles, ...groups.teams].find((x) => x.key === listGroup)
+    return g ? visible.filter((p) => g.ids.includes(p.id)) : visible
+  }, [groups, listGroup, visible])
+
+  /** Adds a whole group; if all of it is already chosen, takes it out. */
+  function toggleGroup(g: Group) {
+    setChosen((current) => {
+      const next = new Set(current)
+      const all = g.ids.every((id) => next.has(id))
+      for (const id of g.ids) {
+        if (all) next.delete(id)
+        else next.add(id)
+      }
+      return next
+    })
+    setListGroup(g.key)
+  }
 
   function toggle(id: string) {
     setChosen((current) => {
@@ -134,7 +187,7 @@ export function CountRequests({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <ClipboardList className="h-4 w-4 text-brand" />
-          Ask for a store count
+          Ask for a stock count
         </CardTitle>
         <p className="text-sm text-muted-foreground">
           Merchandisers count when you ask, and at the end of every month (from{' '}
@@ -183,13 +236,36 @@ export function CountRequests({
                 <button
                   type="button"
                   className="text-xs font-semibold text-brand"
-                  onClick={() =>
+                  onClick={() => {
                     setChosen(allChosen ? new Set() : new Set(people.map((p) => p.id)))
-                  }
+                    setListGroup(null)
+                  }}
                 >
                   {allChosen ? 'Clear all' : 'Select everyone'}
                 </button>
               </div>
+              <GroupChips
+                title="By role"
+                groups={groups.roles}
+                chosen={chosen}
+                onToggle={toggleGroup}
+              />
+              {groups.teams.length > 1 && (
+                <GroupChips
+                  title="By team"
+                  groups={groups.teams}
+                  chosen={chosen}
+                  onToggle={toggleGroup}
+                />
+              )}
+              {listGroup && (
+                <p className="text-xs text-muted-foreground">
+                  Showing {[...groups.roles, ...groups.teams].find((g) => g.key === listGroup)?.label}.{' '}
+                  <button type="button" className="font-semibold text-brand" onClick={() => setListGroup(null)}>
+                    Show everyone
+                  </button>
+                </p>
+              )}
               {people.length > 8 && (
                 <div className="relative">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -203,7 +279,7 @@ export function CountRequests({
                 </div>
               )}
               <ul className="grid max-h-60 gap-1 overflow-y-auto rounded-2xl border border-border p-1 sm:grid-cols-2">
-                {visible.map((p) => (
+                {shown.map((p) => (
                   <li key={p.id}>
                     <label
                       className={cn(
@@ -218,7 +294,7 @@ export function CountRequests({
                         className="h-4 w-4 accent-[hsl(var(--brand))]"
                       />
                       <span className="min-w-0 flex-1 truncate">{p.full_name}</span>
-                      <span className="text-xs text-muted-foreground">{p.role}</span>
+                      <span className="text-xs text-muted-foreground">{p.role_label ?? p.role}</span>
                     </label>
                   </li>
                 ))}
@@ -275,5 +351,52 @@ export function CountRequests({
         )}
       </CardContent>
     </Card>
+  )
+}
+
+/**
+ * One row of group chips. A chip is filled when the whole group is chosen,
+ * half-filled when some of it is, and shows how many are in it.
+ */
+function GroupChips({
+  title,
+  groups,
+  chosen,
+  onToggle,
+}: {
+  title: string
+  groups: Group[]
+  chosen: Set<string>
+  onToggle: (g: Group) => void
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="mr-1 text-xs font-semibold text-muted-foreground">{title}</span>
+      {groups.map((g) => {
+        const picked = g.ids.filter((id) => chosen.has(id)).length
+        const all = picked === g.ids.length
+        return (
+          <button
+            key={g.key}
+            type="button"
+            onClick={() => onToggle(g)}
+            aria-pressed={all}
+            title={all ? `Take out ${g.label}` : `Add all ${g.label}`}
+            className={cn(
+              'rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
+              all
+                ? 'border-brand bg-brand text-primary-foreground'
+                : picked
+                  ? 'border-brand bg-card text-brand-deep hover:bg-tint'
+                  : 'border-border bg-card text-foreground hover:bg-tint',
+            )}
+          >
+            {all ? '✓ ' : ''}
+            {g.label} · {picked && !all ? `${picked}/` : ''}
+            {g.ids.length}
+          </button>
+        )
+      })}
+    </div>
   )
 }

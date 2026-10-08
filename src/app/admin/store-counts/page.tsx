@@ -126,7 +126,7 @@ export default async function StoreCountsPage({
       .not('sheet_order', 'is', null)
       .eq('is_active', true),
     // Which roles take store counts (migration 046).
-    supabase.from('staff_roles').select('id, counts_stock'),
+    supabase.from('staff_roles').select('id, name, counts_stock'),
     supabase.from('role_store_counts').select('role, counts_stock'),
   ])
   const countingRoles = new Map(
@@ -147,12 +147,26 @@ export default async function StoreCountsPage({
     created_at: string
   }[]
 
-  const people: CountPerson[] = ((staff ?? []) as Profile[])
+  // Each person with their role (an added role's own name) and their team,
+  // so the request can pick whole groups at once.
+  const everyone = (staff ?? []) as Profile[]
+  const nameOf = new Map(everyone.map((p) => [p.id, p.full_name]))
+  const roleName = new Map(
+    ((addedRoles ?? []) as Pick<StaffRole, 'id' | 'name'>[]).map((r) => [r.id, r.name]),
+  )
+  const people: CountPerson[] = everyone
     .filter(
       (p) =>
         p.is_active && p.id !== session.userId && takesStoreCounts(p, countingRoles, builtInCounts),
     )
-    .map((p) => ({ id: p.id, full_name: p.full_name, role: p.role }))
+    .map((p) => ({
+      id: p.id,
+      full_name: p.full_name,
+      role: p.role,
+      role_label: (p.staff_role_id && roleName.get(p.staff_role_id)) || (p.role === 'marketer' ? 'Marketer' : 'Merchandiser'),
+      team_id: p.supervisor_id ?? null,
+      team_name: p.supervisor_id ? (nameOf.get(p.supervisor_id) ?? 'Another supervisor') : null,
+    }))
 
   // The month-end window: the last three days of the month.
   const nextMonth = new Date(`${today.slice(0, 7)}-01T12:00:00Z`)
