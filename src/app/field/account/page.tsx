@@ -19,15 +19,29 @@ export default async function AccountPage() {
   const session = await requireSession(FIELD_ROLES)
   const supabase = await createServerSupabase()
 
-  const { data: inbox } = await supabase.rpc('my_notifications', { p_limit: 10 })
   // A role an admin added (042) shows by its own name.
-  const { data: addedRole } = session.profile.staff_role_id
-    ? await supabase
-        .from('staff_roles')
-        .select('name')
-        .eq('id', session.profile.staff_role_id)
-        .maybeSingle<{ name: string }>()
-    : { data: null }
+  const [{ data: inbox }, { data: addedRole }, { data: outlet }, photoUrls] = await Promise.all([
+    supabase.rpc('my_notifications', { p_limit: 10 }),
+    session.profile.staff_role_id
+      ? supabase
+          .from('staff_roles')
+          .select('name')
+          .eq('id', session.profile.staff_role_id)
+          .maybeSingle<{ name: string }>()
+      : Promise.resolve({ data: null }),
+    supabase
+      .from('outlets')
+      .select('name, address, geofence_radius_m, shift_start, shift_end')
+      .eq('id', session.profile.outlet_id ?? '')
+      .maybeSingle<{
+        name: string
+        address: string | null
+        geofence_radius_m: number
+        shift_start: string
+        shift_end: string
+      }>(),
+    avatarUrls(supabase, [session.userId]),
+  ])
   const messages = (inbox ?? []) as {
     id: string
     title: string
@@ -37,19 +51,7 @@ export default async function AccountPage() {
     read_at: string | null
   }[]
 
-  const { data: outlet } = await supabase
-    .from('outlets')
-    .select('name, address, geofence_radius_m, shift_start, shift_end')
-    .eq('id', session.profile.outlet_id ?? '')
-    .maybeSingle<{
-      name: string
-      address: string | null
-      geofence_radius_m: number
-      shift_start: string
-      shift_end: string
-    }>()
-
-  const photo = (await avatarUrls(supabase, [session.userId])).get(session.userId) ?? null
+  const photo = photoUrls.get(session.userId) ?? null
 
   return (
     <SheetScreen

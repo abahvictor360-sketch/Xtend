@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { CheckCircle2, Clock3, FileText, LogIn, LogOut, MapPin, Store } from 'lucide-react'
 import { GreetingHeader } from '@/components/field/greeting-header'
@@ -12,7 +13,7 @@ import { ShiftTracker } from '@/components/field/shift-tracker'
 import { usePlace } from '@/components/field/use-place'
 import { OutboxBanner } from '@/components/field/outbox-banner'
 import { ClockPanel } from '@/components/field/clock-panel'
-import { StoreVisits, type VisitOutlet, type VisitRow } from '@/components/field/store-visits'
+import type { VisitOutlet, VisitRow } from '@/components/field/store-visits'
 import { SectionHeader } from '@/components/field/screen'
 import { Chip } from '@/components/ui/chip'
 import { Card, CardContent } from '@/components/ui/card'
@@ -21,6 +22,13 @@ import { addDays, cn, dayOfMonth, formatLagos, metres, weekdayShort } from '@/li
 import type { DayState } from '@/lib/types'
 
 type Tab = 'stores' | 'day' | 'outlet'
+
+const StoreVisits = dynamic(
+  () => import('@/components/field/store-visits').then((module) => module.StoreVisits),
+  {
+    loading: () => <div className="h-48 animate-pulse rounded-2xl bg-muted" aria-label="Loading stores" />,
+  },
+)
 
 export function FieldHome({
   day,

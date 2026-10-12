@@ -23,17 +23,18 @@ export default async function HistoryPage({
   const { d } = await searchParams
 
   const supabase = await createServerSupabase()
-  const { data: serverToday } = await supabase.rpc('business_date')
+  const [{ data: serverToday }, { data }] = await Promise.all([
+    supabase.rpc('business_date'),
+    supabase
+      .from('attendance_detail')
+      .select('*')
+      .eq('user_id', session.userId)
+      .order('attendance_date', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(90),
+  ])
   const today = (serverToday as string) ?? lagosDateString()
   const selected = d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : today
-
-  const { data } = await supabase
-    .from('attendance_detail')
-    .select('*')
-    .eq('user_id', session.userId)
-    .order('attendance_date', { ascending: false })
-    .order('created_at', { ascending: false })
-    .limit(90)
 
   const rows = (data ?? []) as AttendanceDetail[]
   const marks = new Set(rows.map((row) => row.attendance_date))
