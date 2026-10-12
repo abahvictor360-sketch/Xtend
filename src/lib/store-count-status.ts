@@ -1,4 +1,5 @@
 import 'server-only'
+import { cache } from 'react'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 /**
@@ -19,9 +20,9 @@ export type CountStatus =
   | { open: false; reason: 'none'; next_month_end: string }
   | { open: false; reason: 'not_allowed' }
 
-export async function getCountStatus(supabase: SupabaseClient): Promise<CountStatus> {
+export const getCountStatus = cache(async (supabase: SupabaseClient): Promise<CountStatus> => {
   const { data, error } = await supabase.rpc('store_count_status')
   // Before migration 020 the function does not exist: counting stays closed.
   if (error || !data) return { open: false, reason: 'not_allowed' }
   return data as CountStatus
-}
+})

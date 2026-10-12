@@ -17,19 +17,24 @@ export default async function AdminOverview() {
   const session = await requireSession(['admin', 'supervisor'])
   const isAdmin = session.profile.role === 'admin'
   const supabase = await createServerSupabase()
+  const today = lagosDateString()
+  const weekStart = addDays(today, -6)
 
   const [
     { data: overview },
     { data: absentees },
     { data: coverage },
-    { data: live },
+    onShift,
     { data: alerts },
     { data: retention },
+    { data: openings },
   ] = await Promise.all([
     supabase.rpc('admin_overview'),
     supabase.rpc('absentees_today'),
     supabase.rpc('coverage_today'),
-    supabase.rpc('live_locations'),
+    supabase.rpc('live_locations').then(({ data }) =>
+      withAvatars(supabase, (data ?? []) as LiveLocation[]),
+    ),
     supabase
       .from('alert_detail')
       .select('*')
@@ -37,18 +42,16 @@ export default async function AdminOverview() {
       .order('created_at', { ascending: false })
       .limit(20),
     supabase.rpc('selfie_retention_status'),
+    supabase
+      .from('attendance_detail')
+      .select('attendance_date, is_late')
+      .eq('type', 'opening')
+      .gte('attendance_date', weekStart)
+      .lte('attendance_date', today)
+      .limit(5000),
   ])
 
   // The last seven days of clock-ins, on time and late, for the chart.
-  const today = lagosDateString()
-  const weekStart = addDays(today, -6)
-  const { data: openings } = await supabase
-    .from('attendance_detail')
-    .select('attendance_date, is_late')
-    .eq('type', 'opening')
-    .gte('attendance_date', weekStart)
-    .lte('attendance_date', today)
-    .limit(5000)
   const week: DayCount[] = Array.from({ length: 7 }, (_, i) => {
     const date = addDays(weekStart, i)
     const rows = ((openings ?? []) as { attendance_date: string; is_late: boolean }[]).filter(
@@ -72,7 +75,7 @@ export default async function AdminOverview() {
       stats={(overview ?? {}) as OverviewData['stats']}
       away={(absentees ?? []) as OverviewData['away']}
       tracked={(coverage ?? []) as OverviewData['tracked']}
-      onShift={await withAvatars(supabase, (live ?? []) as LiveLocation[])}
+      onShift={onShift}
       alerts={(alerts ?? []) as AlertDetail[]}
       photos={retention as OverviewData['photos']}
     />

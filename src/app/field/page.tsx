@@ -24,6 +24,7 @@ export default async function FieldPage() {
     { data: outlets },
     { data: canVisitStores },
     countStatus,
+    photos,
   ] = await Promise.all([
     supabase.rpc('my_day'),
     supabase.rpc('my_store_visits'),
@@ -34,9 +35,10 @@ export default async function FieldPage() {
       .order('name'),
     supabase.rpc('can_visit_stores'),
     getCountStatus(supabase),
+    avatarUrls(supabase, [session.userId]),
   ])
 
-  const photo = (await avatarUrls(supabase, [session.userId])).get(session.userId) ?? null
+  const photo = photos.get(session.userId) ?? null
 
   if (error || !data) {
     return <Alert variant="destructive">Could not load today. Pull down to retry.</Alert>

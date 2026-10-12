@@ -2,10 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { usePathname } from 'next/navigation'
 import { Expand, MessageCircle, X } from 'lucide-react'
-import { AttendanceAssistant } from '@/components/admin/attendance-assistant'
 import { cn } from '@/lib/utils'
+
+const AttendanceAssistant = dynamic(
+  () => import('@/components/admin/attendance-assistant').then((module) => module.AttendanceAssistant),
+  { loading: () => <p role="status" className="text-sm text-muted-foreground">Loading chat…</p> },
+)
 
 /**
  * The Ask Xtend chat as a floating button on every dashboard page. It lives
@@ -15,6 +20,7 @@ import { cn } from '@/lib/utils'
 export function AssistantLauncher() {
   const pathname = usePathname()
   const [open, setOpen] = useState(false)
+  const [hasOpened, setHasOpened] = useState(false)
 
   useEffect(() => {
     if (!open) return
@@ -66,13 +72,16 @@ export function AssistantLauncher() {
           </div>
         </div>
         <div className="min-h-0 flex-1 p-4">
-          <AttendanceAssistant configured compact />
+          {hasOpened && <AttendanceAssistant configured compact />}
         </div>
       </div>
 
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          setHasOpened(true)
+          setOpen((v) => !v)
+        }}
         aria-expanded={open}
         aria-label={open ? 'Close Ask Xtend' : 'Ask Xtend'}
         className={cn(

@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { cache } from 'react'
 import { createServerSupabase } from '@/lib/supabase/server'
 import type { Profile, UserRole } from '@/lib/types'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
@@ -46,8 +47,8 @@ async function reloginReason(
   return null
 }
 
-/** Reads the session and profile. Returns null when unauthenticated. */
-export async function getSession(): Promise<Session | null> {
+/** Share auth/profile checks across layouts and pages within one render only. */
+export const getSession = cache(async (): Promise<Session | null> => {
   const supabase = await createServerSupabase()
   const {
     data: { user },
@@ -67,7 +68,7 @@ export async function getSession(): Promise<Session | null> {
     profile,
     relogin: await reloginReason(supabase, user, profile),
   }
-}
+})
 
 /** Page-level guard. Redirects rather than throwing. */
 export async function requireSession(roles?: UserRole[]): Promise<Session> {

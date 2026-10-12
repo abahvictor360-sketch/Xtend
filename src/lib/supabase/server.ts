@@ -1,9 +1,10 @@
 import { cookies } from 'next/headers'
+import { cache } from 'react'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { auditContextHeader } from '@/lib/audit-context'
 
 /** Request-scoped client that carries the caller's session, so RLS applies. */
-export async function createServerSupabase() {
+export const createServerSupabase = cache(async () => {
   const cookieStore = await cookies()
   // Where and on what device the request came from, for audit rows written
   // inside database functions (see 0049).
@@ -29,4 +30,4 @@ export async function createServerSupabase() {
       },
     },
   )
-}
+})
