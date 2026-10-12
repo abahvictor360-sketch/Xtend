@@ -13,8 +13,13 @@ export default async function OutletsPage() {
   const readOnly = session.profile.role === 'supervisor'
   const supabase = await createServerSupabase()
 
-  const { data: outlets } = await supabase.from('outlets').select('*').order('name')
-  const { data: counts } = await supabase.from('profiles').select('outlet_id').eq('is_active', true)
+  const [{ data: outlets }, { data: counts }] = await Promise.all([
+    supabase
+      .from('outlets')
+      .select('id, name, address, lat, lng, geofence_radius_m, shift_start, shift_end, is_active, created_at')
+      .order('name'),
+    supabase.from('profiles').select('outlet_id').eq('is_active', true),
+  ])
 
   const staffPerOutlet = new Map<string, number>()
   for (const row of (counts ?? []) as { outlet_id: string | null }[]) {

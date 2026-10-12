@@ -45,6 +45,7 @@ export default async function MetricsOverview() {
   const supabase = await createServerSupabase()
   const today = lagosDateString()
   const month = monthStart(today)
+  const dashboardPromise = loadXmDashboard(supabase, today)
 
   const [{ data: stores }, { data: gaps }, { data: expiry, count: expiryCount }, { data: onHand }, { data: sold }, { data: lastCounts }] =
     await Promise.all([
@@ -84,7 +85,7 @@ export default async function MetricsOverview() {
     .sort((a, b) => a.name.localeCompare(b.name))
   const pull = ((expiry ?? []) as ExpiryRow[]).filter((e) => e.consider_pulling).length
 
-  const dash = await loadXmDashboard(supabase, today)
+  const dash = await dashboardPromise
 
   return (
     <div className="space-y-5">

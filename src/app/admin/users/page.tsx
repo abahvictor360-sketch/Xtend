@@ -37,36 +37,30 @@ export default async function UsersPage({
         : supabase.rpc('outlets_for_user', { target: session.userId }),
     ])
 
-  // Roles an admin added (042); empty until that migration is run.
-  const { data: addedRoles } = await supabase
-    .from('staff_roles')
-    .select('id, name, base_role, is_active')
-    .order('name')
-
-  const photos = Object.fromEntries(
-    await avatarUrls(
-      supabase,
-      ((staff ?? []) as Profile[]).map((p) => p.id),
-    ),
-  )
-
   // Who has notifications on: clocking in needs them (migration 027).
   const ids = ((staff ?? []) as Profile[]).map((p) => p.id)
-  const notified: string[] = []
-  if (ids.length) {
-    try {
-      const { data: subs } = await createAdminSupabase()
-        .from('push_subscriptions')
-        .select('user_id, endpoint')
-        .eq('is_active', true)
-        .in('user_id', ids)
-      for (const sub of (subs ?? []) as { user_id: string; endpoint: string }[]) {
-        if (LIVE_PUSH_ENDPOINT.test(sub.endpoint)) notified.push(sub.user_id)
+  const [{ data: addedRoles }, photoMap, notified] = await Promise.all([
+    supabase.from('staff_roles').select('id, name, base_role, is_active').order('name'),
+    avatarUrls(supabase, ids),
+    (async () => {
+      const result: string[] = []
+      if (!ids.length) return result
+      try {
+        const { data: subs } = await createAdminSupabase()
+          .from('push_subscriptions')
+          .select('user_id, endpoint')
+          .eq('is_active', true)
+          .in('user_id', ids)
+        for (const sub of (subs ?? []) as { user_id: string; endpoint: string }[]) {
+          if (LIVE_PUSH_ENDPOINT.test(sub.endpoint)) result.push(sub.user_id)
+        }
+      } catch {
+        // Without the service key the list still shows, without this column.
       }
-    } catch {
-      // Without the service key the list still shows, without this column.
-    }
-  }
+      return result
+    })(),
+  ])
+  const photos = Object.fromEntries(photoMap)
 
   return (
     <div className="space-y-5">

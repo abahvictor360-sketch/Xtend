@@ -10,28 +10,26 @@ export const metadata = { title: 'Places — Xtend' }
 export default async function PlacesPage() {
   await requireSession(['admin'])
   const supabase = await createServerSupabase()
-  const { data, error } = await supabase
-    .from('known_place_detail')
-    .select('*')
-    .order('verified', { ascending: true })
-    .order('last_seen_at', { ascending: false })
-    .limit(1000)
-
-  // Stores with no location yet: a learned place can be confirmed as one (034).
-  const { data: waiting } = await supabase
-    .from('outlets')
-    .select('id, name, address')
-    .is('lat', null)
-    .eq('is_active', true)
-    .order('name')
-
-  // Places staff must add before going on (045): open today, and recent.
-  const { data: dues } = await supabase
-    .from('place_naming_due_detail')
-    .select('id, staff_name, lat, lng, source_kind, due_date, created_at, named_at, place_name, dismissed_at, dismiss_reason, dismissed_by_name')
-    .gte('due_date', new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10))
-    .order('created_at', { ascending: false })
-    .limit(200)
+  const [{ data, error }, { data: waiting }, { data: dues }] = await Promise.all([
+    supabase
+      .from('known_place_detail')
+      .select('*')
+      .order('verified', { ascending: true })
+      .order('last_seen_at', { ascending: false })
+      .limit(1000),
+    supabase
+      .from('outlets')
+      .select('id, name, address')
+      .is('lat', null)
+      .eq('is_active', true)
+      .order('name'),
+    supabase
+      .from('place_naming_due_detail')
+      .select('id, staff_name, lat, lng, source_kind, due_date, created_at, named_at, place_name, dismissed_at, dismiss_reason, dismissed_by_name')
+      .gte('due_date', new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10))
+      .order('created_at', { ascending: false })
+      .limit(200),
+  ])
 
   // The shop-front photos staff took when naming a place (migration 025).
   const places = (data ?? []) as KnownPlace[]
