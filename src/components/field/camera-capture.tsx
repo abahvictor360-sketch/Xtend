@@ -38,6 +38,7 @@ export function CameraCapture({
   onClose: () => void
 }) {
   const video = useRef<HTMLVideoElement | null>(null)
+  const cancelButton = useRef<HTMLButtonElement | null>(null)
   const stream = useRef<MediaStream | null>(null)
   const [facing, setFacing] = useState<Facing>(startFacing)
   const [ready, setReady] = useState(false)
@@ -93,6 +94,16 @@ export function CameraCapture({
     void start()
     return stop
   }, [open, start, stop])
+
+  useEffect(() => {
+    if (!open) return
+    cancelButton.current?.focus()
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [onClose, open])
 
   // The GPS runs while the camera is open, so the shot knows where it was.
   const position = useRef<ReturnType<typeof followPosition> | null>(null)
@@ -161,13 +172,18 @@ export function CameraCapture({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black" role="dialog" aria-modal="true">
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-black"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="camera-capture-title"
+    >
       <div className="safe-top flex items-center justify-between px-4 py-3 text-white">
-        <button type="button" aria-label="Cancel" onClick={onClose} className="rounded-xl bg-white/15 p-2">
+        <button ref={cancelButton} type="button" aria-label="Cancel" onClick={onClose} className="rounded-xl bg-white/15 p-2">
           <X className="h-5 w-5" />
         </button>
         <div className="min-w-0 px-2 text-center">
-          <p className="truncate text-sm font-semibold">{title}</p>
+          <p id="camera-capture-title" className="truncate text-sm font-semibold">{title}</p>
           {subtitle && (
             <p className="flex items-center justify-center gap-1 truncate text-[11px] text-white/70">
               <MapPin className="h-3 w-3 shrink-0" />

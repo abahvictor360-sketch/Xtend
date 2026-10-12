@@ -9,6 +9,7 @@ import { GreetingHeader } from '@/components/field/greeting-header'
 import { LocationGate } from '@/components/field/location-gate'
 import { useLocationGate } from '@/components/field/use-location-gate'
 import { useHeartbeat } from '@/components/field/heartbeat'
+import { useDashboardRefresh } from '@/components/field/use-dashboard-refresh'
 import { ShiftTracker } from '@/components/field/shift-tracker'
 import { usePlace } from '@/components/field/use-place'
 import { OutboxBanner } from '@/components/field/outbox-banner'
@@ -60,6 +61,7 @@ export function FieldHome({
   const onShift = Boolean(day.opening) && !day.closing
   // Runs quietly while on shift; nothing about it is shown here.
   useHeartbeat(onShift && gate.status === 'ready')
+  useDashboardRefresh(onShift)
 
   const { place, loading: placeLoading } = usePlace(gate.fix)
   const whereIAm = place?.label ?? place?.address ?? null
@@ -250,8 +252,14 @@ export function FieldHome({
             </Card>
           ) : (
             <Card>
-              <CardContent className="pt-5 text-sm text-muted-foreground">
-                No outlet is assigned to you yet.
+              <CardContent className="space-y-3 pt-5 text-sm text-muted-foreground">
+                <p>No outlet is assigned to you yet.</p>
+                <p className="text-xs">
+                  Ask your supervisor to assign one before you clock in.
+                </p>
+                <Link href="/field/support" className="inline-flex text-xs font-semibold text-brand hover:underline">
+                  Contact support
+                </Link>
               </CardContent>
             </Card>
           )}

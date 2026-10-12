@@ -20,5 +20,12 @@ export function Alert({
   variant,
   ...props
 }: React.HTMLAttributes<HTMLDivElement> & VariantProps<typeof alertVariants>) {
-  return <div role="status" className={cn(alertVariants({ variant }), className)} {...props} />
+  return (
+    <div
+      role={variant === 'destructive' ? 'alert' : 'status'}
+      aria-live={variant === 'destructive' ? 'assertive' : 'polite'}
+      className={cn(alertVariants({ variant }), className)}
+      {...props}
+    />
+  )
 }
