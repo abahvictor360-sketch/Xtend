@@ -12,7 +12,7 @@ const nextConfig: NextConfig = {
   // plain back-and-forth between tabs.
   experimental: {
     staleTimes: {
-      dynamic: 30,
+      dynamic: 15,
       static: 180,
     },
   },
