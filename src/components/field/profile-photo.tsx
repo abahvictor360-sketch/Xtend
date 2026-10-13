@@ -1,8 +1,8 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Camera, Loader2 } from 'lucide-react'
+import { Camera, ImageUp, Loader2 } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { processSelfie } from '@/lib/image'
 import { CameraCapture } from '@/components/field/camera-capture'
@@ -18,9 +18,11 @@ function initials(name: string) {
 }
 
 /**
- * The person's profile photo, taken with the camera inside Xtend (no
- * gallery), so it is a current picture of them. Saved to their own folder
- * in the avatars bucket, then set with set_my_avatar (migration 037).
+ * The person's profile photo: taken with the camera inside Xtend, or chosen
+ * from their gallery. It is only for recognising them, not the clock-in
+ * selfie (that stays camera-only, in clock-panel, for attendance integrity),
+ * so a gallery picture is fine here. Saved to their own folder in the avatars
+ * bucket, then set with set_my_avatar (migration 037).
  */
 export function ProfilePhoto({
   name,
@@ -66,6 +68,24 @@ export function ProfilePhoto({
     }
   }
 
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  function onPick(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      setError('Choose an image file.')
+      return
+    }
+    // A raw ceiling; processSelfie compresses it well below this.
+    if (file.size > 20 * 1024 * 1024) {
+      setError('That image is too large. Pick a smaller one.')
+      return
+    }
+    void save(file)
+  }
+
   const box = size === 'lg' ? 'h-32 w-32 text-3xl' : 'h-20 w-20 text-xl'
 
   return (
@@ -98,14 +118,36 @@ export function ProfilePhoto({
           {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
         </span>
       </div>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        disabled={busy}
-        className="rounded-full bg-card px-4 py-2 text-sm font-semibold text-brand transition-colors hover:bg-tint"
-      >
-        {busy ? 'Saving…' : shown ? 'Retake photo' : 'Take your photo'}
-      </button>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          disabled={busy}
+          className="inline-flex items-center gap-1.5 rounded-full bg-card px-4 py-2 text-sm font-semibold text-brand transition-colors hover:bg-tint disabled:opacity-50"
+        >
+          <Camera className="h-4 w-4" />
+          {busy ? 'Saving…' : shown ? 'Retake photo' : 'Take your photo'}
+        </button>
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          disabled={busy}
+          className="inline-flex items-center gap-1.5 rounded-full bg-card px-4 py-2 text-sm font-semibold text-brand transition-colors hover:bg-tint disabled:opacity-50"
+        >
+          <ImageUp className="h-4 w-4" />
+          Upload from gallery
+        </button>
+      </div>
+      {/* No `capture` attribute, so phones offer the gallery (and camera). */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        className="sr-only"
+        aria-hidden="true"
+        tabIndex={-1}
+        onChange={onPick}
+      />
       {error && <p className="text-xs text-destructive">{error}</p>}
 
       <CameraCapture

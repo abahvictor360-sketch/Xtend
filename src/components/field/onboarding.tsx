@@ -120,7 +120,7 @@ export function Onboarding({ name, photoUrl }: { name: string; photoUrl: string 
               <ProfilePhoto name={name} url={photoUrl} size="lg" onSaved={() => setHasPhoto(true)} />
             </div>
             {!hasPhoto && (
-              <p className="mt-3 text-center text-xs text-muted-foreground">Take your photo to continue.</p>
+              <p className="mt-3 text-center text-xs text-muted-foreground">Add a photo to continue.</p>
             )}
           </>
         )}
