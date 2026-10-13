@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Bot, CheckCircle2, ChevronDown, Headset, Send, ShieldQuestion } from 'lucide-react'
+import { supabase } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -50,6 +51,30 @@ export function SupportChat({
   const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState<string | null>(threads[0]?.id ?? null)
   const [replies, setReplies] = useState<Record<string, string>>({})
+
+  // A reply from the office, or a new AI answer, lands in support_messages;
+  // listen for it so the thread updates live instead of only after the member
+  // sends again. RLS scopes the stream to this member's own threads.
+  useEffect(() => {
+    let channel: ReturnType<ReturnType<typeof supabase>['channel']> | null = null
+    try {
+      const client = supabase()
+      channel = client
+        .channel('field-support')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'support_messages' }, () =>
+          router.refresh(),
+        )
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'support_threads' }, () =>
+          router.refresh(),
+        )
+        .subscribe()
+    } catch {
+      // Realtime unavailable: sending still refreshes the thread.
+    }
+    return () => {
+      if (channel) void supabase().removeChannel(channel)
+    }
+  }, [router])
 
   async function send() {
     if (!body.trim()) return
