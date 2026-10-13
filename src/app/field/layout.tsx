@@ -19,11 +19,14 @@ export default async function FieldLayout({ children }: { children: React.ReactN
   // migration runs, so nobody is sent there until it exists.
   if (session.profile.onboarded_at === null) redirect('/welcome')
 
-  // Postgres is the authority on who may file a report; the nav just asks it.
   const supabase = await createServerSupabase()
+  // Who may file a report is purely role (can_file_report() is just
+  // role in marketer/admin), and the session already holds the role, so read
+  // it from there rather than spend a round-trip on every navigation. The
+  // insert policy and trigger still enforce it in the database.
+  const canFileReport = session.profile.role === 'marketer' || session.profile.role === 'admin'
   // The Count tab only appears while a count is due: asked for, or month end.
-  const [{ data: canFileReport }, countStatus, { data: myStores }, { data: xmStores }, { data: placeDue }] = await Promise.all([
-    supabase.rpc('can_file_report'),
+  const [countStatus, { data: myStores }, { data: xmStores }, { data: placeDue }] = await Promise.all([
     getCountStatus(supabase),
     supabase.rpc('my_outlets'),
     // X Metrics (043): the tab shows once one of their stores is in it.
