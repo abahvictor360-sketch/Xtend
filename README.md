@@ -7,6 +7,9 @@ in-app selfie; admins manage staff and audit attendance from a web dashboard.
 - **Stack:** Next.js 15 (App Router, TypeScript), Tailwind, Supabase
   (Auth, Postgres, Storage, Realtime, RLS), Vercel + Vercel Cron.
 - **Surface:** installable PWA for the field, web dashboard for the office.
+- **Build guide:** [`docs/BUILD_GUIDE.md`](docs/BUILD_GUIDE.md): building Xtend
+  from nothing, every migration, setup, checks and the change log. Kept current
+  with every change.
 - **Timezone of record:** Africa/Lagos. **Scale:** 30–100 staff, one outlet each.
 
 ## The architectural rule
