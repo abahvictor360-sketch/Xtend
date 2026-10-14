@@ -473,8 +473,9 @@ docs/                     This guide, LOCATION-INTEGRITY.md, and rebuild/ (the r
 9. **Update the docs in the same commit:** this guide (section 14 at least),
    the README migration list for a migration, and the admin, supervisor or
    staff guide for anything people see.
-10. Open a PR into the main branch; after merging, run the new migrations in
-    Supabase.
+10. Open a PR into the main branch and merge it once the checks pass (the
+    owner asked for every change to be merged and pushed straight away);
+    then run any new migrations in Supabase.
 
 ## 13. Keeping this guide current
 
