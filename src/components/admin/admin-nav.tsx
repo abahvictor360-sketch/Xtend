@@ -37,6 +37,8 @@ interface NavLink {
   label: string
   icon: LucideIcon
   adminOnly: boolean
+  /** Shown to supervisors only (admins have their own version). */
+  supervisorOnly?: boolean
 }
 
 /** The dashboard, grouped the way people look for things. */
@@ -47,6 +49,7 @@ const GROUPS: { title: string | null; links: NavLink[] }[] = [
       { href: '/admin', label: 'Overview', icon: LayoutDashboard, adminOnly: false },
       { href: '/admin/ask', label: 'Ask Xtend', icon: MessageSquareText, adminOnly: false },
       { href: '/admin/guide', label: 'Admin guide', icon: BookOpen, adminOnly: true },
+      { href: '/admin/supervisor-guide', label: 'Guide', icon: BookOpen, adminOnly: false, supervisorOnly: true },
     ],
   },
   {
@@ -99,7 +102,7 @@ function useLinks(readOnly: boolean) {
   const pathname = usePathname()
   const groups = GROUPS.map((g) => ({
     ...g,
-    links: g.links.filter((link) => !link.adminOnly || !readOnly),
+    links: g.links.filter((link) => (!link.adminOnly || !readOnly) && (!link.supervisorOnly || readOnly)),
   })).filter((g) => g.links.length > 0)
   const isActive = (href: string) =>
     href === '/admin' ? pathname === href : pathname.startsWith(href)

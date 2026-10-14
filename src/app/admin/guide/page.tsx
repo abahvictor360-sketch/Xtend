@@ -324,6 +324,7 @@ export default async function AdminGuidePage() {
             Supervisors see and act on their own team only. They can add merchandisers and marketers (who
             join their team) and reset their passwords; only admins create supervisors and admins, move
             people between teams, and see Places, Roles, Teams, the audit log, Updates and this guide.
+            Supervisors have their own guide.
           </Tip>
         </GuideSection>
 
@@ -458,8 +459,12 @@ export default async function AdminGuidePage() {
                 q: 'A supervisor wants this guide',
                 a: (
                   <>
-                    It is for admins only. Supervisors work their own team from the same pages; walk them
-                    through the pages they use, or share the parts of this guide that apply.
+                    It is for admins only. Supervisors have their own{' '}
+                    <Link href="/admin/supervisor-guide" className="font-semibold text-brand hover:underline">
+                      Supervisor guide
+                    </Link>{' '}
+                    in their menu, covering their own team and what to ask an admin for. It leaves out how
+                    location and the checks work.
                   </>
                 ),
               },
