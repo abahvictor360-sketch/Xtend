@@ -297,6 +297,15 @@ export default async function AdminGuidePage() {
             or a search; tick <Ui>Only VPN, new device or new location</Ui> to see just those; open a
             row for the full detail; download it as Excel, PDF, Word or CSV.
           </p>
+          <p>
+            <Ui>Updates</Ui> (admins): Xtend updates itself. Anyone with Xtend open is told when a newer
+            version is live (<Ui>A new version of Xtend is ready</Ui>) and moves to it with one tap;
+            anything waiting to upload is kept. Publish a short <Ui>What&apos;s new</Ui> there and each
+            person sees it once. Tick <Ui>Required</Ui> when an old version must not be used any more.
+            When a new phone app is published, people are offered the download; set the lowest Android
+            or iPhone build allowed to make them install it before carrying on. The page shows who is on
+            which version, and <Ui>Remind to update</Ui> sends those on an older app a notification.
+          </p>
         </GuideSection>
 
         <GuideSection topic={T.alerts} intro="Things that need a look.">

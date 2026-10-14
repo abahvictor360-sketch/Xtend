@@ -14,6 +14,8 @@ const ASSET = 'xtend.apk'
 export interface PublishedApk {
   url: string
   version: string | null
+  /** The Android versionCode: the workflow's run number, the last part of the version. */
+  build: number | null
 }
 
 export async function publishedAndroidApk(): Promise<PublishedApk | null> {
@@ -30,9 +32,12 @@ export async function publishedAndroidApk(): Promise<PublishedApk | null> {
     }
     const apk = release.assets?.find((a) => a.name === ASSET)
     if (!apk) return null
+    const version = release.name?.match(/\d+\.\d+\.\d+/)?.[0] ?? null
+    const build = version ? Number(version.split('.')[2]) : NaN
     return {
       url: apk.browser_download_url,
-      version: release.name?.match(/\d+\.\d+\.\d+/)?.[0] ?? null,
+      version,
+      build: Number.isFinite(build) ? build : null,
     }
   } catch {
     return null

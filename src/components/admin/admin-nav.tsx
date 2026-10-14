@@ -28,6 +28,7 @@ import {
   BadgeCheck,
   Gauge,
   type LucideIcon,
+  RefreshCw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -89,6 +90,7 @@ const GROUPS: { title: string | null; links: NavLink[] }[] = [
       { href: '/admin/outlets', label: 'Outlets', icon: Store, adminOnly: false },
       { href: '/admin/places', label: 'Places', icon: MapPinned, adminOnly: true },
       { href: '/admin/audit', label: 'Audit log', icon: FileClock, adminOnly: true },
+      { href: '/admin/updates', label: 'Updates', icon: RefreshCw, adminOnly: true },
     ],
   },
 ]

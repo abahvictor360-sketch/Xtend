@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { ServiceWorker } from '@/components/service-worker'
+import { UpdateManager } from '@/components/update-manager'
 
 export const metadata: Metadata = {
   title: 'Xtend — Xpel Beauty field attendance',
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="min-h-dvh">
         {children}
         <ServiceWorker />
+        <UpdateManager />
       </body>
     </html>
   )

@@ -43,6 +43,21 @@ What each phone allows:
 Builds from before the tracker existed keep using the background location
 plugin while the app is open or in the background.
 
+## Updates
+
+Most changes need no new app: the apps load the live site, and the site
+tells anyone with Xtend open when a newer deploy is live ("A new version
+of Xtend is ready", `src/components/update-manager.tsx`). A new store
+build is only needed when something in this folder changes. Each Android
+build's version code is the workflow's run number (`1.0.<run>`), and the
+app reads its own build (Capacitor `App.getInfo`) and compares it with the
+newest published on the `android` release: an older app is offered the
+download, and one below the lowest build set on **Updates** in the
+dashboard must install it before carrying on. For iPhone, set
+`IOS_LATEST_BUILD` (and `IOS_APP_URL`) in Vercel when a new build is on
+TestFlight or the App Store. `ANDROID_LATEST_BUILD` overrides the Android
+number when the APK is hosted elsewhere (`ANDROID_APK_URL`).
+
 ## Building
 
 GitHub builds both apps on every push that touches `mobile/`
