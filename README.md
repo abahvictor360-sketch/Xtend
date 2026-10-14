@@ -76,6 +76,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0055_reject_post_clockout_tracking.sql  # positions sent after clock-out are refused
    supabase/migrations/0056_realtime_field_tables.sql  # live updates for the field dashboard
    supabase/migrations/0057_app_updates.sql            # updates: what's new notes, required updates, lowest app builds, who is on which version
+   supabase/migrations/0058_realtime_broadcast.sql     # realtime via per-user Broadcast triggers so connections scale to thousands
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

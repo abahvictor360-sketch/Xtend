@@ -1310,9 +1310,11 @@ role name or the base label). Sections:
   muted); reply input "Write a reply" with send icon; resolved threads show
   "Marked resolved by the office." and no input. Empty: "No messages yet.
   Anything you send shows here with the reply."
-- Live: a realtime channel on `support_messages` and `support_threads`
-  refreshes the page. Skipped when `NEXT_PUBLIC_REALTIME_DISABLED=1` (the
-  fleet-wide release valve); sending still refreshes the thread.
+- Live: rides the member's own private Broadcast topic `field:<uid>`
+  (migration 0058) and refreshes when the event's `table` is
+  `support_messages` or `support_threads`. Skipped when
+  `NEXT_PUBLIC_REALTIME_DISABLED=1` (the fleet-wide release valve); sending
+  still refreshes the thread.
 
 ### 11.5 Staff guide (`/field/guide`, public `/guide`)
 
@@ -1402,11 +1404,18 @@ do; it never explains monitoring.
 
 ### 13.3 Realtime refresh (`use-dashboard-refresh.ts`)
 
-- One channel `field-dashboard` subscribed to all changes on
-  `attendance`, `store_visits`, `support_messages`,
-  `notification_deliveries` (RLS limits rows to the member).
-- Any change → debounce **400 ms** → `router.refresh()`; refreshes are
-  skipped while hidden or offline and are locked for **1500 ms** after one.
+- One **private Broadcast** channel `field:<uid>`. Database triggers
+  (migration 0058) send a `change` event `{ table, op }` to that topic
+  whenever the member's `attendance`, `store_visits`, `support_messages` or
+  `notification_deliveries` row changes. RLS on `realtime.messages` lets a
+  member read only their own topic. Broadcast replaces Postgres Changes so
+  the realtime server does not run RLS per subscriber per change, which is
+  what lets the connection count scale to thousands.
+- Any event → debounce **400 ms** → `router.refresh()` (which re-fetches
+  through RLS; the socket never carries row data); refreshes are skipped
+  while hidden or offline and are locked for **1500 ms** after one.
+- Only **on-shift** members open a socket; a clocked-out member with the app
+  open rides the poll, keeping the connection count down to people working.
 - Safety poll on shift **45 s** when realtime is live, **20 s** when it is
   off or has failed; off shift **120 s** / **60 s**. Each interval is
   jittered **±30 %** per client so a fleet does not stampede the backend on

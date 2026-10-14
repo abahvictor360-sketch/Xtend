@@ -38,6 +38,7 @@ export function FieldHome({
   canVisitStores,
   notificationsRequired = true,
   avatarUrl = null,
+  userId,
 }: {
   day: DayState
   visits: VisitRow[]
@@ -45,6 +46,7 @@ export function FieldHome({
   canVisitStores: boolean
   notificationsRequired?: boolean
   avatarUrl?: string | null
+  userId: string
 }) {
   const router = useRouter()
   const gate = useLocationGate()
@@ -61,7 +63,7 @@ export function FieldHome({
   const onShift = Boolean(day.opening) && !day.closing
   // Runs quietly while on shift; nothing about it is shown here.
   useHeartbeat(onShift && gate.status === 'ready')
-  useDashboardRefresh(onShift)
+  useDashboardRefresh(onShift, userId)
 
   const { place, loading: placeLoading } = usePlace(gate.fix)
   const whereIAm = place?.label ?? place?.address ?? null

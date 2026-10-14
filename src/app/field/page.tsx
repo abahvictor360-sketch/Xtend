@@ -54,6 +54,7 @@ export default async function FieldPage() {
         canVisitStores={canVisitStores === true}
         notificationsRequired={!session.profile.push_exempt}
         avatarUrl={photo}
+        userId={session.userId}
       />
     </>
   )

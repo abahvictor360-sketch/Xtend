@@ -32,6 +32,7 @@ export default async function SupportPage() {
         threads={(threads ?? []) as SupportThread[]}
         messages={(messages ?? []) as SupportMessage[]}
         staffName={session.profile.full_name}
+        userId={session.userId}
       />
     </SheetScreen>
   )

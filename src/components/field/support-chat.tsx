@@ -39,10 +39,12 @@ export function SupportChat({
   threads,
   messages,
   staffName,
+  userId,
 }: {
   threads: SupportThread[]
   messages: SupportMessage[]
   staffName: string
+  userId: string
 }) {
   const router = useRouter()
   const [subject, setSubject] = useState('')
@@ -54,22 +56,21 @@ export function SupportChat({
 
   // A reply from the office, or a new AI answer, lands in support_messages;
   // listen for it so the thread updates live instead of only after the member
-  // sends again. RLS scopes the stream to this member's own threads.
+  // sends again. This rides the member's own private broadcast topic
+  // `field:<uid>` (migration 0058) and refreshes on a support change; the
+  // re-fetch is RLS-scoped to this member's own threads.
   useEffect(() => {
     // Honour the fleet-wide realtime release valve (see use-dashboard-refresh):
     // when sockets are the bottleneck, sending still refreshes the thread.
-    if (process.env.NEXT_PUBLIC_REALTIME_DISABLED === '1') return
+    if (process.env.NEXT_PUBLIC_REALTIME_DISABLED === '1' || !userId) return
     let channel: ReturnType<ReturnType<typeof supabase>['channel']> | null = null
     try {
-      const client = supabase()
-      channel = client
-        .channel('field-support')
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'support_messages' }, () =>
-          router.refresh(),
-        )
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'support_threads' }, () =>
-          router.refresh(),
-        )
+      channel = supabase()
+        .channel(`field:${userId}`, { config: { private: true } })
+        .on('broadcast', { event: 'change' }, ({ payload }) => {
+          const table = (payload as { table?: string } | undefined)?.table
+          if (table === 'support_messages' || table === 'support_threads') router.refresh()
+        })
         .subscribe()
     } catch {
       // Realtime unavailable: sending still refreshes the thread.
@@ -77,7 +78,7 @@ export function SupportChat({
     return () => {
       if (channel) void supabase().removeChannel(channel)
     }
-  }, [router])
+  }, [router, userId])
 
   async function send() {
     if (!body.trim()) return

@@ -5,8 +5,8 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-14, after the k6 load test and realtime scale
-mitigations._
+_Last updated: 2026-10-14, after migration 0058 (realtime via per-user
+Broadcast) and the k6 load test._
 
 ---
 
@@ -244,7 +244,8 @@ the code lives.
 ### Stage 9 — Speed, updates, audiences (2026-10-12 → 10-14)
 
 - Faster dashboard and field loading; the field dashboard live-updates with
-  Supabase realtime (0056).
+  Supabase realtime (0056), carried by per-user Broadcast from database
+  triggers (0058) so the connection count scales to thousands on shift.
 - Store clock-in and clock-out times set by admins (and Ask Xtend).
 - **Updates** (0057): pages notice a new deploy and offer to reload; phone
   apps are offered the new build or required to install it; admins publish
@@ -316,6 +317,7 @@ Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
 | 0055 | Positions after clock-out refused |
 | 0056 | Realtime for the field dashboard |
 | 0057 | Updates: releases, installs |
+| 0058 | Realtime via per-user Broadcast triggers (scale) |
 
 ## 7. Environment variables
 
@@ -409,7 +411,8 @@ storage and realtime), every registered migration, then
 `supabase/tests/rules.sql` (rules, as superuser) and
 `supabase/tests/rls_counts.sql` (row-level security, as the `authenticated`
 role). It must end with `ALL RULES PASSED` and `ALL RLS CHECKS PASSED`.
-Migration 0056 (realtime publication) is not loaded by the harness.
+Migrations 0056 and 0058 (realtime publication and Broadcast triggers) are
+not loaded by the harness — the plain-Postgres stub has no realtime schema.
 
 **Logic checks** (no database). Each ends with an "ALL … PASSED/OK" line, except
 `check-push-endpoints`, which lists each case it checked (any `FAIL` line is a
@@ -503,6 +506,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-14 | Realtime scale fix: the field dashboard and support chat now ride per-user Broadcast (`field:<uid>`) from database triggers instead of Postgres Changes, so Supabase compute holds far more connections. Only on-shift members hold a socket | 0058 |
 | 2026-10-14 | Load test (`load-test/`): k6 script for ~5,000 field staff (edge baseline, dashboard RPC poll, realtime connection ceiling, opt-in clock-in write burst) plus run and infra-sizing notes. Scale mitigations: fleet-wide realtime kill-switch (`NEXT_PUBLIC_REALTIME_DISABLED`), jittered safety poll, faster poll when realtime is off or has failed | — |
 | 2026-10-14 | Both phone apps build on every push; Android version only goes up when the app itself changes; iOS simulator build kept as a download | — |
 | 2026-10-14 | Fix: supervisors can download X Metrics reports for their team (the links were shown but refused) | — |

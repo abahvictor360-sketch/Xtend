@@ -7,11 +7,14 @@ import { supabase } from '@/lib/supabase/client'
 /**
  * Keep the phone dashboard in step with the backend.
  *
- * The fast path is Supabase realtime: the moment the member's own data
- * changes in the database (a clock event, a store visit, a reply from the
- * office) the server state is re-fetched and the screen updates, with no
- * tapping or pull-to-refresh. Realtime only carries rows the member may read
- * under RLS, so a channel without a filter still only ever sees their rows.
+ * The fast path is Supabase realtime Broadcast: a database trigger sends one
+ * lightweight event to the member's own private topic `field:<uid>` whenever
+ * their attendance, store visit, support message or notification changes
+ * (migration 0058). The event carries only { table, op }; the screen re-fetches
+ * on it and that fetch goes through RLS, so the socket never carries row data.
+ * Broadcast replaces Postgres Changes here because it does not run RLS per
+ * subscriber per change, so the same Supabase compute holds far more
+ * connections — the thing that caps how many staff can be on shift at once.
  *
  * Behind it sits a slow poll as a safety net for anything realtime can miss:
  * a dropped socket, or a value the server computes only when the page is
@@ -19,20 +22,15 @@ import { supabase } from '@/lib/supabase/client'
  * work that used to need constant refreshing, which also makes the app feel
  * quicker and spares the battery and data.
  *
- * At scale (thousands of field staff on shift at once) two things matter:
- *   - Realtime holds one socket per client. Supabase caps concurrent
- *     connections per plan; past the cap new sockets are refused. Set
- *     NEXT_PUBLIC_REALTIME_DISABLED=1 to turn realtime off fleet-wide and let
+ * At scale (thousands of field staff on shift at once) three things matter:
+ *   - Only on-shift members hold a socket (see below); everyone else polls.
+ *   - NEXT_PUBLIC_REALTIME_DISABLED=1 turns realtime off fleet-wide and lets
  *     everyone ride the poll instead — a safe release valve if the socket
- *     count is the thing falling over.
- *   - If every client polls on the same 45s boundary, the backend sees a
- *     spike every 45s instead of steady traffic. The safety poll is jittered
- *     per client to spread that load out.
+ *     count is still the thing falling over.
+ *   - If every client polled on the same 45s boundary the backend would see a
+ *     spike every 45s instead of steady traffic, so the poll is jittered per
+ *     client to spread that load out.
  */
-
-// Tables the dashboard's state is derived from. Each is RLS-scoped to the
-// member, and each is in the realtime publication (migrations 0002, 0056).
-const WATCHED = ['attendance', 'store_visits', 'support_messages', 'notification_deliveries'] as const
 
 const REALTIME_DISABLED = process.env.NEXT_PUBLIC_REALTIME_DISABLED === '1'
 
@@ -42,7 +40,7 @@ function jitter(ms: number) {
   return Math.round(ms * (0.7 + Math.random() * 0.6))
 }
 
-export function useDashboardRefresh(activeShift: boolean) {
+export function useDashboardRefresh(activeShift: boolean, userId: string) {
   const router = useRouter()
   const refreshing = useRef(false)
   const timer = useRef<number | null>(null)
@@ -87,23 +85,24 @@ export function useDashboardRefresh(activeShift: boolean) {
     }
     schedulePoll()
 
-    // Realtime: refresh on any change to the member's own watched rows.
+    // Realtime: refresh when the member's own private topic broadcasts a
+    // change (migration 0058). Only on-shift members hold a socket — a
+    // clocked-out member with the app open rides the poll instead, which keeps
+    // the concurrent-connection count down to the people actually working.
     // Skipped entirely when disabled fleet-wide, so no socket is opened.
     let channel: ReturnType<ReturnType<typeof supabase>['channel']> | null = null
-    if (!REALTIME_DISABLED) {
+    if (!REALTIME_DISABLED && activeShift && userId) {
       try {
-        const client = supabase()
-        let ch = client.channel('field-dashboard')
-        for (const table of WATCHED) {
-          ch = ch.on('postgres_changes', { event: '*', schema: 'public', table }, nudge)
-        }
-        channel = ch.subscribe((status) => {
-          // SUBSCRIBED => realtime is live, fall back to the slow poll.
-          // CHANNEL_ERROR / TIMED_OUT / CLOSED => socket is not carrying
-          // changes (e.g. the plan's connection cap was hit); keep polling
-          // on the faster cadence instead of going stale.
-          realtimeLive = status === 'SUBSCRIBED'
-        })
+        channel = supabase()
+          .channel(`field:${userId}`, { config: { private: true } })
+          .on('broadcast', { event: 'change' }, nudge)
+          .subscribe((status) => {
+            // SUBSCRIBED => realtime is live, fall back to the slow poll.
+            // CHANNEL_ERROR / TIMED_OUT / CLOSED => the socket is not carrying
+            // changes (plan connection cap hit, or authorization failed); keep
+            // polling on the faster cadence instead of going stale.
+            realtimeLive = status === 'SUBSCRIBED'
+          })
       } catch {
         // Realtime unavailable (blocked socket, old webview): the poll covers it.
       }
@@ -124,5 +123,5 @@ export function useDashboardRefresh(activeShift: boolean) {
       window.removeEventListener('online', onOnline)
       if (channel) void supabase().removeChannel(channel)
     }
-  }, [activeShift, router])
+  }, [activeShift, userId, router])
 }
