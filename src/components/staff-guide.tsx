@@ -11,7 +11,6 @@ import {
   MapPinPlus,
   Smartphone,
   Store,
-  WifiOff,
   Wrench,
 } from 'lucide-react'
 import {
@@ -35,9 +34,8 @@ export const STAFF_TOPICS = {
   report: { id: 'daily-report', title: 'Daily report', icon: FileText },
   count: { id: 'store-count', title: 'Stock count', icon: ClipboardList },
   clockOut: { id: 'clock-out', title: 'Clock out', icon: LogOut },
-  offline: { id: 'no-network', title: 'No network', icon: WifiOff },
   history: { id: 'history', title: 'History and your account', icon: CalendarDays },
-  help: { id: 'help', title: 'Getting help', icon: LifeBuoy },
+  help: { id: 'help', title: 'Report a problem', icon: LifeBuoy },
   fix: { id: 'problems', title: 'Common problems', icon: Wrench },
 } satisfies Record<string, GuideTopic>
 
@@ -79,10 +77,9 @@ export function StaffGuide() {
         <Steps
           items={[
             <>
-              <Ui>Location:</Ui> when asked, tap Allow. In your phone’s settings, set location
-              to <Ui>High accuracy</Ui>. In the Xtend app, also set it to{' '}
-              <Ui>Allow all the time</Ui> (Android) or <Ui>Always</Ui> (iPhone): Xtend asks on your
-              first shift.
+              <Ui>Location:</Ui> when asked, tap Allow (choose <Ui>Allow all the time</Ui> or{' '}
+              <Ui>Always</Ui> if your phone offers it). In your phone’s settings, set location to{' '}
+              <Ui>High accuracy</Ui>.
             </>,
             <>
               <Ui>Camera:</Ui> allow it when asked. Clocking in and out takes a selfie with
@@ -130,11 +127,6 @@ export function StaffGuide() {
           phone
         />
         <GuideShot src="/guide/staff-clock.png" alt="The Clock in with selfie button" width={748} height={160} phone />
-        <Tip>
-          In the Xtend app, Xtend keeps working until you clock out, even if you close the app
-          or the phone restarts (Android shows an “Xtend · On shift” notification meanwhile). Keep
-          location on, and if your phone asks, let Xtend run without battery restrictions.
-        </Tip>
       </GuideSection>
 
       <GuideSection topic={T.visits} intro="Marketers who move between stores check in at each one.">
@@ -176,10 +168,9 @@ export function StaffGuide() {
             </>,
             <>
               Under <Ui>Photo of the building from outside, with the sign showing</Ui>, tap{' '}
-              <Ui>Open the camera</Ui>. Stand still for a few seconds while Xtend locks your
-              location from several GPS readings, then take the photo. The camera reads your
-              location again as you take it; if the two do not match, Xtend asks you to take it
-              again. That location is where the place is saved, so take it at the place.
+              <Ui>Open the camera</Ui>. Stand still for a few seconds, then take the photo. Take it
+              at the place itself; if Xtend asks you to take it again, stay where you are and retake
+              it.
             </>,
             <>
               Under <Ui>Selfie holding one of our products</Ui>, tap <Ui>Open the camera</Ui>{' '}
@@ -187,8 +178,7 @@ export function StaffGuide() {
             </>,
             <>
               Tap <Ui>Save this place</Ui> and wait while Xtend checks both photos. When you see{' '}
-              <Ui>Xtend will recognise this place from now on</Ui>, you are done, and anything
-              that was waiting on your phone is sent.
+              <Ui>Xtend will recognise this place from now on</Ui>, you are done.
             </>,
           ]}
         />
@@ -201,8 +191,7 @@ export function StaffGuide() {
           Both photos are taken with the camera in Xtend. You cannot upload a picture from your
           gallery. The building photo must show a shop or plaza, not a house or the inside of a
           room. The selfie must show your face and one of our products. If a photo is not
-          accepted, Xtend tells you why: tap the photo again to retake it. You need signal to save
-          the place.
+          accepted, Xtend tells you why: tap the photo again to retake it.
         </Tip>
         <Tip>
           Clocked in somewhere that is not a shop, such as the depot gate? Ask the office: they can
@@ -277,14 +266,6 @@ export function StaffGuide() {
         />
       </GuideSection>
 
-      <GuideSection topic={T.offline} intro="Weak signal or no data is fine.">
-        <p>
-          Keep working as normal. What you do is <Ui>saved on your phone</Ui> and sent by
-          itself when you are back online. A banner shows anything still waiting to send.
-        </p>
-        <Tip>Do not sign out or clear Xtend while something is waiting to send.</Tip>
-      </GuideSection>
-
       <GuideSection topic={T.history} intro="Your own record and settings.">
         <p>
           <Ui>History</Ui> shows your attendance day by day. <Ui>You</Ui> shows your
@@ -293,22 +274,24 @@ export function StaffGuide() {
         </p>
       </GuideSection>
 
-      <GuideSection topic={T.help} intro="Stuck? Ask from inside Xtend.">
+      <GuideSection topic={T.help} intro="Something not working, or a complaint? Tell the office from inside Xtend.">
         <Steps
           items={[
             <>
               Go to <Ui>You</Ui>, then <Ui>Message support</Ui>.
             </>,
             <>
-              Describe the problem, for example: “my clock-in keeps saying off site at my
-              store”.
+              Say what happened, where and when, for example: “my clock-in keeps saying off site at
+              Ikeja City Mall this morning”. One problem per message is easiest to sort out.
             </>,
             <>
-              The Xtend helper replies, and the office steps in when needed. Replies arrive as
-              notifications.
+              The Xtend helper answers simple questions straight away. Anything it cannot sort out
+              goes to the office, and their reply arrives as a notification. Open{' '}
+              <Ui>Message support</Ui> again to read it or add more.
             </>,
           ]}
         />
+        <Tip>Urgent and on shift? Call your supervisor as well.</Tip>
       </GuideSection>
 
       <GuideSection topic={T.fix}>
@@ -360,6 +343,15 @@ export function StaffGuide() {
                 <>
                   Allow the camera for Xtend in your phone’s settings, close other apps using
                   the camera, and try again.
+                </>
+              ),
+            },
+            {
+              q: 'A banner says something is waiting to send',
+              a: (
+                <>
+                  It sends by itself when you have signal. Keep working, and do not sign out until it
+                  has gone.
                 </>
               ),
             },

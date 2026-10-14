@@ -156,7 +156,7 @@ export async function startShiftTracker(): Promise<ShiftTrackerState | null> {
     endpoint: got.endpoint,
     expiresAt: Date.parse(got.expires_at),
     title: 'Xtend',
-    text: 'On shift until you clock out',
+    text: 'On shift',
   })
 }
 
