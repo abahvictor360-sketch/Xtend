@@ -228,13 +228,13 @@ export function Onboarding({ name, photoUrl }: { name: string; photoUrl: string 
           type="button"
           onClick={() => setIndex((i) => i + 1)}
           disabled={!canContinue}
-          className="flex h-16 w-full items-center rounded-full bg-[hsl(24_14%_11%)] p-2 text-white transition-opacity disabled:opacity-40"
+          className="flex h-16 w-full items-center rounded-full bg-brand p-2 text-primary-foreground transition-[filter] hover:brightness-105 disabled:opacity-40"
         >
           <span className="w-12" />
           <span className="flex-1 text-center text-base font-semibold">
             {step === 'welcome' ? "Let's set you up" : !canContinue ? 'Add a photo first' : 'Continue'}
           </span>
-          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-foreground">
+          <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-brand">
             <ArrowRight className="h-5 w-5" />
           </span>
         </button>

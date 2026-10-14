@@ -37,9 +37,27 @@ export function AttendanceChart({ days }: { days: DayCount[] }) {
   const [picked, setPicked] = useState(days.length - 1)
   const max = niceMax(Math.max(1, ...days.map((d) => d.onTime + d.late)))
   const ticks = [max, (max * 3) / 4, max / 2, max / 4, 0]
+  const sel = days[picked] ?? days[days.length - 1]
 
   return (
-    <div className="relative flex h-64 gap-3">
+    <div className="space-y-3">
+      {sel && (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-xl border border-border bg-card px-3 py-2 text-xs">
+          <span className="font-semibold text-foreground">{sel.long}</span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ background: ON_TIME }} /> On time{' '}
+            <span className="font-semibold tabular-nums">{sel.onTime}</span>
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 rounded-full" style={{ background: LATE }} /> Late{' '}
+            <span className="font-semibold tabular-nums">{sel.late}</span>
+          </span>
+          <span className="ml-auto font-semibold">
+            Clock-ins <span className="tabular-nums">{sel.onTime + sel.late}</span>
+          </span>
+        </div>
+      )}
+      <div className="relative flex h-64 gap-3">
       <div className="flex w-7 flex-col justify-between pb-7 text-right text-[11px] tabular-nums text-muted-foreground">
         {ticks.map((t) => (
           <span key={t} className="-translate-y-1/2 leading-none first:translate-y-0 last:translate-y-0">
@@ -99,40 +117,13 @@ export function AttendanceChart({ days }: { days: DayCount[] }) {
                   {d.label}
                 </span>
 
-                {on && (
-                  <div
-                    className={cn(
-                      'pointer-events-none absolute top-1 z-10 w-max rounded-xl border border-border bg-card px-3 py-2 text-left text-xs shadow-soft',
-                      i >= days.length - 2 ? 'right-1/2' : 'left-1/2',
-                    )}
-                  >
-                    <p className="mb-1 text-[11px] text-muted-foreground">{d.long}</p>
-                    <Row colour={ON_TIME} label="On time" value={d.onTime} />
-                    <Row colour={LATE} label="Late" value={d.late} />
-                    <p className="mt-1 flex justify-between gap-6 border-t border-border pt-1 font-semibold">
-                      <span>Clock-ins</span>
-                      <span className="tabular-nums">{total}</span>
-                    </p>
-                  </div>
-                )}
               </button>
             )
           })}
         </div>
       </div>
+      </div>
     </div>
-  )
-}
-
-function Row({ colour, label, value }: { colour: string; label: string; value: number }) {
-  return (
-    <p className="flex items-center justify-between gap-6">
-      <span className="flex items-center gap-1.5">
-        <span className="h-1.5 w-1.5 rounded-full" style={{ background: colour }} />
-        {label}
-      </span>
-      <span className="font-semibold tabular-nums">{value}</span>
-    </p>
   )
 }
 
