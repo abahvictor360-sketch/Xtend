@@ -1,0 +1,183 @@
+-- =====================================================================
+-- Row level security for store counts and count requests (019, 020),
+-- exercised as the `authenticated` role rather than as a superuser.
+-- Run after rules.sql, whose people and data it reuses.
+-- =====================================================================
+set client_min_messages = notice;
+
+-- What Supabase grants the API roles by default.
+grant usage on schema public, auth to authenticated;
+grant select on all tables in schema public to authenticated;
+grant execute on function auth.uid() to authenticated;
+grant execute on function assert(boolean, text) to authenticated;
+-- Supabase also grants writes on public tables and relies on RLS; do the
+-- same here for learned places, so the test proves the policy stops staff.
+grant update, delete on public.known_places to authenticated;
+-- On Supabase those defaults are granted when a table is made, and a
+-- migration's own revokes come after. Replay 026's in that order.
+revoke select on public.phone_checks from authenticated;
+grant select (id, user_id, requested_by, devices, created_at, delivered_at, opened_at)
+  on public.phone_checks to authenticated;
+
+select id as ada   from auth.users where email = 'ada@xpel.ng'   \gset
+select id as bala  from auth.users where email = 'bala@xpel.ng'  \gset
+select id as boss  from auth.users where email = 'boss@xpel.ng'  \gset
+select id as grace from auth.users where email = 'grace@xpel.ng' \gset
+select id as tunde from auth.users where email = 'tunde@xpel.ng' \gset
+select id as funke from auth.users where email = 'funke.support@xpel.ng' \gset
+
+set role authenticated;
+
+select set_config('request.jwt.claim.sub', :'ada', false);
+select assert((select count(*) from public.count_requests) >= 1
+                and (select count(*) from public.count_requests)
+                    = (select count(*) from public.count_request_targets),
+  'rls: a merchandiser sees the requests made to them, and no other');
+select assert(not exists (select 1 from public.count_request_targets where user_id <> :'ada'),
+  'rls: and only their own line of each');
+select assert((select count(*) from public.store_counts) > 0,
+  'rls: they see their own counts');
+
+select assert((select count(*) from public.integrity_flags) = 0,
+  'rls: nobody sees the flags raised about them');
+select assert((select count(*) from public.device_beacons) = 0
+                and (select count(*) from public.phone_checks) = 0,
+  'rls: staff see nothing their phone reports, and no phone checks');
+
+update public.known_places set name = 'Renamed by staff' where name = 'Mama Nkechi Provisions';
+delete from public.known_places where name = 'Mama Nkechi Provisions';
+select assert((select count(*) from public.known_places) = 0
+                and (select count(*) from public.known_place_detail) = 0,
+  'rls: staff cannot read the list of learned places, and who was where');
+select assert((select name from public.known_place_at(6.5001, 3.3001)) = 'Mama Nkechi Provisions',
+  'rls: but are told the name of the place they are standing in');
+
+select set_config('request.jwt.claim.sub', :'bala', false);
+select assert((select count(*) from public.count_requests) = 0,
+  'rls: somebody not asked sees no requests');
+select assert((select count(*) from public.store_counts) = 0,
+  'rls: nor anybody else''s counts');
+
+select set_config('request.jwt.claim.sub', :'tunde', false);
+select assert((select count(*) from public.count_requests) = 1,
+  'rls: a supervisor sees the request they made, not one made to another team');
+select assert((select count(*) from public.store_counts where user_id = :'ada') = 0,
+  'rls: a supervisor does not see counts from outside their team');
+select assert((select count(*) from public.count_request_progress) = 1,
+  'rls: the progress view follows the same rules');
+
+select set_config('request.jwt.claim.sub', :'boss', false);
+select assert((select count(*) from public.count_requests) >= 2,
+  'rls: an admin sees every request');
+select assert((select count(*) from public.integrity_flag_detail) > 0,
+  'rls: an admin sees the integrity flags');
+select assert((select count(*) from public.store_counts) = (select count(*) from public.store_count_detail),
+  'rls: and every count');
+select assert((select count(*) from public.known_places where name = 'Mama Nkechi Provisions') = 1,
+  'rls: staff could not rename or delete a learned place');
+select assert((select count(*) from public.known_place_detail) = (select count(*) from public.known_places),
+  'rls: an admin sees every learned place');
+select assert((select count(*) from public.device_beacons) > 0
+                and (select count(*) from public.phone_checks) > 0,
+  'rls: an admin sees phone reports and checks');
+do $$
+begin
+  perform token from public.phone_checks limit 1;
+  perform assert(false, 'rls: nobody reads the token that proves a phone answered');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: nobody reads the token that proves a phone answered');
+end $$;
+
+do $$
+begin
+  insert into public.count_requests (requested_by, due_date) values (auth.uid(), current_date);
+  perform assert(false, 'rls: requests cannot be written directly');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: requests cannot be written directly');
+end $$;
+
+-- Support inbox, quick replies, templates, schedules and who got a
+-- notification (0053).
+select set_config('request.jwt.claim.sub', :'ada', false);
+select assert(not exists (select 1 from public.support_inbox where user_id <> :'ada'),
+  'rls: a merchandiser sees only their own support threads in the inbox');
+select assert((select count(*) from public.support_quick_replies) = 0
+                and (select count(*) from public.notification_templates) = 0
+                and (select count(*) from public.scheduled_notifications) = 0,
+  'rls: staff see no quick replies, templates or schedules');
+select assert(not exists (select 1 from public.notification_deliveries where user_id <> :'ada'),
+  'rls: staff see only their own deliveries');
+do $$
+begin
+  insert into public.support_quick_replies (title, body) values ('Mine', 'Written by staff');
+  perform assert(false, 'rls: staff cannot add a quick reply');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: staff cannot add a quick reply');
+end $$;
+
+select set_config('request.jwt.claim.sub', :'tunde', false);
+select assert(exists (select 1 from public.support_inbox where user_id = :'funke')
+                and not exists (select 1 from public.support_inbox where user_id = :'ada'),
+  'rls: a supervisor''s inbox holds their team''s threads, not others''');
+select assert((select assigned_name from public.support_inbox where user_id = :'funke' limit 1) = 'Tunde Bello',
+  'rls: and names who has the thread');
+select assert((select count(*) from public.notification_deliveries d
+               join public.notifications n on n.id = d.notification_id
+               where n.sender_id = :'tunde') >= 1,
+  'rls: a supervisor sees who got the notifications they sent');
+select assert(not exists (select 1 from public.notification_deliveries d
+                          where d.user_id <> :'tunde' and not public.notification_sent_by_me(d.notification_id)),
+  'rls: but not who got anybody else''s');
+select assert((select count(*) from public.support_quick_replies) >= 5
+                and (select count(*) from public.notification_templates) >= 4,
+  'rls: a supervisor uses the quick replies and templates');
+select assert(not exists (select 1 from public.scheduled_notifications where created_by <> :'tunde')
+                and exists (select 1 from public.scheduled_notifications),
+  'rls: a supervisor sees only their own schedules');
+delete from public.support_quick_replies where created_by is null;
+select assert((select count(*) from public.support_quick_replies where created_by is null) >= 5,
+  'rls: a supervisor cannot delete the shared quick replies');
+insert into public.notification_templates (title, body) values ('Depot meeting', 'Meet at the depot at 4pm.');
+select assert(exists (select 1 from public.notification_templates where title = 'Depot meeting' and created_by = :'tunde'),
+  'rls: a supervisor saves their own template');
+delete from public.notification_templates where title = 'Depot meeting';
+select assert(not exists (select 1 from public.notification_templates where title = 'Depot meeting'),
+  'rls: and can delete it');
+do $$
+begin
+  insert into public.scheduled_notifications (created_by, title, body, audience, user_ids, send_at)
+  values (auth.uid(), 'Sneaky', 'To everyone at all', 'everyone', array[auth.uid()], now() + interval '1 hour');
+  perform assert(false, 'rls: schedules cannot be written directly');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: schedules cannot be written directly');
+end $$;
+
+select set_config('request.jwt.claim.sub', :'boss', false);
+select assert((select count(*) from public.support_inbox) = (select count(*) from public.support_threads),
+  'rls: an admin sees every support thread');
+select assert((select count(*) from public.notification_log) = (select count(*) from public.notifications),
+  'rls: and the whole notification history');
+
+-- Updates (057): only admins publish; staff see live notes and their own installs.
+select set_config('request.jwt.claim.sub', :'ada', false);
+do $$
+begin
+  insert into public.app_releases (title) values ('Not allowed');
+  perform assert(false, 'rls: only admins publish updates');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: only admins publish updates');
+end $$;
+select assert(not exists (select 1 from public.app_releases where withdrawn_at is not null),
+  'rls: staff do not see withdrawn updates');
+select assert(not exists (select 1 from public.app_installs where user_id <> :'ada'),
+  'rls: staff see only their own app versions');
+select set_config('request.jwt.claim.sub', :'tunde', false);
+select assert(not exists (select 1 from public.app_installs i where i.user_id <> :'tunde' and not public.supervises_user(i.user_id)),
+  'rls: a supervisor sees their own team''s app versions only');
+select set_config('request.jwt.claim.sub', :'boss', false);
+insert into public.app_releases (title, notes) values ('Published by an admin', 'Notes');
+select assert(exists (select 1 from public.app_releases where title = 'Published by an admin' and created_by = :'boss'),
+  'rls: an admin publishes an update');
+
+reset role;
+select 'ALL RLS CHECKS PASSED';

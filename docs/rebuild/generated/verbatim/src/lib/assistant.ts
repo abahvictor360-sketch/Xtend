@@ -1,0 +1,802 @@
+import 'server-only'
+import Anthropic from '@anthropic-ai/sdk'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { lagosDateString, longDate } from '@/lib/utils'
+import {
+  MAX_RANGE_DAYS,
+  attendanceOnDay,
+  attendanceSummary,
+  fieldReports,
+  staffHistory,
+  countRequests,
+  integrityFlags,
+  checkExcuse,
+  storeCounts,
+  storeVisits,
+  integrityRisk,
+  locationAlerts,
+  supportThreads,
+  notificationsSent,
+  xMetricsMonth,
+  visitCoverage,
+} from '@/lib/assistant-data'
+import { AllocationContext } from '@/lib/assistant-allocate'
+import type { ChangePlan } from '@/lib/assistant-plan'
+import { ActionBuilder } from '@/lib/assistant-actions'
+import { PAGES, type PageLink, type ProposedAction } from '@/lib/assistant-action-types'
+import { buildReportSheet } from '@/lib/assistant-report'
+import { REPORT_KINDS, reportSpecSchema, type ReportSpec } from '@/lib/assistant-report-spec'
+
+/**
+ * "Ask Xtend": an admin or supervisor types a question ("who hasn't clocked
+ * in?", "give me this week's attendance report") and Claude answers it by
+ * calling the read-only tools below. Asked to do something (send a
+ * notification, ask for a stock count, check a phone…), it proposes the
+ * action as a card; only the person's Apply button carries it out.
+ *
+ * Every tool queries through the caller's own Supabase client, so RLS decides
+ * what the model can see: a supervisor's assistant only ever knows about that
+ * supervisor's people. Nothing here writes.
+ */
+
+const MODEL = 'claude-opus-5'
+const MAX_TOOL_ROUNDS = 10
+
+export interface ChatTurn {
+  role: 'user' | 'assistant'
+  content: string
+}
+
+export interface AssistantReply {
+  answer: string
+  /** Reports created this turn; the chat shows download buttons for each. */
+  reports: ReportSpec[]
+  /** Changes proposed this turn; the chat shows each with an Apply button. */
+  plans: ChangePlan[]
+  /** Dashboard actions proposed this turn, each with its own Apply button. */
+  actions: ProposedAction[]
+  /** Pages to open, as buttons. */
+  links: PageLink[]
+}
+
+export interface Asker {
+  name: string
+  role: 'admin' | 'supervisor'
+}
+
+export function assistantConfigured() {
+  return Boolean(process.env.ANTHROPIC_API_KEY)
+}
+
+const SYSTEM = `You are Xtend's assistant for Xpel Beauty. Office staff (admins and supervisors) ask you about field staff: who clocked in, who clocked out, who has not clocked in or out, who was late, who clocked in away from their store, a person's history, the daily reports marketers file, store visits, and stock counts (merchandisers count the products physically in their store and report, product by product, how many are left and how many were sold since their previous count; product names are as they typed them). Stock counts are taken when a supervisor or admin asks for one, and by everyone in the last three days of each month. You also produce downloadable reports, prepare store allocations and team changes for the user to approve, and carry out dashboard actions (notifications, stock count requests, phone checks, reviews, targets, store clock-in and clock-out times) once the user approves them.
+
+Answer only from what the tools return. Never guess a time, a name or a count; if the tools return nothing, say so. Call a tool for every question about the data, even one you think you answered earlier, because the data changes through the day.
+
+How attendance works:
+- A "clock in" is an opening record; a "clock out" is a closing record. Each has a time, a location and a status: on_site (inside the store's radius), off_site (outside it) or flagged.
+- Late means the clock in was after the store's shift start.
+- A person is "not clocked in" when they have no opening record that day, and "still on shift" when they clocked in but have not clocked out.
+- All times and dates are Africa/Lagos.
+
+Reports: when the user asks for a report, a summary to share, an export or a download, first read the data with the lookup tools, then call create_report with the matching kind and a short written summary: the headline numbers, who stands out (absent, late, off site, missing clock-outs, issues raised in field reports) and anything that needs follow-up. The report's table is filled in from the database automatically, so do not repeat the rows in your reply. After create_report, reply with two or three sentences giving the key findings and saying the download buttons are below. Pick the kind:
+- daily_attendance: one day, everyone's clock in and out (use "from" for the day).
+- attendance_summary: per-person totals over a range.
+- staff_history: one person day by day (set "name").
+- field_reports: the marketers' daily reports over a range.
+- store_visits: store visits over a range.
+- store_counts: merchandisers' product counts (left in store and sold) over a range.
+Ranges are at most ${MAX_RANGE_DAYS} days.
+
+Allocations and teams: the user may paste a list or attach a file (CSV, Excel, PDF, a photo of a sheet) saying which stores go to which merchandisers, or which people report to which supervisor. To prepare it:
+1. Read every line. Collect each distinct person, store and supervisor name exactly as written.
+2. Call match_names once with all of them. Each candidate has a reference (P…, S…, V…) and a score from 0 to 1.
+3. Pick the right candidate for each name. Take a clear best match (score about 0.8 or more, well ahead of the rest). When two candidates are close, or nothing is close, do not guess: leave that line out and list it in "unmatched".
+4. Call propose_changes once with every change. Use mode "add" (keep the stores they already have) unless the user says the list replaces what people have, then "replace".
+5. Reply in two or three sentences: how many people and stores are in the plan, anything unmatched and why, and that nothing changes until they press Apply below. Never say the changes are made: only the Apply button makes them.
+Only admins can change who somebody reports to; for a supervisor, say so and prepare only store allocations. If the user just asks for an allocation in words ("give Ada Ikeja Mall"), follow the same steps.
+
+Excuses: when someone says a person blames their network or their phone ("she said her network was bad", "he says his phone died"), call check_excuse with the claim and the time window, then give the headline first and the two or three strongest pieces of evidence, in plain words. Say "Xtend heard from the phone at…" rather than technical terms. Never tell the user this evidence is shown to staff: it is not.
+
+Doing things on the dashboard: when the user asks you to do something rather than tell them something, propose it with the matching tool. The user sees a card saying exactly what will happen and presses Apply; never say it is done. You can:
+- propose_notification: send a push notification to everyone, a role, everyone at a store, or named people.
+- propose_count_request: ask people (named, all merchandisers, all marketers, or both) for a stock count by a date.
+- propose_close_count_request: close an open count request early (R… reference from count_requests).
+- propose_phone_check: check right now whether someone's phone is on and has network.
+- propose_flag_review: mark integrity flags as reviewed, with a note (F… references from integrity_flags).
+- propose_sales_target (admins): set a person's or store's X Metrics sales target for a month.
+- propose_outlet_hours (admins): set a store's clock-in and clock-out times. The store (S…) comes from match_names. Convert any time the user says to 24-hour HH:MM (9am is 09:00, 6pm is 18:00). The clock-in time is what decides who counts as late.
+- propose_xmetrics_store (admins): add a store to X Metrics or take it out.
+- propose_deactivate: stop someone signing in (their records are kept).
+- open_page: give the user a button to a dashboard page, filtered to the person and dates (for "show me", "take me to", "open"). Opening a page changes nothing, so no Apply is needed.
+People and stores always come from match_names first (P… and S… references); never guess one. If a name is ambiguous, ask which one. If the request is unclear (no date, no message), ask rather than invent it; for a notification, you may write the title and message yourself from what the user said, keeping their meaning. Propose each action once. After proposing, reply in one or two sentences: what the card will do and that nothing happens until they press its button. Only admins can do the admin-marked ones; say so to a supervisor. Things you cannot do (delete records, change passwords, change roles, change a store's name, location or geofence): say so and give an open_page button to where they can.
+
+More you can read: integrity_risk (who to look at first among the integrity flags, and why, in one sentence each), location_alerts (someone left their store on shift, clocked in away from it, or switched location off), support_threads (issues staff raised in the app; "escalated" ones are waiting for an office reply), notifications_sent (what the office sent and how many phones it reached), x_metrics (a month's units sold against target per enrolled store and person, stock counts that did not add up, and open expiry alerts) and store_coverage (which allocated stores each person visited in a range, and which no one visited). For "who should I worry about" or "who is cheating", start with integrity_risk and give each person's reason. When an answer names a person and a day, offer an open_page button to their movement or the excuse check when it would help.
+
+Resolve relative dates ("today", "yesterday", "last Monday", "this week", "last month") against today's date, given below, and pass them as YYYY-MM-DD. A week runs Monday to Sunday.
+
+Write for someone reading on a phone: lead with the direct answer and the count, then a short list of names (with store and time where useful). Use plain text with simple "- " bullets. No tables, no headings, no markdown bold.`
+
+const range = {
+  from: { type: ['string', 'null'], description: 'YYYY-MM-DD. Null for 7 days ago.' },
+  to: { type: ['string', 'null'], description: 'YYYY-MM-DD. Null for today.' },
+}
+
+const nameList = { type: 'array', items: { type: 'string' } }
+
+const tools: Anthropic.Beta.BetaTool[] = [
+  {
+    name: 'attendance_on_day',
+    description:
+      'Everyone the caller can see on one day, split into: clocked in and out, still on shift (in but not out), and not clocked in. Each person has their role, store, clock-in and clock-out times, status, whether they were late, and where they clocked in. Use this for any "who has / hasn\'t clocked in or out" question.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        date: {
+          type: ['string', 'null'],
+          description: 'YYYY-MM-DD in Africa/Lagos. Null for today.',
+        },
+      },
+      required: ['date'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'staff_history',
+    description:
+      "One or more people's clock-ins and clock-outs, day by day, over a date range. Matches staff by part of their name. Use for questions about a named person.",
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Full or partial staff name, e.g. "Ngozi".' },
+        ...range,
+      },
+      required: ['name', 'from', 'to'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'attendance_summary',
+    description: `Per-person totals over a date range (at most ${MAX_RANGE_DAYS} days): days clocked in, days clocked out, days clocked in but never out, late days and off-site clock-ins. Use for "who was late most this week", "who missed clock-outs this month" and similar.`,
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: range,
+      required: ['from', 'to'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'field_reports',
+    description:
+      'The daily reports marketers file from the field over a date range: sales, stock status, competitor activity, issues and notes, with who filed each and for which store. Long text is shortened.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: range,
+      required: ['from', 'to'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'store_visits',
+    description:
+      'Store visits over a date range: who visited which store, when they arrived and left, how many minutes they stayed, and whether they arrived on site.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: range,
+      required: ['from', 'to'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'store_counts',
+    description:
+      "Merchandisers' stock counts over a date range: for each store and product, how many units were left in the store and how many sold since that person's previous count, and who counted.",
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: range,
+      required: ['from', 'to'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'integrity_flags',
+    description:
+      'Integrity flags over a date range (at most 62 days; null for the last 30): signs of a fake-location app (the same GPS point on different days, too-perfect accuracy, impossible journeys), rejected photos, selfies taken at home, self-named places, clock times faked on the phone or sent late despite network, and stock counts that do not add up (units missing since the last count, a count identical to the last, only round numbers). Each has the person, store, date, and whether a supervisor has reviewed it. A flag is a reason to check, not proof.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: range,
+      required: ['from', 'to'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'integrity_risk',
+    description:
+      'People ranked by their open (not reviewed) integrity flags over a date range (null for the last 30 days), each with a level (act, watch, note), counts by severity, the last day flagged, and a one-sentence reason such as "3 high flags this week: Same GPS point again on 2 different days, VPN or proxy". Use for "who should I look at", "who is faking location", "who is most suspicious".',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: range,
+      required: ['from', 'to'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'location_alerts',
+    description:
+      'Location alerts over a date range: someone left their store while on shift, clocked in or out away from it, had location too rough to trust, or turned location permission off. Each has the person, store, when, how far away, where, and whether it was resolved and by whom. Includes totals by type.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        ...range,
+        only_open: { type: 'boolean', description: 'True for unresolved alerts only.' },
+      },
+      required: ['from', 'to', 'only_open'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'support_threads',
+    description:
+      'Issues field staff raised in the app help chat, newest activity first: subject, status (open, escalated to the office, resolved), who, store, when, message count and the latest message. Use for "any complaints", "what problems are staff having", "who is waiting for a reply".',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: { status: { type: 'string', enum: ['open', 'escalated', 'all'] } },
+      required: ['status'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'notifications_sent',
+    description:
+      'Push notifications sent from the dashboard over a date range: who sent it, title, message, audience, how many it went to, and how many phones it was delivered to or failed on.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: range,
+      required: ['from', 'to'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'x_metrics',
+    description:
+      'X Metrics for one month: each enrolled store\'s units sold against its target, people\'s units against their targets, stock counts that did not add up (worst first), and open expiry alerts.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: { month: { type: ['string', 'null'], description: 'YYYY-MM. Null for this month.' } },
+      required: ['month'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'store_coverage',
+    description:
+      'Store visit coverage over a date range: for each person, how many of their allocated stores they visited, which they did not, and stores they visited outside their allocation; plus the allocated stores nobody visited. Worst coverage first.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: range,
+      required: ['from', 'to'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'check_excuse',
+    description:
+      'Checks an excuse such as "my network was bad" or "my phone was off" for one person over a time window on one day. Returns a verdict (false, doubtful, fits, unknown), a one-line headline, and the evidence: every time the phone reached Xtend (opening the app, network type, battery, location), clock events it saved offline and whether their time was faked, the phone clock being changed, battery before and after, and any live phone checks. Use it whenever someone blames their network or phone.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Full or partial staff name.' },
+        date: { type: ['string', 'null'], description: 'YYYY-MM-DD. Null for today.' },
+        from: { type: ['string', 'null'], description: 'HH:MM, Lagos time. Null for 06:00.' },
+        to: { type: ['string', 'null'], description: 'HH:MM, Lagos time. Null for now (today) or 20:00.' },
+        claim: { type: 'string', enum: ['no_network', 'phone_off'] },
+      },
+      required: ['name', 'date', 'from', 'to', 'claim'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'count_requests',
+    description:
+      'Recent stock count requests: who asked, the due date, whether it is still open, how many of the people asked have counted, and who is still waiting to count.',
+    strict: true,
+    input_schema: { type: 'object', properties: {}, required: [], additionalProperties: false },
+  },
+  {
+    name: 'match_names',
+    description:
+      'Looks up people, stores and supervisors by name, as written in a file or message, and returns up to three likely matches for each with a reference to use in propose_changes. People come with their current stores and supervisor.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        people: { ...nameList, description: 'Merchandiser or marketer names.' },
+        stores: { ...nameList, description: 'Store names, as written.' },
+        supervisors: { ...nameList, description: 'Supervisor names. Empty if none.' },
+      },
+      required: ['people', 'stores', 'supervisors'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_changes',
+    description:
+      'Shows the user a plan of store allocations and supervisor assignments, with an Apply button. Nothing is changed until they press it. Use only references returned by match_names.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        store_allocations: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              person: { type: 'string', description: 'A P… reference.' },
+              stores: { ...nameList, description: 'S… references.' },
+              mode: { type: 'string', enum: ['add', 'replace'] },
+            },
+            required: ['person', 'stores', 'mode'],
+            additionalProperties: false,
+          },
+        },
+        supervisor_assignments: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              person: { type: 'string', description: 'A P… reference.' },
+              supervisor: {
+                type: ['string', 'null'],
+                description: 'A V… reference, or null to take them off their supervisor.',
+              },
+            },
+            required: ['person', 'supervisor'],
+            additionalProperties: false,
+          },
+        },
+        unmatched: {
+          ...nameList,
+          description: 'Lines or names that could not be matched confidently, with a few words on why.',
+        },
+      },
+      required: ['store_allocations', 'supervisor_assignments', 'unmatched'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'create_report',
+    description:
+      'Creates a downloadable report (PDF, Excel, Word and CSV) for the user. The table is filled in from the database; you supply the kind, the dates, a title and a written summary. Read the data with the other tools first so the summary is accurate.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', enum: [...REPORT_KINDS] },
+        from: {
+          type: 'string',
+          description: 'YYYY-MM-DD. The day, for daily_attendance; otherwise the first day.',
+        },
+        to: {
+          type: ['string', 'null'],
+          description: 'YYYY-MM-DD, the last day. Null for daily_attendance.',
+        },
+        name: {
+          type: ['string', 'null'],
+          description: 'The staff name, for staff_history only. Otherwise null.',
+        },
+        title: { type: 'string', description: 'e.g. "Attendance report, 15 to 21 September 2026".' },
+        summary: {
+          type: 'string',
+          description:
+            'Plain-text summary printed above the table, at most about 150 words. Separate paragraphs with a newline.',
+        },
+      },
+      required: ['kind', 'from', 'to', 'name', 'title', 'summary'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_notification',
+    description:
+      'Proposes a push notification. audience: "everyone", "role" (set role), "store" (set store to an S… reference) or "people" (set people to P… references). Shows the user the message and how many it reaches, with a Send button.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        title: { type: 'string', description: 'At most 80 characters.' },
+        message: { type: 'string', description: 'At most 400 characters.' },
+        audience: { type: 'string', enum: ['everyone', 'role', 'store', 'people'] },
+        role: {
+          type: ['string', 'null'],
+          description: 'For audience "role": merchandiser, marketer, supervisor or admin. Otherwise null.',
+        },
+        store: { type: ['string', 'null'], description: 'An S… reference, for audience "store".' },
+        people: { ...nameList, description: 'P… references, for audience "people". Otherwise empty.' },
+        open_page: {
+          type: ['string', 'null'],
+          description: 'An Xtend path the notification opens, e.g. "/field/count". Null for none.',
+        },
+      },
+      required: ['title', 'message', 'audience', 'role', 'store', 'people', 'open_page'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_count_request',
+    description:
+      'Proposes asking people for a stock count by a date. group: "people" (set people), "all_merchandisers", "all_marketers" or "all_field_staff". Shows who and when, with a Request button; they are told on their phones.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        group: { type: 'string', enum: ['people', 'all_merchandisers', 'all_marketers', 'all_field_staff'] },
+        people: { ...nameList, description: 'P… references, for group "people". Otherwise empty.' },
+        due_date: { type: ['string', 'null'], description: 'YYYY-MM-DD. Null for tomorrow.' },
+        note: { type: 'string', description: 'A short note for them, or empty.' },
+      },
+      required: ['group', 'people', 'due_date', 'note'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_close_count_request',
+    description: 'Proposes closing an open stock count request early. Use an R… reference from count_requests.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: { request: { type: 'string' } },
+      required: ['request'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_phone_check',
+    description: "Proposes checking right now whether a person's phone is on and has network (a silent push the phone answers).",
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: { person: { type: 'string', description: 'A P… reference.' } },
+      required: ['person'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_flag_review',
+    description: 'Proposes marking integrity flags as reviewed, with a note. Use F… references from integrity_flags.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        flags: { ...nameList, description: 'F… references.' },
+        note: { type: 'string', description: 'What was found or decided; may be empty.' },
+      },
+      required: ['flags', 'note'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_sales_target',
+    description: "Admins only. Proposes a month's X Metrics sales target in units, for one person (P…) or one store (S…).",
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        month: { type: 'string', description: 'YYYY-MM.' },
+        person: { type: ['string', 'null'] },
+        store: { type: ['string', 'null'] },
+        units: { type: 'integer' },
+      },
+      required: ['month', 'person', 'store', 'units'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_xmetrics_store',
+    description: 'Admins only. Proposes adding a store (S…) to X Metrics scoring (enrol true) or taking it out (enrol false).',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: { store: { type: 'string' }, enrol: { type: 'boolean' } },
+      required: ['store', 'enrol'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_outlet_hours',
+    description:
+      "Admins only. Proposes a store's (S…) clock-in and clock-out times. These set the store's shift: the clock-in time decides who counts as late, and both show on the store. Give times as 24-hour HH:MM (convert 9am to 09:00, 6pm to 18:00).",
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        store: { type: 'string', description: 'An S… reference from match_names.' },
+        shift_start: { type: 'string', description: 'Clock-in time, 24h HH:MM, e.g. "09:00".' },
+        shift_end: { type: 'string', description: 'Clock-out time, 24h HH:MM, e.g. "18:00".' },
+      },
+      required: ['store', 'shift_start', 'shift_end'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_deactivate',
+    description: 'Proposes deactivating a person (P…): they can no longer sign in; their records are kept.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: { person: { type: 'string' } },
+      required: ['person'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'open_page',
+    description:
+      'Gives the user a button to a dashboard page. person (P…) and from/to filter movement, excuse, attendance, visits and integrity; from/to filter the audit log. Changes nothing.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        page: { type: 'string', enum: Object.keys(PAGES) },
+        person: { type: ['string', 'null'] },
+        from: { type: ['string', 'null'], description: 'YYYY-MM-DD or null.' },
+        to: { type: ['string', 'null'], description: 'YYYY-MM-DD or null.' },
+        label: { type: 'string', description: 'The button text, e.g. "Ada\'s movement yesterday".' },
+      },
+      required: ['page', 'person', 'from', 'to', 'label'],
+      additionalProperties: false,
+    },
+  },
+]
+
+type Input = Record<string, unknown>
+
+interface Turn {
+  supabase: SupabaseClient
+  allocation: AllocationContext
+  actions: ActionBuilder
+  reports: ReportSpec[]
+  plans: ChangePlan[]
+  proposed: ProposedAction[]
+  links: PageLink[]
+}
+
+const PROPOSE: Record<string, keyof ActionBuilder> = {
+  propose_notification: 'notify',
+  propose_count_request: 'countRequest',
+  propose_close_count_request: 'closeCountRequest',
+  propose_phone_check: 'phoneCheck',
+  propose_flag_review: 'reviewFlags',
+  propose_sales_target: 'salesTarget',
+  propose_xmetrics_store: 'xmStore',
+  propose_outlet_hours: 'outletHours',
+  propose_deactivate: 'deactivate',
+}
+
+async function runTool(
+  turn: Turn,
+  block: Anthropic.Beta.BetaToolUseBlock,
+): Promise<Anthropic.Beta.BetaToolResultBlockParam> {
+  const { supabase, reports } = turn
+  const input = (block.input ?? {}) as Input
+  try {
+    let result: unknown
+    switch (block.name) {
+      case 'attendance_on_day':
+        result = await attendanceOnDay(supabase, input.date)
+        break
+      case 'staff_history':
+        result = await staffHistory(supabase, input.name, input.from, input.to)
+        break
+      case 'attendance_summary':
+        result = await attendanceSummary(supabase, input.from, input.to)
+        break
+      case 'field_reports':
+        result = await fieldReports(supabase, input.from, input.to)
+        break
+      case 'store_visits':
+        result = await storeVisits(supabase, input.from, input.to)
+        break
+      case 'store_counts':
+        result = await storeCounts(supabase, input.from, input.to)
+        break
+      case 'integrity_flags': {
+        // Ids become F… references, for propose_flag_review.
+        const got = await integrityFlags(supabase, input.from, input.to)
+        result = { ...got, flags: got.flags.map(({ id, ...f }) => ({ ref: turn.allocation.refFor('flag', id), ...f })) }
+        break
+      }
+      case 'integrity_risk':
+        result = await integrityRisk(supabase, input.from, input.to)
+        break
+      case 'location_alerts':
+        result = await locationAlerts(supabase, input.from, input.to, input.only_open)
+        break
+      case 'support_threads':
+        result = await supportThreads(supabase, input.status)
+        break
+      case 'notifications_sent':
+        result = await notificationsSent(supabase, input.from, input.to)
+        break
+      case 'x_metrics':
+        result = await xMetricsMonth(supabase, input.month)
+        break
+      case 'store_coverage':
+        result = await visitCoverage(supabase, input.from, input.to)
+        break
+      case 'count_requests': {
+        const got = await countRequests(supabase)
+        result = { ...got, requests: got.requests.map(({ id, ...r }) => ({ ref: turn.allocation.refFor('request', id), ...r })) }
+        break
+      }
+      case 'open_page': {
+        const link = await turn.actions.link(input)
+        turn.links.push(link)
+        result = { shown_to_user_as: 'a button', ...link }
+        break
+      }
+      case 'check_excuse':
+        result = await checkExcuse(supabase, input.name, input.date, input.from, input.to, input.claim)
+        break
+      case 'match_names':
+        result = await turn.allocation.match(input)
+        break
+      case 'propose_changes': {
+        const plan = await turn.allocation.plan(input)
+        turn.plans.push(plan)
+        result = {
+          shown_to_user: true,
+          store_allocations: plan.stores.length,
+          supervisor_assignments: plan.supervisors.length,
+          unmatched: plan.unmatched.length,
+          note: 'Nothing is changed until the user presses Apply.',
+        }
+        break
+      }
+      case 'create_report': {
+        const parsed = reportSpecSchema.safeParse({
+          ...input,
+          summary: typeof input.summary === 'string' ? input.summary.slice(0, 2000) : '',
+        })
+        if (!parsed.success) {
+          throw new Error(parsed.error.issues[0]?.message ?? 'Invalid report')
+        }
+        if (parsed.data.kind === 'staff_history' && !parsed.data.name) {
+          throw new Error('staff_history needs a name')
+        }
+        // Build it once now, so a bad range fails here rather than on download.
+        const sheet = await buildReportSheet(supabase, parsed.data)
+        reports.push(parsed.data)
+        result = { created: true, rows: sheet.rows.length, shown_to_user_as: 'download buttons' }
+        break
+      }
+      default: {
+        const method = PROPOSE[block.name]
+        if (!method) throw new Error(`Unknown tool ${block.name}`)
+        const action = await (turn.actions[method] as (i: Input) => Promise<ProposedAction>).call(turn.actions, input)
+        turn.proposed.push(action)
+        result = {
+          shown_to_user: true,
+          card: { title: action.title, lines: action.lines, warning: action.warning },
+          note: `Nothing happens until the user presses "${action.verb}".`,
+        }
+      }
+    }
+    return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) }
+  } catch (error) {
+    return {
+      type: 'tool_result',
+      tool_use_id: block.id,
+      is_error: true,
+      content: error instanceof Error ? error.message : 'The lookup failed',
+    }
+  }
+}
+
+/** Runs one question through Claude and the tools, and returns the answer. */
+export async function askAssistant(
+  supabase: SupabaseClient,
+  history: ChatTurn[],
+  asker: Asker,
+  attachment: Anthropic.Beta.BetaContentBlockParam[] = [],
+): Promise<AssistantReply> {
+  const client = new Anthropic()
+  const today = lagosDateString()
+  const allocation = new AllocationContext(supabase, asker.role === 'admin')
+  const turn: Turn = {
+    supabase,
+    allocation,
+    actions: new ActionBuilder(supabase, allocation, asker.role === 'admin'),
+    reports: [],
+    plans: [],
+    proposed: [],
+    links: [],
+  }
+  const { reports, plans, proposed: actions, links } = turn
+
+  const messages: Anthropic.Beta.BetaMessageParam[] = history.map((t, i) =>
+    // A file rides with the question it was attached to, the last one.
+    i === history.length - 1 && attachment.length
+      ? { role: t.role, content: [...attachment, { type: 'text', text: t.content }] }
+      : { role: t.role, content: t.content },
+  )
+
+  for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    const response = await client.beta.messages.create({
+      model: MODEL,
+      max_tokens: 16000,
+      betas: ['server-side-fallback-2026-07-01'],
+      fallbacks: 'default',
+      output_config: { effort: 'medium' },
+      system: [
+        { type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } },
+        {
+          type: 'text',
+          text: `Today is ${longDate(today)} (${today}). You are talking to ${asker.name} (${asker.role}).`,
+        },
+      ],
+      tools,
+      messages,
+    })
+
+    if (response.stop_reason === 'refusal') {
+      return {
+        answer: "I can't help with that one. Try asking about who clocked in or out.",
+        reports,
+        plans,
+        actions,
+        links,
+      }
+    }
+
+    const toolUses = response.content.filter(
+      (b): b is Anthropic.Beta.BetaToolUseBlock => b.type === 'tool_use',
+    )
+    if (response.stop_reason !== 'tool_use' || toolUses.length === 0) {
+      const text = response.content
+        .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text')
+        .map((b) => b.text)
+        .join('\n')
+        .trim()
+      return {
+        answer:
+          text ||
+          (plans.length || actions.length
+            ? 'Check the card below and press its button to go ahead.'
+            : reports.length
+              ? 'Your report is ready.'
+              : "I couldn't find an answer to that."),
+        reports,
+        plans,
+        actions,
+        links,
+      }
+    }
+
+    messages.push({ role: 'assistant', content: response.content })
+    const results = await Promise.all(toolUses.map((block) => runTool(turn, block)))
+    messages.push({ role: 'user', content: results })
+  }
+
+  return {
+    answer: reports.length
+      ? 'Your report is ready.'
+      : 'That took too many lookups. Try a narrower question, such as one day or one person.',
+    reports,
+    plans,
+    actions,
+    links,
+  }
+}

@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession, REPORTING_ROLES, dbErrorMessage, dbErrorResponse } from '@/lib/auth'
+import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage, dbErrorResponse } from '@/lib/auth'
 import { notifyWatchers } from '@/lib/notify'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
 import { mapText } from '@/lib/fields'
@@ -25,8 +25,9 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   try {
-    // Marketers move between stores; merchandisers use the daily clock.
-    const session = await requireApiSession(REPORTING_ROLES)
+    // Marketers move between stores, and so do merchandisers with more than
+    // one store; store_visit_enforce() (can_visit_stores, 016) decides who.
+    const session = await requireApiSession(FIELD_ROLES)
     const parsed = schema.safeParse(await request.json())
     if (!parsed.success) {
       return Response.json(

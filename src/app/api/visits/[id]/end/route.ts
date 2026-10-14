@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession, REPORTING_ROLES, dbErrorMessage } from '@/lib/auth'
+import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/auth'
 import { mapText } from '@/lib/fields'
 
 const schema = z.object({
@@ -14,7 +14,7 @@ const schema = z.object({
 /** Check out of the store. Closing a visit is a one-way door. */
 export async function POST(request: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    await requireApiSession(REPORTING_ROLES)
+    await requireApiSession(FIELD_ROLES)
     const { id } = await ctx.params
     const parsed = schema.safeParse(await request.json())
     if (!parsed.success) {
