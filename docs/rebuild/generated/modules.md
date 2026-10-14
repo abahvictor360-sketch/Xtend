@@ -1275,17 +1275,29 @@ Exports: `TaskRow`
 
 Keep the phone dashboard in step with the backend.
 
-The fast path is Supabase realtime: the moment the member's own data
-changes in the database (a clock event, a store visit, a reply from the
-office) the server state is re-fetched and the screen updates, with no
-tapping or pull-to-refresh. Realtime only carries rows the member may read
-under RLS, so a channel without a filter still only ever sees their rows.
+The fast path is Supabase realtime Broadcast: a database trigger sends one
+lightweight event to the member's own private topic `field:<uid>` whenever
+their attendance, store visit, support message or notification changes
+(migration 0058). The event carries only { table, op }; the screen re-fetches
+on it and that fetch goes through RLS, so the socket never carries row data.
+Broadcast replaces Postgres Changes here because it does not run RLS per
+subscriber per change, so the same Supabase compute holds far more
+connections — the thing that caps how many staff can be on shift at once.
 
 Behind it sits a slow poll as a safety net for anything realtime can miss:
 a dropped socket, or a value the server computes only when the page is
 read. It is far slower than the old 15s poll, because realtime now does the
 work that used to need constant refreshing, which also makes the app feel
 quicker and spares the battery and data.
+
+At scale (thousands of field staff on shift at once) three things matter:
+  - Only on-shift members hold a socket (see below); everyone else polls.
+  - NEXT_PUBLIC_REALTIME_DISABLED=1 turns realtime off fleet-wide and lets
+    everyone ride the poll instead — a safe release valve if the socket
+    count is still the thing falling over.
+  - If every client polled on the same 45s boundary the backend would see a
+    spike every 45s instead of steady traffic, so the poll is jittered per
+    client to spread that load out.
 
 Exports: `useDashboardRefresh`
 

@@ -1467,6 +1467,28 @@ calculation.
 
 ---
 
+## 16a. Realtime (0056, 0058)
+
+- **Who hears what.** A change to a field member's own `attendance`,
+  `store_visits`, `support_threads` or `notification_deliveries` row, or a
+  new or changed `support_messages` row in their thread, is announced on
+  their private topic `field:<their uid>` (`field_topic()`), by AFTER-row
+  triggers `realtime_broadcast` → `realtime_notify_field_owner()` /
+  `realtime_notify_support_message()` (SECURITY DEFINER, 0058).
+- **What it says.** Only `{ "table": <name>, "op": INSERT|UPDATE|DELETE }`,
+  event `change`, private. Never row data; the app re-reads through RLS.
+- **Who may listen.** RLS on `realtime.messages` (policy "Field members read
+  their own topic"): `realtime.topic() = field_topic(auth.uid())`. Nobody can
+  subscribe to another member's topic.
+- **When the app listens.** The field dashboard holds a socket only while the
+  member is on shift; a jittered safety poll covers the rest, and
+  `NEXT_PUBLIC_REALTIME_DISABLED=1` turns sockets off for everyone.
+- **Dashboard.** The office alert feed uses Postgres Changes on
+  `location_alerts` (0002 publication), filtered by RLS.
+- **Tests.** `rules.sql`: announcements reach the owner's topic, carry only
+  table and op, cover clock-ins and support replies. `rls_counts.sql`: a
+  member reads their own topic and nothing on anyone else's.
+
 ## 17. Rule checklist
 
 Testable statements, grouped by area. They mirror the assertions in

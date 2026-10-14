@@ -1114,6 +1114,7 @@ Policies:
 - `encrypt_iv(bytea, bytea, bytea, text)` → bytea
 - `end_store_visit(p_visit_id uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_place_name text, p_address text)` → jsonb · definer · 0016_visits_without_allocation.sql
 - `expired_selfie_paths(p_hours integer)` → TABLE(path text) · definer · 0012_selfie_retention_24h.sql
+- `field_topic(uid uuid)` → text · 0058_realtime_broadcast.sql
 - `finish_onboarding()` → void · definer · 0037_profile_photos.sql
 - `flag_location(p_user uuid, p_lat double precision, p_lng double precision, p_accuracy double precision, p_at timestamp with time zone, p_source text, p_check_repeat boolean, p_outlet uuid)` → void · definer · 0022_integrity_checks.sql
 - `flag_own_integrity(p_kind text, p_severity text, p_summary text, p_detail jsonb, p_outlet uuid)` → void · definer · 0032_native_integrity.sql
@@ -1196,6 +1197,8 @@ Policies:
 - `profiles_supervisor_check()` → trigger · definer · 0017_supervisor_manages_staff.sql
 - `punctuality_grace_minutes()` → integer · 0036_supervisor_alerts.sql
 - `raise_place_due(p_user uuid, p_lat double precision, p_lng double precision, p_accuracy double precision, p_kind text, p_source uuid, p_position jsonb)` → void · definer · 0045_mandatory_place_naming.sql
+- `realtime_notify_field_owner()` → trigger · definer · 0058_realtime_broadcast.sql
+- `realtime_notify_support_message()` → trigger · definer · 0058_realtime_broadcast.sql
 - `record_background_pings(p_token text, p_points jsonb, p_sent_at timestamp with time zone)` → jsonb · definer · 0055_reject_post_clockout_tracking.sql
 - `record_beacon(p jsonb)` → jsonb · definer · 0026_phone_evidence.sql
 - `record_excuse_check(p_user uuid, p_claim text, p_from timestamp with time zone, p_to timestamp with time zone, p_verdict text, p_headline text, p_note text)` → uuid · definer · 0048_excuse_check_advanced.sql
@@ -1269,6 +1272,7 @@ Policies:
 ## Triggers
 
 - `assistant_conversations`: `trg_assistant_conversation_touch` — BEFORE UPDATE ON public.assistant_conversations FOR EACH ROW EXECUTE FUNCTION assistant_conversation_touch()
+- `attendance`: `realtime_broadcast` — AFTER INSERT OR DELETE OR UPDATE ON public.attendance FOR EACH ROW EXECUTE FUNCTION realtime_notify_field_owner()
 - `attendance`: `trg_attendance_alert` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_alert()
 - `attendance`: `trg_attendance_enforce` — BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_enforce()
 - `attendance`: `trg_attendance_integrity` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_integrity()
@@ -1283,6 +1287,7 @@ Policies:
 - `location_pings`: `trg_ping_alert` — AFTER INSERT ON public.location_pings FOR EACH ROW EXECUTE FUNCTION ping_alert()
 - `location_pings`: `trg_ping_enforce` — BEFORE INSERT ON public.location_pings FOR EACH ROW EXECUTE FUNCTION ping_enforce()
 - `location_pings`: `trg_ping_integrity` — AFTER INSERT ON public.location_pings FOR EACH ROW EXECUTE FUNCTION ping_integrity()
+- `notification_deliveries`: `realtime_broadcast` — AFTER INSERT OR DELETE OR UPDATE ON public.notification_deliveries FOR EACH ROW EXECUTE FUNCTION realtime_notify_field_owner()
 - `profiles`: `trg_profiles_clear_temp_password` — AFTER UPDATE OF must_change_password ON public.profiles FOR EACH ROW EXECUTE FUNCTION clear_temp_password()
 - `profiles`: `trg_profiles_self_guard` — BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION profiles_self_guard()
 - `profiles`: `trg_profiles_staff_role_sync` — BEFORE INSERT OR UPDATE OF role, staff_role_id ON public.profiles FOR EACH ROW EXECUTE FUNCTION profiles_staff_role_sync()
@@ -1294,11 +1299,14 @@ Policies:
 - `reports`: `trg_reports_place_due_guard` — BEFORE INSERT ON public.reports FOR EACH ROW EXECUTE FUNCTION place_due_guard()
 - `reports`: `trg_reports_touch` — BEFORE UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION touch_updated_at()
 - `store_counts`: `trg_store_counts_place_due_guard` — BEFORE INSERT ON public.store_counts FOR EACH ROW EXECUTE FUNCTION place_due_guard()
+- `store_visits`: `realtime_broadcast` — AFTER INSERT OR DELETE OR UPDATE ON public.store_visits FOR EACH ROW EXECUTE FUNCTION realtime_notify_field_owner()
 - `store_visits`: `trg_store_visit_alert` — AFTER INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION store_visit_alert()
 - `store_visits`: `trg_store_visit_enforce` — BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION store_visit_enforce()
 - `store_visits`: `trg_store_visit_selfie_check` — BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION selfie_check()
 - `store_visits`: `trg_store_visits_place_due_guard` — BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION place_due_guard()
 - `store_visits`: `trg_store_visits_zz_place_due` — AFTER INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION visit_place_due()
+- `support_messages`: `realtime_broadcast` — AFTER INSERT OR DELETE OR UPDATE ON public.support_messages FOR EACH ROW EXECUTE FUNCTION realtime_notify_support_message()
+- `support_threads`: `realtime_broadcast` — AFTER INSERT OR DELETE OR UPDATE ON public.support_threads FOR EACH ROW EXECUTE FUNCTION realtime_notify_field_owner()
 - `xm_counts`: `trg_xm_counts_place_due_guard` — BEFORE INSERT ON public.xm_counts FOR EACH ROW EXECUTE FUNCTION place_due_guard()
 - `xm_sales`: `trg_xm_sales_place_due_guard` — BEFORE INSERT ON public.xm_sales FOR EACH ROW EXECUTE FUNCTION place_due_guard()
 - `xm_settings`: `trg_xm_settings_keep` — BEFORE UPDATE ON public.xm_settings FOR EACH ROW EXECUTE FUNCTION xm_settings_keep()
