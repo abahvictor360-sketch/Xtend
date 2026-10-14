@@ -5,8 +5,8 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-14, after migration 0057 and the admin and
-supervisor guides (PR #32)._
+_Last updated: 2026-10-14, after the k6 load test and realtime scale
+mitigations._
 
 ---
 
@@ -340,6 +340,7 @@ Set in `.env.local` for development and in Vercel for production.
 | `TRUSTED_PROXY_HOPS` | Optional | 1 behind Vercel/Nginx, 2 with Cloudflare in front |
 | `IP_API_KEY`, `IP_GEO_URL`, `IP_GEO_DISABLED` | Optional | IP lookup for VPN checks and the audit log |
 | `XTEND_BUILD_ID` | Optional | Build id outside Vercel (Vercel sets `VERCEL_DEPLOYMENT_ID`) |
+| `NEXT_PUBLIC_REALTIME_DISABLED` | Optional | Set `1` to turn the client realtime sockets off fleet-wide and ride the safety poll instead — the release valve when Supabase's concurrent-connection cap is the bottleneck under heavy load |
 
 ## 8. Scheduled jobs
 
@@ -502,6 +503,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-14 | Load test (`load-test/`): k6 script for ~5,000 field staff (edge baseline, dashboard RPC poll, realtime connection ceiling, opt-in clock-in write burst) plus run and infra-sizing notes. Scale mitigations: fleet-wide realtime kill-switch (`NEXT_PUBLIC_REALTIME_DISABLED`), jittered safety poll, faster poll when realtime is off or has failed | — |
 | 2026-10-14 | Both phone apps build on every push; Android version only goes up when the app itself changes; iOS simulator build kept as a download | — |
 | 2026-10-14 | Fix: supervisors can download X Metrics reports for their team (the links were shown but refused) | — |
 | 2026-10-14 | Fix: merchandisers with more than one store can check in at store visits (the visit routes now leave the decision to the database) | — |
