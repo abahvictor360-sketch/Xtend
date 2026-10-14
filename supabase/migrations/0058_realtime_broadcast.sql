@@ -17,9 +17,10 @@
 -- may only read `field:<their own uid>`. The triggers themselves run
 -- SECURITY DEFINER and send on the owner's behalf.
 --
--- Note: this is not exercised by scripts/test-sql.sh — the plain-Postgres
--- harness does not model the realtime schema (same reason 0056 is omitted).
--- It runs against Supabase, where realtime.send and realtime.messages exist.
+-- scripts/test-sql.sh runs this against a minimal realtime stub (realtime.send
+-- records each broadcast in realtime.messages, realtime.topic() reads the
+-- subscriber's topic), so the tests check that a change is announced only on
+-- its owner's topic. In production these are Supabase's own realtime functions.
 -- ---------------------------------------------------------------------
 
 -- The owner topic for a member. Kept as one function so the client and the
