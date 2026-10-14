@@ -3052,7 +3052,8 @@ begin
       values ('closing', 6.6019, 3.3516, 12, fresh_photo('selfies', 'kayode-out.jpg'), now());
       tok2 := public.issue_tracking_token('android');
       res := public.record_background_pings(tok2->>'token', '[]'::jsonb, now());
-      perform assert((res->>'ok')::boolean and not (res->>'shift_open')::boolean
+      -- 055: after clock-out nothing is stored; the phone is told to stop at once.
+      perform assert(not (res->>'ok')::boolean and (res->>'stop')::boolean and not (res->>'shift_open')::boolean
                      and not (public.record_background_pings(tok2->>'token', '[]'::jsonb, now())->>'ok')::boolean,
         'tracking: after clock-out the phone is told to stop, and its token ends');
       perform act_as(boss);
