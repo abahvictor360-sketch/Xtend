@@ -10,7 +10,8 @@ export const maxDuration = 60
 /** X Metrics grades and stock reports as Excel, Word, PDF or CSV. */
 export async function GET(request: Request, ctx: { params: Promise<{ kind: string; format: string }> }) {
   try {
-    await requireApiSession(['admin'])
+    // Supervisors download what they can already see: RLS narrows it to their team.
+    await requireApiSession(['admin', 'supervisor'])
     const { kind, format } = await ctx.params
     if (!XM_EXPORTS.includes(kind as XmExportKind)) throw new ApiError('Unknown report', 404)
     const url = new URL(request.url)

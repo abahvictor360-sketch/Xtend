@@ -296,7 +296,7 @@ const schema = z.object({ note: note(300) })
 ## `GET /api/admin/metrics/export/[kind]/[format]`
 
 - File: `src/app/api/admin/metrics/export/[kind]/[format]/route.ts`
-- Who: ['admin']
+- Who: ['admin', 'supervisor']
 
 X Metrics grades and stock reports as Excel, Word, PDF or CSV.
 

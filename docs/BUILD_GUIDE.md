@@ -497,6 +497,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-14 | Fix: supervisors can download X Metrics reports for their team (the links were shown but refused) | — |
 | 2026-10-14 | Fix: merchandisers with more than one store can check in at store visits (the visit routes now leave the decision to the database) | — |
 | 2026-10-14 | Rebuild pack (`docs/rebuild/`): a complete spec any AI can rebuild Xtend from, with the exact database generated from the migrations and verified against the tests | — |
 | 2026-10-14 | Supervisor guide; admin guide admins-only and page by page; this build guide | — |

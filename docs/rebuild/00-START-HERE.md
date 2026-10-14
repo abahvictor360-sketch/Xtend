@@ -45,11 +45,13 @@ Read in this order.
 | `generated/modules.md` | Every shared file: purpose and exports | From the code |
 | `generated/constants.md` | Every tunable number in the code | From the code |
 | `generated/tests/` | The database acceptance tests and the Supabase stand-in they run on | From the code |
+| `generated/verbatim/` | Files whose words or values must match exactly: the three guides, every instruction given to Claude (Ask Xtend, the support helper, photo checks, invoice reading), flag and excuse wording, design tokens, service worker, app manifest. Copy them as they are | From the code |
 
 The `generated/` files are rebuilt from the code by `scripts/rebuild-pack.ts`
 and are always exact. The hand-written files explain behaviour, intent and
 words. **If they ever disagree, the generated files win** for the database,
-routes and numbers; the hand-written files win for wording and layout.
+routes, numbers and anything in `verbatim/`; the hand-written files win for
+layout and behaviour they describe that the generated files do not.
 
 ## 3. Decisions already made
 
