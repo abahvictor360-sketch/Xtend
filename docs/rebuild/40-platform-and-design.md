@@ -957,13 +957,14 @@ server pages hide "Get the app" inside the app.
 
 ### 5.6 GitHub Actions (`.github/workflows/mobile.yml`)
 
-Triggers: `push` touching `mobile/**` or the workflow file; `workflow_dispatch`.
+Triggers: every `push` (all branches, no path filter); `workflow_dispatch`.
 Concurrency `mobile-${{ github.ref }}`, cancel in progress.
 
 **Job `android`** (ubuntu-latest, `permissions: contents: write`, working dir `mobile`,
-env `XTEND_VERSION_CODE = run_number`, `XTEND_VERSION_NAME = 1.0.<run_number>`):
+version set by a "Version" step: `XTEND_VERSION_CODE = 100 + git rev-list --count HEAD -- mobile .github/workflows/mobile.yml`,
+`XTEND_VERSION_NAME = 1.0.<code>`, written to `$GITHUB_ENV`):
 
-1. `actions/checkout@v4`
+1. `actions/checkout@v4` with `fetch-depth: 0`, then the Version step
 2. `actions/setup-node@v4` node 22, npm cache on `mobile/package-lock.json`
 3. `actions/setup-java@v4` temurin 21
 4. `npm ci`
@@ -975,14 +976,16 @@ env `XTEND_VERSION_CODE = run_number`, `XTEND_VERSION_NAME = 1.0.<run_number>`):
 10. If a key: `./gradlew assembleRelease bundleRelease --no-daemon` with `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`
 11. `actions/upload-artifact@v4` name `xtend-android-<run>`, APKs and AABs, `if-no-files-found: error`
 12. On the default branch: copy the signed release APK (or the debug APK) to `xtend.apk`; create or edit release
-    tag `android` titled `Xtend for Android 1.0.<run>` with notes `Built from <sha7> (<kind>). Install from https://xtend-brown.vercel.app/download`;
+    tag `android` titled `Xtend for Android 1.0.<code>` with notes `Built from <sha7>, run <run> (<kind>). Install from https://xtend-brown.vercel.app/download`;
     `gh release upload android xtend.apk --clobber`.
 
 **Job `ios`** (macos-latest): checkout, node 22, select newest `/Applications/Xcode_*.app`,
-`npm ci`, `npx cap sync ios`, `xcodebuild -project App.xcodeproj -scheme App -configuration Debug -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build`.
+`npm ci`, `npx cap sync ios`, `xcodebuild -project App.xcodeproj -scheme App -configuration Debug -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -derivedDataPath $RUNNER_TEMP/ios-build build`,
+then zip `App.app` and upload it as artifact `xtend-ios-simulator-<run>` (kept 30 days).
 No TestFlight upload (manual steps in `mobile/README.md`).
 
-Versioning: Android `versionCode` = run number, `versionName` = `1.0.<run>`; the `/download` page
+Versioning: Android `versionCode` = 100 + commits that changed `mobile/` or the workflow, `versionName` = `1.0.<code>`
+(website-only changes keep the same version, so the update prompt does not fire); the `/download` page
 and `UpdateManager` read the build from the release name's third number. iOS builds are set by hand
 in Xcode and announced with `IOS_LATEST_BUILD` / `IOS_APP_URL`. Admins can set minimum builds
 (`app_minimum_builds`) to force an install.
@@ -1372,7 +1375,7 @@ A rebuild matches this specification when all of the following hold.
 **Native**
 21. The Android build has the permissions, service and boot receiver in 5.3; the tracker posts at least every 150 s while on shift, with `Authorization: Bearer <token>`, and stops on 401 or `{ stop: true }`.
 22. `getNativeFix()` returns `is_mock`/`compromised`; clock-in `device_info.native` carries them.
-23. The workflow publishes `xtend.apk` on release tag `android` named `Xtend for Android 1.0.<run>`, and `/api/version` reports that build.
+23. The workflow publishes `xtend.apk` on release tag `android` named `Xtend for Android 1.0.<code>`, and `/api/version` reports that build.
 
 **Design**
 24. At 390 px wide, no field or admin page scrolls horizontally (tables scroll only inside their wrapper); the field nav clears the home indicator.

@@ -5,15 +5,19 @@
 # set. iOS: compiled for the simulator on every run, to prove it builds;
 # a TestFlight upload needs an Apple Developer account (see the README).
 #
-# On the production branch the APK is also published as xtend.apk on the
-# repo's "android" release, which the /download page links to.
+# Runs on every push to every branch, so each change gets both apps
+# built. On the production branch the APK is also published as xtend.apk on
+# the repo's "android" release, which the /download page links to.
+#
+# Version numbers only go up when the phone app itself changes (anything
+# in mobile/ or this file): 100 + the number of commits that touched it.
+# A website-only change rebuilds the APK with the same version, so the
+# app's update prompt does not ask staff to reinstall for nothing (the
+# site itself updates without a new app).
 name: Mobile apps
 
 on:
   push:
-    paths:
-      - 'mobile/**'
-      - '.github/workflows/mobile.yml'
   workflow_dispatch:
 
 concurrency:
@@ -29,11 +33,20 @@ jobs:
     defaults:
       run:
         working-directory: mobile
-    env:
-      XTEND_VERSION_CODE: ${{ github.run_number }}
-      XTEND_VERSION_NAME: 1.0.${{ github.run_number }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The whole history, to count the commits that changed the app.
+          fetch-depth: 0
+
+      - name: Version
+        working-directory: .
+        run: |
+          native=$(git rev-list --count HEAD -- mobile .github/workflows/mobile.yml)
+          code=$((100 + native))
+          echo "XTEND_VERSION_CODE=$code" >> "$GITHUB_ENV"
+          echo "XTEND_VERSION_NAME=1.0.$code" >> "$GITHUB_ENV"
+          echo "Version 1.0.$code (build $code, run ${{ github.run_number }})"
 
       - uses: actions/setup-node@v4
         with:
@@ -120,7 +133,7 @@ jobs:
             kind="debug build: set the Android signing secrets for updates that install over each other"
           fi
           title="Xtend for Android $XTEND_VERSION_NAME"
-          notes="Built from ${GITHUB_SHA::7} ($kind). Install from https://xtend-brown.vercel.app/download"
+          notes="Built from ${GITHUB_SHA::7}, run ${{ github.run_number }} ($kind). Install from https://xtend-brown.vercel.app/download"
           if gh release view android >/dev/null 2>&1; then
             gh release edit android --title "$title" --notes "$notes"
           else
@@ -162,4 +175,18 @@ jobs:
             -configuration Debug \
             -destination 'generic/platform=iOS Simulator' \
             CODE_SIGNING_ALLOWED=NO \
+            -derivedDataPath "$RUNNER_TEMP/ios-build" \
             build
+
+      # The simulator app, for testing on a Mac (Xcode's Simulator). Real
+      # iPhones need an Apple Developer account and TestFlight: see the README.
+      - name: Package the simulator app
+        run: |
+          cd "$RUNNER_TEMP/ios-build/Build/Products/Debug-iphonesimulator"
+          zip -qry "$RUNNER_TEMP/xtend-ios-simulator.zip" App.app
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xtend-ios-simulator-${{ github.run_number }}
+          path: ${{ runner.temp }}/xtend-ios-simulator.zip
+          retention-days: 30
