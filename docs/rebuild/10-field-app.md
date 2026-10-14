@@ -1311,7 +1311,8 @@ role name or the base label). Sections:
   "Marked resolved by the office." and no input. Empty: "No messages yet.
   Anything you send shows here with the reply."
 - Live: a realtime channel on `support_messages` and `support_threads`
-  refreshes the page.
+  refreshes the page. Skipped when `NEXT_PUBLIC_REALTIME_DISABLED=1` (the
+  fleet-wide release valve); sending still refreshes the thread.
 
 ### 11.5 Staff guide (`/field/guide`, public `/guide`)
 
@@ -1406,8 +1407,17 @@ do; it never explains monitoring.
   `notification_deliveries` (RLS limits rows to the member).
 - Any change → debounce **400 ms** → `router.refresh()`; refreshes are
   skipped while hidden or offline and are locked for **1500 ms** after one.
-- Safety poll every **45 s** on shift, **120 s** otherwise; also on
-  visibility and on `online`.
+- Safety poll on shift **45 s** when realtime is live, **20 s** when it is
+  off or has failed; off shift **120 s** / **60 s**. Each interval is
+  jittered **±30 %** per client so a fleet does not stampede the backend on
+  one tick. Also refreshes on visibility and on `online`.
+- Scale release valve: `NEXT_PUBLIC_REALTIME_DISABLED=1` skips the socket
+  entirely (here and in the field support chat) and everyone rides the poll
+  — used when Supabase's concurrent-connection cap is the bottleneck. The
+  poll also speeds up on its own if a socket subscribes then errors
+  (`CHANNEL_ERROR` / `TIMED_OUT`), so hitting the cap slows updates rather
+  than breaking the app. See `load-test/` for the k6 script that finds the
+  ceiling.
 
 ### 13.4 Native shift tracker (`shift-tracker.tsx`, `src/lib/native.ts`, `mobile/`)
 
