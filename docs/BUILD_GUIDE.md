@@ -443,7 +443,7 @@ supabase/migrations/      The database, in order
 supabase/tests/           Database tests and the Supabase stand-in
 scripts/                  Admin bootstrap, logic checks, SQL test runner
 mobile/                   Capacitor Android and iOS apps
-docs/                     This guide and LOCATION-INTEGRITY.md
+docs/                     This guide, LOCATION-INTEGRITY.md, and rebuild/ (the rebuild pack)
 .github/workflows/        Phone app builds
 ```
 
@@ -483,7 +483,10 @@ script or a setup step must update it **in the same commit or PR**:
 - update the section it touches (5 for a new stage or feature, 6 for a
   migration, 7 for a variable, 8 for a job, 9 for the apps, 10 for a check,
   11 for a new folder, 15 for anything left to do);
-- change the "Last updated" line at the top.
+- change the "Last updated" line at the top;
+- keep the **rebuild pack** current: update the spec in `docs/rebuild/` the
+  change touches and rerun `scripts/rebuild-pack.ts` (see
+  `docs/rebuild/00-START-HERE.md` §7).
 
 `CLAUDE.md` at the root repeats this rule for anyone (or any AI assistant)
 working on the project.
@@ -494,6 +497,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-14 | Rebuild pack (`docs/rebuild/`): a complete spec any AI can rebuild Xtend from, with the exact database generated from the migrations and verified against the tests | — |
 | 2026-10-14 | Supervisor guide; admin guide admins-only and page by page; this build guide | — |
 | 2026-10-14 | Staff app and guide cut to what staff need | — |
 | 2026-10-14 | Updates: new-version banner, required updates, What's new, Updates page | 0057 |

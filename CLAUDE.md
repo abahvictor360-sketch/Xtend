@@ -14,6 +14,15 @@ scheduled job, page, check script or setup step must update
   8 jobs, 9 phone apps, 10 checks, 11 folders, 15 open items);
 - change the "Last updated" line at the top.
 
+Keep the rebuild pack (`docs/rebuild/`, which lets any AI rebuild Xtend from
+scratch) current in the same commit too:
+
+- update the hand-written spec the change touches (`10-field-app.md`,
+  `20-admin-dashboard.md`, `30-rules.md`, `40-platform-and-design.md`, and
+  `00-START-HERE.md` if the build order or a decision changes);
+- regenerate the exact parts (database, routes, pages, modules, constants):
+  `PGURL=postgres://postgres@localhost:5433/postgres npx tsx --tsconfig tsconfig.scripts.json scripts/rebuild-pack.ts`.
+
 A new migration also goes in the README's migration list. Anything people see
 goes in the right guide: staff (`src/components/staff-guide.tsx`),
 supervisors (`src/app/admin/supervisor-guide/page.tsx`) or admins
