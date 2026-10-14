@@ -299,7 +299,7 @@ function ShiftPill({
       {state === 'before' ? (
         <a
           href="#clock"
-          className="shrink-0 rounded-full bg-white/15 px-4 py-2 text-xs font-bold uppercase tracking-wide transition-colors hover:bg-white/25"
+          className="shrink-0 rounded-full bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-brand transition-opacity hover:opacity-90"
         >
           Clock in
         </a>
