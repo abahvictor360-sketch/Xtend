@@ -232,7 +232,7 @@ export function Onboarding({ name, photoUrl }: { name: string; photoUrl: string 
         >
           <span className="w-12" />
           <span className="flex-1 text-center text-base font-semibold">
-            {step === 'welcome' ? "Let's set you up" : 'Continue'}
+            {step === 'welcome' ? "Let's set you up" : !canContinue ? 'Add a photo first' : 'Continue'}
           </span>
           <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white text-foreground">
             <ArrowRight className="h-5 w-5" />
