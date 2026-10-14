@@ -49,7 +49,9 @@ Most changes need no new app: the apps load the live site, and the site
 tells anyone with Xtend open when a newer deploy is live ("A new version
 of Xtend is ready", `src/components/update-manager.tsx`). A new store
 build is only needed when something in this folder changes. Each Android
-build's version code is the workflow's run number (`1.0.<run>`), and the
+build's version code is 100 + the number of commits that changed `mobile/`
+or the workflow (`1.0.<code>`), so it only goes up when the app itself
+changes, and the
 app reads its own build (Capacitor `App.getInfo`) and compares it with the
 newest published on the `android` release: an older app is offered the
 download, and one below the lowest build set on **Updates** in the
@@ -60,8 +62,9 @@ number when the APK is hosted elsewhere (`ANDROID_APK_URL`).
 
 ## Building
 
-GitHub builds both apps on every push that touches `mobile/`
-(`.github/workflows/mobile.yml`, or run it by hand from the Actions tab):
+GitHub builds both apps on every push to every branch
+(`.github/workflows/mobile.yml`, or run it by hand from the Actions tab).
+A website-only change rebuilds the APK with the same version number:
 
 - **Android**: a debug APK, downloadable from the run's *Artifacts*. It can
   be installed straight on a phone ("install unknown apps" must be allowed).
@@ -143,7 +146,7 @@ it is used during a shift to confirm the person is at their store.
 Staff install the apps from `https://xtend-brown.vercel.app/download`.
 
 **Android works by itself.** Each time the production branch is built
-(after a merge that touches `mobile/`, or **Actions → Mobile apps → Run
+(after every merge, or **Actions → Mobile apps → Run
 workflow**), the workflow publishes the APK as `xtend.apk` on this repo's
 **android** release, and the download page links to it automatically. That
 needs the repo to be public, which it is.

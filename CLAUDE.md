@@ -42,6 +42,17 @@ supervisors (`src/app/admin/supervisor-guide/page.tsx`) or admins
 - New migration: next number, registered in `scripts/test-sql.sh`, tested in
   `supabase/tests/rules.sql` (and `rls_counts.sql` for new tables).
 
+## Shipping changes
+
+The owner has asked for every change to be merged and pushed without
+waiting to be asked. For each change: commit on the working branch, run the
+checks below, push, open a PR into the default branch
+(`claude/new-session-sgmxdg`), merge it, then bring the working branch level
+with the default branch and push. Only merge when the checks pass; if they
+fail, fix first. Remind the owner of any migration to run in Supabase.
+
+Every push builds the Android and iPhone apps (`.github/workflows/mobile.yml`).
+
 ## Checks before pushing
 
 ```bash

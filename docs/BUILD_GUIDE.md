@@ -372,11 +372,15 @@ in `mobile/` changes.
   `mobile/ios/App/App/`. Registered in `MainActivity.java` and
   `XtendViewController.swift`. A new iOS Swift file must also be added to
   `App.xcodeproj/project.pbxproj`.
-- **Builds:** `.github/workflows/mobile.yml` runs on every push touching
-  `mobile/`: a debug APK always, a signed APK and Play bundle when the
-  secrets are set, and an iOS simulator build. On the default branch it
-  publishes `xtend.apk` on the `android` release, which `/download` links to.
-  The Android version code is the run number (`1.0.<run>`).
+- **Builds:** `.github/workflows/mobile.yml` runs on **every push to every
+  branch**: a debug APK always, a signed APK and Play bundle when the
+  secrets are set, and an iOS simulator build (downloadable as a zip from the
+  run). On the default branch it publishes `xtend.apk` on the `android`
+  release, which `/download` links to.
+- **Version numbers** go up only when the phone app itself changes: the
+  version code is 100 + the number of commits that changed `mobile/` or the
+  workflow (`1.0.<code>`). A website-only change rebuilds the APK with the
+  same version, so the app's update prompt does not ask staff to reinstall.
 - **GitHub secrets:** `GOOGLE_SERVICES_JSON`, `ANDROID_KEYSTORE_BASE64`,
   `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
 - **iPhone:** needs the Apple steps in `mobile/README.md` (Xcode archive →
@@ -469,8 +473,9 @@ docs/                     This guide, LOCATION-INTEGRITY.md, and rebuild/ (the r
 9. **Update the docs in the same commit:** this guide (section 14 at least),
    the README migration list for a migration, and the admin, supervisor or
    staff guide for anything people see.
-10. Open a PR into the main branch; after merging, run the new migrations in
-    Supabase.
+10. Open a PR into the main branch and merge it once the checks pass (the
+    owner asked for every change to be merged and pushed straight away);
+    then run any new migrations in Supabase.
 
 ## 13. Keeping this guide current
 
@@ -497,6 +502,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-14 | Both phone apps build on every push; Android version only goes up when the app itself changes; iOS simulator build kept as a download | — |
 | 2026-10-14 | Fix: supervisors can download X Metrics reports for their team (the links were shown but refused) | — |
 | 2026-10-14 | Fix: merchandisers with more than one store can check in at store visits (the visit routes now leave the decision to the database) | — |
 | 2026-10-14 | Rebuild pack (`docs/rebuild/`): a complete spec any AI can rebuild Xtend from, with the exact database generated from the migrations and verified against the tests | — |
