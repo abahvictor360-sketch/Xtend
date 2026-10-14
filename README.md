@@ -70,6 +70,9 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0052_visits_alerts.sql          # store visits: departure places, store coverage; alerts resolved in bulk
    supabase/migrations/0053_support_notifications.sql  # support inbox, quick replies, assigning; notification templates, history, scheduling; fixes office replies
    supabase/migrations/0054_integrity_ask.sql          # integrity flags reviewed in bulk; Ask Xtend chats kept
+   supabase/migrations/0055_reject_post_clockout_tracking.sql  # positions sent after clock-out are refused
+   supabase/migrations/0056_realtime_field_tables.sql  # live updates for the field dashboard
+   supabase/migrations/0057_app_updates.sql            # updates: what's new notes, required updates, lowest app builds, who is on which version
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

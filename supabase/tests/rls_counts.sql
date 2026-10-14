@@ -158,5 +158,26 @@ select assert((select count(*) from public.support_inbox) = (select count(*) fro
 select assert((select count(*) from public.notification_log) = (select count(*) from public.notifications),
   'rls: and the whole notification history');
 
+-- Updates (057): only admins publish; staff see live notes and their own installs.
+select set_config('request.jwt.claim.sub', :'ada', false);
+do $$
+begin
+  insert into public.app_releases (title) values ('Not allowed');
+  perform assert(false, 'rls: only admins publish updates');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: only admins publish updates');
+end $$;
+select assert(not exists (select 1 from public.app_releases where withdrawn_at is not null),
+  'rls: staff do not see withdrawn updates');
+select assert(not exists (select 1 from public.app_installs where user_id <> :'ada'),
+  'rls: staff see only their own app versions');
+select set_config('request.jwt.claim.sub', :'tunde', false);
+select assert(not exists (select 1 from public.app_installs i where i.user_id <> :'tunde' and not public.supervises_user(i.user_id)),
+  'rls: a supervisor sees their own team''s app versions only');
+select set_config('request.jwt.claim.sub', :'boss', false);
+insert into public.app_releases (title, notes) values ('Published by an admin', 'Notes');
+select assert(exists (select 1 from public.app_releases where title = 'Published by an admin' and created_by = :'boss'),
+  'rls: an admin publishes an update');
+
 reset role;
 select 'ALL RLS CHECKS PASSED';

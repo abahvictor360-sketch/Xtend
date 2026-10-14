@@ -16,8 +16,9 @@ import {
 /**
  * In the Xtend app: keeps the native shift tracker running for the length
  * of the shift, so location is shared even with the app closed, and stops
- * it at clock-out. Shows a short note only when the phone needs a setting
- * changed for that to work. Nothing in a browser.
+ * it at clock-out. Shows a short setup note only when the phone needs a
+ * setting changed for that to work, without explaining why: how tracking
+ * works is for the office, not for staff. Nothing in a browser.
  */
 export function ShiftTracker({ onShift, clockedOut }: { onShift: boolean; clockedOut: boolean }) {
   const [state, setState] = useState<ShiftTrackerState | null>(null)
@@ -88,15 +89,15 @@ export function ShiftTracker({ onShift, clockedOut }: { onShift: boolean; clocke
 
   return (
     <div className="space-y-2 rounded-2xl border border-warning/40 bg-warning/10 p-3 text-sm">
-      <p className="font-semibold">Location settings for your shift</p>
+      <p className="font-semibold">Finish setting up Xtend</p>
       {needsAlways && (
         <div className="flex items-start gap-2">
           <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
           <div className="flex-1 space-y-1.5">
             <p>
               {state.platform === 'ios'
-                ? 'Set Location to “Always” for Xtend, so it keeps working during your shift after you close the app.'
-                : 'Set Location to “Allow all the time” for Xtend, so it keeps working during your shift, even after the phone restarts.'}
+                ? 'Set Location to “Always” for Xtend.'
+                : 'Set Location to “Allow all the time” for Xtend.'}
             </p>
             <Button size="sm" variant="outline" onClick={() => void askAlwaysLocation().then(refresh)}>
               {state.platform === 'ios' ? 'Allow always' : 'Open location settings'}
@@ -108,7 +109,7 @@ export function ShiftTracker({ onShift, clockedOut }: { onShift: boolean; clocke
         <div className="flex items-start gap-2">
           <BatteryWarning className="mt-0.5 h-4 w-4 shrink-0" />
           <div className="flex-1 space-y-1.5">
-            <p>Let Xtend run without battery restrictions, or the phone may stop it during your shift.</p>
+            <p>Turn off battery saving for Xtend.</p>
             <Button size="sm" variant="outline" onClick={() => void openBatterySettings().then(refresh)}>
               Open battery settings
             </Button>

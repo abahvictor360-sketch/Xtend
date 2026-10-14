@@ -65,6 +65,7 @@ export const ACTION_GROUPS: Record<string, string> = {
   alert: 'Alerts',
   export: 'Exports',
   xm: 'X Metrics',
+  app: 'Updates',
 }
 
 const LABELS: Record<string, string> = {
@@ -88,6 +89,8 @@ const LABELS: Record<string, string> = {
   'role_store_counts.update': 'Changed stock count categories',
   'count_sheet.template': 'Downloaded a count sheet',
   'notification.send': 'Sent a notification',
+  'app.release': 'Published an update',
+  'app.release_withdraw': 'Withdrew an update',
   'notification.schedule': 'Scheduled a notification',
   'notification.cancel': 'Cancelled a scheduled notification',
   'notification_template.create': 'Saved a notification template',

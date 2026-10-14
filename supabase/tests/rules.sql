@@ -3052,7 +3052,8 @@ begin
       values ('closing', 6.6019, 3.3516, 12, fresh_photo('selfies', 'kayode-out.jpg'), now());
       tok2 := public.issue_tracking_token('android');
       res := public.record_background_pings(tok2->>'token', '[]'::jsonb, now());
-      perform assert((res->>'ok')::boolean and not (res->>'shift_open')::boolean
+      -- 055: after clock-out nothing is stored; the phone is told to stop at once.
+      perform assert(not (res->>'ok')::boolean and (res->>'stop')::boolean and not (res->>'shift_open')::boolean
                      and not (public.record_background_pings(tok2->>'token', '[]'::jsonb, now())->>'ok')::boolean,
         'tracking: after clock-out the phone is told to stop, and its token ends');
       perform act_as(boss);
@@ -3384,6 +3385,33 @@ begin
                      and (select kind from public.notification_log where title = 'Reply from the office'
                           and body = 'Cannot clock in: fixed.') = 'support',
         'notifications: automatic alerts and support replies are told apart from messages');
+    end;
+
+    -- Updates (057).
+    declare
+      r1 uuid;
+      r2 uuid;
+    begin
+      perform act_as(boss);
+      insert into public.app_releases (title, notes, required, min_android_build)
+      values ('Faster pages', 'Pages open faster.', false, 40) returning id into r1;
+      insert into public.app_releases (title, min_android_build, min_ios_build)
+      values ('New tracker', 52, 3) returning id into r2;
+      perform assert((select android from public.app_minimum_builds) = 52
+                     and (select ios from public.app_minimum_builds) = 3,
+        'updates: the lowest app build allowed is the highest any release set');
+      update public.app_releases set withdrawn_at = now() where id = r2;
+      perform assert((select android from public.app_minimum_builds) = 40,
+        'updates: a withdrawn release no longer sets the minimum');
+      perform act_as(ada);
+      perform public.report_app_install('android', '1.0.48', 48, 'abc123');
+      perform public.report_app_install('android', '1.0.48', 48, 'abc123');
+      perform assert((select count(*) from public.app_installs where user_id = ada and platform = 'android' and app_build = 48) = 1,
+        'updates: each phone reports its app build, one row per platform');
+      perform public.report_app_install('android', '1.0.53', 53, 'def456');
+      perform assert((select app_build from public.app_installs where user_id = ada and platform = 'android') = 53,
+        'updates: a new build is recorded at once');
+      perform act_as(boss);
     end;
 
   end;
