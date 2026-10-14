@@ -1607,7 +1607,7 @@ const schema = z.object({
 ## `POST /api/visits/[id]/end`
 
 - File: `src/app/api/visits/[id]/end/route.ts`
-- Who: REPORTING_ROLES
+- Who: FIELD_ROLES
 
 Check out of the store. Closing a visit is a one-way door.
 
@@ -1626,7 +1626,7 @@ const schema = z.object({
 ## `POST /api/visits`
 
 - File: `src/app/api/visits/route.ts`
-- Who: REPORTING_ROLES
+- Who: FIELD_ROLES
 
 Check in to a store. Naming the store is optional: left out, the
 database picks whichever of the person's own stores they are closest to.
