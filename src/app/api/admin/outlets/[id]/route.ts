@@ -34,3 +34,33 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
     return apiError(error)
   }
 }
+
+export async function DELETE(_request: Request, ctx: { params: Promise<{ id: string }> }) {
+  try {
+    await requireApiSession(['admin'])
+    const { id } = await ctx.params
+
+    const supabase = await createServerSupabase()
+    const { error } = await supabase.from('outlets').delete().eq('id', id)
+    if (error) {
+      // An outlet with visit, count or X Metrics history is held back by the
+      // database (those references are ON DELETE RESTRICT). Keep its records
+      // intact and tell the admin to deactivate it instead.
+      if (error.code === '23503') {
+        return Response.json(
+          {
+            error:
+              'This outlet has visit, stock-count or metrics history, so it cannot be deleted. Deactivate it instead.',
+          },
+          { status: 409 },
+        )
+      }
+      return Response.json({ error: dbErrorMessage(error, 'That outlet could not be deleted.') }, { status: 400 })
+    }
+
+    await audit(supabase, 'outlet.delete', 'outlets', id, {})
+    return Response.json({ ok: true })
+  } catch (error) {
+    return apiError(error)
+  }
+}

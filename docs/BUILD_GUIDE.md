@@ -5,8 +5,8 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-14, after migration 0058 (realtime via per-user
-Broadcast) and the k6 load test._
+_Last updated: 2026-10-14, after outlet delete and search, migration 0058
+(realtime via per-user Broadcast) and the k6 load test._
 
 ---
 
@@ -510,6 +510,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-14 | Admins can delete an outlet (trash icon → confirm → DELETE `/api/admin/outlets/<id>`; refused with 409 when it has visit/count/metrics history) and search the outlet list | — |
 | 2026-10-14 | Tests and rebuild pack cover realtime (0056, 0058): the Supabase stub has a minimal realtime schema; the pack's database now includes 0058 and the realtime access rule | — |
 | 2026-10-14 | Realtime scale fix: the field dashboard and support chat now ride per-user Broadcast (`field:<uid>`) from database triggers instead of Postgres Changes, so Supabase compute holds far more connections. Only on-shift members hold a socket | 0058 |
 | 2026-10-14 | Load test (`load-test/`): k6 script for ~5,000 field staff (edge baseline, dashboard RPC poll, realtime connection ceiling, opt-in clock-in write burst) plus run and infra-sizing notes. Scale mitigations: fleet-wide realtime kill-switch (`NEXT_PUBLIC_REALTIME_DISABLED`), jittered safety poll, faster poll when realtime is off or has failed | — |

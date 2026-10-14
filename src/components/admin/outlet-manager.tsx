@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Crosshair, Plus } from 'lucide-react'
+import { Crosshair, Plus, Search, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -51,6 +51,15 @@ export function OutletManager({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [locating, setLocating] = useState(false)
+  const [query, setQuery] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+
+  const q = query.trim().toLowerCase()
+  const shown = q
+    ? outlets.filter(
+        (o) => o.name.toLowerCase().includes(q) || (o.address ?? '').toLowerCase().includes(q),
+      )
+    : outlets
 
   /**
    * Standing in the shop is the most accurate way there is to place a
@@ -152,6 +161,23 @@ export function OutletManager({
     }
   }
 
+  async function remove(outlet: Outlet) {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/admin/outlets/${outlet.id}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(data.error ?? 'That outlet could not be deleted.')
+        return
+      }
+      router.refresh()
+    } finally {
+      setBusy(false)
+      setConfirmDelete(null)
+    }
+  }
+
   function edit(outlet: Outlet) {
     setEditing(outlet.id)
     setAdding(true)
@@ -182,6 +208,19 @@ export function OutletManager({
           <Plus className="h-4 w-4" />
           {adding ? 'Cancel' : 'Add outlet'}
         </Button>
+      )}
+
+      {outlets.length > 4 && (
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search outlets by name or address"
+            className="pl-9"
+            aria-label="Search outlets"
+          />
+        </div>
       )}
 
       {adding && !readOnly && (
@@ -276,8 +315,14 @@ export function OutletManager({
         </Card>
       )}
 
+      {shown.length === 0 && (
+        <p className="py-6 text-center text-sm text-muted-foreground">
+          {q ? 'No outlets match your search.' : 'No outlets yet.'}
+        </p>
+      )}
+
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-        {outlets.map((outlet) => (
+        {shown.map((outlet) => (
           <Card key={outlet.id}>
             <CardContent className="space-y-2 p-4 pt-4">
               <div className="flex items-start justify-between gap-2">
@@ -307,13 +352,38 @@ export function OutletManager({
                 <div>Staff: {staffCounts[outlet.id] ?? 0}</div>
               </dl>
 
-              {!readOnly && (
+              {!readOnly && confirmDelete === outlet.id && (
+                <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-2 text-xs">
+                  <span className="flex-1 text-foreground">Delete this outlet for good?</span>
+                  <Button size="sm" variant="destructive" disabled={busy} onClick={() => void remove(outlet)}>
+                    {busy ? 'Deleting…' : 'Delete'}
+                  </Button>
+                  <Button size="sm" variant="ghost" disabled={busy} onClick={() => setConfirmDelete(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              )}
+
+              {!readOnly && confirmDelete !== outlet.id && (
                 <div className="flex gap-1">
                   <Button size="sm" variant="outline" onClick={() => edit(outlet)}>
                     Edit
                   </Button>
                   <Button size="sm" variant="ghost" disabled={busy} onClick={() => void toggleActive(outlet)}>
                     {outlet.is_active ? 'Deactivate' : 'Reactivate'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="ml-auto text-destructive hover:text-destructive"
+                    aria-label={`Delete ${outlet.name}`}
+                    disabled={busy}
+                    onClick={() => {
+                      setError(null)
+                      setConfirmDelete(outlet.id)
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
               )}

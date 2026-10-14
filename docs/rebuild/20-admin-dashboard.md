@@ -160,7 +160,7 @@ Invisible. On mount, and then every 15 minutes (`REFRESH_MS = 15 * 60_000`), it 
 | Roles | full | hidden | everything |
 | Store allocation | full | team | No team chips |
 | Notifications | full | team | Reach anyone outside their team; manage others' templates/scheduled items; resend others' messages |
-| Outlets | full | read-only | Add, edit, deactivate; bulk add |
+| Outlets | full | read-only | Add, edit, deactivate, delete; search; bulk add |
 | Outlets bulk add | full | hidden | everything |
 | Places | full | hidden | everything |
 | Audit log | full | hidden | everything |
@@ -1652,7 +1652,9 @@ Loads `outlets` (id, name, address, lat, lng, geofence_radius_m, shift_start, sh
 
 ### Cards (1 / 2 / 3 columns)
 
-Name, address (—), a badge **Inactive** (outline), **No location yet** (warning, when `lat` is null), or **Active** (success); facts "Geofence: N m", "Shift: 08:00–18:00", coordinates to 5 decimals or "Pinned from a clock-in, on Places", "Staff: N". Admins: **Edit** (opens the form filled) and **Deactivate** / **Reactivate** (PATCH `{is_active}`, no confirmation).
+Name, address (—), a badge **Inactive** (outline), **No location yet** (warning, when `lat` is null), or **Active** (success); facts "Geofence: N m", "Shift: 08:00–18:00", coordinates to 5 decimals or "Pinned from a clock-in, on Places", "Staff: N". Admins: **Edit** (opens the form filled), **Deactivate** / **Reactivate** (PATCH `{is_active}`, no confirmation), and a trash icon → inline confirm **"Delete this outlet for good?"** (**Delete** / **Cancel**) → DELETE `/api/admin/outlets/<id>`. An outlet with visit, stock-count or metrics history (ON DELETE RESTRICT) is refused with "This outlet has visit, stock-count or metrics history, so it cannot be deleted. Deactivate it instead." (HTTP 409); its allocations cascade away and attendance/thread references are nulled.
+
+When there are more than 4 outlets, a **search** box ("Search outlets by name or address") filters the cards client-side by name or address; "No outlets match your search." when none do.
 
 ### Add stores in bulk — `/admin/outlets/import` (admins only)
 
