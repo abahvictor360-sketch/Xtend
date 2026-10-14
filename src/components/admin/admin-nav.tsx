@@ -46,7 +46,7 @@ const GROUPS: { title: string | null; links: NavLink[] }[] = [
     links: [
       { href: '/admin', label: 'Overview', icon: LayoutDashboard, adminOnly: false },
       { href: '/admin/ask', label: 'Ask Xtend', icon: MessageSquareText, adminOnly: false },
-      { href: '/admin/guide', label: 'Guide', icon: BookOpen, adminOnly: false },
+      { href: '/admin/guide', label: 'Admin guide', icon: BookOpen, adminOnly: true },
     ],
   },
   {
