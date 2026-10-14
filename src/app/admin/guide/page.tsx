@@ -2,16 +2,16 @@ import Link from 'next/link'
 import {
   BarChart3,
   Bell,
+  CalendarCheck,
   ClipboardList,
-  Headset,
+  Gauge,
+  HelpCircle,
   LayoutDashboard,
-  MessageSquareText,
-  PackageSearch,
   Rocket,
   Route,
+  Settings2,
   ShieldAlert,
   Smartphone,
-  Store,
   Users,
 } from 'lucide-react'
 import { requireSession } from '@/lib/auth'
@@ -27,181 +27,351 @@ import {
 } from '@/components/guide'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Guide — Xtend' }
+export const metadata = { title: 'Admin guide — Xtend' }
 
 const T = {
-  setup: { id: 'set-up', title: 'Setting up', icon: Rocket },
-  places: { id: 'stores-and-places', title: 'Adding a store or place', icon: Store },
-  staff: { id: 'staff', title: 'Staff and teams', icon: Users },
-  apps: { id: 'apps', title: 'Getting staff on the app', icon: Smartphone },
-  overview: { id: 'overview', title: 'The overview', icon: LayoutDashboard },
-  attendance: { id: 'attendance', title: 'Attendance and exports', icon: ClipboardList },
-  movement: { id: 'movement', title: 'Movement and store visits', icon: Route },
-  alerts: { id: 'alerts', title: 'Alerts and checks', icon: ShieldAlert },
-  counts: { id: 'store-counts', title: 'Stock count', icon: PackageSearch },
-  support: { id: 'support', title: 'Support messages', icon: Headset },
-  notify: { id: 'notifications', title: 'Notifications', icon: Bell },
-  ask: { id: 'ask', title: 'Ask Xtend and analytics', icon: MessageSquareText },
-  faq: { id: 'questions', title: 'Questions', icon: BarChart3 },
+  start: { id: 'first-week', title: 'Your first week', icon: Rocket },
+  daily: { id: 'every-day', title: 'Every day', icon: CalendarCheck },
+  overview: { id: 'overview', title: 'Overview, Ask Xtend and the guide', icon: LayoutDashboard },
+  attendance: { id: 'attendance', title: 'Attendance and Analytics', icon: ClipboardList },
+  movement: { id: 'movement', title: 'Movement and Store visits', icon: Route },
+  alerts: { id: 'alerts-support', title: 'Alerts and Support', icon: Bell },
+  stock: { id: 'stock', title: 'Stock count and X Metrics', icon: Gauge },
+  checks: { id: 'checks', title: 'Integrity and Check an excuse', icon: ShieldAlert },
+  people: { id: 'people', title: 'Staff, teams, roles and notifications', icon: Users },
+  setup: { id: 'setup', title: 'Outlets, places, audit log and updates', icon: Settings2 },
+  apps: { id: 'apps', title: 'Staff phones and the app', icon: Smartphone },
+  analytics: { id: 'exports', title: 'Downloads and records', icon: BarChart3 },
+  faq: { id: 'questions', title: 'Questions', icon: HelpCircle },
 } satisfies Record<string, GuideTopic>
 
-/** How to run Xtend, for admins and supervisors. Staff have /guide. */
+/**
+ * How to run the Xtend dashboard, page by page. Admins only: it covers
+ * how location, checks and the phone app work, which staff and
+ * supervisors are not shown. Staff have their own guide at /guide.
+ */
 export default async function AdminGuidePage() {
-  const session = await requireSession(['admin', 'supervisor'])
-  const isAdmin = session.profile.role === 'admin'
+  await requireSession(['admin'])
 
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">How to use Xtend</h1>
+        <h1 className="text-2xl font-bold tracking-tight">Admin guide</h1>
         <p className="text-sm text-muted-foreground">
-          {isAdmin
-            ? 'For admins and supervisors. Parts marked “admins only” are hidden from supervisors.'
-            : 'For supervisors. Everything here covers your own team.'}{' '}
-          Staff have their own guide at{' '}
+          How to use the dashboard, page by page, in the order of the menu. Only admins can see this
+          guide. Staff have a short guide of their own at{' '}
           <Link href="/guide" className="font-semibold text-brand hover:underline">
             /guide
-          </Link>
-          , which you can share with them.
+          </Link>{' '}
+          (clocking in and out, stock counts, using the app and reporting a problem), which you can
+          share with them. Times everywhere are Lagos time.
         </p>
       </div>
 
       <GuideContents topics={Object.values(T)} />
 
       <div className="grid gap-5 xl:grid-cols-2">
-        <GuideSection topic={T.setup} intro="Do this once, before staff start clocking in.">
+        <GuideSection topic={T.start} intro="Do these once, in this order, before staff start clocking in.">
           <Steps
             items={[
               <>
-                <Ui>Outlets</Ui> (admins only): add each store with its address and map position,
-                its shift start time and its radius (a small kiosk needs a small radius). A store
-                marked “No location yet” is pinned later from where staff clock in, on{' '}
-                <Ui>Places</Ui>. See “Adding a store or place” below.
+                <Ui>Outlets</Ui>: add every store with its address, its map position, its shift start
+                and end, and its radius (50–100 m for a kiosk or small shop, 150–300 m for a
+                supermarket or mall). See <Ui>Outlets, places, audit log and updates</Ui> below.
               </>,
               <>
-                <Ui>Staff</Ui>: add everyone (one by one, or <Ui>Bulk import CSV</Ui>). Choose the
-                role: merchandiser, marketer, supervisor or admin.
+                <Ui>Staff</Ui>: add everyone, one by one or with <Ui>Bulk import CSV</Ui>, choosing
+                merchandiser, marketer, supervisor or admin.
               </>,
               <>
-                <Ui>Store allocation</Ui>: give each merchandiser their store, so their clock-in is
-                measured against it. Marketers do not need one.
+                <Ui>Store allocation</Ui>: give each merchandiser their store. Their clock-in is measured
+                against it. Marketers move between stores and do not need one.
               </>,
               <>
-                <Ui>Teams</Ui> (admins only): put merchandisers and marketers under a supervisor.
+                <Ui>Teams</Ui>: put merchandisers and marketers under their supervisor. Supervisors then
+                see only their own team everywhere in the dashboard.
+              </>,
+              <>
+                Share the download page and the staff guide (see <Ui>Staff phones and the app</Ui>), and
+                download <Ui>Login details (Word)</Ui> from Staff to hand out sign-ins.
+              </>,
+              <>
+                Optional: set up <Ui>X Metrics</Ui> (products, stores, targets) if you score stock and
+                sales, and publish the scoring policy.
               </>,
             ]}
           />
         </GuideSection>
 
-        <GuideSection
-          topic={T.places}
-          intro="Stores are what clock-ins are measured against. Only admins add or change them."
-        >
-          <p className="font-semibold">Add a store yourself</p>
+        <GuideSection topic={T.daily} intro="Ten minutes each morning keeps on top of the field.">
           <Steps
             items={[
               <>
-                Open <Ui>Outlets</Ui> and click <Ui>Add outlet</Ui>.
+                <Ui>Overview</Ui>: who has clocked in, who is late, who has not come in yet, and open
+                alerts.
               </>,
               <>
-                Fill in the <Ui>Name</Ui> and <Ui>Address</Ui>.
+                <Ui>Alerts</Ui>: deal with anything open (someone left their store, clocked in away from
+                it, or had location off), oldest first.
               </>,
               <>
-                For the location, the easiest way is to stand inside the store and click{' '}
-                <Ui>I am standing here</Ui>: Xtend fills in Latitude and Longitude (and the name and
-                address if it can). Otherwise, in Google Maps press and hold on the store&apos;s
-                entrance; the two numbers appear at the top (for example 6.6018, 3.3515). Copy the
-                first into <Ui>Latitude</Ui> and the second into <Ui>Longitude</Ui>.
+                <Ui>Support</Ui>: answer the threads that need a person, longest waiting first.
               </>,
               <>
-                Set the <Ui>Geofence radius</Ui>: about 50–100 m for a kiosk or small shop, 150–300
-                m for a supermarket or mall. Set <Ui>Shift start</Ui> and <Ui>Shift end</Ui>.
+                <Ui>Integrity</Ui>: look at <Ui>Who to look at first</Ui> and review new high flags.
               </>,
               <>
-                Click <Ui>Create outlet</Ui>. Then allocate staff to it on{' '}
-                <Ui>Store allocation</Ui>.
+                Late in the day: <Ui>Attendance</Ui> for missing clock-outs, and <Ui>Store visits</Ui>{' '}
+                for short visits and stores nobody reached.
               </>,
             ]}
           />
           <Tip>
-            A store marked <Ui>No location yet</Ui> on Outlets can still be allocated. When its
-            staff clock in there, the spot shows on <Ui>Places</Ui> under{' '}
-            <Ui>Store locations to confirm</Ui>: check the photo and click{' '}
-            <Ui>Confirm store location</Ui>. Or edit the store and add its location yourself.
+            Short on time? Ask Xtend: “who has not clocked in today?”, “anything I should look at
+            today?”, “who forgot to clock out yesterday?”.
           </Tip>
+        </GuideSection>
 
-          <p className="pt-2 font-semibold">Places your staff add</p>
+        <GuideSection topic={T.overview} intro="The top of the menu.">
           <p>
-            When staff clock in or check in at a shop or plaza that no store, learned place or map can
-            name, they must add it before they go on. Standing outside, they type the name on the sign
-            and take two photos with the camera in Xtend (never from the gallery): the building with
-            its sign showing, and a selfie holding one of our products. The position is read from their
-            phone&apos;s GPS, not typed: several readings are combined, the camera reads the position
-            again at each photo, and the readings must agree with each other and with where they clocked
-            in. Nobody is asked to add a place when the clock-in&apos;s own readings disagree, since that
-            spot cannot be trusted. From then on Xtend
-            recognises the place for everyone. Until it is added, that day&apos;s store visits, store
-            counts, X Metrics counts and sales and daily report wait; clocking out never does.
+            <Ui>Overview</Ui> is the first page each day: the week&apos;s clock-ins (point at a day for its
+            figures), today&apos;s clocked in, late and not-in-store counts, who has not clocked in yet,
+            open alerts, location coverage and everyone on shift. The tip card suggests the next thing
+            worth doing. The search box at the top finds anyone on the Staff page.
+          </p>
+          <GuideShot src="/guide/admin-overview.png" alt="The overview page" width={2880} height={1800} caption="The overview, before anyone has clocked in" />
+          <p>
+            <Ui>Ask Xtend</Ui> answers plain questions about attendance, visits, stock counts, alerts,
+            support, notifications, X Metrics and integrity, and makes downloadable reports (“make this
+            week&apos;s attendance report”). Attach a list or a photo of a sheet and it prepares store
+            allocations or team changes. Ask it to do something (“remind everyone who has not clocked in
+            to clock in now”, “ask all merchandisers for a stock count by Friday”, “check Ada&apos;s
+            phone”, “set Ikeja Mall&apos;s target to 500 units for October”, “deactivate Bala”, “show me
+            Ada&apos;s movement yesterday”) and it shows a card saying exactly what will happen and to
+            whom. Nothing happens until you press the card&apos;s button, and it is recorded in the audit
+            log. Chats are kept under <Ui>Earlier chats</Ui>, for you alone.
           </p>
           <p>
-            These appear on <Ui>Places</Ui> (admins only):
+            <Ui>Guide</Ui> is this page.
+          </p>
+        </GuideSection>
+
+        <GuideSection topic={T.attendance} intro="Who came in, when, and where.">
+          <p>
+            <Ui>Attendance</Ui> shows each person&apos;s day: clock-in and clock-out, on time or late, at
+            their store or not, and whether they clocked out. Pick a quick range or dates, then narrow by
+            person, store, team, role or kind of day. The cards add it up; <Ui>Worth a look</Ui> names
+            repeat absences, lateness, off-site clock-ins and missing clock-outs. The calendar has one
+            square per person per day; tap one, or open a row, to see the photo, the map, the distance
+            from the store and the phone used, with links to Movement and Check an excuse for that day.
           </p>
           <ul className="list-disc space-y-1.5 pl-5">
             <li>
-              <Ui>Places staff had to add</Ui>: the last 7 days, who and where, and whether each was
-              added. If someone clocked in somewhere that is not a shop (a depot gate, say), click{' '}
-              <Ui>Dismiss</Ui> and give the reason so they can carry on.
+              Late means after the store&apos;s shift start. Off site means outside the store&apos;s
+              radius; flagged means the location was not clear enough to tell.
             </li>
             <li>
-              <Ui>Names to check</Ui>: open <Ui>Photo of the place</Ui> and <Ui>Selfie with product</Ui>,
-              correct the spelling if needed, then click <Ui>Save and verify</Ui> (or <Ui>Verify</Ui>).
+              A working day without a clock-in counts as absent. Sundays only count if you tick{' '}
+              <Ui>Sundays are working days</Ui>.
+            </li>
+            <li>Records cannot be edited or deleted, by anyone.</li>
+          </ul>
+          <p>
+            <Ui>Analytics</Ui> compares any period with the same number of days just before it: trends,
+            on time by weekday, clock-in times, leaderboards by person, store or team, and how well each
+            store was covered.
+          </p>
+        </GuideSection>
+
+        <GuideSection topic={T.movement} intro="Where staff are during their shift.">
+          <p>
+            <Ui>Movement</Ui> opens on a live map of everyone on shift, with how many are in a store, away
+            from it, or not heard from in 15 minutes. Pick a person and up to 7 days to see their journey:
+            the stops they made (at their store or elsewhere, by name), the travel between them and the
+            times nothing was heard, with a strip per day and totals. <Ui>Worth a look</Ui> points out
+            impossible jumps (faster than 150 km/h, which a fake-location app makes), long silences
+            (linked to Check an excuse) and long stays away.
+          </p>
+          <p>
+            <Ui>Store visits</Ui> shows marketers&apos; rounds: where they checked in and out, for how long,
+            how far from the store, with the check-in photo while it is kept. It points out very short
+            visits, check-ins away from the store and visits too far apart to be real. <Ui>By store</Ui>,{' '}
+            <Ui>By person</Ui> and <Ui>Store coverage</Ui> (stores nobody visited in 7, 14 or 30 days)
+            add it up.
+          </p>
+          <p className="font-semibold">How location is recorded (not shown to staff)</p>
+          <ul className="list-disc space-y-1.5 pl-5">
+            <li>
+              From clock-in to clock-out the phone sends its position every few minutes, and at every
+              clock-in, check-in and check-out.
             </li>
             <li>
-              <Ui>Make it a store</Ui>: turns the place into one of your outlets, so staff can be
-              allocated to it.
+              In the Xtend app it keeps coming even when the app is closed. On Android a small{' '}
+              <Ui>Xtend · On shift</Ui> notification shows meanwhile, and it resumes after the phone
+              restarts when location is set to <Ui>Allow all the time</Ui>. On iPhone, Apple only wakes a
+              closed app when the phone moves about 500 m, so someone standing still with the app closed
+              shows as a silence until they move or open it.
             </li>
-            <li>Delete a place that is wrong, such as a photo that is not a shop.</li>
+            <li>
+              Without network, positions are kept on the phone and sent later, at the time they were
+              taken. A position sent after clock-out is refused.
+            </li>
+            <li>
+              In a browser instead of the app, Xtend must stay open on screen. Some Android phones stop
+              apps to save battery; the app asks staff to change that setting, without saying why.
+            </li>
           </ul>
         </GuideSection>
 
-        <GuideSection topic={T.staff} intro="People pages, under People in the menu.">
+        <GuideSection topic={T.alerts} intro="What needs a person today.">
           <p>
-            On <Ui>Staff</Ui>, the tabs show <Ui>All</Ui>, <Ui>Merchandisers</Ui>,{' '}
-            <Ui>Marketers</Ui>, <Ui>Supervisors</Ui> or <Ui>Admins</Ui>. <Ui>Add staff</Ui> creates an account and shows a temporary
-            password (Xtend also tries to send it). The person chooses their own password at first
-            sign-in. From the same list you can reset a password, change someone&apos;s store or
-            supervisor, or deactivate them: their history is kept.
+            <Ui>Alerts</Ui>: someone left their store during a shift, clocked in away from it, or had
+            location off. Filter by kind, open or resolved, person, store and dates. Each alert shows how
+            long it has been open and links to Movement, Check an excuse, a phone check and a call. People
+            with three or more alerts are listed at the top. Tick several and resolve them together with one
+            note; each is still written to the audit log.
           </p>
-          {isAdmin && (
-            <p>
-              <Ui>Roles</Ui> (admins only): besides Merchandiser, Marketer, Supervisor and Admin,
-              add a role with its own name, such as Account Receivable, and choose what it works
-              like. Give it to someone with the <Ui>Role</Ui> picker on Staff; they can do what the
-              base role does and show by the new name. Retire a role you no longer use.
-            </p>
-          )}
-          {isAdmin && (
-            <p>
-              <Ui>Login details (Word)</Ui> on Staff downloads every merchandiser&apos;s and
-              marketer&apos;s login, with their temporary password and how to install the app. It is
-              built fresh on each download, so anyone added since is in it. Once someone chooses
-              their own password, the sheet says <Ui>Chosen by them</Ui>.
-            </p>
-          )}
           <p>
-            On <Ui>Teams</Ui>, pick <Ui>All</Ui>, <Ui>Merchandisers</Ui> or <Ui>Marketers</Ui>,
-            tick people (or <Ui>Select all shown</Ui>), choose a supervisor and click{' '}
-            <Ui>Assign to supervisor</Ui>.
+            <Ui>Support</Ui>: problems and complaints staff send from the app. The Xtend helper answers the
+            simple ones; the rest wait for a person, longest waiting first. Open a thread to see who they
+            are, their store and supervisor and whether they clocked in today. Reply in your own words or
+            with a quick reply (<Ui>{'{name}'}</Ui> becomes their first name), pass it to a colleague under{' '}
+            <Ui>Who answers</Ui>, and close it when sorted; it reopens if they write again. Your reply
+            reaches their phone.
+          </p>
+        </GuideSection>
+
+        <GuideSection topic={T.stock} intro="What is in each store, and how staff are scored.">
+          <p>
+            <Ui>Stock count</Ui>: merchandisers count against the Xpel stock count sheet at the end of
+            every month and whenever you ask. Request a count for named people, a whole role or a team, with
+            a due date; they are told on their phones. For each product they enter back store and shop
+            floor (Xtend adds the total), the expiry date and how many sold, with a shelf photo. Paper
+            sheets come back as Excel, PDF or a photo under <Ui>Count sheets</Ui>.
+          </p>
+          <p>
+            <Ui>X Metrics</Ui> scores stock, sales and expiry for the stores you enrol:
+          </p>
+          <ul className="list-disc space-y-1.5 pl-5">
+            <li>
+              <Ui>Products &amp; stores</Ui>: the products counted and sold, and which stores are in X
+              Metrics.
+            </li>
+            <li>
+              <Ui>Targets</Ui>: a monthly target in units for a person or a store.
+            </li>
+            <li>
+              <Ui>Supplies</Ui>: every delivery, in units or cartons, logged by hand or imported from an
+              invoice or supply sheet (CSV, Excel, PDF or Word). A mistake is voided with a reason, never
+              edited.
+            </li>
+            <li>
+              <Ui>Expiry alerts</Ui>: each batch as it nears expiry; “consider pulling” means it will not
+              sell in time.
+            </li>
+            <li>
+              <Ui>Grades</Ui>: each person monthly, on sales against target, stock accuracy, reporting
+              and expiry handling. Review, then finalise.
+            </li>
+            <li>
+              <Ui>Scoring policy</Ui>: what staff are scored by. They read it beside their own score.{' '}
+              <Ui>Settings</Ui> holds the weights and bands.
+            </li>
+          </ul>
+        </GuideSection>
+
+        <GuideSection topic={T.checks} intro="When something does not look right. Staff never see these.">
+          <p>
+            <Ui>Integrity</Ui> flags signs of a fake-location app, a rooted phone, a VPN, a phone clock
+            changed, photos taken at home, and stock counts that do not add up. A flag is a reason to ask,
+            not proof. Pick dates (up to 120 days) and narrow by person, store, kind, severity and whether
+            reviewed. <Ui>Who to look at first</Ui> ranks people by their open flags and says why in one
+            line. Open a flag to read it in plain words, see the GPS point on a map, or check whether their
+            phone is on now. Tick several and mark them reviewed with one note.
+          </p>
+          <p>
+            <Ui>Check an excuse</Ui>: someone says their network was bad, their phone was off, their
+            location would not work, they were at the store all along, or the app would not let them clock
+            in. Pick who, what they said and when (up to 3 days). Xtend says whether it holds up and shows a
+            timeline of what their phone did. <Ui>Keep on record</Ui> with a note builds their history; the
+            page warns when several excuses have not held up.
+          </p>
+        </GuideSection>
+
+        <GuideSection topic={T.people} intro="The People part of the menu.">
+          <p>
+            <Ui>Staff</Ui>: tabs for all, merchandisers, marketers, supervisors and admins.{' '}
+            <Ui>Add staff</Ui> creates an account with a temporary password; the person picks their own at
+            first sign-in. From the list you reset a password, change a store or supervisor, or deactivate
+            someone (their history stays). <Ui>Login details (Word)</Ui> downloads every field worker&apos;s
+            sign-in with how to install the app.
           </p>
           <GuideShot src="/guide/admin-add-staff.png" alt="The Add staff form" width={1932} height={504} caption="Staff → Add staff" />
+          <p>
+            <Ui>Teams</Ui>: pick a category, tick people (or <Ui>Select all shown</Ui>), choose a supervisor
+            and click <Ui>Assign to supervisor</Ui>. <Ui>Roles</Ui>: add a role with its own name (such as
+            Account Receivable) that works like one of the built-in ones. <Ui>Store allocation</Ui>: which
+            stores each person works.
+          </p>
           <GuideShot src="/guide/admin-teams.png" alt="The Teams page with category tabs" width={2000} height={1216} caption="Teams: pick a category, tick people, assign" />
+          <p>
+            <Ui>Notifications</Ui>: write a message (or start from a template), check <Ui>See who</Ui>, and
+            send now or <Ui>Later</Ui>. You can reach everyone, one role, one store or named people. The
+            history shows who got it, who read it and who has notifications off; <Ui>Send again</Ui> reaches
+            the people it missed.
+          </p>
           <Tip>
-            Supervisors can add merchandisers and marketers, who join their own team, and reset their
-            passwords. Only admins create supervisors and admins or move people between teams.
+            Supervisors see and act on their own team only. They can add merchandisers and marketers (who
+            join their team) and reset their passwords; only admins create supervisors and admins, move
+            people between teams, and see Places, Roles, Teams, the audit log, Updates and this guide.
+            Supervisors have their own guide.
           </Tip>
         </GuideSection>
 
-        <GuideSection topic={T.apps} intro="Staff use the Android or iPhone app, or Chrome.">
+        <GuideSection topic={T.setup} intro="The Setup part of the menu.">
+          <p className="font-semibold">Add a store (Outlets)</p>
+          <Steps
+            items={[
+              <>
+                Click <Ui>Add outlet</Ui> and fill in the <Ui>Name</Ui> and <Ui>Address</Ui>.
+              </>,
+              <>
+                Standing inside the store, click <Ui>I am standing here</Ui> to fill in the position.
+                Otherwise press and hold on the entrance in Google Maps and copy the two numbers into{' '}
+                <Ui>Latitude</Ui> and <Ui>Longitude</Ui>.
+              </>,
+              <>
+                Set the <Ui>Geofence radius</Ui>, <Ui>Shift start</Ui> and <Ui>Shift end</Ui>, click{' '}
+                <Ui>Create outlet</Ui>, then allocate staff to it.
+              </>,
+            ]}
+          />
+          <Tip>
+            A store with <Ui>No location yet</Ui> can still be allocated. When its staff clock in there, the
+            spot appears on <Ui>Places</Ui> under <Ui>Store locations to confirm</Ui>.
+          </Tip>
+          <p className="pt-2">
+            <Ui>Places</Ui>: when staff clock in or check in at a shop or plaza Xtend cannot name, they must
+            add it, standing outside with two photos taken in the app (the building with its sign, and a
+            selfie holding one of our products). The position comes from several GPS readings that must
+            agree with each other and with the clock-in. Here you check the names and photos (
+            <Ui>Save and verify</Ui>), turn a place into a store (<Ui>Make it a store</Ui>), delete a wrong
+            one, or <Ui>Dismiss</Ui> one that is not a shop (a depot gate) so the person can carry on.
+          </p>
+          <p>
+            <Ui>Audit log</Ui>: every change an admin or supervisor makes, with when, where they were and on
+            what device and IP address. Actions from a VPN, a new device or a new location are marked.
+          </p>
+          <p>
+            <Ui>Updates</Ui>: Xtend updates itself. Anyone with Xtend open is told when a newer version is
+            live and moves to it with one tap. Publish a short <Ui>What&apos;s new</Ui> (each person sees it
+            once); tick <Ui>Required</Ui> when an old version must not be used; set the lowest Android or
+            iPhone build to make people install a new phone app. The page shows who is on which version and
+            reminds those on an older app.
+          </p>
+        </GuideSection>
+
+        <GuideSection topic={T.apps} intro="Getting staff set up, and what their phones need.">
           <Steps
             items={[
               <>
@@ -209,192 +379,35 @@ export default async function AdminGuidePage() {
                 <Link href="/download" className="font-semibold text-brand hover:underline">
                   the download page
                 </Link>{' '}
-                with your staff (it has a QR code for computers), and{' '}
+                (it has a QR code for computers) and{' '}
                 <Link href="/guide" className="font-semibold text-brand hover:underline">
                   the staff guide
                 </Link>
                 .
               </>,
               <>
-                Each person signs in, chooses a password, allows location and camera, and turns on
-                notifications. Clocking in needs notifications on; the Staff page shows who has them.
+                Each person signs in, picks a password, adds a profile photo, and allows location, camera
+                and notifications. Clocking in is blocked until notifications are on; the Staff page shows who
+                has them.
               </>,
               <>
-                New staff see a short welcome walkthrough the first time they open Xtend: what a day
-                looks like, their profile photo, location, notifications and how to clock in.
-                Their photo then shows beside their name and on the Movement map.
+                The Android app installs from the download page. The iPhone app needs the Apple steps in the
+                project&apos;s mobile README before it can be offered.
               </>,
             ]}
           />
+          <Tip>
+            The staff guide and the app tell staff only what they need to do. How tracking, checks and
+            alerts work is in this guide only.
+          </Tip>
         </GuideSection>
 
-        <GuideSection topic={T.overview} intro="The first page you see each day.">
+        <GuideSection topic={T.analytics} intro="Getting the numbers out.">
           <p>
-            The week&apos;s clock-ins (point at a day for its figures), today&apos;s clocked in,
-            late and not-in-store counts, who has not clocked in yet, open alerts, location
-            coverage and everyone on shift. The tip card suggests the next thing worth doing. Use
-            the search box at the top to find anyone on the Staff page.
-          </p>
-          <GuideShot src="/guide/admin-overview.png" alt="The overview page" width={2880} height={1800} caption="The overview, before anyone has clocked in" />
-        </GuideSection>
-
-        <GuideSection topic={T.attendance} intro="Every clock-in and clock-out, with filters.">
-          <p>
-            <Ui>Attendance</Ui> shows each person&apos;s day: when they clocked in and out, whether they
-            were on time, at their store, and whether they clocked out. Use the quick ranges and filters
-            (person, store, team, role, kind of day), read the cards and <Ui>Worth a look</Ui> (repeat
-            absences, lateness, off-site clock-ins, missing clock-outs), then tap a square in the
-            calendar or a row in the table. An open row shows the photo, the map, the distance from the
-            store and the phone used, with links to Movement and Check an excuse for that day. A working
-            day without a clock-in counts as absent; Sundays only count if you tick{' '}
-            <Ui>Sundays are working days</Ui>.
-          </p>
-          <p>
-            <Ui>Analytics</Ui> compares any period with the same number of days just before it: trends,
-            on time by weekday, clock-in times, who stands out by person, store or team, and how well
-            each store was covered. Every table downloads as <Ui>Excel</Ui>, <Ui>Word</Ui>,{' '}
-            <Ui>PDF</Ui> or <Ui>CSV</Ui>, exactly as filtered. Records cannot be edited or deleted.
-            Times are Lagos time.
-          </p>
-        </GuideSection>
-
-        <GuideSection topic={T.movement} intro="Where people are during their shift.">
-          <p>
-            <Ui>Movement</Ui> shows everyone on shift on a map, with how many are in a store, away
-            from it, or not heard from. Pick a person and up to 7 days (or tap <Ui>Yesterday</Ui>,{' '}
-            <Ui>Last 3 days</Ui>, <Ui>Last 7 days</Ui>) to see their journey: the stops they made (at
-            their store or somewhere else, by name), the travel between them, and the times nothing
-            was heard. A strip per day shows it at a glance, with totals for time at stores, elsewhere,
-            travelling and silent. <Ui>Worth a look</Ui> points out impossible jumps (faster than
-            150 km/h, which a fake-location app makes), long silences (with a link to check an excuse
-            for them) and long stays away. The journey downloads as Excel, PDF, Word or CSV.{' '}
-          </p>
-          <p>
-            <Ui>Store visits</Ui> shows each person&apos;s rounds for any dates, with filters for
-            person, store, team, arrival and short visits; tap a visit to see where they checked in and
-            out, how far from the store, the map and the check-in photo while it is kept.{' '}
-            <Ui>Worth a look</Ui> points out very short visits, check-ins away from the store, and two
-            visits back to back too far apart for anyone to have travelled between them. The{' '}
-            <Ui>By store</Ui> and <Ui>By person</Ui> views add up visits and time, and{' '}
-            <Ui>Store coverage</Ui> lists every store by how long it has gone without a visit, so you
-            can see which shops nobody has been to in 7, 14 or 30 days.
-          </p>
-          <p>
-            In the Xtend app, a person&apos;s location keeps coming in until they clock out, even if
-            they close the app. On Android a small <Ui>Xtend · On shift</Ui> notification shows
-            meanwhile, and tracking resumes after the phone restarts when location is set to{' '}
-            <Ui>Allow all the time</Ui>. On iPhone, Apple only wakes a closed app when the phone
-            moves (about 500 m), so someone standing still with the app closed shows as a silence
-            until they move or open it. In a browser, Xtend must stay open. Some Android phones stop
-            apps to save battery; the app asks staff to lift that for Xtend.
-          </p>
-          <p>
-            <Ui>Audit log</Ui> (admins) lists every change an admin or supervisor makes: who, what,
-            when, where they were (from the browser when allowed, otherwise roughly from the IP
-            address, named after the store or place it falls in) and on what device (phone or
-            computer, system, browser, the Xtend app or the web), with the IP address. Actions from a
-            VPN, a new device or a new location are marked. Filter by person, kind of action, dates
-            or a search; tick <Ui>Only VPN, new device or new location</Ui> to see just those; open a
-            row for the full detail; download it as Excel, PDF, Word or CSV.
-          </p>
-          <p>
-            <Ui>Updates</Ui> (admins): Xtend updates itself. Anyone with Xtend open is told when a newer
-            version is live (<Ui>A new version of Xtend is ready</Ui>) and moves to it with one tap;
-            anything waiting to upload is kept. Publish a short <Ui>What&apos;s new</Ui> there and each
-            person sees it once. Tick <Ui>Required</Ui> when an old version must not be used any more.
-            When a new phone app is published, people are offered the download; set the lowest Android
-            or iPhone build allowed to make them install it before carrying on. The page shows who is on
-            which version, and <Ui>Remind to update</Ui> sends those on an older app a notification.
-          </p>
-        </GuideSection>
-
-        <GuideSection topic={T.alerts} intro="Things that need a look.">
-          <ul className="list-disc space-y-2 pl-5">
-            <li>
-              <Ui>Alerts</Ui>: someone left their store during a shift, clocked in away from it,
-              or had location off. Filter by kind, open or resolved, person, store and dates; each
-              alert shows how long it has been open and links to Movement, Check an excuse and a phone
-              check. People with three or more alerts are listed at the top. Admins can tick several
-              and resolve them together with one note; each is still written to the audit log.
-            </li>
-            <li>
-              <Ui>Integrity</Ui>: signs of a fake-location app, a rooted phone, a VPN, or store
-              counts that do not add up. A flag is a reason to ask, not proof. Pick any dates (up to
-              120 days) and narrow by person, store, kind of check, severity and whether it has been
-              reviewed. <Ui>Who to look at first</Ui> ranks people by their open flags and says why in
-              one line. Tap a flag to read what happened in plain words, open the GPS point on a map,
-              or check whether their phone is on now. Tick several and mark them reviewed together with
-              one note.
-            </li>
-            <li>
-              <Ui>Check an excuse</Ui>: someone says their network was bad, their phone was off, their
-              location would not work, they were at the store all along, or the app would not let them
-              clock in? Pick who, what they said and when (or tap a quick window such as{' '}
-              <Ui>Yesterday&apos;s shift</Ui>; up to 3 days). Xtend says whether it holds up, and shows a
-              timeline of what their phone did: when it had network, what it kept offline, where it was
-              against their store, what went wrong, and the battery. Click <Ui>Keep on record</Ui> with a
-              note to build up their history; the page warns when several excuses have not held up.
-            </li>
-          </ul>
-        </GuideSection>
-
-        <GuideSection topic={T.counts} intro="Stock in each store.">
-          <p>
-            Merchandisers count against the Xpel stock count sheet at the end of every month, and
-            whenever you request a count on <Ui>Stock count</Ui>. For each product they enter the
-            back store and shop floor numbers (Xtend adds the total), the expiry date and how
-            many sold, with a shelf photo.
-          </p>
-          <p>
-            The sheet can also be downloaded as Excel, named for the month (for example “October
-            2026 stock count sheet”), with the store&apos;s name on it. Sheets filled on paper come
-            back as the Excel file, a PDF or a photo, and are listed under{' '}
-            <Ui>Count sheets</Ui>.
-          </p>
-        </GuideSection>
-
-        <GuideSection topic={T.support} intro="Problems staff raise in the app.">
-          <p>
-            The Xtend helper answers simple questions. <Ui>Support</Ui> opens on the threads that
-            need a person, longest waiting first, each showing how long they have waited. Open one to
-            see who they are, their store and supervisor, whether they have clocked in today, and links
-            to their Movement and Check an excuse. Reply in your own words or with a quick reply
-            ({'{name}'} becomes their first name), pass it to a colleague under{' '}
-            <Ui>Who answers</Ui>, and close it when it is sorted; it reopens by itself if they write
-            again. The staff member gets your reply in their app.
-          </p>
-        </GuideSection>
-
-        <GuideSection topic={T.notify} intro="Reach staff phones directly.">
-          <p>
-            On <Ui>Notifications</Ui>, write a message (or start from a template), check{' '}
-            <Ui>See who</Ui>, and send it now or choose <Ui>Later</Ui> to send at a set time such as
-            7:45 tomorrow.{' '}
-            {isAdmin
-              ? 'Admins can reach everyone, one role, one outlet, or named people.'
-              : 'As a supervisor you reach the staff at your own outlet.'}{' '}
-            The history shows who got each message, who read it and who has notifications off, and{' '}
-            <Ui>Send again</Ui> reaches the people it missed.
-          </p>
-        </GuideSection>
-
-        <GuideSection topic={T.ask} intro="Answers without digging.">
-          <p>
-            <Ui>Ask Xtend</Ui> answers plain questions such as “who clocked in late today?” or
-            “who has not clocked out?”, and about alerts, support issues, notifications sent, X Metrics
-            sales against target and stores nobody visited. Every chat is kept under{' '}
-            <Ui>Earlier chats</Ui> for you alone, where you can reopen, rename or delete it, or start a
-            new one; each answer has a <Ui>Copy</Ui> button.
-          </p>
-          <p>
-            Ask it to do something and it prepares it for you: “remind everyone who has not clocked in
-            to clock in now”, “ask all merchandisers for a stock count by Friday”, “check Ada&apos;s
-            phone”, “mark those flags reviewed”, “set Ikeja Mall&apos;s target to 500 units for
-            October”, “deactivate Bala”, or “show me Ada&apos;s movement yesterday”. A card says
-            exactly what will happen, to whom, and any catch (such as people with notifications off).
-            Nothing is done until you press its button, and it goes through the same checks as the
-            button on the page, so a supervisor can only act on their own team. It is recorded in the
-            audit log like any other change.
+            Almost every list downloads as <Ui>Excel</Ui>, <Ui>PDF</Ui>, <Ui>Word</Ui> or <Ui>CSV</Ui>,
+            exactly as filtered on screen: attendance, analytics, movement, store visits, alerts,
+            integrity, the audit log and X Metrics. Ask Xtend makes written reports with a summary on top.
+            Every download is itself recorded in the audit log.
           </p>
         </GuideSection>
 
@@ -405,9 +418,28 @@ export default async function AdminGuidePage() {
                 q: 'Someone cannot clock in',
                 a: (
                   <>
-                    Most often notifications or location are off on their phone; the staff guide
-                    walks them through it. Check they are active on Staff and, for a merchandiser,
-                    that they have a store on Store allocation.
+                    Most often notifications or location are off on their phone; the staff guide walks them
+                    through it. Check they are active on Staff and, for a merchandiser, that they have a store
+                    on Store allocation.
+                  </>
+                ),
+              },
+              {
+                q: 'Someone says they clocked in but nothing shows',
+                a: (
+                  <>
+                    Without network the clock-in waits on their phone and arrives when they are back online,
+                    at the time it was taken. Use Check an excuse with “the app would not let me clock in” to
+                    see what their phone did.
+                  </>
+                ),
+              },
+              {
+                q: 'A person shows long silences on Movement',
+                a: (
+                  <>
+                    Their phone was off, had no network, or (on iPhone) the app was closed and they did not
+                    move. Check an excuse for that window tells you which.
                   </>
                 ),
               },
@@ -417,14 +449,22 @@ export default async function AdminGuidePage() {
               },
               {
                 q: 'Someone left the company',
-                a: <>Deactivate them on the Staff page. Their attendance history stays.</>,
+                a: <>Deactivate them on the Staff page. Their history stays.</>,
               },
               {
                 q: 'A store’s location is wrong',
+                a: <>Correct it on Outlets, or confirm the right spot on Places from where staff clock in.</>,
+              },
+              {
+                q: 'A supervisor wants this guide',
                 a: (
                   <>
-                    An admin corrects it on Outlets, or confirms the right spot on Places from
-                    where staff actually clock in.
+                    It is for admins only. Supervisors have their own{' '}
+                    <Link href="/admin/supervisor-guide" className="font-semibold text-brand hover:underline">
+                      Supervisor guide
+                    </Link>{' '}
+                    in their menu, covering their own team and what to ask an admin for. It leaves out how
+                    location and the checks work.
                   </>
                 ),
               },

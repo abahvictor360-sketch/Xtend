@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 
 /*
  * Building blocks for the two user guides: /guide for field staff and
- * /admin/guide for admins and supervisors.
+ * /admin/guide for admins only.
  */
 
 export interface GuideTopic {
