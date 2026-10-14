@@ -1590,6 +1590,15 @@ $$;
 
 
 --
+-- Name: field_topic(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.field_topic(uid uuid) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    AS $$ select 'field:' || uid::text $$;
+
+
+--
 -- Name: finish_onboarding(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3216,6 +3225,57 @@ begin
   insert into public.place_naming_due (user_id, lat, lng, accuracy_m, source_kind, source_id, due_date)
   values (p_user, at_lat, at_lng, at_acc, p_kind, p_source, public.business_date())
   on conflict do nothing;
+end;
+$$;
+
+
+--
+-- Name: realtime_notify_field_owner(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.realtime_notify_field_owner() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'realtime'
+    AS $$
+declare
+  owner uuid := coalesce(new.user_id, old.user_id);
+begin
+  if owner is not null then
+    perform realtime.send(
+      jsonb_build_object('table', tg_table_name, 'op', tg_op),
+      'change',
+      public.field_topic(owner),
+      true  -- private channel; receipt gated by RLS on realtime.messages
+    );
+  end if;
+  return null;
+end;
+$$;
+
+
+--
+-- Name: realtime_notify_support_message(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.realtime_notify_support_message() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'realtime'
+    AS $$
+declare
+  owner uuid;
+begin
+  select user_id into owner
+    from public.support_threads
+   where id = coalesce(new.thread_id, old.thread_id);
+  if owner is not null then
+    perform realtime.send(
+      jsonb_build_object('table', 'support_messages', 'op', tg_op),
+      'change',
+      public.field_topic(owner),
+      true
+    );
+  end if;
+  return null;
 end;
 $$;
 
@@ -8411,6 +8471,41 @@ CREATE INDEX xm_supplies_by_store ON public.xm_supplies USING btree (outlet_id, 
 --
 
 CREATE INDEX xm_targets_by_month ON public.xm_targets USING btree (month);
+
+
+--
+-- Name: attendance realtime_broadcast; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER realtime_broadcast AFTER INSERT OR DELETE OR UPDATE ON public.attendance FOR EACH ROW EXECUTE FUNCTION public.realtime_notify_field_owner();
+
+
+--
+-- Name: notification_deliveries realtime_broadcast; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER realtime_broadcast AFTER INSERT OR DELETE OR UPDATE ON public.notification_deliveries FOR EACH ROW EXECUTE FUNCTION public.realtime_notify_field_owner();
+
+
+--
+-- Name: store_visits realtime_broadcast; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER realtime_broadcast AFTER INSERT OR DELETE OR UPDATE ON public.store_visits FOR EACH ROW EXECUTE FUNCTION public.realtime_notify_field_owner();
+
+
+--
+-- Name: support_messages realtime_broadcast; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER realtime_broadcast AFTER INSERT OR DELETE OR UPDATE ON public.support_messages FOR EACH ROW EXECUTE FUNCTION public.realtime_notify_support_message();
+
+
+--
+-- Name: support_threads realtime_broadcast; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER realtime_broadcast AFTER INSERT OR DELETE OR UPDATE ON public.support_threads FOR EACH ROW EXECUTE FUNCTION public.realtime_notify_field_owner();
 
 
 --

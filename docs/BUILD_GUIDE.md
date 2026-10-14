@@ -411,8 +411,12 @@ storage and realtime), every registered migration, then
 `supabase/tests/rules.sql` (rules, as superuser) and
 `supabase/tests/rls_counts.sql` (row-level security, as the `authenticated`
 role). It must end with `ALL RULES PASSED` and `ALL RLS CHECKS PASSED`.
-Migrations 0056 and 0058 (realtime publication and Broadcast triggers) are
-not loaded by the harness — the plain-Postgres stub has no realtime schema.
+Migrations 0056 and 0058 run in the harness too: the stub includes a minimal
+realtime schema (`realtime.send` records each broadcast in
+`realtime.messages`, `realtime.topic()` reads the subscriber's topic), so the
+tests check that each change is announced only on its owner's
+`field:<uid>` topic, carries no row data, and that nobody can read another
+member's topic.
 
 **Logic checks** (no database). Each ends with an "ALL … PASSED/OK" line, except
 `check-push-endpoints`, which lists each case it checked (any `FAIL` line is a
@@ -506,6 +510,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-14 | Tests and rebuild pack cover realtime (0056, 0058): the Supabase stub has a minimal realtime schema; the pack's database now includes 0058 and the realtime access rule | — |
 | 2026-10-14 | Realtime scale fix: the field dashboard and support chat now ride per-user Broadcast (`field:<uid>`) from database triggers instead of Postgres Changes, so Supabase compute holds far more connections. Only on-shift members hold a socket | 0058 |
 | 2026-10-14 | Load test (`load-test/`): k6 script for ~5,000 field staff (edge baseline, dashboard RPC poll, realtime connection ceiling, opt-in clock-in write burst) plus run and infra-sizing notes. Scale mitigations: fleet-wide realtime kill-switch (`NEXT_PUBLIC_REALTIME_DISABLED`), jittered safety poll, faster poll when realtime is off or has failed | — |
 | 2026-10-14 | Both phone apps build on every push; Android version only goes up when the app itself changes; iOS simulator build kept as a download | — |

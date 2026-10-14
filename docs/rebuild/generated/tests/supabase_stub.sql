@@ -83,3 +83,27 @@ language sql immutable as $$
 $$;
 
 create publication supabase_realtime;
+
+-- Supabase Realtime, just enough for 0058's broadcast triggers: realtime.send
+-- records each event in realtime.messages (as Supabase does) so the tests can
+-- check who would hear what; realtime.topic() reads the topic a subscriber
+-- asked for, as the receipt policy sees it.
+create schema realtime;
+create table realtime.messages (
+  id bigserial primary key,
+  topic text not null,
+  extension text not null default 'broadcast',
+  event text,
+  payload jsonb,
+  private boolean default true,
+  inserted_at timestamptz not null default now()
+);
+alter table realtime.messages enable row level security;
+create or replace function realtime.send(payload jsonb, event text, topic text, private boolean default true)
+returns void language sql as $$
+  insert into realtime.messages (topic, event, payload, private) values (topic, event, payload, private);
+$$;
+create or replace function realtime.topic() returns text
+language sql stable as $$ select nullif(current_setting('realtime.topic', true), '') $$;
+grant usage on schema realtime to authenticated, anon;
+grant select on realtime.messages to authenticated;

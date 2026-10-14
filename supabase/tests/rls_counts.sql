@@ -179,5 +179,15 @@ insert into public.app_releases (title, notes) values ('Published by an admin', 
 select assert(exists (select 1 from public.app_releases where title = 'Published by an admin' and created_by = :'boss'),
   'rls: an admin publishes an update');
 
+-- Realtime (058): a member hears only their own topic.
+select set_config('request.jwt.claim.sub', :'ada', false);
+select set_config('realtime.topic', 'field:' || :'ada', false);
+select assert((select count(*) from realtime.messages) > 0,
+  'rls: a member receives the announcements on their own topic');
+select set_config('realtime.topic', 'field:' || :'bala', false);
+select assert((select count(*) from realtime.messages) = 0,
+  'rls: and nothing on anyone else''s');
+select set_config('realtime.topic', '', false);
+
 reset role;
 select 'ALL RLS CHECKS PASSED';

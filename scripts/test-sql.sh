@@ -16,6 +16,7 @@ psql "$PGURL" -v ON_ERROR_STOP=1 -q -c \
    create schema public;
    drop schema if exists auth cascade;
    drop schema if exists storage cascade;
+   drop schema if exists realtime cascade;
    drop publication if exists supabase_realtime;"
 
 run supabase/tests/supabase_stub.sql
@@ -73,6 +74,8 @@ run supabase/migrations/0052_visits_alerts.sql
 run supabase/migrations/0053_support_notifications.sql
 run supabase/migrations/0054_integrity_ask.sql
 run supabase/migrations/0055_reject_post_clockout_tracking.sql
+run supabase/migrations/0056_realtime_field_tables.sql
 run supabase/migrations/0057_app_updates.sql
+run supabase/migrations/0058_realtime_broadcast.sql
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rules.sql 2>&1 | grep -E 'NOTICE|ERROR' | sed 's/^psql:[^ ]*: //'
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_counts.sql 2>&1 | grep -E 'NOTICE|ERROR|PASSED' | sed 's/^psql:[^ ]*: //'

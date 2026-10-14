@@ -323,8 +323,10 @@ It uses the anon key and the request cookies, so RLS applies to every query.
 
 `createBrowserClient(url, anonKey, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } })`.
 `supabase()` returns a singleton per tab (repeated clients leak realtime sockets).
-Used for Storage uploads from the outbox and for realtime channels
-(`postgres_changes` in `support-chat.tsx`, `use-dashboard-refresh.ts`, `live-alert-feed.tsx`).
+Used for Storage uploads from the outbox and for realtime channels: the
+member's private broadcast topic `field:<uid>` in `use-dashboard-refresh.ts`
+and `support-chat.tsx`, and `postgres_changes` in the admin `live-alert-feed.tsx`
+(see §3.8).
 
 ### 2.3 Admin client (`src/lib/supabase/admin.ts`)
 
@@ -635,10 +637,30 @@ Data block (all strings) for both: `{ url: payload.url ?? '/field', notification
 
 ### 3.8 Supabase Realtime
 
-Channels subscribe to `postgres_changes` (`event: '*'`, `schema: 'public'`) on:
-`support_messages`, `support_threads` (support chat), the dashboard tables in
-`use-dashboard-refresh.ts` (each change triggers `router.refresh()`), and alerts
-in `live-alert-feed.tsx`. RLS filters what each user receives.
+**Field app (migration 0058): per-member Broadcast.** Database triggers on
+`attendance`, `store_visits`, `support_threads`, `notification_deliveries`
+(owner = `user_id`) and `support_messages` (owner = the thread's `user_id`)
+call `realtime.send({table, op}, 'change', 'field:<owner uid>', private = true)`.
+The event carries only the table name and the kind of change, never the row.
+Receipt is limited by the policy "Field members read their own topic" on
+`realtime.messages`: `realtime.topic() = field_topic(auth.uid())`.
+
+- `use-dashboard-refresh.ts` subscribes to
+  `supabase().channel('field:' + userId, { config: { private: true } }).on('broadcast', { event: 'change' }, …)`
+  only while the member has an active shift, and answers each event with a
+  debounced `router.refresh()` (the re-fetch goes through RLS as usual). A
+  jittered safety poll keeps the screen current if the socket is off or fails.
+- `support-chat.tsx` listens on the same topic for `support_messages` /
+  `support_threads` changes and re-reads the thread.
+- `NEXT_PUBLIC_REALTIME_DISABLED=1` turns the client sockets off fleet-wide;
+  the safety poll then carries the updates (the release valve when the
+  concurrent-connection cap is the bottleneck).
+
+**Dashboard:** `live-alert-feed.tsx` still subscribes to `postgres_changes`
+INSERTs on `location_alerts` (channel `alerts-feed`); office users are few, so
+the per-subscriber RLS cost is small. Migration 0056 adds the field tables to
+the `supabase_realtime` publication; 0002 added `attendance` and
+`location_alerts`.
 
 ---
 

@@ -3414,6 +3414,17 @@ begin
       perform act_as(boss);
     end;
 
+    -- Realtime broadcast (058): changes reach only the owner's topic, and
+    -- carry no row data.
+    perform assert(exists (select 1 from realtime.messages where topic = 'field:' || ada::text and event = 'change'),
+      'realtime: a member''s own changes are announced on their own topic');
+    perform assert(not exists (select 1 from realtime.messages m
+                               where m.payload - 'table' - 'op' <> '{}'::jsonb),
+      'realtime: an announcement carries only the table and the kind of change, never the row');
+    perform assert(exists (select 1 from realtime.messages m where m.payload->>'table' = 'attendance')
+                   and exists (select 1 from realtime.messages m where m.payload->>'table' = 'support_messages'),
+      'realtime: clock-ins and support replies are both announced');
+
   end;
 
   raise notice 'ALL RULES PASSED';
