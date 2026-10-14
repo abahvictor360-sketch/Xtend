@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { ChevronDown, Download as DownloadIcon } from 'lucide-react'
 import { buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -173,19 +174,27 @@ export function AttendanceFilters({
       </div>
 
       {downloads.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          {downloads.map((d) => (
-            <span key={d.label} className="flex flex-wrap items-center gap-1.5">
-              <span className="font-semibold text-muted-foreground">{d.label}:</span>
-              {(Object.keys(FORMATS) as (keyof typeof FORMATS)[]).map((f) => (
-                <a key={f} href={`${d.base}/${f}${d.query ? `?${d.query}` : ''}`} className={CHIP}>
-                  {FORMATS[f]}
-                </a>
-              ))}
-              <span className="mx-1 hidden text-border sm:inline">|</span>
-            </span>
-          ))}
-        </div>
+        <details className="group relative inline-block text-xs">
+          <summary className="inline-flex cursor-pointer list-none items-center gap-1.5 rounded-full border border-border bg-card px-4 py-1.5 font-semibold hover:border-brand hover:bg-tint [&::-webkit-details-marker]:hidden">
+            <DownloadIcon className="h-3.5 w-3.5" />
+            Export
+            <ChevronDown className="h-3.5 w-3.5 transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="absolute left-0 z-20 mt-2 w-64 space-y-3 rounded-2xl border border-border bg-card p-3 shadow-lg">
+            {downloads.map((d) => (
+              <div key={d.label}>
+                <p className="mb-1.5 font-semibold text-muted-foreground">{d.label}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {(Object.keys(FORMATS) as (keyof typeof FORMATS)[]).map((f) => (
+                    <a key={f} href={`${d.base}/${f}${d.query ? `?${d.query}` : ''}`} className={CHIP}>
+                      {FORMATS[f]}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </details>
       )}
     </form>
   )
