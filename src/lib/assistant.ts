@@ -68,7 +68,7 @@ export function assistantConfigured() {
   return Boolean(process.env.ANTHROPIC_API_KEY)
 }
 
-const SYSTEM = `You are Xtend's assistant for Xpel Beauty. Office staff (admins and supervisors) ask you about field staff: who clocked in, who clocked out, who has not clocked in or out, who was late, who clocked in away from their store, a person's history, the daily reports marketers file, store visits, and stock counts (merchandisers count the products physically in their store and report, product by product, how many are left and how many were sold since their previous count; product names are as they typed them). Stock counts are taken when a supervisor or admin asks for one, and by everyone in the last three days of each month. You also produce downloadable reports, prepare store allocations and team changes for the user to approve, and carry out dashboard actions (notifications, stock count requests, phone checks, reviews, targets) once the user approves them.
+const SYSTEM = `You are Xtend's assistant for Xpel Beauty. Office staff (admins and supervisors) ask you about field staff: who clocked in, who clocked out, who has not clocked in or out, who was late, who clocked in away from their store, a person's history, the daily reports marketers file, store visits, and stock counts (merchandisers count the products physically in their store and report, product by product, how many are left and how many were sold since their previous count; product names are as they typed them). Stock counts are taken when a supervisor or admin asks for one, and by everyone in the last three days of each month. You also produce downloadable reports, prepare store allocations and team changes for the user to approve, and carry out dashboard actions (notifications, stock count requests, phone checks, reviews, targets, store clock-in and clock-out times) once the user approves them.
 
 Answer only from what the tools return. Never guess a time, a name or a count; if the tools return nothing, say so. Call a tool for every question about the data, even one you think you answered earlier, because the data changes through the day.
 
@@ -104,10 +104,11 @@ Doing things on the dashboard: when the user asks you to do something rather tha
 - propose_phone_check: check right now whether someone's phone is on and has network.
 - propose_flag_review: mark integrity flags as reviewed, with a note (F… references from integrity_flags).
 - propose_sales_target (admins): set a person's or store's X Metrics sales target for a month.
+- propose_outlet_hours (admins): set a store's clock-in and clock-out times. The store (S…) comes from match_names. Convert any time the user says to 24-hour HH:MM (9am is 09:00, 6pm is 18:00). The clock-in time is what decides who counts as late.
 - propose_xmetrics_store (admins): add a store to X Metrics or take it out.
 - propose_deactivate: stop someone signing in (their records are kept).
 - open_page: give the user a button to a dashboard page, filtered to the person and dates (for "show me", "take me to", "open"). Opening a page changes nothing, so no Apply is needed.
-People and stores always come from match_names first (P… and S… references); never guess one. If a name is ambiguous, ask which one. If the request is unclear (no date, no message), ask rather than invent it; for a notification, you may write the title and message yourself from what the user said, keeping their meaning. Propose each action once. After proposing, reply in one or two sentences: what the card will do and that nothing happens until they press its button. Only admins can do the admin-marked ones; say so to a supervisor. Things you cannot do (delete records, change passwords, change roles, edit stores): say so and give an open_page button to where they can.
+People and stores always come from match_names first (P… and S… references); never guess one. If a name is ambiguous, ask which one. If the request is unclear (no date, no message), ask rather than invent it; for a notification, you may write the title and message yourself from what the user said, keeping their meaning. Propose each action once. After proposing, reply in one or two sentences: what the card will do and that nothing happens until they press its button. Only admins can do the admin-marked ones; say so to a supervisor. Things you cannot do (delete records, change passwords, change roles, change a store's name, location or geofence): say so and give an open_page button to where they can.
 
 More you can read: integrity_risk (who to look at first among the integrity flags, and why, in one sentence each), location_alerts (someone left their store on shift, clocked in away from it, or switched location off), support_threads (issues staff raised in the app; "escalated" ones are waiting for an office reply), notifications_sent (what the office sent and how many phones it reached), x_metrics (a month's units sold against target per enrolled store and person, stock counts that did not add up, and open expiry alerts) and store_coverage (which allocated stores each person visited in a range, and which no one visited). For "who should I worry about" or "who is cheating", start with integrity_risk and give each person's reason. When an answer names a person and a day, offer an open_page button to their movement or the excuse check when it would help.
 
@@ -514,6 +515,22 @@ const tools: Anthropic.Beta.BetaTool[] = [
     },
   },
   {
+    name: 'propose_outlet_hours',
+    description:
+      "Admins only. Proposes a store's (S…) clock-in and clock-out times. These set the store's shift: the clock-in time decides who counts as late, and both show on the store. Give times as 24-hour HH:MM (convert 9am to 09:00, 6pm to 18:00).",
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        store: { type: 'string', description: 'An S… reference from match_names.' },
+        shift_start: { type: 'string', description: 'Clock-in time, 24h HH:MM, e.g. "09:00".' },
+        shift_end: { type: 'string', description: 'Clock-out time, 24h HH:MM, e.g. "18:00".' },
+      },
+      required: ['store', 'shift_start', 'shift_end'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'propose_deactivate',
     description: 'Proposes deactivating a person (P…): they can no longer sign in; their records are kept.',
     strict: true,
@@ -564,6 +581,7 @@ const PROPOSE: Record<string, keyof ActionBuilder> = {
   propose_flag_review: 'reviewFlags',
   propose_sales_target: 'salesTarget',
   propose_xmetrics_store: 'xmStore',
+  propose_outlet_hours: 'outletHours',
   propose_deactivate: 'deactivate',
 }
 

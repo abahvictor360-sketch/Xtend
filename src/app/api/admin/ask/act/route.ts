@@ -7,6 +7,7 @@ import { POST as checkPhone } from '@/app/api/admin/phone-check/route'
 import { POST as reviewFlag } from '@/app/api/admin/integrity/[id]/review/route'
 import { POST as setTarget } from '@/app/api/admin/metrics/targets/route'
 import { POST as setXmStore } from '@/app/api/admin/metrics/stores/route'
+import { PATCH as updateOutlet } from '@/app/api/admin/outlets/[id]/route'
 import { PATCH as updateUser } from '@/app/api/admin/users/[id]/route'
 
 export const maxDuration = 60
@@ -91,6 +92,20 @@ export async function POST(request: Request) {
       case 'xm_store': {
         const r = await call(setXmStore as Handler, '/api/admin/metrics/stores', action.payload)
         result = r.ok ? { ok: true, detail: action.payload.active ? 'Added to X Metrics.' : 'Removed from X Metrics.' } : { ok: false, detail: r.error }
+        break
+      }
+      case 'outlet_hours': {
+        const id = action.payload.outlet_id
+        const r = await call(
+          updateOutlet as Handler,
+          `/api/admin/outlets/${id}`,
+          { shift_start: action.payload.shift_start, shift_end: action.payload.shift_end },
+          { id },
+          'PATCH',
+        )
+        result = r.ok
+          ? { ok: true, detail: `Clock-in ${action.payload.shift_start}, clock-out ${action.payload.shift_end}.` }
+          : { ok: false, detail: r.error }
         break
       }
       case 'deactivate': {

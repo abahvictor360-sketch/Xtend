@@ -17,6 +17,20 @@ type Input = Record<string, unknown>
 const str = (v: unknown, max: number) => (typeof v === 'string' ? v.trim().slice(0, max) : '')
 const list = (v: unknown) => (Array.isArray(v) ? v : [])
 const isDate = (v: unknown): v is string => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)
+
+/** Normalise "8", "8:00", "8am", "9:30 pm", "18:00" to 24h "HH:MM", or null. */
+function normTime(v: unknown): string | null {
+  if (typeof v !== 'string') return null
+  const m = v.trim().toLowerCase().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/)
+  if (!m) return null
+  let h = Number(m[1])
+  const min = m[2] ? Number(m[2]) : 0
+  const ap = m[3]
+  if (ap === 'pm' && h < 12) h += 12
+  if (ap === 'am' && h === 12) h = 0
+  if (h > 23 || min > 59) return null
+  return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
+}
 let counter = 0
 const key = (kind: string) => `${kind}-${Date.now().toString(36)}-${(counter++).toString(36)}`
 
@@ -234,6 +248,29 @@ export class ActionBuilder {
       warning: null,
       verb: 'Set target',
       payload: { month, user_id: person?.id ?? null, outlet_id: store?.id ?? null, target_units: units },
+    }
+  }
+
+  async outletHours(input: Input): Promise<ProposedAction> {
+    this.adminOnly('set a store’s clock-in and clock-out times')
+    const store = await this.store(input.store)
+    const start = normTime(input.shift_start)
+    const end = normTime(input.shift_end)
+    if (!start || !end) {
+      throw new Error('Give both a clock-in and a clock-out time, like 08:00 and 18:00.')
+    }
+    return {
+      key: key('hours'),
+      kind: 'outlet_hours',
+      title: `Set ${store.name}’s clock-in and clock-out times`,
+      lines: [
+        `Clock in from ${start}`,
+        `Clock out by ${end}`,
+        'Applies to everyone who clocks in at this store; it sets who counts as late.',
+      ],
+      warning: null,
+      verb: 'Set times',
+      payload: { outlet_id: store.id, shift_start: start, shift_end: end },
     }
   }
 

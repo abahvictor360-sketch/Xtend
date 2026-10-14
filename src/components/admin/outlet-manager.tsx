@@ -249,7 +249,7 @@ export function OutletManager({
                 </Button>
               </div>
               <div className="space-y-1">
-                <Label>Shift start</Label>
+                <Label>Clock-in time</Label>
                 <Input
                   required
                   type="time"
@@ -258,7 +258,7 @@ export function OutletManager({
                 />
               </div>
               <div className="space-y-1">
-                <Label>Shift end</Label>
+                <Label>Clock-out time</Label>
                 <Input
                   required
                   type="time"
