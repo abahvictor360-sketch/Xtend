@@ -56,6 +56,9 @@ export function SupportChat({
   // listen for it so the thread updates live instead of only after the member
   // sends again. RLS scopes the stream to this member's own threads.
   useEffect(() => {
+    // Honour the fleet-wide realtime release valve (see use-dashboard-refresh):
+    // when sockets are the bottleneck, sending still refreshes the thread.
+    if (process.env.NEXT_PUBLIC_REALTIME_DISABLED === '1') return
     let channel: ReturnType<ReturnType<typeof supabase>['channel']> | null = null
     try {
       const client = supabase()
