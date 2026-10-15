@@ -19,7 +19,7 @@ export function PushToggle({
   /** What turning it on gets you; shown while it is off. */
   hint?: string
 } = {}) {
-  const { state, error, enable, disable } = usePush()
+  const { state, error, enable, disable, recheck } = usePush()
 
   const label =
     state === 'on'
@@ -57,7 +57,9 @@ export function PushToggle({
           {error && <p className="mt-1 text-xs text-destructive">{error}</p>}
           {state === 'denied' && (
             <p className="mt-1 text-xs text-muted-foreground">
-              Open your browser settings for this site and set Notifications to Allow.
+              Tap the icon just before the web address (a lock or sliders), set Notifications
+              to Allow, then Check again. On a phone it is under the three-dot menu → site
+              settings.
             </p>
           )}
         </div>
@@ -69,6 +71,12 @@ export function PushToggle({
             onClick={() => void (state === 'on' ? disable() : enable())}
           >
             {state === 'on' ? 'Turn off' : 'Turn on'}
+          </Button>
+        )}
+
+        {state === 'denied' && (
+          <Button size="sm" variant="outline" onClick={() => void recheck()}>
+            Check again
           </Button>
         )}
       </CardContent>

@@ -708,7 +708,7 @@ Heading **"Alerts"**. Intro (admin): "Everything about every member of staff, ne
 
 ### Push switch
 
-A `PushToggle` card titled **"Alerts on this device"**, hint (while off) "Turn this on to be told the moment somebody clocks in late, leaves their store or does something suspicious. Do it on each computer or phone you use." States: "On for this device" (with a green "On" badge, button **Turn off**), "Off" (button **Turn on**), "Blocked in your browser settings" (+ "Open your browser settings for this site and set Notifications to Allow."), "Not supported by this browser", "Not switched on by your admin yet" (no VAPID keys), "Checking…".
+A `PushToggle` card titled **"Alerts on this device"**, hint (while off) "Turn this on to be told the moment somebody clocks in late, leaves their store or does something suspicious. Do it on each computer or phone you use." States: "On for this device" (with a green "On" badge, button **Turn off**), "Off" (button **Turn on**), "Blocked in your browser settings" (+ "Tap the icon just before the web address (a lock or sliders), set Notifications to Allow, then Check again. On a phone it is under the three-dot menu → site settings." and a **Check again** button that re-reads the browser permission, since the app cannot re-ask once blocked), "Not supported by this browser", "Not switched on by your admin yet" (no VAPID keys), "Checking…".
 
 ### Tabs (links, bookmarkable)
 

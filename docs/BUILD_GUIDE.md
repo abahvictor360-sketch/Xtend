@@ -515,6 +515,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-15 | Notifications card: a blocked device gets concrete steps to re-allow it in browser settings and a **Check again** button to pick up the change (the app cannot re-ask once blocked) | — |
 | 2026-10-15 | Speed: Vercel functions pinned to `dub1` (Dublin), co-located with the Supabase project (`eu-west-1`), so each page's serial DB round-trips no longer cross the Atlantic | — |
 | 2026-10-14 | Admins can delete an outlet (trash icon → confirm → DELETE `/api/admin/outlets/<id>`; refused with 409 when it has visit/count/metrics history) and search the outlet list | — |
 | 2026-10-14 | Tests and rebuild pack cover realtime (0056, 0058): the Supabase stub has a minimal realtime schema; the pack's database now includes 0058 and the realtime access rule | — |

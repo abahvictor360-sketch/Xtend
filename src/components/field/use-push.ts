@@ -148,5 +148,8 @@ export function usePush() {
     }
   }, [read])
 
-  return { state, error, enable, disable }
+  // Re-reads the browser permission. A blocked device stays blocked until the
+  // person changes it in browser settings — the app cannot re-ask — so the
+  // card offers this to pick up the change without a full reload.
+  return { state, error, enable, disable, recheck: read }
 }
