@@ -58,7 +58,23 @@ export function usePush() {
 
     try {
       const registration = await navigator.serviceWorker.ready
-      const existing = await registration.pushManager.getSubscription()
+      let existing = await registration.pushManager.getSubscription()
+      // The person still allows notifications but the browser dropped the
+      // push subscription (it rotates them, or a service-worker update cleared
+      // it). Re-subscribe silently — the native app re-registers on every
+      // start, so web should too, or alerts quietly lapse without anyone
+      // turning them off. subscribe() needs no user gesture once permission
+      // is granted.
+      if (!existing && Notification.permission === 'granted' && publicKey) {
+        try {
+          existing = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(publicKey),
+          })
+        } catch {
+          existing = null
+        }
+      }
       if (existing && Notification.permission === 'granted') {
         // The server may have retired it (a failed send) while the phone
         // kept it: register it again, so "on" here is "on" there too.

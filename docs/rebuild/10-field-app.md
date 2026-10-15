@@ -473,7 +473,10 @@ the authoritative distance is computed by the database.
     `NEXT_PUBLIC_VAPID_PUBLIC_KEY` → `unconfigured`; permission denied →
     `denied`. If a subscription exists and permission is granted, it is
     re-POSTed to `/api/push/subscribe` on every load (the server may have
-    retired it); a non-401 failure unsubscribes and shows off.
+    retired it); a non-401 failure unsubscribes and shows off. If permission
+    is granted but the browser dropped the subscription, it re-subscribes
+    silently on load (parity with the native app re-registering every start),
+    so web alerts do not quietly lapse.
   - Enable: request permission, subscribe with the VAPID key
     (`userVisibleOnly: true`), POST the subscription JSON. Disable: DELETE
     `/api/push/subscribe { endpoint }` then unsubscribe.
