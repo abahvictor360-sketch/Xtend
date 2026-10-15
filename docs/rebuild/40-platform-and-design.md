@@ -244,6 +244,7 @@ matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|
 ```json
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": ["dub1"],
   "crons": [
     { "path": "/api/cron/purge-selfies", "schedule": "20 2 * * *" },
     { "path": "/api/cron/absence-sweep", "schedule": "30 8 * * 1-6" },
@@ -251,6 +252,11 @@ matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|
   ]
 }
 ```
+
+`regions` pins the serverless functions to Dublin (`dub1`), the same AWS
+region as the Supabase project (`eu-west-1`); each page makes several serial
+DB round-trips, so co-locating functions with the database is what keeps
+pages fast. Match this to wherever the Supabase project lives.
 
 Schedules are UTC (Lagos is UTC+1 all year: 03:20, 09:30 Mon–Sat, every 5 min).
 What each job does is in BUILD_GUIDE section 8.

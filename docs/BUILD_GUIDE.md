@@ -5,8 +5,8 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-14, after outlet delete and search, migration 0058
-(realtime via per-user Broadcast) and the k6 load test._
+_Last updated: 2026-10-15, after pinning the Vercel functions to the
+Supabase region, outlet delete and search, and migration 0058._
 
 ---
 
@@ -142,7 +142,12 @@ allocation, teams.
 
 1. Import the repo into Vercel; set the environment variables (section 7)
    for Production.
-2. `vercel.json` schedules the jobs (section 8).
+2. `vercel.json` schedules the jobs (section 8) and pins the functions to
+   `dub1` (Dublin), the same region as the Supabase project (`eu-west-1`).
+   Every page makes several serial Supabase round-trips, so keeping the
+   functions next to the database is what keeps pages fast — a mismatched
+   region adds a cross-region hop (~150 ms) to each of those trips. If the
+   Supabase project is ever moved, change this region to match.
 3. Run any new migrations in Supabase **before or right after** the deploy
    that needs them. A page that needs a missing migration says which one.
 
@@ -510,6 +515,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-15 | Speed: Vercel functions pinned to `dub1` (Dublin), co-located with the Supabase project (`eu-west-1`), so each page's serial DB round-trips no longer cross the Atlantic | — |
 | 2026-10-14 | Admins can delete an outlet (trash icon → confirm → DELETE `/api/admin/outlets/<id>`; refused with 409 when it has visit/count/metrics history) and search the outlet list | — |
 | 2026-10-14 | Tests and rebuild pack cover realtime (0056, 0058): the Supabase stub has a minimal realtime schema; the pack's database now includes 0058 and the realtime access rule | — |
 | 2026-10-14 | Realtime scale fix: the field dashboard and support chat now ride per-user Broadcast (`field:<uid>`) from database triggers instead of Postgres Changes, so Supabase compute holds far more connections. Only on-shift members hold a socket | 0058 |
