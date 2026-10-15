@@ -154,7 +154,7 @@ Invisible. On mount, and then every 15 minutes (`REFRESH_MS = 15 * 60_000`), it 
 | X Metrics staff/[id], stores/[id] | full | read-only | Void counts, sales, supplies (downloads allowed, their team only) |
 | Integrity | full | team | — (they review their team's flags) |
 | Check an excuse | full | team | — |
-| Staff | full | team | Change email, role, store, supervisor, notification rule; Login details (Word); Bulk import CSV. They can add merchandisers/marketers to their own stores (who report to them), edit name/phone, reset passwords, deactivate/reactivate. |
+| Staff | full | team | Change email, role, store, supervisor, notification rule; delete an account; Login details (Word); Bulk import CSV. They can add merchandisers/marketers to their own stores (who report to them), edit name/phone, reset passwords, deactivate/reactivate — but not delete. |
 | Staff bulk import | full | hidden | everything |
 | Teams | full | hidden | everything |
 | Roles | full | hidden | everything |
@@ -1446,9 +1446,9 @@ Success: a green alert **"Temporary password for `name`"** with the password in 
 
 - Admins edit Role, Outlet and Reports to inline with selects (each change PATCHes `/api/admin/users/<id>` immediately; Reports to only when there are supervisors, never offering the person themselves). Supervisors see plain text (role label, store or "No store", supervisor name or —).
 - Status badges: **Active** (success) / **Deactivated** (outline); **Temp password** (warning) while `must_change_password`; for field staff **Notifications on** (success), **Notifications off: cannot clock in** (warning), or **Excused from notifications** (outline) when `push_exempt`.
-- Actions (ghost buttons): **Edit details**, **Reset password** (PATCH `{reset_password: true}` → shows the new temporary password the same way), **Deactivate** / **Reactivate** (PATCH `{is_active}`, no confirmation), and for admins on field staff **Excuse from notifications** / **Require notifications** (confirm "Let `name` clock in without notifications? Only do this for a phone that cannot receive them: their phone can then not be checked live.").
+- Actions (ghost buttons): **Edit details**, **Reset password** (PATCH `{reset_password: true}` → shows the new temporary password the same way), **Deactivate** / **Reactivate** (PATCH `{is_active}`, no confirmation), for admins on field staff **Excuse from notifications** / **Require notifications** (confirm "Let `name` clock in without notifications? Only do this for a phone that cannot receive them: their phone can then not be checked live."), and for admins **Delete** (red; `confirm` "Delete `name`'s account for good? …" → DELETE `/api/admin/users/<id>`). Delete removes the auth account, which cascades the profile; it is refused with a 409 ("This person has attendance history … Deactivate it instead.") when they have attendance or any other ON DELETE RESTRICT history, and you cannot delete your own account. Supervisors do not see Delete.
 
-**Phone cards** (< `md`): photo, name, email, phone ("No phone"), the badges on the right; Role / Outlet / Reports to as labelled selects (admins) or text; the same buttons (Edit details and Reset password as outline).
+**Phone cards** (< `md`): photo, name, email, phone ("No phone"), the badges on the right; Role / Outlet / Reports to as labelled selects (admins) or text; the same buttons (Edit details and Reset password as outline; Delete red for admins).
 
 **Edit details** card (above the list): "Edit `name`", **Full name** (≤ 80), **Email (their login)** (≤ 200; disabled for supervisors with "Only an admin can change an email."), **Phone (Nigerian mobile)**; **Save details** sends only changed fields; "`name`'s details are saved."
 

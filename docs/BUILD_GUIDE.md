@@ -5,8 +5,8 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-15, after pinning the Vercel functions to the
-Supabase region, outlet delete and search, and migration 0058._
+_Last updated: 2026-10-15, after staff and outlet delete, pinning the Vercel
+functions to the Supabase region, and migration 0058._
 
 ---
 
@@ -515,6 +515,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-15 | Admins can delete a staff account (DELETE `/api/admin/users/<id>`): removes the auth account, cascading the profile; refused with 409 when they have attendance (or other ON DELETE RESTRICT) history, and no self-delete. Supervisors cannot delete | — |
 | 2026-10-15 | Notifications card: a blocked device gets concrete steps to re-allow it in browser settings and a **Check again** button to pick up the change (the app cannot re-ask once blocked) | — |
 | 2026-10-15 | Speed: Vercel functions pinned to `dub1` (Dublin), co-located with the Supabase project (`eu-west-1`), so each page's serial DB round-trips no longer cross the Atlantic | — |
 | 2026-10-14 | Admins can delete an outlet (trash icon → confirm → DELETE `/api/admin/outlets/<id>`; refused with 409 when it has visit/count/metrics history) and search the outlet list | — |

@@ -175,3 +175,54 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
     return apiError(error)
   }
 }
+
+export async function DELETE(_request: Request, ctx: { params: Promise<{ id: string }> }) {
+  try {
+    const session = await requireApiSession(['admin'])
+    const { id } = await ctx.params
+
+    if (id === session.userId) {
+      return Response.json({ error: 'You cannot delete your own account.' }, { status: 400 })
+    }
+
+    const admin = createAdminSupabase()
+
+    // Anyone with history is kept: the attendance (and visit, count, metrics)
+    // foreign keys are ON DELETE RESTRICT, so the account cannot be removed
+    // without destroying records. Check the main one up front for a clear
+    // message; deactivation is the right tool there.
+    const { count } = await admin
+      .from('attendance')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', id)
+    if ((count ?? 0) > 0) {
+      return Response.json(
+        {
+          error:
+            'This person has attendance history, so their account cannot be deleted. Deactivate it instead.',
+        },
+        { status: 409 },
+      )
+    }
+
+    // Removing the auth account cascades to the profile. If a record elsewhere
+    // still holds them back, the delete fails — report it as history too.
+    const { error } = await admin.auth.admin.deleteUser(id)
+    if (error) {
+      console.error('deleteUser failed', error)
+      return Response.json(
+        {
+          error:
+            'This account has records that cannot be removed, so it cannot be deleted. Deactivate it instead.',
+        },
+        { status: 409 },
+      )
+    }
+
+    const supabase = await createServerSupabase()
+    await audit(supabase, 'user.delete', 'profiles', id, {})
+    return Response.json({ ok: true })
+  } catch (error) {
+    return apiError(error)
+  }
+}

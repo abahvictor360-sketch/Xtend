@@ -217,6 +217,33 @@ export function StaffManager({
     }
   }
 
+  async function remove(person: Profile) {
+    if (
+      !confirm(
+        `Delete ${person.full_name}'s account for good? This cannot be undone. It only works if they have no attendance history; otherwise deactivate them instead.`,
+      )
+    ) {
+      return
+    }
+    setBusy(true)
+    setError(null)
+    setSaved(null)
+    try {
+      const res = await fetch(`/api/admin/users/${person.id}`, { method: 'DELETE' })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError(data.error ?? 'That account could not be deleted.')
+        return
+      }
+      setSaved(`${person.full_name}'s account was deleted.`)
+      router.refresh()
+    } catch {
+      setError('No connection. Try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function patch(id: string, changes: Record<string, unknown>): Promise<boolean> {
     setBusy(true)
     setError(null)
@@ -585,6 +612,17 @@ export function StaffManager({
                   {isAdmin && isField(person.role) && (
                     <ExemptButton person={person} busy={busy} patch={patch} />
                   )}
+                  {isAdmin && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive hover:text-destructive"
+                      disabled={busy}
+                      onClick={() => void remove(person)}
+                    >
+                      Delete
+                    </Button>
+                  )}
                 </TableCell>
               </TableRow>
             ))}
@@ -705,6 +743,17 @@ export function StaffManager({
                 </Button>
                 {isAdmin && isField(person.role) && (
                   <ExemptButton person={person} busy={busy} patch={patch} />
+                )}
+                {isAdmin && (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive hover:text-destructive"
+                    disabled={busy}
+                    onClick={() => void remove(person)}
+                  >
+                    Delete
+                  </Button>
                 )}
               </div>
             </CardContent>
