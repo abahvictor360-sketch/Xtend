@@ -5,8 +5,8 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-16, after raising the location agreement floor to 50 m,
-the PWA push-parity fix, and staff and outlet delete._
+_Last updated: 2026-10-16, after moving the alerts cron off the Hobby plan,
+raising the location agreement floor to 50 m, and the PWA push-parity fix._
 
 ---
 
@@ -360,9 +360,13 @@ All need `Authorization: Bearer $CRON_SECRET`.
 | `/api/cron/alerts` | Every 5 minutes | Sends unsent integrity flags, scheduled notifications, and hourly the X Metrics checks |
 | `/api/cron/metrics` | Optional, hourly | X Metrics checks on their own schedule |
 
-They are in `vercel.json`. Vercel's Hobby plan only runs jobs daily; on that
-plan, or on a VPS, call the five-minute job from an outside scheduler
-(cron-job.org, or the server's crontab):
+The two daily jobs are in `vercel.json`. The Vercel Hobby plan only allows
+once-a-day crons, so the five-minute `alerts` job is **not** in `vercel.json`
+(it would make every deploy fail with `cron_jobs_limits_reached`); instead it
+runs from `.github/workflows/alerts-cron.yml` (a GitHub Actions schedule that
+curls the endpoint with `CRON_SECRET`, set as a repo secret). On Vercel Pro you
+can move it back into `vercel.json` and delete that workflow. On a VPS, run it
+from the server's crontab instead:
 
 ```
 0-59/5 * * * *  curl -s -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/alerts
@@ -515,6 +519,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-16 | Moved the every-5-minute `alerts` cron out of `vercel.json` (the Hobby plan rejects sub-daily crons, which was blocking all deploys) into a GitHub Actions schedule (`.github/workflows/alerts-cron.yml`) hitting the endpoint with `CRON_SECRET`; the two daily crons stay on Vercel | — |
 | 2026-10-16 | Location agreement floor raised 30 m → 50 m (`fixesAgree`), so normal standing-still GPS jitter no longer trips the "your location jumped" block when adding a place; spoof detection is unaffected (a real spoof is far larger) | — |
 | 2026-10-15 | PWA push parity: if a browser drops the push subscription while permission is still granted, the app re-subscribes silently on load (as the native app re-registers each start), so web alerts do not quietly lapse | — |
 | 2026-10-15 | Admins can delete a staff account (DELETE `/api/admin/users/<id>`): removes the auth account, cascading the profile; refused with 409 when they have attendance (or other ON DELETE RESTRICT) history, and no self-delete. Supervisors cannot delete | — |

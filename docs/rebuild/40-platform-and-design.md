@@ -247,11 +247,16 @@ matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|
   "regions": ["dub1"],
   "crons": [
     { "path": "/api/cron/purge-selfies", "schedule": "20 2 * * *" },
-    { "path": "/api/cron/absence-sweep", "schedule": "30 8 * * 1-6" },
-    { "path": "/api/cron/alerts",        "schedule": "*/5 * * * *" }
+    { "path": "/api/cron/absence-sweep", "schedule": "30 8 * * 1-6" }
   ]
 }
 ```
+
+The every-5-minute `alerts` cron is **not** here: the Vercel Hobby plan rejects
+sub-daily crons (deploys fail with `cron_jobs_limits_reached`), so it runs from
+`.github/workflows/alerts-cron.yml` instead (a GitHub Actions schedule that
+curls `/api/cron/alerts` with `CRON_SECRET`). On Vercel Pro, or a VPS crontab,
+schedule it the normal way and drop the workflow.
 
 `regions` pins the serverless functions to Dublin (`dub1`), the same AWS
 region as the Supabase project (`eu-west-1`); each page makes several serial

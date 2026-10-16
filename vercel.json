@@ -9,10 +9,6 @@
     {
       "path": "/api/cron/absence-sweep",
       "schedule": "30 8 * * 1-6"
-    },
-    {
-      "path": "/api/cron/alerts",
-      "schedule": "*/5 * * * *"
     }
   ]
 }

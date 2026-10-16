@@ -1,0 +1,39 @@
+# Runs the alerts job every 5 minutes.
+#
+# The Vercel Hobby plan only allows once-a-day crons, so the every-5-minute
+# alerts job (location-breach alerts to supervisors, scheduled notifications,
+# and the hourly X Metrics sweep, all in /api/cron/alerts) is scheduled here
+# instead of in vercel.json. On Vercel Pro you could move it back to
+# vercel.json and delete this workflow.
+#
+# Needs a repository secret CRON_SECRET matching the deployed CRON_SECRET env
+# var. GitHub's scheduled runs can be delayed or skipped under load, so the
+# cadence is best-effort, which is fine for alerts.
+name: Alerts cron
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: alerts-cron
+  cancel-in-progress: false
+
+jobs:
+  alerts:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit the alerts endpoint
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "::error::CRON_SECRET repository secret is not set"
+            exit 1
+          fi
+          code=$(curl -s -o /tmp/out.json -w '%{http_code}' --max-time 60 \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            https://xtend-brown.vercel.app/api/cron/alerts)
+          echo "HTTP $code"; cat /tmp/out.json || true
+          test "$code" = "200"
