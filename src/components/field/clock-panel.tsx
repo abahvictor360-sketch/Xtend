@@ -1,12 +1,13 @@
 'use client'
 
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, Camera, CheckCircle2, CloudUpload, LogIn, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NotificationGate } from '@/components/field/notification-gate'
 import { usePush } from '@/components/field/use-push'
 import { CameraCapture } from '@/components/field/camera-capture'
+import { CLOCK_OUT_EVENT } from '@/components/field/clock-out-prompt'
 import { Alert } from '@/components/ui/alert'
 import { processSelfie } from '@/lib/image'
 import { deviceInfo } from '@/lib/device'
@@ -99,6 +100,15 @@ export function ClockPanel({
       setBusyStep(null)
     }
   }, [])
+
+  // The "Clock out now" prompt at the top of the home screen starts the
+  // clock-out here, the same as tapping the button below.
+  useEffect(() => {
+    if (nextType !== 'closing' || busyStep || pending) return
+    const onAsk = () => void start('closing')
+    window.addEventListener(CLOCK_OUT_EVENT, onAsk)
+    return () => window.removeEventListener(CLOCK_OUT_EVENT, onAsk)
+  }, [nextType, busyStep, pending, start])
 
   const onSelfie = useCallback(
     async (photo: Blob, at: SampledFix | null) => {

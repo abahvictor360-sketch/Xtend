@@ -189,5 +189,33 @@ select assert((select count(*) from realtime.messages) = 0,
   'rls: and nothing on anyone else''s');
 select set_config('realtime.topic', '', false);
 
+-- Clock-out reminders (061): own, team or everyone; never written directly.
+select set_config('request.jwt.claim.sub', :'ada', false);
+select assert(not exists (select 1 from public.clock_out_reminders where user_id <> :'ada'),
+  'rls: staff see only their own clock-out reminders');
+do $$
+begin
+  insert into public.clock_out_reminders (user_id, reminder_date, stage, shift_end)
+  values (auth.uid(), current_date + 1, 1, '18:00');
+  perform assert(false, 'rls: clock-out reminders cannot be written directly');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: clock-out reminders cannot be written directly');
+end $$;
+do $$
+begin
+  perform * from public.claim_clock_out_reminders();
+  perform assert(false, 'rls: only the scheduled job claims clock-out reminders');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: only the scheduled job claims clock-out reminders');
+end $$;
+select set_config('request.jwt.claim.sub', :'tunde', false);
+select assert(not exists (select 1 from public.clock_out_reminders r
+                          where r.user_id <> :'tunde' and not public.supervises_user(r.user_id)),
+  'rls: a supervisor sees only their own team''s clock-out reminders');
+select set_config('request.jwt.claim.sub', :'boss', false);
+select assert((select count(*) from public.clock_out_reminders r
+               join public.profiles p on p.id = r.user_id where p.email like 'cy_@xpel.ng') >= 5,
+  'rls: an admin sees every clock-out reminder');
+
 reset role;
 select 'ALL RLS CHECKS PASSED';
