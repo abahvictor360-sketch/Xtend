@@ -15,9 +15,8 @@ export default async function FieldPage() {
   const session = await requireSession(FIELD_ROLES)
   const supabase = await createServerSupabase()
 
-  // The day itself, today's store visits,
-  // and every store Xtend knows, so the picker can name one without anybody
-  // having had to allocate it first.
+  // The day itself, today's store visits, and the stores allocated to
+  // them for the picker (060: none when nothing is allocated yet).
   const [
     { data, error },
     { data: visits },
@@ -28,11 +27,7 @@ export default async function FieldPage() {
   ] = await Promise.all([
     supabase.rpc('my_day'),
     supabase.rpc('my_store_visits'),
-    supabase
-      .from('outlets')
-      .select('id, name, address, lat, lng, geofence_radius_m')
-      .eq('is_active', true)
-      .order('name'),
+    supabase.rpc('my_visit_stores'),
     supabase.rpc('can_visit_stores'),
     getCountStatus(supabase),
     avatarUrls(supabase, [session.userId]),

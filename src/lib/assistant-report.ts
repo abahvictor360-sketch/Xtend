@@ -102,12 +102,14 @@ async function build(supabase: SupabaseClient, spec: ReportSpec): Promise<Built>
       const r = await fieldReports(supabase, spec.from, spec.to, 2000)
       return {
         period: period(r.from, r.to),
-        columns: ['Date', 'Staff', 'Store', 'Sales', 'Stock', 'Competitors', 'Issues', 'Notes'],
-        weights: [1.8, 3, 3, 4, 4, 4, 4, 4],
+        columns: ['Date', 'Staff', 'Store', 'Store visits', 'Minutes in stores', 'Sales', 'Stock', 'Competitors', 'Issues', 'Notes'],
+        weights: [1.8, 3, 3, 5, 1.6, 4, 4, 4, 4, 4],
         rows: r.reports.map((x) => [
           x.date,
           x.name ?? '—',
           x.store ?? '—',
+          x.visits,
+          String(x.visit_minutes),
           x.sales || '—',
           x.stock || '—',
           x.competitors || '—',

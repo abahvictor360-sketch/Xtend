@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AttendanceDetail, Profile } from '@/lib/types'
 import { FIELD_ROLES } from '@/lib/auth'
 import { addDays, formatLagos, lagosDateString, longDate } from '@/lib/utils'
+import { snapshotText } from '@/lib/marketer-report'
 import { CLAIMS, judgeExcuse, lagosInstant, type Claim, type ExcuseEvidence } from '@/lib/excuse'
 import { detailText, fetchIntegrity, parseIntegrityFilter, personRisk } from '@/lib/integrity-review'
 
@@ -276,6 +277,21 @@ export interface FieldReport {
   competitors: string
   issues: string
   notes: string
+  /** The store visits kept with the report (060): store, times, minutes. */
+  visits: string
+  visit_minutes: number
+}
+
+interface ReportRow {
+  report_date: string
+  body: string | null
+  sales_summary: string | null
+  stock_status: string | null
+  competitor_activity: string | null
+  issues: string | null
+  store_visits?: unknown
+  profiles: unknown
+  outlets: unknown
 }
 
 /** The daily reports marketers file from the field app. */
@@ -286,15 +302,20 @@ export async function fieldReports(
   maxChars = 600,
 ): Promise<{ from: string; to: string; reports: FieldReport[] }> {
   const { from, to } = checkRange(fromDate, toDate)
-  const { data, error } = await supabase
-    .from('reports')
-    .select(
-      'report_date, body, sales_summary, stock_status, competitor_activity, issues, profiles(full_name), outlets(name)',
-    )
-    .gte('report_date', from)
-    .lte('report_date', to)
-    .order('report_date', { ascending: false })
-    .limit(1000)
+  const columns = (withVisits: boolean): string =>
+    `report_date, body, sales_summary, stock_status, competitor_activity, issues, ${withVisits ? 'store_visits, ' : ''}profiles(full_name), outlets(name)`
+  const read = (withVisits: boolean) =>
+    supabase
+      .from('reports')
+      .select(columns(withVisits))
+      .gte('report_date', from)
+      .lte('report_date', to)
+      .order('report_date', { ascending: false })
+      .limit(1000)
+      .returns<ReportRow[]>()
+  let { data, error } = await read(true)
+  // Before migration 060 runs there is no store_visits column yet.
+  if (error && error.message.includes('store_visits')) ({ data, error } = await read(false))
   if (error) throw new Error(error.message)
 
   const clip = (v: unknown) => {
@@ -314,6 +335,10 @@ export async function fieldReports(
       competitors: clip(r.competitor_activity),
       issues: clip(r.issues),
       notes: clip(r.body),
+      ...(() => {
+        const v = snapshotText(r.store_visits)
+        return { visits: clip(v.text), visit_minutes: v.minutes }
+      })(),
     })),
   }
 }

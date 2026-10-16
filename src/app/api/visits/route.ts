@@ -7,8 +7,9 @@ import { mapText } from '@/lib/fields'
 
 /**
  * Check in to a store. Naming the store is optional: left out, the
- * database picks whichever of the person's own stores they are closest to.
- * Either way it measures the distance itself and decides the status.
+ * database works out which store they are standing in. Once someone has
+ * stores allocated, it must be one of theirs (060). Either way it measures
+ * the distance itself and decides the status.
  */
 const schema = z.object({
   outlet_id: z.string().uuid().nullable().optional(),
@@ -77,6 +78,12 @@ export async function POST(request: Request) {
       }
       if (error.message.includes('Only marketers')) {
         return Response.json({ error: 'Only marketers record store visits.' }, { status: 403 })
+      }
+      if (error.message.includes('not on your list')) {
+        return Response.json(
+          { error: 'This store is not on your list. Ask your supervisor to add it.' },
+          { status: 403 },
+        )
       }
       if (error.message.includes('Invalid capture timestamp')) {
         return Response.json(

@@ -17,6 +17,7 @@ import {
   type VisitRow,
 } from '@/lib/visit-review'
 import { cn, formatLagos, lagosDateString, metres } from '@/lib/utils'
+import { reportQuery } from '@/lib/marketer-report'
 
 /*
  * The pieces of the Store visits page (src/app/admin/visits/page.tsx):
@@ -263,9 +264,19 @@ export function BreakdownTable({
                   <TableCell className={cn('tabular-nums', r.offSite > 0 && 'font-semibold text-destructive')}>{r.offSite}</TableCell>
                   <TableCell className="whitespace-nowrap tabular-nums">{formatLagos(r.last, ranged)}</TableCell>
                   {!stores && r.id && (
-                    <TableCell>
+                    <TableCell className="whitespace-nowrap">
                       <Link href={movementHref(r.id, from, to)} className="text-xs font-semibold text-brand hover:underline">
                         Movement
+                      </Link>
+                      <Link
+                        href={`/admin/marketer-reports?${
+                          from === to
+                            ? reportQuery(r.id, 'day', from)
+                            : reportQuery(r.id, 'month', to.slice(0, 7))
+                        }`}
+                        className="ml-3 text-xs font-semibold text-brand hover:underline"
+                      >
+                        {from === to ? 'Day report' : 'Month report'}
                       </Link>
                     </TableCell>
                   )}
