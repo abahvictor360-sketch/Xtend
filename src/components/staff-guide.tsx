@@ -8,6 +8,7 @@ import {
   LifeBuoy,
   LogIn,
   LogOut,
+  Palmtree,
   MapPinPlus,
   Smartphone,
   Store,
@@ -35,6 +36,7 @@ export const STAFF_TOPICS = {
   count: { id: 'store-count', title: 'Stock count', icon: ClipboardList },
   clockOut: { id: 'clock-out', title: 'Clock out', icon: LogOut },
   history: { id: 'history', title: 'History and your account', icon: CalendarDays },
+  leave: { id: 'leave', title: 'Days off and leave', icon: Palmtree },
   help: { id: 'help', title: 'Report a problem', icon: LifeBuoy },
   fix: { id: 'problems', title: 'Common problems', icon: Wrench },
 } satisfies Record<string, GuideTopic>
@@ -134,11 +136,16 @@ export function StaffGuide() {
           items={[
             <>Clock in at the start of your day as above.</>,
             <>
-              At each store, tap <Ui>Check in here</Ui>.
+              At each store, tap <Ui>Check in here</Ui>. If Xtend does not find the store, tap{' '}
+              <Ui>Pick the store myself</Ui>: it lists only the stores on your list.
             </>,
             <>
               When you leave, tap <Ui>Check out</Ui> before you go to the next store. You can
               only be checked in at one store at a time.
+            </>,
+            <>
+              See <Ui>No stores are allocated to you yet</Ui> or{' '}
+              <Ui>This store is not on your list</Ui>? Ask your supervisor to add the store.
             </>,
             <>
               If Xtend does not know the place, you must <Ui>add it</Ui> before you go on. See{' '}
@@ -210,6 +217,11 @@ export function StaffGuide() {
             </>,
           ]}
         />
+        <p>
+          Marketers: the top of the report shows today&apos;s store visits: each store, the time in
+          and out, how long you were there, and the total. They are added to your report when you
+          save it; there is nothing to type for them.
+        </p>
       </GuideSection>
 
       <GuideSection topic={T.count} intro="When a stock count is due, a Count tab appears and the home screen tells you.">
@@ -256,6 +268,11 @@ export function StaffGuide() {
             </>,
           ]}
         />
+        <p>
+          When your shift ends, Xtend reminds you to clock out: a message on your phone and a{' '}
+          <Ui>Clock out</Ui> button at the top of the home screen. If you are still checked in at a
+          store, check out of it first, then clock out.
+        </p>
         <GuideShot
           src="/guide/staff-progress.png"
           alt="The day's progress: clock in, daily report, clock out"
@@ -272,6 +289,44 @@ export function StaffGuide() {
           account: your store, notifications, <Ui>Change your password</Ui> and{' '}
           <Ui>Message support</Ui>.
         </p>
+        <p>The week on the home screen and the calendar in History are coloured:</p>
+        <ul className="list-disc space-y-1 pl-5">
+          <li>A dot: you clocked in that day.</li>
+          <li>
+            <Ui>Missed</Ui> (red): a working day you did not clock in.
+          </li>
+          <li>
+            <Ui>Off</Ui> (grey): a day off on your schedule.
+          </li>
+          <li>
+            <Ui>Leave</Ui> (soft orange): approved leave.
+          </li>
+        </ul>
+      </GuideSection>
+
+      <GuideSection topic={T.leave} intro="Your supervisor sets which days you work. Ask for leave in the app.">
+        <Steps
+          items={[
+            <>
+              Open <Ui>You</Ui>, then <Ui>Ask for leave</Ui> (it is also on the home screen, under
+              the week).
+            </>,
+            <>
+              Pick the type (<Ui>Annual</Ui>, <Ui>Sick</Ui>, <Ui>Casual</Ui> or <Ui>Other</Ui>),
+              your first and last day, write the reason, and tap <Ui>Send request</Ui>. You can ask
+              for days up to 7 days back.
+            </>,
+            <>
+              Your request shows as <Ui>Pending</Ui> until your supervisor answers. You get a message
+              when it is <Ui>Approved</Ui> or <Ui>Rejected</Ui>. You can cancel it while it is still
+              pending.
+            </>,
+          ]}
+        />
+        <Tip>
+          On a day off the home screen says <Ui>Day off today</Ui>. Working that day anyway? Clock in
+          as usual.
+        </Tip>
       </GuideSection>
 
       <GuideSection topic={T.help} intro="Something not working, or a complaint? Tell the office from inside Xtend.">

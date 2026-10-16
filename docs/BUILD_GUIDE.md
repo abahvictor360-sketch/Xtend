@@ -5,8 +5,9 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-16, after moving the alerts cron off the Hobby plan,
-raising the location agreement floor to 50 m, and the PWA push-parity fix._
+_Last updated: 2026-10-16, after work schedules and leave (0059), marketer
+store lists, visits in the daily report and marketer reports (0060), and
+clock-out reminders (0061)._
 
 ---
 
@@ -259,6 +260,27 @@ the code lives.
   reporting a problem), supervisors, admins (everything, including how
   tracking works).
 
+### Stage 10 — Schedules, leave, marketer reports (2026-10-16)
+
+- **Work schedules and leave** (0059): each person has a weekly pattern
+  (Mon–Sat unless changed) and one-off changes; staff ask for leave in the app
+  (`/field/leave`) and the office decides it (`/admin/leave`, `/admin/schedules`).
+  Approved leave, then a one-off change, then the pattern decide whether a day
+  is a working day (`day_kind`). Missed working days show red on the staff
+  calendar, days off grey, leave soft orange. Attendance, Analytics, the
+  absence sweep (now daily) and Ask Xtend never count days off or leave as
+  absent (`src/lib/schedule.ts`, `schedule-server.ts`).
+- **Marketer stores and reports** (0060): once someone has allocated stores
+  they can only check in at those (`my_visit_stores`, `store_visit_enforce`);
+  the daily report shows and keeps the day's store visits
+  (`reports.store_visits`, set by the database); `/admin/marketer-reports`
+  downloads each person's day or month report as a designed PDF, Word or Excel
+  (`src/lib/marketer-report*.ts`, `src/lib/export/marketer-report*.ts`).
+- **Clock-out reminders** (0061): at the end of the shift the alerts job
+  pushes "Time to clock out", and again an hour later; the home screen shows a
+  **Clock out** prompt (`src/lib/clock-out-reminder*.ts`,
+  `src/components/field/clock-out-prompt.tsx`).
+
 ## 6. The database: every migration
 
 Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
@@ -323,6 +345,9 @@ Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
 | 0056 | Realtime for the field dashboard |
 | 0057 | Updates: releases, installs |
 | 0058 | Realtime via per-user Broadcast triggers (scale) |
+| 0059 | Work schedules, one-off changes, leave requests; absence skips days off and leave |
+| 0060 | Marketers check in only at their own stores; visits kept with the daily report |
+| 0061 | Clock-out reminders at the end of the shift |
 
 ## 7. Environment variables
 
@@ -356,8 +381,8 @@ All need `Authorization: Bearer $CRON_SECRET`.
 | Path | When | Does |
 |---|---|---|
 | `/api/cron/purge-selfies` | 02:20 UTC daily | Deletes clock photos older than 24 hours |
-| `/api/cron/absence-sweep` | 08:30 UTC Mon–Sat | Tells the office who has not clocked in |
-| `/api/cron/alerts` | Every 5 minutes | Sends unsent integrity flags, scheduled notifications, and hourly the X Metrics checks |
+| `/api/cron/absence-sweep` | 08:30 UTC daily | Tells the office who has not clocked in (skips anyone on a day off or on leave, 0059) |
+| `/api/cron/alerts` | Every 5 minutes | Sends unsent integrity flags, scheduled notifications, clock-out reminders (at shift end and an hour later, 0061), and hourly the X Metrics checks |
 | `/api/cron/metrics` | Optional, hourly | X Metrics checks on their own schedule |
 
 The two daily jobs are in `vercel.json`. The Vercel Hobby plan only allows
@@ -435,7 +460,8 @@ failure):
 for s in check-allocate check-assistant-actions check-attendance check-audit \
          check-excuses check-exports check-fields check-geo check-integrity-ask \
          check-movement check-push-endpoints check-supply-import \
-         check-support-notifications check-updates check-visits-alerts check-xm-exports; do
+         check-support-notifications check-updates check-visits-alerts check-xm-exports \
+         check-schedules-leave check-marketer-reports check-clock-out-reminder; do
   npx tsx --tsconfig tsconfig.scripts.json scripts/$s.ts | tail -1
 done
 ```
@@ -519,6 +545,10 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-16 | Clock-out reminders: a push at the end of the shift ("Time to clock out") and one an hour later, from the alerts job, plus a **Clock out** prompt at the top of the home screen (check out of the store first) | 0061 |
+| 2026-10-16 | Marketers: the store list shows only their allocated stores and check-ins elsewhere are refused once they have any; the daily report shows and keeps the day's visits; new **Marketer reports** page with day and month PDF, Word and Excel downloads | 0060 |
+| 2026-10-16 | Work schedules and leave: weekly patterns and one-off changes (`/admin/schedules`), leave requests in the app and decisions on `/admin/leave`; missed working days red on the staff calendar; absence everywhere follows schedules and leave; absence sweep now daily | 0059 |
+| 2026-10-16 | Alerts cron names its failure (401 means `CRON_SECRET` differs between GitHub and Vercel) | — |
 | 2026-10-16 | Moved the every-5-minute `alerts` cron out of `vercel.json` (the Hobby plan rejects sub-daily crons, which was blocking all deploys) into a GitHub Actions schedule (`.github/workflows/alerts-cron.yml`) hitting the endpoint with `CRON_SECRET`; the two daily crons stay on Vercel | — |
 | 2026-10-16 | Location agreement floor raised 30 m → 50 m (`fixesAgree`), so normal standing-still GPS jitter no longer trips the "your location jumped" block when adding a place; spoof detection is unaffected (a real spoof is far larger) | — |
 | 2026-10-15 | PWA push parity: if a browser drops the push subscription while permission is still granted, the app re-subscribes silently on load (as the native app re-registers each start), so web alerts do not quietly lapse | — |
@@ -559,9 +589,12 @@ Newest first. Dates are when the work landed on the main branch.
 - **iPhone app** is not yet on TestFlight or the App Store (needs the Apple
   account steps); until then iPhone staff use Chrome/Safari and get site
   updates only.
-- **Five-minute job** (`/api/cron/alerts`): confirm it actually runs every
-  five minutes on the current Vercel plan; if not, use an outside scheduler
-  (section 8). Scheduled notifications show as "Late" otherwise.
+- **Five-minute job** (`/api/cron/alerts`): runs from GitHub Actions and needs
+  the `CRON_SECRET` repo secret to match Vercel's exactly (a 401 means they
+  differ). Until it runs, scheduled notifications show as "Late" and
+  clock-out reminders are not sent. GitHub's schedule is best-effort.
+- **Clock-out reminders** ignore schedules: they go to anyone clocked in and
+  not out, which covers someone working on a day off.
 - **Android signing secrets**: until they are set, the published APK is a
   debug build and each update needs the old app uninstalled first.
 - Migrations to run in production after each merge: check the change log

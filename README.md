@@ -77,6 +77,9 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0056_realtime_field_tables.sql  # live updates for the field dashboard
    supabase/migrations/0057_app_updates.sql            # updates: what's new notes, required updates, lowest app builds, who is on which version
    supabase/migrations/0058_realtime_broadcast.sql     # realtime via per-user Broadcast triggers so connections scale to thousands
+   supabase/migrations/0059_schedules_leave.sql        # work schedules, one-off changes, leave; days off and leave never count as absent
+   supabase/migrations/0060_marketer_visits_reports.sql  # check in only at your own stores; visits kept with the daily report
+   supabase/migrations/0061_clock_out_reminders.sql    # reminders to clock out at the end of the shift
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
