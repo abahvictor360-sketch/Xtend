@@ -2,7 +2,7 @@
 
 # API routes
 
-100 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+107 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
 
 ## `POST /api/admin/alerts/[id]`
 
@@ -232,6 +232,15 @@ The audit log, as filtered on screen, as Excel, Word, PDF or CSV.
 The integrity flags, as filtered on screen, as Excel, Word, PDF or CSV.
 Read through the caller's session, so a supervisor gets their team only.
 
+## `GET /api/admin/export/marketer-report/[format]`
+
+- File: `src/app/api/admin/export/marketer-report/[format]/route.ts`
+- Who: ['admin', 'supervisor']
+
+One marketer's report for a day or a month, as PDF, Word or Excel.
+Read through the caller's own client, so a supervisor only gets their
+own team; anyone else is "not found".
+
 ## `GET /api/admin/export/movement/[format]`
 
 - File: `src/app/api/admin/export/movement/[format]/route.ts`
@@ -279,6 +288,25 @@ const schema = z.object({
 ```
 
 - Database functions: `review_integrity_flags`
+
+## `POST /api/admin/leave/[id]`
+
+- File: `src/app/api/admin/leave/[id]/route.ts`
+- Who: ['admin', 'supervisor']
+
+The person's supervisor or an admin approves or rejects a leave request.
+decide_leave() (migration 059) checks who may, refuses anyone deciding
+their own, and writes the audit row in the same transaction. The person
+is then told.
+
+```ts
+const schema = z.object({
+  decision: z.enum(['approve', 'reject'], { message: 'Approve or reject the request' }),
+  note: note(500),
+})
+```
+
+- Database functions: `decide_leave`
 
 ## `POST /api/admin/metrics/expiry/[id]`
 
@@ -576,7 +604,7 @@ const schema = z.object({
 ```
 - Tables and views: `notification_templates`
 
-## `PATCH /api/admin/outlets/[id]`
+## `PATCH, DELETE /api/admin/outlets/[id]`
 
 - File: `src/app/api/admin/outlets/[id]/route.ts`
 - Who: ['admin']
@@ -743,6 +771,53 @@ const schema = z.object({
 ```
 - Tables and views: `role_store_counts`
 
+## `DELETE /api/admin/schedules/overrides/[id]`
+
+- File: `src/app/api/admin/schedules/overrides/[id]/route.ts`
+- Who: ['admin', 'supervisor']
+
+Removes a date change, so the weekly pattern applies again (audited in 059).
+
+- Database functions: `remove_schedule_override`
+
+## `POST /api/admin/schedules/overrides`
+
+- File: `src/app/api/admin/schedules/overrides/route.ts`
+- Who: ['admin', 'supervisor']
+
+One date made an extra day in or an extra day off for someone
+(set_schedule_override, migration 059; audited there).
+
+```ts
+const schema = z.object({
+  user_id: z.string().uuid('Pick a person'),
+  day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick a date'),
+  working: z.boolean(),
+  note: note(300),
+})
+```
+
+- Database functions: `set_schedule_override`
+
+## `POST /api/admin/schedules`
+
+- File: `src/app/api/admin/schedules/route.ts`
+- Who: ['admin', 'supervisor']
+
+Sets one weekly pattern for one or several people (set_work_pattern,
+migration 059). The database checks every person is on the caller's team
+and writes one audit row per person.
+
+```ts
+const schema = z.object({
+  user_ids: z.array(z.string().uuid()).min(1, 'Pick at least one person').max(500, 'Set at most 500 people at a time'),
+  // Days of the week worked, 0 = Sunday … 6 = Saturday. Null: back to Monday to Saturday.
+  days: z.array(z.number().int().min(0).max(6)).max(7).nullable(),
+})
+```
+
+- Database functions: `set_work_pattern`
+
 ## `GET /api/admin/staff-logins`
 
 - File: `src/app/api/admin/staff-logins/route.ts`
@@ -898,7 +973,7 @@ const schema = z.object({
 ```
 - Tables and views: `app_releases`
 
-## `PATCH /api/admin/users/[id]`
+## `PATCH, DELETE /api/admin/users/[id]`
 
 - File: `src/app/api/admin/users/[id]/route.ts`
 - Who: ['admin', 'supervisor']
@@ -923,7 +998,7 @@ const patchSchema = z.object({
   reset_password: z.boolean().optional(),
 })
 ```
-- Tables and views: `profiles`, `staff_roles`, `audit_log`
+- Tables and views: `profiles`, `staff_roles`, `audit_log`, `attendance`
 
 ## `POST /api/admin/users/import`
 
@@ -1052,6 +1127,10 @@ Absence sweep. Anyone whose shift started more than the grace period ago
 and who has not clocked in is reported to their admin and supervisor,
 once per day per person.
 
+Nobody on a day off or on approved leave is reported: staff_no_show()
+follows each person's schedule (migration 059), so the sweep runs every
+day, Sundays included, for anyone whose schedule has them in.
+
 Scheduled daily at 08:30 UTC (09:30 Lagos), which is past the 30-minute
 grace for both an 08:00 and a 09:00 shift. Vercel's Hobby plan allows one
 run per day per cron; on Pro, change the schedule in vercel.json to
@@ -1071,8 +1150,10 @@ safe whenever the plan allows.
 Sends any integrity flag nobody has been told about yet. Flags are
 usually sent the moment the clock-in, ping or photo that raised them
 arrives; this catches the rest (a flag raised by a database job, or a
-send that failed). It also sends scheduled notifications that are due.
-Run it every five minutes from the server's crontab:
+send that failed). It also sends scheduled notifications that are due,
+and asks anyone still clocked in after their shift end to clock out
+(migration 0061). It runs every five minutes from
+.github/workflows/alerts-cron.yml, or from a server's crontab:
 
   0-59/5 * * * *  curl -s -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/alerts
 
@@ -1120,6 +1201,34 @@ as the answer when they are standing in it.
 Configuration health. Booleans and diagnoses — never a key, never any
 data — so it can be checked without signing in when something is not
 behaving.
+
+## `POST /api/leave/[id]/cancel`
+
+- File: `src/app/api/leave/[id]/cancel/route.ts`
+- Who: FIELD_ROLES
+
+The person who asked withdraws a request still waiting (cancel_leave, 059).
+
+- Database functions: `cancel_leave`
+
+## `POST /api/leave`
+
+- File: `src/app/api/leave/route.ts`
+- Who: FIELD_ROLES
+
+A member of staff asks for leave. apply_leave() (migration 059) checks
+the dates, the reason and overlaps; the supervisor and admins are told.
+
+```ts
+const schema = z.object({
+  kind: z.enum(['annual', 'sick', 'casual', 'other'], { message: 'Pick the type of leave' }),
+  from: DAY,
+  to: DAY,
+  reason: writtenText(LEAVE_LIMITS.reasonMax, LEAVE_LIMITS.reasonMin, 'the reason'),
+})
+```
+
+- Database functions: `apply_leave`
 
 ## `POST /api/location-block`
 
@@ -1629,8 +1738,9 @@ const schema = z.object({
 - Who: FIELD_ROLES
 
 Check in to a store. Naming the store is optional: left out, the
-database picks whichever of the person's own stores they are closest to.
-Either way it measures the distance itself and decides the status.
+database works out which store they are standing in. Once someone has
+stores allocated, it must be one of theirs (060). Either way it measures
+the distance itself and decides the status.
 
 ```ts
 const schema = z.object({

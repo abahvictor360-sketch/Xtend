@@ -189,5 +189,112 @@ select assert((select count(*) from realtime.messages) = 0,
   'rls: and nothing on anyone else''s');
 select set_config('realtime.topic', '', false);
 
+-- Clock-out reminders (061): own, team or everyone; never written directly.
+select set_config('request.jwt.claim.sub', :'ada', false);
+select assert(not exists (select 1 from public.clock_out_reminders where user_id <> :'ada'),
+  'rls: staff see only their own clock-out reminders');
+do $$
+begin
+  insert into public.clock_out_reminders (user_id, reminder_date, stage, shift_end)
+  values (auth.uid(), current_date + 1, 1, '18:00');
+  perform assert(false, 'rls: clock-out reminders cannot be written directly');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: clock-out reminders cannot be written directly');
+end $$;
+do $$
+begin
+  perform * from public.claim_clock_out_reminders();
+  perform assert(false, 'rls: only the scheduled job claims clock-out reminders');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: only the scheduled job claims clock-out reminders');
+end $$;
+select set_config('request.jwt.claim.sub', :'tunde', false);
+select assert(not exists (select 1 from public.clock_out_reminders r
+                          where r.user_id <> :'tunde' and not public.supervises_user(r.user_id)),
+  'rls: a supervisor sees only their own team''s clock-out reminders');
+select set_config('request.jwt.claim.sub', :'boss', false);
+select assert((select count(*) from public.clock_out_reminders r
+               join public.profiles p on p.id = r.user_id where p.email like 'cy_@xpel.ng') >= 5,
+  'rls: an admin sees every clock-out reminder');
+-- Schedules and leave (059): staff read their own, a supervisor their team,
+-- an admin everyone; nobody writes the tables directly.
+reset role;
+select id as kemi from auth.users where email = 'kemi.rota@xpel.ng' \gset
+select id as obi  from auth.users where email = 'obi.rota@xpel.ng'  \gset
+select id as sola from auth.users where email = 'sola.rota@xpel.ng' \gset
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'kemi', false);
+select assert((select count(*) from public.leave_requests) > 0
+                and not exists (select 1 from public.leave_requests where user_id <> :'kemi'),
+  'rls: staff see their own leave requests and nobody else''s');
+select assert((select count(*) from public.work_patterns) = 1
+                and not exists (select 1 from public.schedule_overrides where user_id <> :'kemi'),
+  'rls: staff see only their own schedule');
+select assert((select count(*) from public.my_calendar(current_date - 3, current_date)) = 4,
+  'rls: staff read their own calendar');
+do $$
+begin
+  insert into public.leave_requests (user_id, kind, from_date, to_date, reason)
+  values (auth.uid(), 'annual', current_date + 100, current_date + 101, 'Straight into the table');
+  perform assert(false, 'rls: staff must not write leave straight into the table');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: leave is asked for only through apply_leave');
+end $$;
+do $$
+begin
+  update public.leave_requests set status = 'approved' where user_id = auth.uid();
+  perform assert(false, 'rls: staff must not approve their own leave in the table');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: staff cannot change a request''s status in the table');
+end $$;
+do $$
+begin
+  insert into public.work_patterns (user_id, days) values (auth.uid(), '{0}');
+  perform assert(false, 'rls: staff must not write their own schedule');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: staff cannot write a schedule into the table');
+end $$;
+do $$
+begin
+  perform public.day_kind(auth.uid(), current_date);
+  perform assert(false, 'rls: day_kind is internal');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: the unchecked day_kind() is not callable by signed-in people');
+end $$;
+
+select set_config('request.jwt.claim.sub', :'ada', false);
+select assert(not exists (select 1 from public.leave_requests where user_id = :'kemi')
+                and not exists (select 1 from public.leave_request_detail where user_id = :'kemi'),
+  'rls: other staff see none of someone''s leave');
+
+select set_config('request.jwt.claim.sub', :'sola', false);
+select assert(exists (select 1 from public.leave_request_detail where user_id = :'kemi' and staff_name = 'Kemi Adeyemi'),
+  'rls: a supervisor sees their team''s leave, with names');
+select assert(not exists (select 1 from public.leave_requests where user_id = :'obi')
+                and not exists (select 1 from public.work_patterns where user_id = :'obi')
+                and not exists (select 1 from public.schedule_overrides where user_id = :'obi'),
+  'rls: and nothing of anyone outside their team');
+
+select set_config('request.jwt.claim.sub', :'boss', false);
+select assert(exists (select 1 from public.work_patterns where user_id = :'obi')
+                and exists (select 1 from public.schedule_overrides where user_id = :'obi')
+                and (select count(*) from public.leave_request_detail) = (select count(*) from public.leave_requests),
+  'rls: an admin sees every schedule and request');
+-- Visits kept with a report (060): only the database writes them, and
+-- nobody can read another person's day through the snapshot function.
+select set_config('request.jwt.claim.sub', :'grace', false);
+do $$
+begin
+  perform public.report_visits_snapshot(auth.uid(), current_date);
+  perform assert(false, 'rls: staff cannot call the report visits snapshot');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: staff cannot call the report visits snapshot');
+end $$;
+select assert(not exists (select 1 from public.reports r where r.user_id <> :'grace'),
+  'rls: a marketer sees only their own reports and the visits in them');
+select set_config('request.jwt.claim.sub', :'boss', false);
+select assert(exists (select 1 from public.reports r where jsonb_array_length(r.store_visits) > 0),
+  'rls: the office reads the visits kept with a report');
+
 reset role;
 select 'ALL RLS CHECKS PASSED';

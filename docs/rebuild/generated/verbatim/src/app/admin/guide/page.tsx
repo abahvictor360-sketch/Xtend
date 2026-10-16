@@ -171,8 +171,9 @@ export default async function AdminGuidePage() {
               radius; flagged means the location was not clear enough to tell.
             </li>
             <li>
-              A working day without a clock-in counts as absent. Sundays only count if you tick{' '}
-              <Ui>Sundays are working days</Ui>.
+              A working day without a clock-in counts as absent. Each person&apos;s schedule decides
+              their working days; days off (grey “–”) and approved leave (soft orange “Lv”) never count
+              as absent, here, in Analytics, the downloads, Ask Xtend or the 09:30 no-show message.
             </li>
             <li>Records cannot be edited or deleted, by anyone.</li>
           </ul>
@@ -311,7 +312,19 @@ export default async function AdminGuidePage() {
             <Ui>Teams</Ui>: pick a category, tick people (or <Ui>Select all shown</Ui>), choose a supervisor
             and click <Ui>Assign to supervisor</Ui>. <Ui>Roles</Ui>: add a role with its own name (such as
             Account Receivable) that works like one of the built-in ones. <Ui>Store allocation</Ui>: which
-            stores each person works.
+            stores each person works. Once someone has any store allocated, a check-in at a store that is
+            not theirs is refused, whether they picked it or Xtend recognised it by location; people with
+            no allocation can check in anywhere, as before.
+          </p>
+          <p>
+            <Ui>Schedules</Ui>: which weekdays each person works (Monday to Saturday unless changed), and
+            one-off changes for single dates (60 days back to a year ahead). A day is decided by approved
+            leave first, then a one-off change, then the weekly pattern. <Ui>Leave</Ui>: staff ask in the
+            app (Annual, Sick, Casual or Other; up to 7 days back, a year ahead, 60 days per request, no
+            overlaps). Admins decide anyone&apos;s, supervisors their own team&apos;s, nobody their own; the
+            office gets a push when someone asks and the person gets one with the answer. Pending leave
+            does not excuse a day. Changes are in the audit log as <Ui>schedule.pattern</Ui>,{' '}
+            <Ui>schedule.override</Ui>, <Ui>leave.approve</Ui> and <Ui>leave.reject</Ui>.
           </p>
           <GuideShot src="/guide/admin-teams.png" alt="The Teams page with category tabs" width={2000} height={1216} caption="Teams: pick a category, tick people, assign" />
           <p>
@@ -408,6 +421,21 @@ export default async function AdminGuidePage() {
             exactly as filtered on screen: attendance, analytics, movement, store visits, alerts,
             integrity, the audit log and X Metrics. Ask Xtend makes written reports with a summary on top.
             Every download is itself recorded in the audit log.
+          </p>
+          <p>
+            <Ui>Marketer reports</Ui> (Attendance menu): pick a day or a month and download each
+            person&apos;s report as a designed PDF, Word or Excel. It has eight summary tiles (days worked,
+            stores, visits, time in stores, average visit, on-time clock-ins, missing clock-outs, reports
+            filed), clock-in and clock-out with their status, every visit with arrival and the time between
+            stores, the daily report, stock counts and X Metrics sales; the month adds a day-by-day table,
+            a per-store table and each day&apos;s details. The daily report keeps a copy of that day&apos;s
+            visits written by the database each time it is saved, so the phone cannot change it.
+          </p>
+          <p>
+            <Ui>Clock-out reminders</Ui>: anyone still clocked in when their store&apos;s shift ends
+            (18:00 without a store) gets a push, and a second one an hour later if they still have not
+            clocked out; never more than two a day and none after midnight. They show in Notifications
+            history.
           </p>
         </GuideSection>
 

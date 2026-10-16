@@ -109,6 +109,10 @@ begin
   perform notifications_on(ada);
   perform notifications_on(bala);
   perform notifications_on(grace);
+  -- Every day is a working day for these three, so the absence checks
+  -- below pass whatever day of the week the tests run on (059).
+  insert into public.work_patterns (user_id, days) values
+    (ada, '{0,1,2,3,4,5,6}'), (bala, '{0,1,2,3,4,5,6}'), (grace, '{0,1,2,3,4,5,6}');
 
   -- ---------------------------------------------------------------
   -- The trigger owns distance and status.
@@ -3424,6 +3428,472 @@ begin
     perform assert(exists (select 1 from realtime.messages m where m.payload->>'table' = 'attendance')
                    and exists (select 1 from realtime.messages m where m.payload->>'table' = 'support_messages'),
       'realtime: clock-ins and support replies are both announced');
+
+
+    -- Clock-out reminders (061).
+    declare
+      today date := public.business_date();
+      shop uuid;
+      cy1 uuid := gen_random_uuid();  -- clocked in at a store ending 17:00
+      cy2 uuid := gen_random_uuid();  -- clocked in, no store: 18:00
+      cy3 uuid := gen_random_uuid();  -- not clocked in
+      cy4 uuid := gen_random_uuid();  -- clocked in and out
+      cy5 uuid := gen_random_uuid();  -- the job was over an hour late
+      mine uuid[];
+      got  record;
+      n    integer;
+    begin
+      insert into auth.users (id, email) values
+        (cy1, 'cy1@xpel.ng'), (cy2, 'cy2@xpel.ng'), (cy3, 'cy3@xpel.ng'),
+        (cy4, 'cy4@xpel.ng'), (cy5, 'cy5@xpel.ng');
+      insert into public.outlets (name, lat, lng, geofence_radius_m, shift_start, shift_end)
+      values ('Surulere Shop', 6.5000, 3.3500, 150, '08:00', '17:00') returning id into shop;
+      insert into public.profiles (id, full_name, email, role, outlet_id) values
+        (cy1, 'Chiamaka One',   'cy1@xpel.ng', 'merchandiser', shop),
+        (cy2, 'Chinedu Two',    'cy2@xpel.ng', 'marketer',     null),
+        (cy3, 'Chioma Three',   'cy3@xpel.ng', 'merchandiser', shop),
+        (cy4, 'Chukwudi Four',  'cy4@xpel.ng', 'merchandiser', shop),
+        (cy5, 'Chidinma Five',  'cy5@xpel.ng', 'merchandiser', shop);
+      mine := array[cy1, cy2, cy3, cy4, cy5];
+
+      -- Clock events written straight in (the clock-in rules are tested above).
+      perform set_config('session_replication_role', 'replica', true);
+      insert into public.attendance (user_id, type, lat, lng, accuracy_m, selfie_path, client_captured_at, attendance_date)
+      values (cy1, 'opening', 6.5, 3.35, 10, 'x', now(), today),
+             (cy2, 'opening', 6.5, 3.35, 10, 'x', now(), today),
+             (cy4, 'opening', 6.5, 3.35, 10, 'x', now(), today),
+             (cy4, 'closing', 6.5, 3.35, 10, 'x', now(), today),
+             (cy5, 'opening', 6.5, 3.35, 10, 'x', now(), today);
+      perform set_config('session_replication_role', 'origin', true);
+
+      perform assert(public.shift_end_for(cy1) = time '17:00' and public.shift_end_for(cy2) = time '18:00',
+        'clock-out reminders: the shift end is the home store''s, or 18:00 with no store');
+
+      select count(*) into n from public.claim_clock_out_reminders((today + time '16:59') at time zone 'Africa/Lagos') c
+      where c.user_id = any(mine);
+      perform assert(n = 0, 'clock-out reminders: nobody is reminded before their shift ends');
+
+      select count(*) into n from public.claim_clock_out_reminders((today + time '17:00') at time zone 'Africa/Lagos') c
+      where c.user_id = any(mine) and c.user_id in (cy1) and c.stage = 1 and c.shift_end = '17:00';
+      perform assert(n = 1 and not exists (select 1 from public.clock_out_reminders r where r.user_id in (cy3, cy4)),
+        'clock-out reminders: the first goes at the shift end, not to anyone not clocked in or already out');
+      perform assert(exists (select 1 from public.clock_out_reminders r where r.user_id = cy5 and r.stage = 1),
+        'clock-out reminders: and to everyone else whose shift has ended');
+
+      select count(*) into n from public.claim_clock_out_reminders((today + time '17:05') at time zone 'Africa/Lagos') c
+      where c.user_id = any(mine);
+      perform assert(n = 0, 'clock-out reminders: claiming again hands back nothing the second time');
+
+      -- cy5 clocks out before the second reminder.
+      perform set_config('session_replication_role', 'replica', true);
+      insert into public.attendance (user_id, type, lat, lng, accuracy_m, selfie_path, client_captured_at, attendance_date)
+      values (cy5, 'closing', 6.5, 3.35, 10, 'x', now(), today);
+      perform set_config('session_replication_role', 'origin', true);
+
+      select count(*) into n from public.claim_clock_out_reminders((today + time '17:59') at time zone 'Africa/Lagos') c
+      where c.user_id = cy1;
+      perform assert(n = 0, 'clock-out reminders: the second does not go before an hour has passed');
+
+      perform assert(not exists (select 1 from public.clock_out_reminders r where r.user_id = cy2),
+        'clock-out reminders: somebody with no store is not reminded at 17:00');
+      create temp table cy_claim on commit drop as
+        select * from public.claim_clock_out_reminders((today + time '18:00') at time zone 'Africa/Lagos') c
+        where c.user_id = any(mine);
+      perform assert(exists (select 1 from cy_claim c where c.user_id = cy2 and c.stage = 1 and c.shift_end = '18:00'),
+        'clock-out reminders: somebody with no store is reminded at 18:00');
+      perform assert((select count(*) from cy_claim c where c.stage = 2) = 1
+                     and exists (select 1 from cy_claim c where c.user_id = cy1 and c.stage = 2),
+        'clock-out reminders: the second goes an hour after the shift end');
+      perform assert(not exists (select 1 from public.clock_out_reminders r where r.user_id = cy5 and r.stage = 2),
+        'clock-out reminders: none after they clock out');
+
+      select count(*) into n from public.claim_clock_out_reminders((today + time '22:00') at time zone 'Africa/Lagos') c
+      where c.user_id = any(mine);
+      perform assert(n = 1 and (select count(*) from public.clock_out_reminders r where r.user_id = cy1) = 2,
+        'clock-out reminders: never more than two a day (only the no-store member''s second is left)');
+
+      perform assert((select count(*) from public.claim_clock_out_reminders(((today + 1) + time '00:30') at time zone 'Africa/Lagos') c
+                      where c.user_id = any(mine)) = 0,
+        'clock-out reminders: nothing after midnight Lagos');
+
+      -- A job more than an hour late sends only the second, once.
+      update public.outlets set shift_end = '20:00' where id = shop;
+      perform set_config('session_replication_role', 'replica', true);
+      delete from public.attendance where user_id = cy3;
+      insert into public.attendance (user_id, type, lat, lng, accuracy_m, selfie_path, client_captured_at, attendance_date)
+      values (cy3, 'opening', 6.5, 3.35, 10, 'x', now(), today);
+      perform set_config('session_replication_role', 'origin', true);
+      select * into got from public.claim_clock_out_reminders((today + time '21:10') at time zone 'Africa/Lagos') c
+      where c.user_id = cy3;
+      perform assert(got.stage = 2 and got.shift_end = '20:00'
+                     and not exists (select 1 from public.clock_out_reminders r where r.user_id = cy3 and r.stage = 1),
+        'clock-out reminders: a late job sends one reminder, the second, not both at once');
+      perform assert((select count(*) from public.claim_clock_out_reminders((today + time '21:15') at time zone 'Africa/Lagos') c
+                      where c.user_id = cy3) = 0,
+        'clock-out reminders: and the first is not sent after it');
+      update public.outlets set shift_end = '17:00' where id = shop;
+    end;
+
+    -- Work schedules and leave (059).
+    declare
+      kemi  uuid := gen_random_uuid();  -- on Sola's team
+      obi   uuid := gen_random_uuid();  -- on nobody's team
+      uche  uuid := gen_random_uuid();  -- on Sola's team, on leave today
+      sola  uuid := gen_random_uuid();  -- supervisor
+      sade  uuid := gen_random_uuid();  -- another supervisor
+      shop  uuid;
+      d0    date := public.business_date();
+      sat   date;
+      sun   date;
+      mon   date;
+      lv    uuid;
+      lv2   uuid;
+      res   jsonb;
+      cal   record;
+    begin
+      sat := d0 + ((6 - extract(dow from d0)::int + 7) % 7) + 7;
+      sun := sat + 1;
+      mon := sat + 2;
+      insert into auth.users (id, email) values
+        (kemi, 'kemi.rota@xpel.ng'), (obi, 'obi.rota@xpel.ng'), (uche, 'uche.rota@xpel.ng'),
+        (sola, 'sola.rota@xpel.ng'), (sade, 'sade.rota@xpel.ng');
+      insert into public.outlets (name, lat, lng, geofence_radius_m, shift_start, shift_end)
+      values ('Yaba Early Store', 6.5095, 3.3711, 100, '00:00', '23:59')
+      returning id into shop;
+      insert into public.profiles (id, full_name, email, role) values
+        (sola, 'Sola Martins', 'sola.rota@xpel.ng', 'supervisor'),
+        (sade, 'Sade Lawal', 'sade.rota@xpel.ng', 'supervisor');
+      insert into public.profiles (id, full_name, email, role, outlet_id, supervisor_id) values
+        (kemi, 'Kemi Adeyemi', 'kemi.rota@xpel.ng', 'merchandiser', shop, sola),
+        (obi,  'Obi Nwosu',    'obi.rota@xpel.ng',  'merchandiser', shop, null),
+        (uche, 'Uche Okeke',   'uche.rota@xpel.ng', 'marketer',     shop, sola);
+
+      -- Nobody given a pattern works Monday to Saturday.
+      perform act_as(boss);
+      perform assert(public.is_working_day(obi, sat) and public.is_working_day(obi, mon)
+                     and not public.is_working_day(obi, sun),
+        'schedules: without a pattern, Monday to Saturday are working days and Sunday is off');
+
+      -- Staff cannot set schedules; a supervisor only for their own team.
+      perform act_as(kemi);
+      begin
+        perform public.set_work_pattern(array[kemi], '{0,1}'::smallint[]);
+        perform assert(false, 'schedules: staff must not set schedules');
+      exception when others then
+        perform assert(sqlerrm like '%Only admins and supervisors%', 'schedules: staff cannot set their own schedule');
+      end;
+      perform act_as(sola);
+      begin
+        perform public.set_work_pattern(array[obi], '{1,2,3}'::smallint[]);
+        perform assert(false, 'schedules: a supervisor must not set another team''s schedule');
+      exception when others then
+        perform assert(sqlerrm like '%own team%', 'schedules: a supervisor cannot set a schedule outside their team');
+      end;
+      begin
+        perform public.set_work_pattern(array[kemi, obi], '{1,2,3}'::smallint[]);
+        perform assert(false, 'schedules: a mixed list must be refused');
+      exception when others then
+        perform assert(sqlerrm like '%own team%', 'schedules: one person outside the team refuses the whole list');
+      end;
+      perform assert(not exists (select 1 from public.work_patterns where user_id = kemi),
+        'schedules: and nobody on the list was changed');
+      begin
+        perform public.set_work_pattern(array[sade], '{1,2,3}'::smallint[]);
+        perform assert(false, 'schedules: a supervisor has no schedule');
+      exception when others then
+        perform assert(sqlerrm like '%merchandisers and marketers%', 'schedules: only field staff have schedules');
+      end;
+      perform assert(public.is_working_day(obi, mon) is null,
+        'schedules: a supervisor cannot read the schedule of someone outside their team');
+
+      perform assert(public.set_work_pattern(array[kemi, uche], '{1,2,3,4,5,5}'::smallint[]) = 2,
+        'schedules: a supervisor sets one pattern for several of their team at once');
+      perform assert((select days from public.work_patterns where user_id = kemi) = '{1,2,3,4,5}'::smallint[],
+        'schedules: the days are kept once each, in order');
+      perform assert(not public.is_working_day(kemi, sat) and public.is_working_day(kemi, mon),
+        'schedules: Monday to Friday means Saturday is off');
+      perform assert((select count(*) from public.audit_log
+                      where action = 'schedule.pattern' and actor_id = sola and target_id in (kemi, uche)) = 2,
+        'schedules: each person changed has an audit row');
+
+      -- One date changed: an extra day in, an extra day off.
+      lv := public.set_schedule_override(kemi, sat, true, 'Stock count weekend');
+      perform assert(public.is_working_day(kemi, sat), 'schedules: an extra day in makes a day off a working day');
+      perform public.set_schedule_override(kemi, mon, false, '');
+      perform assert(not public.is_working_day(kemi, mon), 'schedules: an extra day off makes a working day off');
+      perform public.set_schedule_override(kemi, mon, true, 'Changed my mind');
+      perform assert((select count(*) from public.schedule_overrides where user_id = kemi and day = mon) = 1
+                     and public.is_working_day(kemi, mon),
+        'schedules: a second change on the same date replaces the first');
+      perform public.remove_schedule_override(lv);
+      perform assert(not public.is_working_day(kemi, sat), 'schedules: removing the change puts the pattern back');
+      perform assert(exists (select 1 from public.audit_log where action = 'schedule.override_remove' and target_id = kemi),
+        'schedules: date changes are audited');
+      begin
+        perform public.set_schedule_override(kemi, d0 + 400, true, '');
+        perform assert(false, 'schedules: a date years ahead must be refused');
+      exception when others then
+        perform assert(sqlerrm like '%within the next year%', 'schedules: a date more than a year ahead is refused');
+      end;
+      perform act_as(sade);
+      begin
+        perform public.set_schedule_override(kemi, sat, true, '');
+        perform assert(false, 'schedules: another supervisor must not change the date');
+      exception when others then
+        perform assert(sqlerrm like '%own team%', 'schedules: another supervisor cannot change someone''s dates');
+      end;
+
+      -- Leave: asking, overlaps, limits.
+      perform act_as(kemi);
+      lv := public.apply_leave('annual', mon, mon + 2, 'Family wedding in Enugu');
+      perform assert((select status from public.leave_requests where id = lv) = 'pending',
+        'leave: a request starts as pending');
+      perform assert(public.is_working_day(kemi, mon + 1), 'leave: a pending request does not change the day');
+      begin
+        perform public.apply_leave('sick', mon + 1, mon + 5, 'Malaria treatment');
+        perform assert(false, 'leave: an overlap must be refused');
+      exception when others then
+        perform assert(sqlerrm like '%already have leave%', 'leave: a request overlapping one still waiting is refused');
+      end;
+      begin
+        perform public.apply_leave('sick', d0 - 8, d0 - 8, 'Was ill');
+        perform assert(false, 'leave: too far back must be refused');
+      exception when others then
+        perform assert(sqlerrm like '%7 days ago%', 'leave: a start more than 7 days back is refused');
+      end;
+      perform assert(public.apply_leave('sick', d0 - 7, d0 - 7, 'Was ill with fever') is not null,
+        'leave: a start exactly 7 days back is accepted');
+      begin
+        perform public.apply_leave('casual', mon + 20, mon + 19, 'Errand');
+        perform assert(false, 'leave: dates the wrong way round must be refused');
+      exception when others then
+        perform assert(sqlerrm like '%before the first day%', 'leave: the last day cannot be before the first');
+      end;
+      begin
+        perform public.apply_leave('casual', mon + 20, mon + 20, '  ');
+        perform assert(false, 'leave: a reason is required');
+      exception when others then
+        perform assert(sqlerrm like '%Say why%', 'leave: a reason is required');
+      end;
+      begin
+        perform public.apply_leave('holiday', mon + 20, mon + 20, 'Rest');
+        perform assert(false, 'leave: an unknown type must be refused');
+      exception when others then
+        perform assert(sqlerrm like '%type of leave%', 'leave: only the four types are accepted');
+      end;
+
+      -- Deciding: never the person themselves, only their supervisor or an admin.
+      begin
+        perform public.decide_leave(lv, true, '');
+        perform assert(false, 'leave: staff must not decide leave');
+      exception when others then
+        perform assert(sqlerrm like '%Only admins and supervisors%', 'leave: staff cannot approve their own request');
+      end;
+      perform act_as(sade);
+      begin
+        perform public.decide_leave(lv, true, '');
+        perform assert(false, 'leave: another team''s supervisor must not decide');
+      exception when others then
+        perform assert(sqlerrm like '%own team%', 'leave: a supervisor cannot decide leave outside their team');
+      end;
+      insert into public.leave_requests (user_id, kind, from_date, to_date, reason)
+      values (boss, 'annual', mon, mon, 'Admin''s own day') returning id into lv2;
+      perform act_as(boss);
+      begin
+        perform public.decide_leave(lv2, true, '');
+        perform assert(false, 'leave: nobody decides their own leave');
+      exception when others then
+        perform assert(sqlerrm like '%your own leave%', 'leave: an admin cannot approve their own leave');
+      end;
+      delete from public.leave_requests where id = lv2;
+
+      perform act_as(sola);
+      res := public.decide_leave(lv, true, 'Enjoy the wedding');
+      perform assert(res->>'status' = 'approved' and (res->>'user_id')::uuid = kemi,
+        'leave: the supervisor approves, and is told whose request it was');
+      perform assert(not public.is_working_day(kemi, mon) and not public.is_working_day(kemi, mon + 2),
+        'leave: approved leave makes each of its days a non-working day');
+      perform assert(public.day_kind(kemi, mon + 1) = 'leave' and public.day_kind(kemi, mon + 3) = 'working',
+        'leave: the days read as leave, and the day after as working');
+      perform assert(exists (select 1 from public.audit_log
+                             where action = 'leave.approve' and actor_id = sola and target_id = lv),
+        'leave: the decision is audited');
+      begin
+        perform public.decide_leave(lv, false, '');
+        perform assert(false, 'leave: a decided request must not be decided again');
+      exception when others then
+        perform assert(sqlerrm like '%already been decided%', 'leave: a decision cannot be changed by deciding again');
+      end;
+
+      perform act_as(kemi);
+      begin
+        perform public.cancel_leave(lv);
+        perform assert(false, 'leave: an approved request must not be cancelled by the person');
+      exception when others then
+        perform assert(sqlerrm like '%still waiting%', 'leave: only a pending request can be cancelled');
+      end;
+      begin
+        perform public.apply_leave('casual', mon + 2, mon + 4, 'Another errand');
+        perform assert(false, 'leave: an overlap with approved leave must be refused');
+      exception when others then
+        perform assert(sqlerrm like '%already have leave%', 'leave: a request overlapping approved leave is refused');
+      end;
+      lv2 := public.apply_leave('casual', mon + 10, mon + 10, 'Bank visit');
+      perform public.cancel_leave(lv2);
+      perform assert((select status from public.leave_requests where id = lv2) = 'cancelled',
+        'leave: the person cancels a request still waiting');
+      lv2 := public.apply_leave('casual', mon + 10, mon + 10, 'Bank visit again');
+      perform act_as(boss);
+      perform public.decide_leave(lv2, false, 'We are short that day');
+      perform assert(public.is_working_day(kemi, mon + 10)
+                     and (select decision_note from public.leave_requests where id = lv2) = 'We are short that day',
+        'leave: an admin rejects with a note, and the day stays a working day');
+      perform act_as(kemi);
+      perform assert(public.apply_leave('casual', mon + 10, mon + 10, 'Bank visit, third try') is not null,
+        'leave: cancelled and rejected requests do not block asking again');
+
+      -- The no-show sweep and the absentee list skip days off and leave.
+      perform act_as(boss);
+      perform public.set_work_pattern(array[kemi, obi, uche], '{0,1,2,3,4,5,6}'::smallint[]);
+      perform public.set_schedule_override(kemi, d0, false, 'Swapped for Saturday');
+      perform act_as(uche);
+      lv := public.apply_leave('sick', d0, d0, 'Hospital appointment');
+      perform act_as(boss);
+      perform public.decide_leave(lv, true, '');
+      perform assert(exists (select 1 from public.staff_no_show(0) where user_id = obi),
+        'sweep: someone working today with no clock-in is reported');
+      perform assert(not exists (select 1 from public.staff_no_show(0) where user_id in (kemi, uche)),
+        'sweep: nobody on a day off or on leave is reported');
+      perform assert(exists (select 1 from public.absentees_today() where user_id = obi)
+                     and not exists (select 1 from public.absentees_today() where user_id in (kemi, uche)),
+        'sweep: the absentee list leaves out days off and leave');
+      perform assert((public.admin_overview()->>'not_expected')::int >= 2,
+        'sweep: the overview counts who is not expected today');
+
+      -- The staff calendar: missed days in the past, days off, today.
+      update public.profiles set created_at = now() - interval '10 days' where id = obi;
+      perform public.set_schedule_override(obi, d0 - 2, false, '');
+      perform act_as(obi);
+      select * into cal from public.my_calendar(d0 - 1, d0 - 1);
+      perform assert(cal.kind = 'working' and cal.missed and not cal.clocked_in,
+        'calendar: a past working day with no clock-in is missed');
+      select * into cal from public.my_calendar(d0 - 2, d0 - 2);
+      perform assert(cal.kind = 'off' and not cal.missed, 'calendar: a day off is never missed');
+      select * into cal from public.my_calendar(d0, d0);
+      perform assert(not cal.missed, 'calendar: today is not missed yet');
+      perform assert((select count(*) from public.my_calendar(d0 - 30, d0 - 1) where missed) = 9,
+        'calendar: nothing is missed before the account was made');
+      perform act_as(uche);
+      select * into cal from public.my_calendar(d0, d0);
+      perform assert(cal.kind = 'leave', 'calendar: approved leave shows as leave');
+      perform act_as(ada);
+      select * into cal from public.my_calendar(d0, d0);
+      perform assert(cal.clocked_in, 'calendar: a day with a clock-in shows it');
+      perform act_as(boss);
+    end;
+    -- Store visits keep to the person's own stores, and the report keeps
+    -- the day's visits (060).
+    declare
+      mk      uuid := gen_random_uuid();
+      allen   uuid;
+      ogba    uuid;
+      v1      uuid;
+      rep     uuid;
+      snap    jsonb;
+    begin
+      perform act_as(boss);
+      insert into auth.users (id, email) values (mk, 'chidi.mkt@xpel.ng');
+      insert into public.profiles (id, full_name, email, role, outlet_id)
+      values (mk, 'Chidi Obi', 'chidi.mkt@xpel.ng', 'marketer', null);
+      perform notifications_on(mk);
+      insert into public.outlets (name, address, lat, lng, geofence_radius_m)
+      values ('Allen Avenue Beauty', '12 Allen Avenue, Ikeja', 6.5200, 3.3700, 60) returning id into allen;
+      insert into public.outlets (name, lat, lng, geofence_radius_m)
+      values ('Ogba Cosmetics', 6.5300, 3.3700, 60) returning id into ogba;
+      perform set_staff_outlets(mk, array[allen]);
+
+      perform act_as(mk);
+      perform assert(public.has_allocated_stores(mk), 'visits: the marketer has a store allocated');
+      perform assert((select count(*) from public.my_visit_stores()) = 1
+                     and (select name from public.my_visit_stores()) = 'Allen Avenue Beauty',
+        'visits: the store picker lists only their allocated store');
+
+      begin
+        insert into public.store_visits (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
+        values (ogba, 6.5300, 3.3700, 10, now());
+        perform assert(false, 'visits: a store picked by hand that is not theirs is refused');
+      exception when others then
+        perform assert(sqlerrm = 'This store is not on your list. Ask your supervisor to add it.',
+          'visits: a store picked by hand that is not theirs is refused');
+      end;
+      begin
+        insert into public.store_visits (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
+        values (6.5301, 3.3701, 10, now());
+        perform assert(false, 'visits: standing in a store that is not theirs is refused');
+      exception when others then
+        perform assert(sqlerrm like 'This store is not on your list%',
+          'visits: standing in a store that is not theirs is refused');
+      end;
+      perform assert(not exists (select 1 from public.store_visits where user_id = mk),
+        'visits: and neither refusal left a visit behind');
+
+      insert into public.store_visits (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at,
+                                       arrived_place_name)
+      values (6.5201, 3.3701, 10, now(), 'Allen Avenue Beauty') returning id into v1;
+      perform assert((select outlet_id from public.store_visits where id = v1) = allen
+                     and (select arrived_status from public.store_visits where id = v1) = 'on_site',
+        'visits: standing in their own store is recognised and on site');
+      perform public.end_store_visit(v1, 6.5201, 3.3701, 10, null, null);
+      update public.store_visits set arrived_at = now() - interval '50 minutes', departed_at = now() - interval '5 minutes'
+       where id = v1;
+
+      insert into public.store_visits (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
+      values (allen, 6.5201, 3.3701, 10, now()) returning id into v1;
+      perform assert((select outlet_id from public.store_visits where id = v1) = allen,
+        'visits: picking their own store by hand is allowed');
+
+      -- The report: the database fills in the day's visits, whatever was sent.
+      insert into public.reports (body, sales_summary, stock_status, store_visits)
+      values ('A steady day at Allen.', 'Twelve units of toner.', 'Serum is running low.',
+              '[{"store": "Made up by the phone", "minutes": 999}]'::jsonb)
+      returning id into rep;
+      snap := (select store_visits from public.reports where id = rep);
+      perform assert(jsonb_array_length(snap) = 2,
+        'reports: the report keeps the day''s two visits');
+      perform assert(not exists (select 1 from jsonb_array_elements(snap) e where e->>'store' = 'Made up by the phone'),
+        'reports: and ignores visits the phone sent');
+      perform assert((snap->0->>'outlet_name') = 'Allen Avenue Beauty'
+                     and (snap->0->>'minutes')::int = 45
+                     and snap->0->>'departed_at' is not null
+                     and snap->1->>'departed_at' is null
+                     and (snap->0->>'address') = '12 Allen Avenue, Ikeja',
+        'reports: each visit has its store, address, times and minutes, in order');
+
+      perform public.end_store_visit(v1, 6.5201, 3.3701, 10, null, null);
+      update public.reports set issues = 'Need more testers.', store_visits = '[]'::jsonb where id = rep;
+      snap := (select store_visits from public.reports where id = rep);
+      perform assert(jsonb_array_length(snap) = 2 and snap->1->>'departed_at' is not null,
+        'reports: saving the report again refreshes the visits, and cannot clear them');
+
+      -- With no allocation, any known store will do, as before.
+      perform act_as(boss);
+      perform set_staff_outlets(mk, array[]::uuid[]);
+      perform act_as(mk);
+      perform assert(not public.has_allocated_stores(mk)
+                     and (select count(*) from public.my_visit_stores()) = 0,
+        'visits: with no allocation, the picker has no stores to offer');
+      insert into public.store_visits (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
+      values (ogba, 6.5300, 3.3700, 10, now()) returning id into v1;
+      perform assert((select outlet_id from public.store_visits where id = v1) = ogba,
+        'visits: with no allocation, a store picked by hand is allowed');
+      perform public.end_store_visit(v1, 6.5300, 3.3700, 10, null, null);
+      insert into public.store_visits (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
+      values (6.5301, 3.3701, 10, now()) returning id into v1;
+      perform assert((select outlet_id from public.store_visits where id = v1) = ogba,
+        'visits: with no allocation, standing in a known store is recognised');
+      perform public.end_store_visit(v1, 6.5301, 3.3701, 10, null, null);
+      perform act_as(boss);
+    end;
 
   end;
 

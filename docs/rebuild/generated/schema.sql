@@ -143,6 +143,7 @@ CREATE FUNCTION public.absentees_today() RETURNS TABLE(user_id uuid, full_name t
   where p.is_active
     and public.is_field_role(p.role)
     and (public.is_admin() or public.supervises_user(p.id))
+    and public.day_kind(p.id, public.business_date()) = 'working'
     and not exists (
       select 1 from public.attendance a
       where a.user_id = p.id
@@ -163,7 +164,8 @@ CREATE FUNCTION public.admin_overview() RETURNS jsonb
     AS $$
   with today as (select public.business_date() as d),
   staff as (
-    select p.id, p.full_name, o.shift_start
+    select p.id, p.full_name, o.shift_start,
+           public.day_kind(p.id, (select d from today)) = 'working' as expected
     from public.profiles p
     left join public.outlets o on o.id = p.outlet_id
     where p.is_active and public.is_field_role(p.role)
@@ -185,7 +187,9 @@ CREATE FUNCTION public.admin_overview() RETURNS jsonb
     'still_on_shift',  (select count(*) from openings o
                         where not exists (select 1 from closings c where c.user_id = o.user_id)),
     'absent',          (select count(*) from staff s
-                        where not exists (select 1 from openings o where o.user_id = s.id)),
+                        where s.expected
+                          and not exists (select 1 from openings o where o.user_id = s.id)),
+    'not_expected',    (select count(*) from staff s where not s.expected),
     'late',            (select count(*) from openings o
                         join staff s on s.id = o.user_id
                         where s.shift_start is not null
@@ -224,6 +228,68 @@ CREATE FUNCTION public.alert_watchers(p_user uuid) RETURNS TABLE(user_id uuid, f
         )
       )
     );
+$$;
+
+
+--
+-- Name: apply_leave(text, date, date, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.apply_leave(p_kind text, p_from date, p_to date, p_reason text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  me public.profiles;
+  today date := public.business_date();
+  clean text := btrim(coalesce(p_reason, ''));
+  new_id uuid;
+begin
+  select * into me from public.profiles where id = auth.uid();
+  if me.id is null or not me.is_active then
+    raise exception 'Sign in again to ask for leave';
+  end if;
+  if not public.is_field_role(me.role) then
+    raise exception 'Leave requests are for merchandisers and marketers';
+  end if;
+  if p_kind is null or p_kind not in ('annual', 'sick', 'casual', 'other') then
+    raise exception 'Pick the type of leave';
+  end if;
+  if p_from is null or p_to is null then
+    raise exception 'Pick the first and last day of your leave';
+  end if;
+  if p_to < p_from then
+    raise exception 'The last day cannot be before the first day';
+  end if;
+  if p_from < today - 7 then
+    raise exception 'Leave can start at most 7 days ago';
+  end if;
+  if p_to > today + 365 then
+    raise exception 'Pick dates within the next year';
+  end if;
+  if p_to - p_from + 1 > 60 then
+    raise exception 'One request can cover at most 60 days';
+  end if;
+  if length(clean) < 3 then
+    raise exception 'Say why you need the leave';
+  end if;
+  if length(clean) > 1000 then
+    raise exception 'Keep the reason under 1000 characters';
+  end if;
+
+  -- One at a time per person, so two requests sent together cannot both pass.
+  perform 1 from public.profiles where id = me.id for update;
+  if exists (select 1 from public.leave_requests l
+             where l.user_id = me.id and l.status in ('pending', 'approved')
+               and l.from_date <= p_to and l.to_date >= p_from) then
+    raise exception 'You already have leave asked for or approved on some of those days';
+  end if;
+
+  insert into public.leave_requests (user_id, kind, from_date, to_date, reason)
+  values (me.id, p_kind, p_from, p_to, clean)
+  returning id into new_id;
+  return new_id;
+end;
 $$;
 
 
@@ -773,6 +839,22 @@ $$;
 
 
 --
+-- Name: can_manage_schedule(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.can_manage_schedule(p_user uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select coalesce(
+    (select public.is_field_role(p.role)
+            and (public.is_admin() or public.supervises_user(p.id))
+       from public.profiles p where p.id = p_user),
+    false);
+$$;
+
+
+--
 -- Name: can_see_count_request(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -821,6 +903,29 @@ CREATE FUNCTION public.can_visit_stores() RETURNS boolean
     end
     from public.profiles p where p.id = auth.uid()
   ), false);
+$$;
+
+
+--
+-- Name: cancel_leave(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.cancel_leave(p_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  l public.leave_requests;
+begin
+  select * into l from public.leave_requests where id = p_id for update;
+  if l.id is null or l.user_id <> auth.uid() then
+    raise exception 'That request was not found';
+  end if;
+  if l.status <> 'pending' then
+    raise exception 'Only a request still waiting can be cancelled';
+  end if;
+  update public.leave_requests set status = 'cancelled', cancelled_at = now() where id = p_id;
+end;
 $$;
 
 
@@ -1116,6 +1221,55 @@ begin
     values (auth.uid(), 'count_round_numbers', 'low',
             'Every number in the count is a multiple of 10', p_outlet_id);
   end if;
+end;
+$$;
+
+
+--
+-- Name: claim_clock_out_reminders(timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.claim_clock_out_reminders(p_now timestamp with time zone DEFAULT now()) RETURNS TABLE(user_id uuid, reminder_date date, stage smallint, shift_end text)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+#variable_conflict use_column
+declare
+  today date := (coalesce(p_now, now()) at time zone 'Africa/Lagos')::date;
+  at_now timestamptz := coalesce(p_now, now());
+begin
+  return query
+    with due as (
+      select p.id as uid,
+             public.shift_end_for(p.id) as ends
+      from public.profiles p
+      where p.is_active
+        and exists (select 1 from public.attendance a
+                    where a.user_id = p.id and a.attendance_date = today and a.type = 'opening')
+        and not exists (select 1 from public.attendance a
+                        where a.user_id = p.id and a.attendance_date = today and a.type = 'closing')
+    ),
+    staged as (
+      select d.uid, d.ends,
+             case
+               when at_now >= ((today + d.ends) at time zone 'Africa/Lagos') + interval '60 minutes' then 2
+               when at_now >= ((today + d.ends) at time zone 'Africa/Lagos') then 1
+             end::smallint as st
+      from due d
+    ),
+    claimed as (
+      insert into public.clock_out_reminders as r (user_id, reminder_date, stage, shift_end, claimed_at)
+      select s.uid, today, s.st, s.ends, at_now
+      from staged s
+      where s.st is not null
+        -- Stage 1 is never sent once stage 2 has gone.
+        and not exists (select 1 from public.clock_out_reminders x
+                        where x.user_id = s.uid and x.reminder_date = today and x.stage >= s.st)
+      on conflict do nothing
+      returning r.user_id, r.reminder_date, r.stage, r.shift_end
+    )
+    select c.user_id, c.reminder_date, c.stage, to_char(c.shift_end, 'HH24:MI')
+    from claimed c;
 end;
 $$;
 
@@ -1471,6 +1625,98 @@ $$;
 
 
 --
+-- Name: day_kind(uuid, date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.day_kind(p_user uuid, p_day date) RETURNS text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select case
+    when exists (select 1 from public.leave_requests l
+                 where l.user_id = p_user and l.status = 'approved'
+                   and p_day between l.from_date and l.to_date)
+      then 'leave'
+    else coalesce(
+      (select case when o.working then 'working' else 'off' end
+         from public.schedule_overrides o
+        where o.user_id = p_user and o.day = p_day),
+      case when extract(dow from p_day)::smallint = any (
+             coalesce((select w.days from public.work_patterns w where w.user_id = p_user),
+                      public.default_work_days()))
+           then 'working' else 'off' end)
+  end;
+$$;
+
+
+--
+-- Name: decide_leave(uuid, boolean, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.decide_leave(p_id uuid, p_approve boolean, p_note text DEFAULT ''::text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  l public.leave_requests;
+  clean text := btrim(coalesce(p_note, ''));
+  outcome text;
+begin
+  if not (public.is_admin() or public.current_user_role() = 'supervisor') then
+    raise exception 'Only admins and supervisors decide leave';
+  end if;
+  if p_approve is null then
+    raise exception 'Approve or reject the request';
+  end if;
+  select * into l from public.leave_requests where id = p_id for update;
+  if l.id is null then
+    raise exception 'That request was not found';
+  end if;
+  if l.user_id = auth.uid() then
+    raise exception 'You cannot decide your own leave';
+  end if;
+  if not (public.is_admin() or public.supervises_user(l.user_id)) then
+    raise exception 'You can only decide leave for your own team';
+  end if;
+  if l.status = 'cancelled' then
+    raise exception 'That request was cancelled';
+  end if;
+  if l.status <> 'pending' then
+    raise exception 'That request has already been decided';
+  end if;
+  if length(clean) > 500 then
+    raise exception 'Keep the note under 500 characters';
+  end if;
+
+  outcome := case when p_approve then 'approved' else 'rejected' end;
+  update public.leave_requests
+     set status = outcome, decided_by = auth.uid(), decided_at = now(), decision_note = clean
+   where id = p_id;
+
+  insert into public.audit_log (actor_id, action, target_table, target_id, meta)
+  values (auth.uid(), case when p_approve then 'leave.approve' else 'leave.reject' end,
+          'leave_requests', p_id,
+          jsonb_build_object('user_id', l.user_id, 'kind', l.kind, 'from', l.from_date,
+                             'to', l.to_date, 'note', clean));
+
+  return jsonb_build_object('id', l.id, 'user_id', l.user_id, 'status', outcome, 'kind', l.kind,
+                            'from_date', l.from_date, 'to_date', l.to_date, 'note', clean);
+end;
+$$;
+
+
+--
+-- Name: default_work_days(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.default_work_days() RETURNS smallint[]
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  select array[1, 2, 3, 4, 5, 6]::smallint[];
+$$;
+
+
+--
 -- Name: dismiss_place_due(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1754,6 +2000,23 @@ $$;
 
 
 --
+-- Name: has_allocated_stores(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.has_allocated_stores(target uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select exists (
+    select 1
+    from public.staff_outlets s
+    join public.outlets o on o.id = s.outlet_id
+    where s.user_id = target and o.is_active
+  );
+$$;
+
+
+--
 -- Name: has_live_push(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1803,6 +2066,21 @@ CREATE FUNCTION public.is_month_end_window(d date DEFAULT public.business_date()
     SET search_path TO 'public'
     AS $$
   select d > ((date_trunc('month', d) + interval '1 month')::date - public.month_end_count_days() - 1)
+$$;
+
+
+--
+-- Name: is_working_day(uuid, date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.is_working_day(p_user uuid, p_day date) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select case
+    when auth.uid() is null or p_user = auth.uid() or public.is_admin() or public.supervises_user(p_user)
+      then public.day_kind(p_user, p_day) = 'working'
+  end;
 $$;
 
 
@@ -2181,6 +2459,37 @@ $$;
 
 
 --
+-- Name: my_calendar(date, date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_calendar(p_from date, p_to date) RETURNS TABLE(day date, kind text, clocked_in boolean, missed boolean)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  with me as (
+    select p.id, (p.created_at at time zone 'Africa/Lagos')::date as since
+    from public.profiles p where p.id = auth.uid()
+  ),
+  days as (
+    select d::date as day
+    from generate_series(p_from, least(p_to, p_from + 92), interval '1 day') d
+  )
+  select d.day,
+         public.day_kind(me.id, d.day),
+         exists (select 1 from public.attendance a
+                 where a.user_id = me.id and a.attendance_date = d.day and a.type = 'opening'),
+         (d.day < public.business_date()
+          and d.day >= me.since
+          and public.day_kind(me.id, d.day) = 'working'
+          and not exists (select 1 from public.attendance a
+                          where a.user_id = me.id and a.attendance_date = d.day and a.type = 'opening'))
+  from days d cross join me
+  where p_from is not null and p_to is not null and p_to >= p_from
+  order by d.day;
+$$;
+
+
+--
 -- Name: my_coverage(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2473,6 +2782,22 @@ CREATE FUNCTION public.my_store_visits() RETURNS SETOF public.store_visit_detail
   select * from public.store_visit_detail
   where user_id = auth.uid() and visit_date = public.business_date()
   order by arrived_at desc;
+$$;
+
+
+--
+-- Name: my_visit_stores(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_visit_stores() RETURNS TABLE(id uuid, name text, address text, lat double precision, lng double precision, geofence_radius_m integer)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select o.id, o.name, o.address, o.lat, o.lng, o.geofence_radius_m
+  from public.outlets o
+  where public.has_allocated_stores(auth.uid())
+    and o.id in (select f.outlet_id from public.outlets_for_user(auth.uid()) f)
+  order by o.name;
 $$;
 
 
@@ -3608,6 +3933,30 @@ $$;
 
 
 --
+-- Name: remove_schedule_override(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.remove_schedule_override(p_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  o public.schedule_overrides;
+begin
+  select * into o from public.schedule_overrides where id = p_id;
+  if o.id is null then
+    raise exception 'That date change was not found';
+  end if;
+  perform public.schedule_guard(o.user_id);
+  delete from public.schedule_overrides where id = p_id;
+  insert into public.audit_log (actor_id, action, target_table, target_id, meta)
+  values (auth.uid(), 'schedule.override_remove', 'profiles', o.user_id,
+          jsonb_build_object('day', o.day, 'working', o.working, 'note', o.note));
+end;
+$$;
+
+
+--
 -- Name: reopen_support_thread(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3661,6 +4010,23 @@ $$;
 
 
 --
+-- Name: report_capture_visits(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.report_capture_visits() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  -- Runs after report_enforce (trigger names sort), so user and date are
+  -- the server's own.
+  new.store_visits := public.report_visits_snapshot(new.user_id, new.report_date);
+  return new;
+end;
+$$;
+
+
+--
 -- Name: report_enforce(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3704,6 +4070,29 @@ begin
   end if;
   return new;
 end;
+$$;
+
+
+--
+-- Name: report_visits_snapshot(uuid, date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.report_visits_snapshot(p_user uuid, p_date date) RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'store',          d.store_label,
+           'outlet_name',    d.outlet_name,
+           'address',        coalesce(d.outlet_address, d.arrived_address),
+           'arrived_at',     d.arrived_at,
+           'departed_at',    d.departed_at,
+           'minutes',        d.minutes,
+           'status',         d.status,
+           'arrived_status', d.arrived_status
+         ) order by d.arrived_at), '[]'::jsonb)
+  from public.store_visit_detail d
+  where d.user_id = p_user and d.visit_date = p_date;
 $$;
 
 
@@ -4029,6 +4418,34 @@ $$;
 
 
 --
+-- Name: schedule_guard(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.schedule_guard(p_user uuid) RETURNS void
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  target_role user_role;
+begin
+  if not (public.is_admin() or public.current_user_role() = 'supervisor') then
+    raise exception 'Only admins and supervisors set schedules';
+  end if;
+  select role into target_role from public.profiles where id = p_user;
+  if target_role is null then
+    raise exception 'That person was not found';
+  end if;
+  if not public.is_field_role(target_role) then
+    raise exception 'Schedules are for merchandisers and marketers';
+  end if;
+  if not public.can_manage_schedule(p_user) then
+    raise exception 'You can only set schedules for your own team';
+  end if;
+end;
+$$;
+
+
+--
 -- Name: schedule_notification(text, text, text, public.notification_audience, jsonb, timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4197,6 +4614,47 @@ $$;
 
 
 --
+-- Name: set_schedule_override(uuid, date, boolean, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_schedule_override(p_user uuid, p_day date, p_working boolean, p_note text DEFAULT ''::text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  new_id uuid;
+  clean text := btrim(coalesce(p_note, ''));
+begin
+  perform public.schedule_guard(p_user);
+  if p_day is null or p_working is null then
+    raise exception 'Pick a date and whether it is a working day or a day off';
+  end if;
+  if p_day < public.business_date() - 60 then
+    raise exception 'That date is too far in the past';
+  end if;
+  if p_day > public.business_date() + 366 then
+    raise exception 'Pick a date within the next year';
+  end if;
+  if length(clean) > 300 then
+    raise exception 'Keep the note under 300 characters';
+  end if;
+
+  insert into public.schedule_overrides (user_id, day, working, note, created_by, created_at)
+  values (p_user, p_day, p_working, clean, auth.uid(), now())
+  on conflict (user_id, day) do update
+    set working = excluded.working, note = excluded.note,
+        created_by = excluded.created_by, created_at = now()
+  returning id into new_id;
+
+  insert into public.audit_log (actor_id, action, target_table, target_id, meta)
+  values (auth.uid(), 'schedule.override', 'profiles', p_user,
+          jsonb_build_object('day', p_day, 'working', p_working, 'note', clean, 'override_id', new_id));
+  return new_id;
+end;
+$$;
+
+
+--
 -- Name: set_staff_outlets(uuid, uuid[]); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4234,6 +4692,77 @@ begin
   return query
     select s.outlet_id from public.staff_outlets s where s.user_id = p_user_id;
 end;
+$$;
+
+
+--
+-- Name: set_work_pattern(uuid[], smallint[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_work_pattern(p_users uuid[], p_days smallint[]) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  t uuid;
+  clean smallint[];
+  before smallint[];
+  n integer := 0;
+begin
+  if p_users is null or cardinality(p_users) = 0 then
+    raise exception 'Pick at least one person';
+  end if;
+  if cardinality(p_users) > 500 then
+    raise exception 'Set at most 500 people at a time';
+  end if;
+  if p_days is not null then
+    if not (p_days <@ array[0, 1, 2, 3, 4, 5, 6]::smallint[]) then
+      raise exception 'Days of the week run from Sunday (0) to Saturday (6)';
+    end if;
+    select coalesce(array_agg(distinct d order by d), '{}') into clean from unnest(p_days) d;
+  end if;
+
+  -- All or nothing: check everyone before changing anyone.
+  foreach t in array p_users loop
+    perform public.schedule_guard(t);
+  end loop;
+
+  for t in select distinct u from unnest(p_users) u loop
+    select days into before from public.work_patterns where user_id = t;
+    if p_days is null then
+      delete from public.work_patterns where user_id = t;
+    else
+      insert into public.work_patterns (user_id, days, updated_by, updated_at)
+      values (t, clean, auth.uid(), now())
+      on conflict (user_id) do update
+        set days = excluded.days, updated_by = excluded.updated_by, updated_at = now();
+    end if;
+    insert into public.audit_log (actor_id, action, target_table, target_id, meta)
+    values (auth.uid(), 'schedule.pattern', 'profiles', t,
+            jsonb_build_object('days', coalesce(to_jsonb(clean), to_jsonb(public.default_work_days())),
+                               'default', p_days is null,
+                               'before', coalesce(to_jsonb(before), to_jsonb(public.default_work_days())),
+                               'people', cardinality(p_users)));
+    n := n + 1;
+  end loop;
+  return n;
+end;
+$$;
+
+
+--
+-- Name: shift_end_for(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.shift_end_for(p_user uuid) RETURNS time without time zone
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select coalesce(
+    (select o.shift_end from public.profiles p
+     join public.outlets o on o.id = p.outlet_id
+     where p.id = p_user),
+    time '18:00');
 $$;
 
 
@@ -4349,6 +4878,7 @@ CREATE FUNCTION public.staff_no_show(p_grace_minutes integer DEFAULT 30) RETURNS
     and o.is_active
     and (select ts from now_local)
         >= ((select ts from now_local)::date + o.shift_start + make_interval(mins => greatest(0, p_grace_minutes)))
+    and public.day_kind(p.id, public.business_date()) = 'working'
     and not exists (
       select 1 from public.attendance a
       where a.user_id = p.id
@@ -4417,6 +4947,8 @@ CREATE FUNCTION public.store_visit_enforce() RETURNS trigger
     AS $$
 declare
   o record;
+  limited boolean;
+  found uuid;
 begin
   if not public.can_visit_stores() then
     raise exception 'Only marketers record store visits';
@@ -4434,7 +4966,26 @@ begin
   new.departed_distance_m := null;
   new.departed_status := null;
 
-  if new.outlet_id is null then
+  limited := public.has_allocated_stores(new.user_id);
+
+  if new.outlet_id is not null then
+    -- Picked by hand: it has to be one of theirs.
+    if limited and new.outlet_id not in (select f.outlet_id from public.outlets_for_user(new.user_id) f) then
+      raise exception 'This store is not on your list. Ask your supervisor to add it.';
+    end if;
+  elsif limited then
+    -- Recognised by location: their own store first, if they stand in one.
+    select x.id into found
+    from public.outlets x
+    where x.id in (select f.outlet_id from public.outlets_for_user(new.user_id) f)
+      and public.distance_metres(new.arrived_lat, new.arrived_lng, x.lat, x.lng) <= x.geofence_radius_m
+    order by public.distance_metres(new.arrived_lat, new.arrived_lng, x.lat, x.lng)
+    limit 1;
+    if found is null and public.outlet_containing(new.arrived_lat, new.arrived_lng) is not null then
+      raise exception 'This store is not on your list. Ask your supervisor to add it.';
+    end if;
+    new.outlet_id := found;
+  else
     new.outlet_id := public.outlet_containing(new.arrived_lat, new.arrived_lng);
   end if;
 
@@ -6039,6 +6590,20 @@ CREATE VIEW public.audit_log_detail WITH (security_invoker='true') AS
 
 
 --
+-- Name: clock_out_reminders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.clock_out_reminders (
+    user_id uuid NOT NULL,
+    reminder_date date NOT NULL,
+    stage smallint NOT NULL,
+    shift_end time without time zone NOT NULL,
+    claimed_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT clock_out_reminders_stage_check CHECK ((stage = ANY (ARRAY[1, 2])))
+);
+
+
+--
 -- Name: count_request_targets; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -6362,6 +6927,60 @@ CREATE VIEW public.known_place_detail WITH (security_invoker='true') AS
 
 
 --
+-- Name: leave_requests; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.leave_requests (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    kind text NOT NULL,
+    from_date date NOT NULL,
+    to_date date NOT NULL,
+    reason text NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    decided_by uuid,
+    decided_at timestamp with time zone,
+    decision_note text DEFAULT ''::text NOT NULL,
+    cancelled_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT leave_requests_check CHECK ((to_date >= from_date)),
+    CONSTRAINT leave_requests_decision_note_check CHECK ((length(decision_note) <= 500)),
+    CONSTRAINT leave_requests_kind_check CHECK ((kind = ANY (ARRAY['annual'::text, 'sick'::text, 'casual'::text, 'other'::text]))),
+    CONSTRAINT leave_requests_reason_check CHECK (((length(btrim(reason)) >= 3) AND (length(btrim(reason)) <= 1000))),
+    CONSTRAINT leave_requests_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'cancelled'::text])))
+);
+
+
+--
+-- Name: leave_request_detail; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.leave_request_detail WITH (security_invoker='true') AS
+ SELECT l.id,
+    l.user_id,
+    l.kind,
+    l.from_date,
+    l.to_date,
+    l.reason,
+    l.status,
+    l.decided_by,
+    l.decided_at,
+    l.decision_note,
+    l.cancelled_at,
+    l.created_at,
+    p.full_name AS staff_name,
+    p.role AS staff_role,
+    o.name AS outlet_name,
+    p.supervisor_id,
+    d.full_name AS decided_by_name,
+    ((l.to_date - l.from_date) + 1) AS days
+   FROM (((public.leave_requests l
+     JOIN public.profiles p ON ((p.id = l.user_id)))
+     LEFT JOIN public.outlets o ON ((o.id = p.outlet_id)))
+     LEFT JOIN public.profiles d ON ((d.id = l.decided_by)));
+
+
+--
 -- Name: location_pings; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -6636,8 +7255,16 @@ CREATE TABLE public.reports (
     competitor_activity text,
     issues text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    store_visits jsonb DEFAULT '[]'::jsonb NOT NULL
 );
+
+
+--
+-- Name: COLUMN reports.store_visits; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.reports.store_visits IS 'The store visits of that person and day when the report was last saved (060). Set by trigger only.';
 
 
 --
@@ -6649,6 +7276,22 @@ CREATE TABLE public.role_store_counts (
     counts_stock boolean DEFAULT true NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT role_store_counts_role_check CHECK ((role = ANY (ARRAY['merchandiser'::public.user_role, 'marketer'::public.user_role])))
+);
+
+
+--
+-- Name: schedule_overrides; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.schedule_overrides (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    day date NOT NULL,
+    working boolean NOT NULL,
+    note text DEFAULT ''::text NOT NULL,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT schedule_overrides_note_check CHECK ((length(note) <= 300))
 );
 
 
@@ -6947,6 +7590,19 @@ CREATE TABLE public.tracking_tokens (
     last_used_at timestamp with time zone,
     points integer DEFAULT 0 NOT NULL,
     CONSTRAINT tracking_tokens_platform_check CHECK ((platform = ANY (ARRAY['android'::text, 'ios'::text])))
+);
+
+
+--
+-- Name: work_patterns; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.work_patterns (
+    user_id uuid NOT NULL,
+    days smallint[] NOT NULL,
+    updated_by uuid,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT work_patterns_days_check CHECK (((days <@ ARRAY[(0)::smallint, (1)::smallint, (2)::smallint, (3)::smallint, (4)::smallint, (5)::smallint, (6)::smallint]) AND (cardinality(days) <= 7)))
 );
 
 
@@ -7503,6 +8159,14 @@ ALTER TABLE ONLY public.audit_log
 
 
 --
+-- Name: clock_out_reminders clock_out_reminders_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.clock_out_reminders
+    ADD CONSTRAINT clock_out_reminders_pkey PRIMARY KEY (user_id, reminder_date, stage);
+
+
+--
 -- Name: count_request_targets count_request_targets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7572,6 +8236,14 @@ ALTER TABLE ONLY public.job_runs
 
 ALTER TABLE ONLY public.known_places
     ADD CONSTRAINT known_places_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: leave_requests leave_requests_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.leave_requests
+    ADD CONSTRAINT leave_requests_pkey PRIMARY KEY (id);
 
 
 --
@@ -7743,6 +8415,22 @@ ALTER TABLE ONLY public.role_store_counts
 
 
 --
+-- Name: schedule_overrides schedule_overrides_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schedule_overrides
+    ADD CONSTRAINT schedule_overrides_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: schedule_overrides schedule_overrides_user_id_day_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schedule_overrides
+    ADD CONSTRAINT schedule_overrides_user_id_day_key UNIQUE (user_id, day);
+
+
+--
 -- Name: scheduled_notifications scheduled_notifications_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -7868,6 +8556,14 @@ ALTER TABLE ONLY public.tracking_tokens
 
 ALTER TABLE ONLY public.tracking_tokens
     ADD CONSTRAINT tracking_tokens_token_hash_key UNIQUE (token_hash);
+
+
+--
+-- Name: work_patterns work_patterns_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_patterns
+    ADD CONSTRAINT work_patterns_pkey PRIMARY KEY (user_id);
 
 
 --
@@ -8110,6 +8806,13 @@ CREATE INDEX audit_log_created_at_idx ON public.audit_log USING btree (created_a
 
 
 --
+-- Name: clock_out_reminders_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX clock_out_reminders_date ON public.clock_out_reminders USING btree (reminder_date DESC);
+
+
+--
 -- Name: count_request_targets_by_user; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -8156,6 +8859,20 @@ CREATE INDEX integrity_flags_to_notify ON public.integrity_flags USING btree (cr
 --
 
 CREATE INDEX known_places_by_position ON public.known_places USING btree (lat, lng);
+
+
+--
+-- Name: leave_requests_by_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX leave_requests_by_status ON public.leave_requests USING btree (status, from_date);
+
+
+--
+-- Name: leave_requests_by_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX leave_requests_by_user ON public.leave_requests USING btree (user_id, from_date);
 
 
 --
@@ -8282,6 +8999,13 @@ CREATE INDEX push_subscriptions_user ON public.push_subscriptions USING btree (u
 --
 
 CREATE UNIQUE INDEX reports_one_per_day ON public.reports USING btree (user_id, report_date);
+
+
+--
+-- Name: schedule_overrides_by_day; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX schedule_overrides_by_day ON public.schedule_overrides USING btree (day);
 
 
 --
@@ -8670,6 +9394,13 @@ CREATE TRIGGER trg_report_photo_limit BEFORE INSERT ON public.report_photos FOR 
 
 
 --
+-- Name: reports trg_report_visits; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_report_visits BEFORE INSERT OR UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION public.report_capture_visits();
+
+
+--
 -- Name: reports trg_reports_place_due_guard; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -8795,6 +9526,14 @@ ALTER TABLE ONLY public.audit_log
 
 
 --
+-- Name: clock_out_reminders clock_out_reminders_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.clock_out_reminders
+    ADD CONSTRAINT clock_out_reminders_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
 -- Name: count_request_targets count_request_targets_request_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8880,6 +9619,22 @@ ALTER TABLE ONLY public.integrity_flags
 
 ALTER TABLE ONLY public.known_places
     ADD CONSTRAINT known_places_named_by_fkey FOREIGN KEY (named_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: leave_requests leave_requests_decided_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.leave_requests
+    ADD CONSTRAINT leave_requests_decided_by_fkey FOREIGN KEY (decided_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: leave_requests leave_requests_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.leave_requests
+    ADD CONSTRAINT leave_requests_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 
 
 --
@@ -9064,6 +9819,22 @@ ALTER TABLE ONLY public.reports
 
 ALTER TABLE ONLY public.reports
     ADD CONSTRAINT reports_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE RESTRICT;
+
+
+--
+-- Name: schedule_overrides schedule_overrides_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schedule_overrides
+    ADD CONSTRAINT schedule_overrides_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: schedule_overrides schedule_overrides_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.schedule_overrides
+    ADD CONSTRAINT schedule_overrides_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 
 
 --
@@ -9256,6 +10027,22 @@ ALTER TABLE ONLY public.support_threads
 
 ALTER TABLE ONLY public.tracking_tokens
     ADD CONSTRAINT tracking_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: work_patterns work_patterns_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_patterns
+    ADD CONSTRAINT work_patterns_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: work_patterns work_patterns_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.work_patterns
+    ADD CONSTRAINT work_patterns_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 
 
 --
@@ -9693,6 +10480,19 @@ CREATE POLICY audit_admin_read ON public.audit_log FOR SELECT USING (public.is_a
 ALTER TABLE public.audit_log ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: clock_out_reminders; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.clock_out_reminders ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: clock_out_reminders clock_out_reminders_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY clock_out_reminders_read ON public.clock_out_reminders FOR SELECT USING (((user_id = auth.uid()) OR public.is_admin() OR public.supervises_user(user_id)));
+
+
+--
 -- Name: count_request_targets; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -9787,6 +10587,19 @@ ALTER TABLE public.known_places ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY known_places_admin ON public.known_places USING (public.is_admin()) WITH CHECK (public.is_admin());
+
+
+--
+-- Name: leave_requests; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.leave_requests ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: leave_requests leave_requests_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY leave_requests_read ON public.leave_requests FOR SELECT TO authenticated USING (((user_id = auth.uid()) OR public.is_admin() OR public.supervises_user(user_id)));
 
 
 --
@@ -10110,6 +10923,19 @@ CREATE POLICY role_store_counts_read ON public.role_store_counts FOR SELECT USIN
 
 
 --
+-- Name: schedule_overrides; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.schedule_overrides ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: schedule_overrides schedule_overrides_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY schedule_overrides_read ON public.schedule_overrides FOR SELECT TO authenticated USING (((user_id = auth.uid()) OR public.is_admin() OR public.supervises_user(user_id)));
+
+
+--
 -- Name: scheduled_notifications; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -10283,6 +11109,19 @@ CREATE POLICY support_threads_select ON public.support_threads FOR SELECT USING 
 --
 
 ALTER TABLE public.tracking_tokens ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: work_patterns; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.work_patterns ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: work_patterns work_patterns_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY work_patterns_read ON public.work_patterns FOR SELECT TO authenticated USING (((user_id = auth.uid()) OR public.is_admin() OR public.supervises_user(user_id)));
+
 
 --
 -- Name: xm_count_lines; Type: ROW SECURITY; Schema: public; Owner: -
@@ -10519,6 +11358,14 @@ GRANT ALL ON FUNCTION public.alert_watchers(p_user uuid) TO service_role;
 
 
 --
+-- Name: FUNCTION apply_leave(p_kind text, p_from date, p_to date, p_reason text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.apply_leave(p_kind text, p_from date, p_to date, p_reason text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.apply_leave(p_kind text, p_from date, p_to date, p_reason text) TO authenticated;
+
+
+--
 -- Name: FUNCTION assign_support_thread(p_thread uuid, p_assignee uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -10648,6 +11495,15 @@ GRANT ALL ON FUNCTION public.can_file_report() TO service_role;
 
 
 --
+-- Name: FUNCTION can_manage_schedule(p_user uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.can_manage_schedule(p_user uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.can_manage_schedule(p_user uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.can_manage_schedule(p_user uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION can_see_count_request(p_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -10672,6 +11528,14 @@ GRANT ALL ON FUNCTION public.can_send_notifications() TO service_role;
 REVOKE ALL ON FUNCTION public.can_visit_stores() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.can_visit_stores() TO authenticated;
 GRANT ALL ON FUNCTION public.can_visit_stores() TO service_role;
+
+
+--
+-- Name: FUNCTION cancel_leave(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.cancel_leave(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.cancel_leave(p_id uuid) TO authenticated;
 
 
 --
@@ -10706,6 +11570,14 @@ GRANT ALL ON FUNCTION public.check_excuse_more(p_user uuid, p_from timestamp wit
 --
 
 REVOKE ALL ON FUNCTION public.check_store_count(p_outlet_id uuid, today date) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION claim_clock_out_reminders(p_now timestamp with time zone); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.claim_clock_out_reminders(p_now timestamp with time zone) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.claim_clock_out_reminders(p_now timestamp with time zone) TO service_role;
 
 
 --
@@ -10800,6 +11672,30 @@ GRANT ALL ON FUNCTION public.current_user_role() TO service_role;
 
 
 --
+-- Name: FUNCTION day_kind(p_user uuid, p_day date); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.day_kind(p_user uuid, p_day date) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.day_kind(p_user uuid, p_day date) TO service_role;
+
+
+--
+-- Name: FUNCTION decide_leave(p_id uuid, p_approve boolean, p_note text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.decide_leave(p_id uuid, p_approve boolean, p_note text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.decide_leave(p_id uuid, p_approve boolean, p_note text) TO authenticated;
+
+
+--
+-- Name: FUNCTION default_work_days(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.default_work_days() TO authenticated;
+GRANT ALL ON FUNCTION public.default_work_days() TO service_role;
+
+
+--
 -- Name: FUNCTION dismiss_place_due(p_due uuid, p_reason text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -10867,6 +11763,15 @@ GRANT ALL ON FUNCTION public.forget_expired_selfies(p_hours integer) TO service_
 
 
 --
+-- Name: FUNCTION has_allocated_stores(target uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.has_allocated_stores(target uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.has_allocated_stores(target uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.has_allocated_stores(target uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION has_live_push(p_user uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -10900,6 +11805,15 @@ GRANT ALL ON FUNCTION public.is_field_role(r public.user_role) TO service_role;
 REVOKE ALL ON FUNCTION public.is_month_end_window(d date) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.is_month_end_window(d date) TO authenticated;
 GRANT ALL ON FUNCTION public.is_month_end_window(d date) TO service_role;
+
+
+--
+-- Name: FUNCTION is_working_day(p_user uuid, p_day date); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.is_working_day(p_user uuid, p_day date) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.is_working_day(p_user uuid, p_day date) TO authenticated;
+GRANT ALL ON FUNCTION public.is_working_day(p_user uuid, p_day date) TO service_role;
 
 
 --
@@ -10962,6 +11876,14 @@ GRANT ALL ON FUNCTION public.mark_notifications_read() TO service_role;
 REVOKE ALL ON FUNCTION public.movement_trail(p_user uuid, p_date date) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.movement_trail(p_user uuid, p_date date) TO authenticated;
 GRANT ALL ON FUNCTION public.movement_trail(p_user uuid, p_date date) TO service_role;
+
+
+--
+-- Name: FUNCTION my_calendar(p_from date, p_to date); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.my_calendar(p_from date, p_to date) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.my_calendar(p_from date, p_to date) TO authenticated;
 
 
 --
@@ -11034,6 +11956,15 @@ GRANT ALL ON FUNCTION public.my_staff() TO service_role;
 REVOKE ALL ON FUNCTION public.my_store_visits() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.my_store_visits() TO authenticated;
 GRANT ALL ON FUNCTION public.my_store_visits() TO service_role;
+
+
+--
+-- Name: FUNCTION my_visit_stores(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.my_visit_stores() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.my_visit_stores() TO authenticated;
+GRANT ALL ON FUNCTION public.my_visit_stores() TO service_role;
 
 
 --
@@ -11259,6 +12190,14 @@ GRANT ALL ON FUNCTION public.record_selfie_sweep(p_result jsonb) TO service_role
 
 
 --
+-- Name: FUNCTION remove_schedule_override(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.remove_schedule_override(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.remove_schedule_override(p_id uuid) TO authenticated;
+
+
+--
 -- Name: FUNCTION reopen_support_thread(p_thread uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -11276,6 +12215,13 @@ GRANT ALL ON FUNCTION public.report_app_install(p_platform text, p_app_version t
 
 
 --
+-- Name: FUNCTION report_capture_visits(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.report_capture_visits() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION report_enforce(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -11287,6 +12233,13 @@ REVOKE ALL ON FUNCTION public.report_enforce() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public.report_photo_limit() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION report_visits_snapshot(p_user uuid, p_date date); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.report_visits_snapshot(p_user uuid, p_date date) FROM PUBLIC;
 
 
 --
@@ -11370,6 +12323,13 @@ GRANT ALL ON FUNCTION public.revoke_tracking_tokens() TO authenticated;
 
 
 --
+-- Name: FUNCTION schedule_guard(p_user uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.schedule_guard(p_user uuid) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION schedule_notification(p_title text, p_body text, p_url text, p_audience public.notification_audience, p_detail jsonb, p_send_at timestamp with time zone); Type: ACL; Schema: public; Owner: -
 --
 
@@ -11412,12 +12372,37 @@ GRANT ALL ON FUNCTION public.set_my_avatar(p_path text) TO authenticated;
 
 
 --
+-- Name: FUNCTION set_schedule_override(p_user uuid, p_day date, p_working boolean, p_note text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.set_schedule_override(p_user uuid, p_day date, p_working boolean, p_note text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.set_schedule_override(p_user uuid, p_day date, p_working boolean, p_note text) TO authenticated;
+
+
+--
 -- Name: FUNCTION set_staff_outlets(p_user_id uuid, p_outlet_ids uuid[]); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.set_staff_outlets(p_user_id uuid, p_outlet_ids uuid[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.set_staff_outlets(p_user_id uuid, p_outlet_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.set_staff_outlets(p_user_id uuid, p_outlet_ids uuid[]) TO service_role;
+
+
+--
+-- Name: FUNCTION set_work_pattern(p_users uuid[], p_days smallint[]); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.set_work_pattern(p_users uuid[], p_days smallint[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.set_work_pattern(p_users uuid[], p_days smallint[]) TO authenticated;
+
+
+--
+-- Name: FUNCTION shift_end_for(p_user uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.shift_end_for(p_user uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.shift_end_for(p_user uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.shift_end_for(p_user uuid) TO service_role;
 
 
 --
@@ -11795,6 +12780,13 @@ GRANT SELECT ON TABLE public.audit_log_detail TO authenticated;
 
 
 --
+-- Name: TABLE clock_out_reminders; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT ON TABLE public.clock_out_reminders TO authenticated;
+
+
+--
 -- Name: TABLE count_request_progress; Type: ACL; Schema: public; Owner: -
 --
 
@@ -11820,6 +12812,20 @@ GRANT SELECT ON TABLE public.integrity_flag_detail TO authenticated;
 --
 
 GRANT SELECT ON TABLE public.known_place_detail TO authenticated;
+
+
+--
+-- Name: TABLE leave_requests; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT ON TABLE public.leave_requests TO authenticated;
+
+
+--
+-- Name: TABLE leave_request_detail; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT ON TABLE public.leave_request_detail TO authenticated;
 
 
 --
@@ -11893,6 +12899,13 @@ GRANT SELECT ON TABLE public.place_naming_due_detail TO authenticated;
 
 
 --
+-- Name: TABLE schedule_overrides; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT ON TABLE public.schedule_overrides TO authenticated;
+
+
+--
 -- Name: TABLE store_count_detail; Type: ACL; Schema: public; Owner: -
 --
 
@@ -11932,6 +12945,13 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.support_quick_replies TO authe
 --
 
 GRANT SELECT ON TABLE public.support_thread_detail TO authenticated;
+
+
+--
+-- Name: TABLE work_patterns; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT ON TABLE public.work_patterns TO authenticated;
 
 
 --

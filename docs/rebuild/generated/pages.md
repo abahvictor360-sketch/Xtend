@@ -2,7 +2,7 @@
 
 # Pages
 
-50 pages. "Who" is what `requireSession` admits (field pages are also guarded by their layout).
+54 pages. "Who" is what `requireSession` admits (field pages are also guarded by their layout).
 
 ## `/admin/alerts` — Alerts — Xtend
 
@@ -38,7 +38,7 @@ On screen: Ask in plain words about attendance, store visits, stock counts, X Me
 - Who: ['admin', 'supervisor']
 - Components: `admin/outlet-allocator`
 
-On screen: Optional. Marketers do not need this: they check in wherever they are and Xtend records the store from the map. Allocate stores when you want a merchandiser measured against a particular shop, or to put someone on a supervisor&rsquo;s team.
+On screen: Choose which stores each person works. A marketer with stores here can only check in at those (and their home store), and the app lists only those; with none, they check in wherever they are. A merchandiser is measured against their store. Allocating also puts someone on a supervisor&rsquo;s team.
 
 ## `/admin/attendance` — Attendance — Xtend
 
@@ -48,7 +48,7 @@ On screen: Optional. Marketers do not need this: they check in wherever they are
 
 Days handed to the table at once; the download has the rest.
 
-On screen: Who came, when, and where, day by day: on time or late (against their store’s opening time), at the store or away from it, and whether they clocked out. A working day without a clock-in counts as absent. Times are Lagos time; clock records cannot be changed or deleted.
+On screen: Who came, when, and where, day by day: on time or late (against their store’s opening time), at the store or away from it, and whether they clocked out. A working day on someone’s schedule without a clock-in counts as absent; their days off and approved leave do not. Times are Lagos time; clock records cannot be changed or deleted.
 
 ## `/admin/audit` — Audit log — Xtend
 
@@ -87,6 +87,20 @@ On screen: Do these once, in this order, before staff start clocking in.
 - Components: `ui/badge`, `ui/button`, `ui/card`, `ui/input`, `ui/label`, `ui/select`, `admin/integrity-flags`, `admin/integrity-overview`
 
 On screen: Things that look wrong: signs of a fake-location app, phone clocks changed, photos refused, and stock counts that do not add up. A flag is a reason to look, not proof. See who to look at first, open a flag for the detail and the evidence around it, then mark it reviewed with what you found, one at a time or several together.
+
+## `/admin/leave` — Leave — Xtend
+
+- File: `src/app/admin/leave/page.tsx`
+- Who: ['admin', 'supervisor']
+- Components: `admin/leave-decisions`, `ui/alert`, `ui/input`, `ui/label`, `ui/select`, `ui/button`
+
+## `/admin/marketer-reports` — Marketer reports — Xtend
+
+- File: `src/app/admin/marketer-reports/page.tsx`
+- Who: ['admin', 'supervisor']
+- Components: `admin/marketer-report-list`, `admin/visit-views`, `ui/alert`, `ui/button`, `ui/card`, `ui/input`, `ui/label`
+
+On screen: A report to download for each marketer, for one day or a whole month: when they clocked in and out, every store they checked in to and how long they spent there, the time between stores, and the daily report they filed. PDF is the one to share; Word and Excel hold the same.
 
 ## `/admin/metrics/expiry` — Expiry alerts — X Metrics
 
@@ -211,6 +225,12 @@ On screen: Places Xtend has learned. When someone clocks in or checks in somewhe
 Roles an admin adds on top of the built-in ones (migration 042).
 
 On screen: Add a role with its own name, such as Account Receivable or Promoter, and choose what it works like. People with it can do what that role does, and show by the new name on Staff, Teams and the login details. Give someone a role on the Staff page.
+
+## `/admin/schedules` — Schedules — Xtend
+
+- File: `src/app/admin/schedules/page.tsx`
+- Who: ['admin', 'supervisor']
+- Components: `admin/schedule-manager`, `ui/alert`
 
 ## `/admin/store-counts` — Stock count — Xtend
 
@@ -346,9 +366,15 @@ The staff guide inside the app, with the menu bar still to hand.
 
 - File: `src/app/field/history/page.tsx`
 - Who: FIELD_ROLES
-- Components: `field/day-strip`, `field/task-row`, `field/screen`, `ui/badge`, `ui/card`, `ui/button`
+- Components: `field/day-strip`, `field/calendar-marks`, `field/task-row`, `field/screen`, `ui/badge`, `ui/card`, `ui/button`
 
-On screen: Nothing recorded on this day.
+## `/field/leave` — Leave — Xtend
+
+- File: `src/app/field/leave/page.tsx`
+- Who: FIELD_ROLES
+- Components: `field/screen`, `field/leave-form`, `ui/alert`
+
+On screen: Pick the type, your first and last day of leave, and say why. Your supervisor approves it, and you get a message when they do.
 
 ## `/field/metrics` — X Metrics — Xtend
 
@@ -370,7 +396,7 @@ Metrics. Both work offline and are sent when there is signal.
 
 - File: `src/app/field/report/page.tsx`
 - Who: public / own check
-- Components: `field/report-form`, `field/screen`
+- Components: `field/report-form`, `field/report-visits`, `field/screen`
 
 ## `/field/support` — Message support — Xtend
 

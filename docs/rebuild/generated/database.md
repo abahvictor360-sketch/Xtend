@@ -118,6 +118,19 @@ Policies:
 Policies:
 - `audit_admin_read` SELECT to public: using `is_admin()`
 
+### `clock_out_reminders`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| user_id | uuid(uuid) |  |  |
+| reminder_date | date(date) |  |  |
+| stage | smallint(int2) |  |  |
+| shift_end | time without time zone(time) |  |  |
+| claimed_at | timestamp with time zone(timestamptz) |  | now() |
+
+Policies:
+- `clock_out_reminders_read` SELECT to public: using `((user_id = auth.uid()) OR is_admin() OR supervises_user(user_id))`
+
 ### `count_request_targets`
 
 | Column | Type | Null | Default |
@@ -249,6 +262,26 @@ Policies:
 
 Policies:
 - `known_places_admin` ALL to public: using `is_admin()`; check `is_admin()`
+
+### `leave_requests`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| id | uuid(uuid) |  | gen_random_uuid() |
+| user_id | uuid(uuid) |  |  |
+| kind | text(text) |  |  |
+| from_date | date(date) |  |  |
+| to_date | date(date) |  |  |
+| reason | text(text) |  |  |
+| status | text(text) |  | 'pending'::text |
+| decided_by | uuid(uuid) | yes |  |
+| decided_at | timestamp with time zone(timestamptz) | yes |  |
+| decision_note | text(text) |  | ''::text |
+| cancelled_at | timestamp with time zone(timestamptz) | yes |  |
+| created_at | timestamp with time zone(timestamptz) |  | now() |
+
+Policies:
+- `leave_requests_read` SELECT to authenticated: using `((user_id = auth.uid()) OR is_admin() OR supervises_user(user_id))`
 
 ### `location_alerts`
 
@@ -512,6 +545,7 @@ Policies:
 | issues | text(text) | yes |  |
 | created_at | timestamp with time zone(timestamptz) |  | now() |
 | updated_at | timestamp with time zone(timestamptz) |  | now() |
+| store_visits | jsonb(jsonb) |  | '[]'::jsonb |
 
 Policies:
 - `reports_admin` ALL to public: using `is_admin()`; check `is_admin()`
@@ -531,6 +565,21 @@ Policies:
 Policies:
 - `role_store_counts_admin` UPDATE to public: using `is_admin()`; check `is_admin()`
 - `role_store_counts_read` SELECT to public: using `(auth.uid() IS NOT NULL)`
+
+### `schedule_overrides`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| id | uuid(uuid) |  | gen_random_uuid() |
+| user_id | uuid(uuid) |  |  |
+| day | date(date) |  |  |
+| working | boolean(bool) |  |  |
+| note | text(text) |  | ''::text |
+| created_by | uuid(uuid) | yes |  |
+| created_at | timestamp with time zone(timestamptz) |  | now() |
+
+Policies:
+- `schedule_overrides_read` SELECT to authenticated: using `((user_id = auth.uid()) OR is_admin() OR supervises_user(user_id))`
 
 ### `scheduled_notifications`
 
@@ -742,6 +791,18 @@ Policies:
 | revoked_at | timestamp with time zone(timestamptz) | yes |  |
 | last_used_at | timestamp with time zone(timestamptz) | yes |  |
 | points | integer(int4) |  | 0 |
+
+### `work_patterns`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| user_id | uuid(uuid) |  |  |
+| days | ARRAY(_int2) |  |  |
+| updated_by | uuid(uuid) | yes |  |
+| updated_at | timestamp with time zone(timestamptz) |  | now() |
+
+Policies:
+- `work_patterns_read` SELECT to authenticated: using `((user_id = auth.uid()) OR is_admin() OR supervises_user(user_id))`
 
 ### `xm_count_lines`
 
@@ -1027,6 +1088,7 @@ Policies:
 - `excuse_check_detail`
 - `integrity_flag_detail`
 - `known_place_detail`
+- `leave_request_detail`
 - `notification_log`
 - `place_naming_due_detail`
 - `staff_allocation`
@@ -1059,9 +1121,10 @@ Policies:
 
 `definer` runs with the owner's rights (it enforces its own checks). Who may call it is in `schema.sql` (GRANT EXECUTE).
 
-- `absentees_today()` → TABLE(user_id uuid, full_name text, phone text, outlet_name text) · definer · 0005_marketer_role.sql
-- `admin_overview()` → jsonb · definer · 0005_marketer_role.sql
+- `absentees_today()` → TABLE(user_id uuid, full_name text, phone text, outlet_name text) · definer · 0059_schedules_leave.sql
+- `admin_overview()` → jsonb · definer · 0059_schedules_leave.sql
 - `alert_watchers(p_user uuid)` → TABLE(user_id uuid, full_name text, role user_role) · definer · 0036_supervisor_alerts.sql
+- `apply_leave(p_kind text, p_from date, p_to date, p_reason text)` → uuid · definer · 0059_schedules_leave.sql
 - `armor(bytea)` → text
 - `armor(bytea, text[], text[])` → text
 - `assign_support_thread(p_thread uuid, p_assignee uuid)` → void · definer · 0053_support_notifications.sql
@@ -1084,13 +1147,16 @@ Policies:
 - `can_create_staff(p_role user_role)` → boolean · definer · 0017_supervisor_manages_staff.sql
 - `can_edit_staff(target uuid)` → boolean · definer · 0017_supervisor_manages_staff.sql
 - `can_file_report()` → boolean · definer · 0005_marketer_role.sql
+- `can_manage_schedule(p_user uuid)` → boolean · definer · 0059_schedules_leave.sql
 - `can_see_count_request(p_id uuid)` → boolean · definer · 0020_count_requests.sql
 - `can_send_notifications()` → boolean · definer · 0006_push_notifications.sql
 - `can_visit_stores()` → boolean · definer · 0016_visits_without_allocation.sql
+- `cancel_leave(p_id uuid)` → void · definer · 0059_schedules_leave.sql
 - `cancel_scheduled_notification(p_id uuid)` → void · definer · 0053_support_notifications.sql
 - `check_excuse(p_user uuid, p_from timestamp with time zone, p_to timestamp with time zone)` → jsonb · definer · 0048_excuse_check_advanced.sql
 - `check_excuse_more(p_user uuid, p_from timestamp with time zone, p_to timestamp with time zone)` → jsonb · definer · 0048_excuse_check_advanced.sql
 - `check_store_count(p_outlet_id uuid, today date)` → void · definer · 0040_xpel_count_sheet.sql
+- `claim_clock_out_reminders(p_now timestamp with time zone)` → TABLE(user_id uuid, reminder_date date, stage smallint, shift_end text) · definer · 0061_clock_out_reminders.sql
 - `claim_due_notifications(p_limit integer)` → SETOF scheduled_notifications · definer · 0053_support_notifications.sql
 - `claim_flag_alerts(p_limit integer)` → TABLE(id uuid, user_id uuid, staff_name text, kind text, severity text, summary text, outlet_name text, created_at timestamp with time zone) · definer · 0036_supervisor_alerts.sql
 - `claim_scheduled_notification(p_id uuid)` → SETOF scheduled_notifications · definer · 0053_support_notifications.sql
@@ -1103,9 +1169,12 @@ Policies:
 - `coverage_today()` → TABLE(user_id uuid, full_name text, outlet_name text, ping_count integer, coverage_pct integer, last_ping_at timestamp with time zone) · definer · 0005_marketer_role.sql
 - `crypt(text, text)` → text
 - `current_user_role()` → user_role · definer · 0001_init.sql
+- `day_kind(p_user uuid, p_day date)` → text · definer · 0059_schedules_leave.sql
 - `dearmor(text)` → bytea
+- `decide_leave(p_id uuid, p_approve boolean, p_note text)` → jsonb · definer · 0059_schedules_leave.sql
 - `decrypt(bytea, bytea, text)` → bytea
 - `decrypt_iv(bytea, bytea, bytea, text)` → bytea
+- `default_work_days()` → smallint[] · 0059_schedules_leave.sql
 - `digest(bytea, text)` → bytea
 - `digest(text, text)` → bytea
 - `dismiss_place_due(p_due uuid, p_reason text)` → void · definer · 0045_mandatory_place_naming.sql
@@ -1123,12 +1192,14 @@ Policies:
 - `gen_random_uuid()` → uuid
 - `gen_salt(text)` → text
 - `gen_salt(text, integer)` → text
+- `has_allocated_stores(target uuid)` → boolean · definer · 0060_marketer_visits_reports.sql
 - `has_live_push(p_user uuid)` → boolean · definer · 0033_native_push.sql
 - `hmac(bytea, bytea, text)` → bytea
 - `hmac(text, text, text)` → bytea
 - `is_admin()` → boolean · definer · 0001_init.sql
 - `is_field_role(r user_role)` → boolean · 0013_harden_triggers.sql
 - `is_month_end_window(d date)` → boolean · 0020_count_requests.sql
+- `is_working_day(p_user uuid, p_day date)` → boolean · definer · 0059_schedules_leave.sql
 - `issue_tracking_token(p_platform text)` → jsonb · definer · 0050_background_tracking.sql
 - `known_place_at(p_lat double precision, p_lng double precision)` → TABLE(id uuid, name text, address text, source text, verified boolean, distance_m double precision) · definer · 0025_place_safeguards.sql
 - `lagos_hm(t timestamp with time zone)` → text · 0026_phone_evidence.sql
@@ -1139,6 +1210,7 @@ Policies:
 - `minutes_label(p_minutes integer)` → text · 0036_supervisor_alerts.sql
 - `month_end_count_days()` → integer · 0020_count_requests.sql
 - `movement_trail(p_user uuid, p_date date)` → jsonb · definer · 0029_offline_positions.sql
+- `my_calendar(p_from date, p_to date)` → TABLE(day date, kind text, clocked_in boolean, missed boolean) · definer · 0059_schedules_leave.sql
 - `my_coverage()` → jsonb · definer · 0004_tracking_coverage.sql
 - `my_day()` → jsonb · definer · 0005_marketer_role.sql
 - `my_notifications(p_limit integer)` → TABLE(id uuid, title text, body text, url text, sent_at timestamp with time zone, sender_name text, read_at timestamp with time zone) · definer · 0006_push_notifications.sql
@@ -1147,6 +1219,7 @@ Policies:
 - `my_place_due()` → TABLE(id uuid, lat double precision, lng double precision, source_kind text, created_at timestamp with time zone) · definer · 0045_mandatory_place_naming.sql
 - `my_staff()` → SETOF profiles · definer · 0017_supervisor_manages_staff.sql
 - `my_store_visits()` → SETOF store_visit_detail · definer · 0016_visits_without_allocation.sql
+- `my_visit_stores()` → TABLE(id uuid, name text, address text, lat double precision, lng double precision, geofence_radius_m integer) · definer · 0060_marketer_visits_reports.sql
 - `name_place(p_due uuid, p_name text, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_storefront_path text, p_selfie_path text, p_evidence jsonb)` → uuid · definer · 0045_mandatory_place_naming.sql
 - `names_overlap(a text, b text)` → boolean · 0025_place_safeguards.sql
 - `nearest_outlet_for_user(target uuid, p_lat double precision, p_lng double precision)` → uuid · definer · 0034_stores_pinned_from_clock_in.sql
@@ -1205,10 +1278,13 @@ Policies:
 - `record_offline_pings(p_points jsonb, p_sent_at timestamp with time zone)` → integer · definer · 0029_offline_positions.sql
 - `record_selfie_sweep(p_result jsonb)` → void · definer · 0012_selfie_retention_24h.sql
 - `release_reports_on_demotion()` → trigger · definer · 0018_reporting_line_upkeep.sql
+- `remove_schedule_override(p_id uuid)` → void · definer · 0059_schedules_leave.sql
 - `reopen_support_thread(p_thread uuid)` → void · definer · 0053_support_notifications.sql
 - `report_app_install(p_platform text, p_app_version text, p_app_build integer, p_web_build text)` → void · definer · 0057_app_updates.sql
+- `report_capture_visits()` → trigger · definer · 0060_marketer_visits_reports.sql
 - `report_enforce()` → trigger · definer · 0005_marketer_role.sql
 - `report_photo_limit()` → trigger · definer · 0002_logic.sql
+- `report_visits_snapshot(p_user uuid, p_date date)` → jsonb · definer · 0060_marketer_visits_reports.sql
 - `request_phone_check(p_user uuid)` → uuid · definer · 0026_phone_evidence.sql
 - `request_store_count(p_user_ids uuid[], p_due_date date, p_note text)` → uuid · definer · 0046_role_store_counts.sql
 - `resolve_alert(p_alert_id uuid, p_note text)` → void · definer · 0002_logic.sql
@@ -1220,18 +1296,22 @@ Policies:
 - `revoke_tracking_tokens()` → void · definer · 0050_background_tracking.sql
 - `safe_ts(p text)` → timestamp with time zone · 0026_phone_evidence.sql
 - `safe_uuid(p text)` → uuid · 0026_phone_evidence.sql
+- `schedule_guard(p_user uuid)` → void · definer · 0059_schedules_leave.sql
 - `schedule_notification(p_title text, p_body text, p_url text, p_audience notification_audience, p_detail jsonb, p_send_at timestamp with time zone)` → uuid · definer · 0053_support_notifications.sql
 - `selfie_check()` → trigger · definer · 0023_photo_checks.sql
 - `selfie_retention_status()` → jsonb · definer · 0012_selfie_retention_24h.sql
 - `set_count_sheet_template(p_path text, p_file_name text)` → uuid · definer · 0035_store_count_sheets.sql
 - `set_my_avatar(p_path text)` → void · definer · 0037_profile_photos.sql
+- `set_schedule_override(p_user uuid, p_day date, p_working boolean, p_note text)` → uuid · definer · 0059_schedules_leave.sql
 - `set_staff_outlets(p_user_id uuid, p_outlet_ids uuid[])` → SETOF uuid · definer · 0011_store_allocation.sql
+- `set_work_pattern(p_users uuid[], p_days smallint[])` → integer · definer · 0059_schedules_leave.sql
+- `shift_end_for(p_user uuid)` → time without time zone · definer · 0061_clock_out_reminders.sql
 - `staff_analytics(p_from date, p_to date)` → TABLE(user_id uuid, full_name text, outlet_name text, days_present integer, days_late integer, days_off_site integer, avg_distance_m double precision) · definer · 0005_marketer_role.sql
 - `staff_day(p_date date)` → TABLE(user_id uuid, staff_name text, role user_role, clocked_in_at timestamp with time zone, clocked_in_at_place text, clocked_out_at timestamp with time zone, clocked_out_at_place text, stores_visited integer, minutes_in_store integer, still_in_store text) · definer · 0016_visits_without_allocation.sql
-- `staff_no_show(p_grace_minutes integer)` → TABLE(user_id uuid, full_name text, phone text, outlet_id uuid, outlet_name text, shift_start time without time zone, minutes_late integer) · definer · 0007_watchers_and_no_show.sql
+- `staff_no_show(p_grace_minutes integer)` → TABLE(user_id uuid, full_name text, phone text, outlet_id uuid, outlet_name text, shift_start time without time zone, minutes_late integer) · definer · 0059_schedules_leave.sql
 - `store_count_status()` → jsonb · definer · 0020_count_requests.sql
 - `store_visit_alert()` → trigger · definer · 0016_visits_without_allocation.sql
-- `store_visit_enforce()` → trigger · definer · 0034_stores_pinned_from_clock_in.sql
+- `store_visit_enforce()` → trigger · definer · 0060_marketer_visits_reports.sql
 - `store_visits_today()` → SETOF store_visit_detail · definer · 0016_visits_without_allocation.sql
 - `submit_count_sheet(p_outlet_id uuid, p_path text, p_file_name text)` → uuid · definer · 0040_xpel_count_sheet.sql
 - `submit_store_count(p_outlet_id uuid, p_lines jsonb, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_photo_path text)` → integer · definer · 0040_xpel_count_sheet.sql
@@ -1296,6 +1376,7 @@ Policies:
 - `profiles`: `trg_release_reports_on_demotion` — AFTER UPDATE OF role ON public.profiles FOR EACH ROW EXECUTE FUNCTION release_reports_on_demotion()
 - `report_photos`: `trg_report_photo_limit` — BEFORE INSERT ON public.report_photos FOR EACH ROW EXECUTE FUNCTION report_photo_limit()
 - `reports`: `trg_report_enforce` — BEFORE INSERT OR UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION report_enforce()
+- `reports`: `trg_report_visits` — BEFORE INSERT OR UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION report_capture_visits()
 - `reports`: `trg_reports_place_due_guard` — BEFORE INSERT ON public.reports FOR EACH ROW EXECUTE FUNCTION place_due_guard()
 - `reports`: `trg_reports_touch` — BEFORE UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION touch_updated_at()
 - `store_counts`: `trg_store_counts_place_due_guard` — BEFORE INSERT ON public.store_counts FOR EACH ROW EXECUTE FUNCTION place_due_guard()

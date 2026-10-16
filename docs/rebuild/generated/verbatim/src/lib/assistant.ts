@@ -112,6 +112,8 @@ People and stores always come from match_names first (P… and S… references);
 
 More you can read: integrity_risk (who to look at first among the integrity flags, and why, in one sentence each), location_alerts (someone left their store on shift, clocked in away from it, or switched location off), support_threads (issues staff raised in the app; "escalated" ones are waiting for an office reply), notifications_sent (what the office sent and how many phones it reached), x_metrics (a month's units sold against target per enrolled store and person, stock counts that did not add up, and open expiry alerts) and store_coverage (which allocated stores each person visited in a range, and which no one visited). For "who should I worry about" or "who is cheating", start with integrity_risk and give each person's reason. When an answer names a person and a day, offer an open_page button to their movement or the excuse check when it would help.
 
+Everyone has a work schedule (days on and days off; Monday to Saturday unless changed) and may have approved leave. Never call someone absent, or say they did not come, on a day off or a day of approved leave: say it was their day off or that they were on leave. Only a working day with no clock-in is an absence.
+
 Resolve relative dates ("today", "yesterday", "last Monday", "this week", "last month") against today's date, given below, and pass them as YYYY-MM-DD. A week runs Monday to Sunday.
 
 Write for someone reading on a phone: lead with the direct answer and the count, then a short list of names (with store and time where useful). Use plain text with simple "- " bullets. No tables, no headings, no markdown bold.`
@@ -127,7 +129,7 @@ const tools: Anthropic.Beta.BetaTool[] = [
   {
     name: 'attendance_on_day',
     description:
-      'Everyone the caller can see on one day, split into: clocked in and out, still on shift (in but not out), and not clocked in. Each person has their role, store, clock-in and clock-out times, status, whether they were late, and where they clocked in. Use this for any "who has / hasn\'t clocked in or out" question.',
+      'Everyone the caller can see on one day, split into: clocked in and out, still on shift (in but not out), not clocked in (expected at work), day off, and on approved leave. People on a day off or on leave are not absent. Each person has their role, store, clock-in and clock-out times, status, whether they were late, and where they clocked in. Use this for any "who has / hasn\'t clocked in or out" question.',
     strict: true,
     input_schema: {
       type: 'object',
@@ -144,7 +146,7 @@ const tools: Anthropic.Beta.BetaTool[] = [
   {
     name: 'staff_history',
     description:
-      "One or more people's clock-ins and clock-outs, day by day, over a date range. Matches staff by part of their name. Use for questions about a named person.",
+      "One or more people's clock-ins and clock-outs, day by day, over a date range, with whether each day was a working day, a day off or approved leave. Matches staff by part of their name. Use for questions about a named person.",
     strict: true,
     input_schema: {
       type: 'object',
@@ -158,7 +160,7 @@ const tools: Anthropic.Beta.BetaTool[] = [
   },
   {
     name: 'attendance_summary',
-    description: `Per-person totals over a date range (at most ${MAX_RANGE_DAYS} days): days clocked in, days clocked out, days clocked in but never out, late days and off-site clock-ins. Use for "who was late most this week", "who missed clock-outs this month" and similar.`,
+    description: `Per-person totals over a date range (at most ${MAX_RANGE_DAYS} days): working days on their schedule, days off, leave days, absent days (past working days with no clock-in), days clocked in, days clocked out, days clocked in but never out, late days and off-site clock-ins. Use for "who was late most this week", "who missed clock-outs this month" and similar.`,
     strict: true,
     input_schema: {
       type: 'object',

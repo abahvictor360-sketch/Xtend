@@ -69,6 +69,12 @@ SET row_security = off;
 
 
 --
+-- Data for Name: clock_out_reminders; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
 -- Data for Name: count_requests; Type: TABLE DATA; Schema: public; Owner: -
 --
 
@@ -112,6 +118,12 @@ SET row_security = off;
 
 --
 -- Data for Name: known_places; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
+-- Data for Name: leave_requests; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 
@@ -434,6 +446,12 @@ INSERT INTO public.role_store_counts VALUES ('marketer', true, '2026-01-01 00:00
 
 
 --
+-- Data for Name: schedule_overrides; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
 -- Data for Name: scheduled_notifications; Type: TABLE DATA; Schema: public; Owner: -
 --
 
@@ -494,6 +512,12 @@ INSERT INTO public.support_quick_replies VALUES ('00000000-0000-4000-8000-000000
 
 --
 -- Data for Name: tracking_tokens; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
+-- Data for Name: work_patterns; Type: TABLE DATA; Schema: public; Owner: -
 --
 
 

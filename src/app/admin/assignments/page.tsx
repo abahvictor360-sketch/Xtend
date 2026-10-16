@@ -40,9 +40,10 @@ export default async function AssignmentsPage() {
       <div>
         <h1 className="text-xl font-semibold">Store allocation</h1>
         <p className="text-sm text-muted-foreground">
-          Optional. Marketers do not need this: they check in wherever they are and Xtend
-          records the store from the map. Allocate stores when you want a merchandiser measured
-          against a particular shop, or to put someone on a supervisor&rsquo;s team.
+          Choose which stores each person works. A marketer with stores here can only check in at
+          those (and their home store), and the app lists only those; with none, they check in
+          wherever they are. A merchandiser is measured against their store.
+          Allocating also puts someone on a supervisor&rsquo;s team.
         </p>
       </div>
 
