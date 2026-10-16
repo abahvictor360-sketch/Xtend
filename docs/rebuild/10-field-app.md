@@ -606,7 +606,7 @@ selfie).
    - `selfie_source: 'in_app_camera'`.
    - `position`: `{ first, shutter, apart_m, agree }` where each point has
      lat, lng, accuracy (1 dp), captured_at, samples, spread; agree when
-     apart ≤ max(30, accA + accB) (`positionCheck`, `fixesAgree`).
+     apart ≤ max(50, accA + accB) (`positionCheck`, `fixesAgree`).
    - `gps`: altitude, altitude_accuracy, speed, heading.
    - native only: mock flag, compromised flag, platform
      (`nativeDeviceSignals`).
@@ -818,7 +818,7 @@ dismiss button.
   30000 })`, clears both photos, then opens the **back** camera titled "The
   building and its sign", subtitle "Stand outside so the sign is in the
   photo", with `locate`.
-  - If the shutter reading disagrees with the locked fix (apart > max(30,
+  - If the shutter reading disagrees with the locked fix (apart > max(50,
     accA + accB)): "Your location jumped N m while you took the photo. Stand
     still outside, wait a moment, and take it again." and the photo is
     discarded.

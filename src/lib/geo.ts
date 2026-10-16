@@ -141,10 +141,15 @@ export function combineFixes(readings: Fix[]): SampledFix | null {
   }
 }
 
-/** Whether two fixes plausibly describe the same spot. */
+/**
+ * Whether two fixes plausibly describe the same spot. The gap allowed scales
+ * with how sure the GPS is (each fix's accuracy), with a 50 m floor so normal
+ * standing-still GPS jitter does not read as a jump. A real spoof is hundreds
+ * of metres or more apart, well beyond this.
+ */
 export function fixesAgree(a: Pick<Fix, 'lat' | 'lng' | 'accuracy_m'>, b: Pick<Fix, 'lat' | 'lng' | 'accuracy_m'>) {
   const apart = haversineMetres(a.lat, a.lng, b.lat, b.lng)
-  return { apart, agree: apart <= Math.max(30, a.accuracy_m + b.accuracy_m) }
+  return { apart, agree: apart <= Math.max(50, a.accuracy_m + b.accuracy_m) }
 }
 
 function browserReadings(o: Required<FixOptions>): Promise<Fix[]> {

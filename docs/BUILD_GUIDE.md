@@ -5,8 +5,8 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-15, after the PWA push-parity fix, staff and outlet
-delete, and pinning the Vercel functions to the Supabase region._
+_Last updated: 2026-10-16, after raising the location agreement floor to 50 m,
+the PWA push-parity fix, and staff and outlet delete._
 
 ---
 
@@ -515,6 +515,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-16 | Location agreement floor raised 30 m → 50 m (`fixesAgree`), so normal standing-still GPS jitter no longer trips the "your location jumped" block when adding a place; spoof detection is unaffected (a real spoof is far larger) | — |
 | 2026-10-15 | PWA push parity: if a browser drops the push subscription while permission is still granted, the app re-subscribes silently on load (as the native app re-registers each start), so web alerts do not quietly lapse | — |
 | 2026-10-15 | Admins can delete a staff account (DELETE `/api/admin/users/<id>`): removes the auth account, cascading the profile; refused with 409 when they have attendance (or other ON DELETE RESTRICT) history, and no self-delete. Supervisors cannot delete | — |
 | 2026-10-15 | Notifications card: a blocked device gets concrete steps to re-allow it in browser settings and a **Check again** button to pick up the change (the app cannot re-ask once blocked) | — |
