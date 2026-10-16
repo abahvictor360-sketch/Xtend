@@ -9,7 +9,7 @@ policy described here. Use this file to write route handlers and screens
 that call those database objects correctly, and to understand what the
 database will refuse and why.
 
-Migration numbers (`0001` to `0057`, no `0051`) say where a rule came
+Migration numbers (`0001` to `0061`, no `0051`) say where a rule came
 from. Where a function was redefined, the latest migration named is the one
 in force.
 
@@ -291,8 +291,13 @@ There are two separate notions of "late". Keep them separate:
 - **Day status in reports** (`buildDays`): present and off site or
   flagged → `off_site` (off site wins over late); present and late →
   `late`; present → `on_time`; not present and the day is after today,
-  before the account was created, or the person is inactive → `none`; a
-  Sunday when Sundays are not counted → `rest`; otherwise `absent`.
+  before the account was created, or the person is inactive → `none`;
+  otherwise the person's schedule for that day (section 2.7, same order as
+  `day_kind`): a day off → `off`, approved leave → `leave`, a working day →
+  `absent`. `off`, `leave` and `none` are never counted (only present and
+  absent days are "expected"). If the schedule cannot be read, everyone
+  falls back to Monday to Saturday. There is no "Sundays count" switch any
+  more.
   The first opening and the last closing of a day count. `missingOut` =
   clocked in, no clock-out, and the day is over. `sentLateMin` = minutes
   between the photo and the server receiving it.
@@ -303,9 +308,11 @@ There are two separate notions of "late". Keep them separate:
 - Report ranges: Attendance/Analytics read at most **92** days
   (`MAX_RANGE_DAYS`); the calendar grid is dropped beyond **62** days;
   trend charts go weekly beyond **45** days.
-- `absentees_today()`: active field staff visible to the caller with no
-  opening today. `admin_overview()`: field staff totals for today (admin or
-  supervisor only).
+- `absentees_today()`: active field staff visible to the caller who are
+  expected today (`day_kind = 'working'`, 0059) with no opening.
+  `admin_overview()`: field staff totals for today (admin or supervisor
+  only); `absent` counts only those expected today, `not_expected` those on
+  a day off or approved leave.
 
 ### 2.5 Offline clock events and the time verdict (`clock_timing`, 0026, 0029)
 
@@ -353,6 +360,162 @@ Stored in `attendance.time_verdict` and `time_detail` (`offset_s`,
   ending `.com .net .org .ng .io .co .xyz .info .biz .me .link .click .top
   .site .online .shop .app .ru .cn`).
 - Blocked while a place is waiting to be named (section 4.5).
+- **The day's visits are kept with the report** (0060):
+  `reports.store_visits jsonb` (default `[]`) is filled by trigger
+  `trg_report_visits` (`report_capture_visits`, before insert or update,
+  after `report_enforce` by trigger-name order) from
+  `report_visits_snapshot(user, date)`: that person's `store_visit_detail`
+  rows for the report date, by arrival, each `{store, outlet_name,
+  address (store's, else arrival address), arrived_at, departed_at,
+  minutes, status, arrived_status}`. Whatever the client sends for it is
+  overwritten; saving again refreshes it, and it cannot be cleared.
+  `report_visits_snapshot` is callable by nobody but the trigger (it would
+  read another person's day).
+
+### 2.7 Work schedules and leave (0059)
+
+Who is expected at work on which day. Mirrored for the dashboard and the
+staff calendars by `src/lib/schedule.ts` (pure; checked by
+`scripts/check-schedules-leave.ts`) and read through the user's session by
+`loadSchedule` / `loadScheduleSafe` (`src/lib/schedule-server.ts`).
+
+- **Tables** (RLS: read your own rows; admins all; a supervisor their team
+  via `supervises_user`; **nobody writes directly**, only the functions
+  below):
+  - `work_patterns(user_id pk, days smallint[], updated_by, updated_at)`:
+    the weekdays worked, as `extract(dow)`: 0 = Sunday … 6 = Saturday.
+  - `schedule_overrides(id, user_id, day, working, note ≤ 300, created_by,
+    created_at)`, unique per person and date: `working = true` an extra day
+    in, `false` an extra day off.
+  - `leave_requests(id, user_id, kind, from_date, to_date, reason, status,
+    decided_by, decided_at, decision_note ≤ 500, cancelled_at, created_at)`:
+    kind `annual | sick | casual | other`; status `pending | approved |
+    rejected | cancelled` (default pending); reason 3–1000 characters
+    after trimming; `to_date ≥ from_date`. View `leave_request_detail`
+    (security invoker) adds staff name, role, store, supervisor, who
+    decided and `days` (both ends counted).
+- **The default week** is Monday to Saturday (`default_work_days()` =
+  `{1,2,3,4,5,6}`): anyone with no pattern works Mon–Sat and has Sunday off.
+- **`day_kind(user, day)`** → `'leave' | 'off' | 'working'`, in this order:
+  1. **approved** leave covering the day → `leave` (pending, rejected and
+     cancelled requests change nothing);
+  2. else a one-off change on that date → `working` or `off`;
+  3. else the weekly pattern (or the default) → `working` or `off`.
+  No permission check; only other `SECURITY DEFINER` functions and the
+  service role may call it.
+- **`is_working_day(user, day)`**: `day_kind = 'working'` for yourself, an
+  admin, a supervisor of that person, or the service role; null for anyone
+  else.
+- **`my_calendar(from, to)`**: the caller's own days (at most 93: `to` is
+  capped at `from + 92`), each `{day, kind, clocked_in, missed}`.
+  `clocked_in` = an opening that day. `missed` = a working day **before
+  today**, on or after the Lagos date the account was made, with no
+  opening. Today is never missed yet; nothing before the account is.
+- **Who manages a schedule** (`can_manage_schedule`, `schedule_guard`):
+  only admins and supervisors ("Only admins and supervisors set
+  schedules"); only for merchandisers and marketers ("Schedules are for
+  merchandisers and marketers"; unknown person "That person was not
+  found"); a supervisor only for their own team ("You can only set
+  schedules for your own team"). Staff never set their own.
+- **`set_work_pattern(users[], days[])`** → number changed: 1–**500**
+  people ("Pick at least one person", "Set at most 500 people at a time");
+  days within 0–6 ("Days of the week run from Sunday (0) to Saturday (6)"),
+  kept once each in order; `days = null` puts them back on the default.
+  **All or nothing**: every person is checked first, so one outside the
+  team refuses the whole list and changes nobody. One audit row per person,
+  `schedule.pattern` on `profiles`/<user> with `{days, default, before,
+  people}`.
+- **`set_schedule_override(user, day, working, note)`** → id: a date from
+  **60 days back** ("That date is too far in the past") to **366 days
+  ahead** ("Pick a date within the next year"); note ≤ 300 ("Keep the note
+  under 300 characters"); replaces any change already on that date. Audit
+  `schedule.override` with `{day, working, note, override_id}`.
+- **`remove_schedule_override(id)`**: same guard ("That date change was not
+  found"); the weekly pattern applies again. Audit
+  `schedule.override_remove` with `{day, working, note}`.
+- **`apply_leave(kind, from, to, reason)`** → id, for the signed-in person:
+  - must be active ("Sign in again to ask for leave") and a merchandiser or
+    marketer ("Leave requests are for merchandisers and marketers");
+  - kind one of the four ("Pick the type of leave");
+  - both dates ("Pick the first and last day of your leave"); last not
+    before first ("The last day cannot be before the first day");
+  - first day at most **7 days back** ("Leave can start at most 7 days
+    ago": sick leave is often asked for afterwards); last day at most
+    **365 days ahead** ("Pick dates within the next year"); at most **60
+    days** in one request ("One request can cover at most 60 days");
+  - reason at least 3 characters ("Say why you need the leave"), at most
+    1000 ("Keep the reason under 1000 characters");
+  - no overlap with the person's own **pending or approved** requests ("You
+    already have leave asked for or approved on some of those days");
+    cancelled and rejected ones do not block. The profile row is locked
+    first, so two requests sent together cannot both pass.
+  - Starts `pending`. Not audited (staff action).
+- **`cancel_leave(id)`**: only the person who asked ("That request was not
+  found") and only while pending ("Only a request still waiting can be
+  cancelled"); sets `cancelled`, `cancelled_at`.
+- **`decide_leave(id, approve, note)`** → `{id, user_id, status, kind,
+  from_date, to_date, note}`: admins and supervisors only ("Only admins and
+  supervisors decide leave"); approve must be given ("Approve or reject the
+  request"); never your own ("You cannot decide your own leave"); a
+  supervisor only for their team ("You can only decide leave for your own
+  team"); not a cancelled one ("That request was cancelled") nor one already
+  decided ("That request has already been decided"); note ≤ 500 ("Keep the
+  note under 500 characters"). Audit `leave.approve` / `leave.reject` on
+  `leave_requests`/<id> with `{user_id, kind, from, to, note}`. A decision
+  cannot be changed by deciding again.
+- **Routes** (thin; the functions decide): `POST /api/leave` (field roles;
+  zod: kind, from, to as YYYY-MM-DD, reason `writtenText(1000, 3)`) then
+  `notifyWatchers` ("<name> asked for leave"); `POST
+  /api/leave/[id]/cancel`; `POST /api/admin/leave/[id] {decision, note ≤
+  500}` then `notifyUsers` to the person ("Leave approved" / "Leave not
+  approved"); `POST /api/admin/schedules {user_ids 1–500, days | null}`;
+  `POST /api/admin/schedules/overrides {user_id, day, working, note ≤ 300}`;
+  `DELETE /api/admin/schedules/overrides/[id]`. Bad ids → 404; database
+  refusals → 400 with the message.
+- **Absence follows the schedule.** Nobody is a no-show, an absentee or
+  counted absent on a day off or a day of approved leave:
+  `staff_no_show()`, `absentees_today()` and `admin_overview()` keep only
+  people whose `day_kind(today) = 'working'` (section 9.3), and the reports
+  use the same order (section 2.4). Clocking in on a day off or on leave is
+  still allowed and counts as a day worked.
+
+### 2.8 Clock-out reminders (0061)
+
+When someone is clocked in today and has not clocked out by the end of
+their shift, their phone is told to clock out.
+
+- **Shift end** (`shift_end_for(user)`): the `shift_end` of the store on
+  their profile (home outlet), else **18:00** Lagos.
+- **Two stages** per person per Lagos day: **1** at the shift end ("Time to
+  clock out"), **2** sixty minutes later ("You have not clocked out yet").
+  Never more than these two; never to someone not clocked in today or
+  already clocked out; never after **midnight Lagos** (the day is read from
+  the moment the job runs, and only that day's clock-in counts). A late job
+  still sends: the first if past the shift end, **only the second** if an
+  hour or more past it (one push, not two at once); stage 1 is never sent
+  once stage 2 has gone.
+- **`clock_out_reminders(user_id, reminder_date, stage 1|2, shift_end,
+  claimed_at)`**, primary key (user, date, stage). RLS read: own, admins, a
+  supervisor's team; nobody writes directly.
+- **`claim_clock_out_reminders(p_now default now())`**, **service role
+  only** (`p_now` is for the tests): returns each due reminder `{user_id,
+  reminder_date, stage, shift_end 'HH:MM'}` and records it in the same
+  statement (`on conflict do nothing`), so two runs at once, or a run every
+  five minutes, never send one twice.
+- **Sending** (`flushClockOutReminders`, `src/lib/clock-out-reminders.ts`,
+  called by `/api/cron/alerts` every 5 minutes): groups the claimed rows by
+  stage, shift end and date and sends each group with `notifyUsers` (web and
+  native), wording from `reminderMessage()` (`src/lib/clock-out-reminder.ts`):
+  stage 1 "Your shift ended at HH:MM. Clock out with a selfie before you
+  leave.", stage 2 "Your shift ended at HH:MM. Please clock out with a
+  selfie now.", both opening `/field`; detail `{kind: 'clock_out_reminder',
+  system: true, stage, shift_end, date}`, so the history shows them as
+  automatic alerts. Never throws; before 0061 is run the missing function
+  is ignored. The job's JSON reply carries `clock_out_reminders: {claimed,
+  delivered}`.
+- The phone shows the same thing on screen from the shift end to midnight
+  (`clockOutDue`, the home screen prompt, `10-field-app.md` §5.9). Staff
+  are only asked to clock out; nothing says the reminder is recorded.
 
 ---
 
@@ -623,16 +786,32 @@ street" and fall back to the address, then `lat, lng` to 5 decimals
 only when they have **more than one** store (`outlets_for_user` count > 1),
 because one daily clock can no longer say which.
 
-### 5.2 Checking in (`store_visit_enforce`, final 0034)
+### 5.2 Checking in (`store_visit_enforce`, final 0060)
 
 - Server sets user, times, `visit_date := business_date()`, `status :=
   'open'`, clears any departure fields.
 - **One open visit per person** (unique partial index): a second check-in
   without checking out fails with `23505`.
-- Outlet optional. Left out → the store whose fence they stand in
-  (`outlet_containing`), any active outlet, no allocation needed. Still
-  none → recorded against **no outlet**, status null (or `flagged` when
-  accuracy > 100 m): a shop Xtend does not know is a perfectly good visit.
+- **Allocated stores only** (0060). `has_allocated_stores(user)` = at
+  least one `staff_outlets` row for an active store. Once true, a visit
+  must be to one of their stores (`outlets_for_user`: allocated plus home):
+  - a store **picked by hand** that is not theirs is refused;
+  - **left out**, the nearest of their own stores whose fence covers the
+    spot is used; if none of theirs does but some other store's fence does
+    (`outlet_containing`), it is refused; if no fence covers it at all, the
+    visit stands alone (no outlet).
+  Both refusals: **"This store is not on your list. Ask your supervisor to
+  add it."** (`POST /api/visits` answers **403** with that text), and no
+  visit row is left behind.
+- Without any allocation the old rule stands exactly: outlet optional; left
+  out → the store whose fence they stand in (`outlet_containing`), any
+  active outlet. Still none → recorded against **no outlet**, status null
+  (or `flagged` when accuracy > 100 m): a shop Xtend does not know is a
+  perfectly good visit (place naming, 0045).
+- `my_visit_stores()` (0060): the stores the phone offers under "Pick the
+  store myself": the caller's own stores (id, name, address, lat, lng,
+  geofence radius, by name) when they have an allocation, otherwise
+  **none** (the phone says to ask their supervisor).
 - Outlet named (or found): must exist and be active; snapshot taken;
   status `flagged` (accuracy > 100 m), null (waiting store), `on_site`
   (within its radius) or `off_site`. Naming a store you are not at is
@@ -672,6 +851,8 @@ label and the store's own point.
   (supervisors may call it).
 - The daily clock measures against the nearest allocated store (section
   2.2), and the event is attributed to that store.
+- Store visits are limited to these stores as soon as one is allocated
+  (section 5.2, 0060).
 
 ### 5.6 Store coverage and visit review
 
@@ -947,12 +1128,15 @@ Labels: `ALERT_LABEL` / `ALERT_SHORT` in `src/lib/alert-review.ts`.
 
 ### 9.3 Absence sweep (no-show)
 
-- `staff_no_show(grace_minutes default 30)`: active field staff whose
-  active home outlet's `shift_start + grace` has passed today (Lagos) and
-  who have no opening today; outlets without a shift time are skipped.
-  Returns minutes late.
-- `/api/cron/absence-sweep` runs at **08:30 UTC (09:30 Lagos), Monday to
-  Saturday**, grace 30 minutes (overridable with `?grace=`). For each
+- `staff_no_show(grace_minutes default 30)` (final 0059): active field
+  staff whose active home outlet's `shift_start + grace` has passed today
+  (Lagos), who are **expected today** (`day_kind = 'working'`: not a day
+  off, not approved leave, section 2.7) and who have no opening today;
+  outlets without a shift time are skipped. Returns minutes late.
+- `/api/cron/absence-sweep` runs at **08:30 UTC (09:30 Lagos) every day**
+  (`"30 8 * * *"` in `vercel.json`; Sundays included since 0059, because
+  the schedule, not the weekday, decides who is expected), grace 30 minutes
+  (overridable with `?grace=`). For each
   no-show not already reported today (`no_show_already_reported`:
   a notification with `audience_detail.kind = 'no_show'` and that
   `subject_id` created today Lagos), it pushes "<name> has not clocked in:
@@ -1050,11 +1234,14 @@ sets (created_by null): 4 templates, 5 quick replies (quick replies use a
 All need `Authorization: Bearer $CRON_SECRET` (`vercel.json`):
 - `/api/cron/purge-selfies` — 02:20 UTC daily: photo sweep, abandoned
   visits, beacons older than 60 days deleted.
-- `/api/cron/absence-sweep` — 08:30 UTC Monday–Saturday: no-shows, then
-  flag alerts.
-- `/api/cron/alerts` — every 5 minutes: unsent flag alerts, due scheduled
-  notifications, and in the first 5 minutes of each hour the X Metrics
-  sweep (`runMetricsSweep`: reconcile, expiry scan, push expiry alerts).
+- `/api/cron/absence-sweep` — 08:30 UTC daily (`"30 8 * * *"`): no-shows
+  (only people expected that day, 0059), then flag alerts.
+- `/api/cron/alerts` — every 5 minutes, run by
+  `.github/workflows/alerts-cron.yml` (Vercel Hobby allows only daily
+  crons; on Pro it can move back to `vercel.json`): unsent flag alerts, due
+  scheduled notifications, clock-out reminders (section 2.8, 0061), and in
+  the first 5 minutes of each hour the X Metrics sweep (`runMetricsSweep`:
+  reconcile, expiry scan, push expiry alerts).
 - `/api/cron/metrics` — optional hourly X Metrics sweep on its own.
 
 ---
@@ -1376,7 +1563,14 @@ calculation.
 - Some functions write audit rows themselves (supervisors cannot be trusted
   to call it): `set_staff_outlets` (`staff.allocate_outlets`),
   `request_store_count` (`store_count.request`), `resolve_alert` /
-  `resolve_alerts` (`alert.resolve`).
+  `resolve_alerts` (`alert.resolve`), and (0059) `set_work_pattern`
+  (`schedule.pattern`, one row per person), `set_schedule_override`
+  (`schedule.override`), `remove_schedule_override`
+  (`schedule.override_remove`), `decide_leave` (`leave.approve` /
+  `leave.reject`), each in the same transaction as the change.
+- Marketer report downloads are audited by their route as
+  `export.marketer_report.<pdf|docx|xlsx>` on `profiles`/<person> with
+  `{period, from, to, visits, days_worked}`.
 - Only admins read the audit log (`audit_admin_read`; `audit_log_detail`).
 
 ### 14.2 Context (`audit_context_columns`, `audit_fill_context`, 0049)
@@ -1412,6 +1606,16 @@ calculation.
   **caller's own Supabase client, so RLS decides what it can see**: a
   supervisor's assistant only knows that supervisor's people. At most
   **10** tool rounds per question; date ranges at most **62** days.
+- **Days off and leave are not absences** (0059). The tools read the
+  schedule (`loadScheduleSafe`): `attendance_on_day` lists people not
+  clocked in who were expected separately from `day_off` and `on_leave`;
+  `staff_history` labels each day "working day", "day off" or "on approved
+  leave"; `attendance_summary` counts working days, days off, leave days and
+  absent days (past working days, on or after the account was made, with no
+  clock-in). The system prompt forbids calling a day off or approved leave
+  an absence.
+- `field_reports` includes the visits kept with each report (0060) as one
+  line of text and the total minutes.
 - Read tools: `attendance_on_day`, `staff_history`, `attendance_summary`,
   `field_reports`, `store_visits`, `store_counts`, `integrity_flags`,
   `integrity_risk`, `location_alerts`, `support_threads`,
@@ -1516,10 +1720,12 @@ Testable statements, grouped by area. They mirror the assertions in
 ### Reports
 - A merchandiser cannot file a daily report; a marketer can; owner, date and outlet are server-set.
 - A report is editable the same day only; at most 5 photos.
+- Saving a report keeps the day's visits with it (store, address, times and minutes, in order), ignores any visits the phone sent, and saving again refreshes them and cannot clear them.
 
 ### Read models
 - `my_day` tells a merchandiser they cannot file, shows today's opening and outlet.
 - `admin_overview` counts clock-ins, off-site openings and open alerts; `absentees_today` lists field staff (marketers too) with no opening.
+- `absentees_today` leaves out people on a day off or on leave; `admin_overview` counts them as `not_expected`, not `absent`.
 - Location labels read "name, street" and fall back to coordinates.
 - `staff_analytics` counts one present day per opening.
 - `live_locations` lists people still on shift with distance and inside-fence; a merchandiser sees nobody.
@@ -1532,6 +1738,7 @@ Testable statements, grouped by area. They mirror the assertions in
 
 ### No-shows and watchers
 - Someone who clocked in is never a no-show; a field member who did not is reported with minutes late.
+- Nobody on a day off or on approved leave is a no-show; someone working today with no clock-in is.
 - Admins are always watchers; a supervisor is a watcher of their team (even from another store) and not of others; nobody watches themselves.
 - Flags created before alerting existed are not sent; each new medium/high flag is claimed once.
 
@@ -1546,6 +1753,24 @@ Testable statements, grouped by area. They mirror the assertions in
 - A visit to a waiting store is neither on nor off site.
 - `staff_day` reports stores visited, clock-in, minutes in store; a marketer sees only their own day.
 - Store coverage shows last visit, who, visits in 30 days and staff assigned; an unvisited store says so.
+- With no allocation, the store picker (`my_visit_stores`) offers nothing, a store picked by hand is allowed and standing in a known store is recognised.
+- With a store allocated, the picker lists only their own stores; picking their own store is allowed; standing in their own store is recognised and `on_site`; a store picked by hand that is not theirs, or standing in one, is refused ("This store is not on your list. Ask your supervisor to add it.") and leaves no visit behind.
+
+### Schedules and leave
+- Without a pattern, Monday to Saturday are working days and Sunday is off; Monday to Friday means Saturday is off; only field staff have schedules (a supervisor has none).
+- Pattern days are kept once each, in order; a supervisor sets one pattern for several of their team at once, with one audit row per person changed; one person outside the team refuses the whole list and nobody on it is changed; staff cannot set their own schedule; a supervisor cannot set or read one outside their team.
+- An extra day in makes a day off a working day; an extra day off makes a working day off; a second change on the same date replaces the first; removing it puts the pattern back; a date more than a year ahead is refused; date changes are audited (`schedule.override`, `schedule.override_remove`).
+- A request starts pending; only the four types are accepted; a reason is required; the last day cannot be before the first; a start exactly 7 days back is accepted, more is refused; a request overlapping one still waiting, or approved leave, is refused; cancelled and rejected requests do not block asking again.
+- Only a pending request can be cancelled, and only by the person; an approved one cannot.
+- Staff cannot decide leave; nobody decides their own (not even an admin); a supervisor cannot decide outside their team; a decided request cannot be decided again; the decision is audited (`leave.approve` / `leave.reject`).
+- A pending or rejected request does not change the day; approved leave makes each of its days `leave`, and the day after it is working again.
+- `my_calendar`: a day with a clock-in shows it; a past working day with no clock-in is missed; today is not missed yet; nothing is missed before the account was made; approved leave shows as leave.
+
+### Clock-out reminders
+- The shift end is the home store's, or 18:00 with no store.
+- Nobody is reminded before their shift ends; the first goes at the shift end, not to anyone not clocked in or already out, and to everyone else whose shift has ended; claiming again hands back nothing the second time.
+- The second does not go before an hour has passed and goes an hour after the shift end; never more than two a day; none after they clock out; somebody with no store is not reminded at 17:00 but is at 18:00.
+- A late job sends one reminder, the second, not both at once, and the first is not sent after it.
 
 ### Teams
 - A supervisor with no shared outlet and no reporting line does not supervise someone; naming them as supervisor does; they may edit that person but not an admin; sharing an outlet with an admin is not supervision.

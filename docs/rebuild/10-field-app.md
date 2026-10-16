@@ -16,7 +16,9 @@ means Africa/Lagos (UTC+1 all year). The "business date" is
 
 Build in the order of the sections below: sign-in, onboarding, shell and
 home, gates, clock-in/out, place naming, store visits, report, stock count,
-X Metrics, history/account/support/guide, background behaviours, copy rules.
+X Metrics, history/account/support/guide/leave, background behaviours, copy
+rules. Schedules and leave come from migration 0059, allocated-store visits
+and visits in the report from 0060, the clock-out reminder from 0061.
 
 ---
 
@@ -296,10 +298,13 @@ showing its label; others are 48px round icons:
 
 Loads `my_day()` (DayState: date, can_file_report, profile, outlet with
 lat/lng/radius/shift times, opening, closing, report_filed),
-`my_store_visits()`, all **active** outlets (id, name, address, lat, lng,
-geofence_radius_m, ordered by name), `can_visit_stores()`, count status, and
-the user's avatar signed URL (1 hour). If `my_day` fails: destructive alert
-"Could not load today. Pull down to retry."
+`my_store_visits()`, `my_visit_stores()` (the stores allocated to them for
+the picker: id, name, address, lat, lng, geofence_radius_m, by name; **none**
+when nothing is allocated, migration 060), `can_visit_stores()`, count
+status, the user's avatar signed URL (1 hour), and
+`my_calendar(p_from = today − 6, p_to = today)` for the week row (migration
+059). If `my_day` fails: destructive alert "Could not load today. Pull down
+to retry."
 
 `can_visit_stores()` is true for marketers and admins, and for a
 merchandiser who has more than one outlet. The visit routes
@@ -313,6 +318,8 @@ merchandiser who has more than one outlet. The visit routes
    open: orange card linking to `/field/count`, title "Stock count
    requested" or "Month-end stock count", sub "By <name> · due <long date>"
    or "due <long date>".
+   Then, first inside the home component, the **clock-out prompt** (§5.9)
+   when the shift has ended and they are still clocked in.
 1. **Greeting header** (`greeting-header.tsx`): 56px round avatar (photo or
    initials, two letters) that toggles a menu; "Hi <first name>" and a bold
    subtitle: on shift "Have a good shift!", clocked out "Nice work today!",
@@ -332,9 +339,20 @@ merchandiser who has more than one outlet. The visit routes
      when you arrive", right button **"CLOCK IN"** (anchor `#clock`).
    - on shift: "On shift", "Since HH:MM · <outlet>", badge **"LIVE"**.
    - clocked out: "Shift complete", "See you next time", badge **"DONE"**.
+   **Not working today** (only when today's `my_calendar` kind is `off` or
+   `leave` and there is no clock-in yet; a missing calendar counts as
+   working): muted rounded card with a palm-tree tile, bold **"Day off
+   today"** / **"On leave today"** and "Enjoy your rest." / "Enjoy your
+   leave." + " If you are working today, clock in as usual." Clocking in is
+   never blocked on a day off.
 6. **Week row**: the last 7 days ending today (6 days ago … today), weekday
-   short name above a round date; today emphasised. Each links to
-   `/field/history?d=<date>`.
+   short name above a round date, a small word under it; today emphasised.
+   Each links to `/field/history?d=<date>` (aria "<Wed> <14>, missed / day
+   off / leave"). Each day is coloured by `calendarMark()` (§11.1):
+   missed red, day off grey, leave soft orange, each with its word
+   ("Missed", "Off", "Leave"); a worked day keeps the plain look with a
+   brand "•" under it. Under the row: the **calendar legend** and a brand
+   link **"Ask for leave ›"** (calendar icon) → `/field/leave`.
 7. **Day card** (orange, rounded 2rem): store icon; status pill "Not
    started" / "In progress" / "Done"; italic "My day" and "<n>% done"; line
    "<outlet> · HH:MM–HH:MM" or "Have a good day"; one vertical bar per step
@@ -384,6 +402,11 @@ the authoritative distance is computed by the database.
 - The progress percentage for a merchandiser after clock-in is 67% (2 of 3);
   for a marketer with clock-in and no report it is 50% (2 of 4).
 - Tapping a day in the week row opens History on that date.
+- With the default schedule, last Sunday shows grey "Off"; a past Monday
+  with no clock-in (after the account was made) shows red "Missed"; a day
+  of approved leave shows soft orange "Leave".
+- On a day off with no clock-in, "Day off today" shows above the week row
+  and the clock-in button still works; it disappears once clocked in.
 
 ---
 
@@ -748,6 +771,46 @@ Service-worker fallback page `/offline`: "You are offline" / "Anything you
 saved while offline is queued on this phone and will be sent the moment you
 have data. Nothing is lost."
 
+### 5.9 Clock-out reminder (migration 0061)
+
+Timing and wording in `src/lib/clock-out-reminder.ts` (plain functions, no
+imports, shared by the phone, the server and
+`scripts/check-clock-out-reminder.ts`):
+
+- Shift end = the home outlet's `shift_end` (`day.outlet.shift_end`), else
+  **18:00** (`DEFAULT_SHIFT_END`); shown as `HH:MM` (`shiftEndLabel`;
+  anything unusable → 18:00). Lagos is UTC+1, no daylight saving.
+- `clockOutDue(state, now)`: clocked in, not clocked out, and `now` is from
+  the shift end on that business date up to (not including) **midnight
+  Lagos** at the end of it.
+- Pushes (sent by the five-minute job, `30-rules.md` §2.8), both opening `/field`:
+  - stage 1 at the shift end: **"Time to clock out"** / "Your shift ended at
+    HH:MM. Clock out with a selfie before you leave."
+  - stage 2 **60 minutes** later (`SECOND_REMINDER_MIN`): **"You have not
+    clocked out yet"** / "Your shift ended at HH:MM. Please clock out with a
+    selfie now."
+
+**The prompt** (`src/components/field/clock-out-prompt.tsx`), the first
+thing on the home screen while `clockOutDue` (state = `{ date: day.date,
+shiftEnd: day.outlet?.shift_end ?? null, clockedIn, clockedOut }`):
+
+- Brand-orange rounded card (`role="alert"`), white round bell tile, bold
+  **"Your shift ended at HH:MM. Clock out now."**, then "Take your
+  clock-out selfie before you leave."
+- Big white pill button **"Clock out"** (log-out icon): scrolls to `#clock`
+  and dispatches the window event `xtend:clock-out` (`CLOCK_OUT_EVENT`);
+  `ClockPanel` listens for it while `nextType === 'closing'` and nothing is
+  busy or pending, and starts the clock-out exactly as its own button
+  (location, then camera).
+- Still checked in at a store (an open visit): the text becomes "You are
+  still checked in at <store>. Check out of it first, then clock out." and
+  the button **"Check out of <store>"** (store icon) switches to the Stores
+  tab and scrolls to it (`id="stores"`). The store is the visit's
+  `store_label`, else `outlet_name`.
+- Appears on its own: a timer wakes at the shift end
+  (`msUntilClockOutDue` + 500 ms) and again at midnight to remove it; it
+  re-checks when the page becomes visible (phones pause timers).
+
 ### Acceptance checks
 
 - The camera only opens after a fix ≤ 100 m is in hand, and its subtitle
@@ -764,6 +827,12 @@ have data. Nothing is lost."
 - Clocking out as a merchandiser shows the result then "You are signed out
   for today"; OK lands on the login page with the clocked-out notice.
 - A second clock-in the same day shows "You have already clocked in today."
+- Clocked in at a store whose shift ends 17:00: at 16:59 there is no prompt;
+  with the app left open, at 17:00 "Your shift ended at 17:00. Clock out
+  now." appears without a reload, and its button opens the clock-out
+  camera after the location step. With no store the time is 18:00.
+- A marketer still checked in at a store is first offered "Check out of
+  <store>"; after clocking out, or after midnight Lagos, the prompt is gone.
 
 ---
 
@@ -896,18 +965,25 @@ Component `src/components/field/store-visits.tsx`, on the **Stores** tab.
 - Header "Store visits" with "<n> done today".
 - One open visit at a time (the database refuses a second: 409 "You are
   already checked in to a store. Check out of it first.").
-- The store list is **every active outlet**, sorted nearest first when a fix
-  exists. `here` = the first outlet whose fence contains the current fix
-  (display only).
+- The store list is **the person's own stores** (`my_visit_stores()`,
+  migration 060: their allocated stores plus their home store, only once
+  they have at least one allocation; otherwise empty), sorted nearest first
+  when a fix exists (a store with no pinned lat/lng sorts last and is never
+  "here"). `here` = the first listed store whose fence contains the current
+  fix (display only).
 
 ### 7.1 No open visit
 
 - Button **"Check in here"** (camera icon). Under it: "You are at <store>."
   or "Xtend will work out where you are."
-- **"Pick the store myself"** (ghost) when there is more than one outlet.
-  Opens a card "Which store are you at?" / "Only needed if Xtend did not
-  recognise the shop you are in.", rows with name and "N m away" (or
-  address), a **"Here"** badge when inside the fence, and **"Cancel"**.
+- **"Pick the store myself"** (ghost) when the list has at least one store.
+  Opens a card "Which store are you at?" / "These are the stores on your
+  list. Only needed if Xtend did not recognise the shop you are in.", rows
+  with name and "N m away" (or address), a **"Here"** badge when inside the
+  fence, and **"Cancel"**.
+- With an empty list, instead of that button: muted rounded line "No stores
+  are allocated to you yet. Ask your supervisor." ("Check in here" still
+  works.)
 
 ### 7.2 Check-in flow
 
@@ -923,9 +999,17 @@ client_captured_at }`. **Not offline-capable**: network errors are shown.
 
 Server (`store_visit_enforce`): only `can_visit_stores()` ("Only marketers
 record store visits" → 403 "Only marketers record store visits."); sets
-user, times, visit_date, status `open`. If no outlet given, uses the outlet
-whose fence contains the point; if none, the visit stands alone (status null
-unless accuracy > 100 → flagged). With an outlet: inactive/missing outlet
+user, times, visit_date, status `open`. **Allocated stores only** (migration
+060): once the person has at least one `staff_outlets` row
+(`has_allocated_stores`), a hand-picked store that is not theirs is
+refused, and so is checking in without picking while standing inside the
+fence of a store that is not theirs (unless one of their own stores' fences
+also covers the spot; the nearest of theirs wins) → 403 **"This store is not
+on your list. Ask your supervisor to add it."** Without any allocation the
+old behaviour stands: if no outlet given, uses the outlet whose fence
+contains the point; if none, the visit stands alone (status null unless
+accuracy > 100 → flagged). With an allocation, a spot inside no fence at all
+also stands alone. With an outlet: inactive/missing outlet
 errors; distance and status (≤ fence → on_site, else off_site, accuracy >
 100 → flagged). Capture time window +2 min/−24 h. Selfie check and place-due
 guard apply; a visit can itself raise a place due. Off-site/flagged notify
@@ -960,6 +1044,11 @@ abandoned → clock (warning), on site → green check, otherwise red clock.
 - Checking in a second time without checking out gives the 409 text.
 - Check-out takes no photo and reports the minutes.
 - With no signal, check-in shows an error (it is not queued).
+- A marketer with stores allocated sees only those in "Pick the store
+  myself"; checking in inside another store's fence shows "This store is not
+  on your list. Ask your supervisor to add it." A marketer with no
+  allocation sees "No stores are allocated to you yet. Ask your supervisor."
+  and can still check in anywhere.
 
 ---
 
@@ -971,6 +1060,20 @@ redirected to `/field`.
 - Sheet screen (orange header with back arrow to `/field`). Title "New
   daily report" or "Edit today's report". Header fields: Filed by, Outlet
   (or "No outlet assigned"), Date (long form of the business date).
+- **Today's store visits** on top, above the form
+  (`src/components/field/report-visits.tsx`, data `my_store_visits()`,
+  lines from `visitLines()` / `visitTotals()` in `src/lib/marketer-report.ts`):
+  section header **"Today’s store visits"** with "<time> in stores" in
+  brand on the right; one row per visit in arrival order: store icon, store
+  (store label, else outlet name, else "Unnamed place"), "In HH:MM · out
+  HH:MM" (an open visit shows "still checked in" in brand), and the time on
+  the right (`duration()`: "45 min", "1 h 20 min", "2 h"). Under the rows a
+  tint bar "<n> visit(s) · <n> store(s)" / "Total time in stores: <time>"
+  and "These are added to your report when you save it." No visits: muted
+  "No store visits yet today. Check in and out at each store from the
+  Stores tab and they appear here." Nothing to type: the database copies
+  the day's visits into the report on every save (`reports.store_visits`,
+  `30-rules.md` §2.6).
 - Form (`report-form.tsx`): five sections as chips, one textarea shown at a
   time (min height 132px, autofocus), counter "<n>/5 filled", a check on
   filled chips, `*` on required unfilled ones.
@@ -1013,6 +1116,11 @@ redirected to `/field`.
 - After 3 photos saved, only 2 more can be added.
 - Re-submitting the same day updates rather than creating a second report.
 - Offline submit queues and later sends with photos.
+- After two visits today (50 min and 40 min, one still open), the top of
+  the report lists both in arrival order, the open one "still checked in",
+  and the bar reads "2 visits · 2 stores" / "Total time in stores: 1 h 30
+  min". Saving the report stores the same visits with it, whatever the
+  phone sends.
 
 ---
 
@@ -1235,14 +1343,43 @@ or "Sales · <store>", date, or struck-through "Voided".
   selected.
 - Day strip (`day-strip.tsx`): 7 days ending today, pills 52×68px, selected
   filled brand, a dot under days with any event; scrolls the selected day
-  into view. `?d=YYYY-MM-DD` selects (invalid → today).
-- Data: own `attendance_detail`, newest first, last **90** rows.
+  into view. `?d=YYYY-MM-DD` selects (invalid or after today → today).
+  Unselected pills take the calendar colour of the day (below) with its word
+  ("Missed", "Off", "Leave") in place of the dot; plain and worked days are
+  a bordered card. The calendar legend sits under the strip.
+- Data: own `attendance_detail`, newest first, last **90** rows; and
+  `my_calendar()` twice (migration 059): the strip's 7 days, and the whole
+  month of the selected date.
 - Day section: "Today" or long date, "<n> event(s)"; empty "Nothing recorded
-  on this day."; rows "Clock in"/"Clock out", "HH:MM · <distance> from
-  outlet · ±N m" and the location label; badge **"On site"**, **"Off
-  site"** or **"Not confirmed"**.
+  on this day." — or, for a missed day, red bold "Missed: no clock-in on
+  this working day."; for a day off / leave "Day off. Nothing recorded on
+  this day." / "Leave. Nothing recorded on this day."; rows "Clock
+  in"/"Clock out", "HH:MM · <distance> from outlet · ±N m" and the location
+  label; badge **"On site"**, **"Off site"** or **"Not confirmed"**.
+- **"Your month"** section (action link **"Ask for leave"** → `/field/leave`):
+  `MonthCalendar` (`src/components/field/calendar-marks.tsx`), a card with
+  the month name ("October 2026"), ‹ › arrows (`?d=` the 1st of the month
+  before/after; no › past the current month), weekday heads Mo Tu We Th Fr
+  Sa Su (Monday first, `monthWeeks()`), 44 px day cells linking to
+  `?d=<date>` (selected: brand outline; today: extra bold with the word
+  "Today"; future days 60 % opacity, but days off and leave still show
+  there), the legend, and a count line "N missed · N days off · N days of
+  leave" (parts left out when zero).
 - "This month" stats (of the selected month, from those rows): **Days**
   (clock-ins), **On site**, **Not on site**.
+
+**How a day is marked** (`calendarMark()`, `src/lib/schedule.ts`, from a
+`my_calendar` row `{ day, kind, clocked_in, missed }`), first match wins:
+
+| Mark | When | Look (`MARK_CLASS`) | Word | Legend |
+|---|---|---|---|---|
+| worked | clocked in (whatever the schedule said) | bordered card | "•" (brand) | Clocked in |
+| missed | `missed`: a past working day (not today), on or after the day the account was made, no clock-in | red tint `bg-destructive/12`, red ring | Missed | Missed |
+| off | kind `off` | grey `bg-muted` | Off | Day off |
+| leave | kind `leave` (approved) | `#fbe4d3` fill, `#f2b48a` ring, brand-deep text | Leave | Leave |
+| plain | today, a future working day, or before they joined | bordered | — | — |
+
+Colour is never the only sign: every mark has its word and an aria label.
 
 ### 11.2 Account (`/field/account`, labelled You)
 
@@ -1254,11 +1391,15 @@ role name or the base label). Sections:
 2. **Your posting**: outlet name, "<address or No address> · N m geofence ·
    HH:MM–HH:MM", or "No outlet assigned" / "Ask your admin to assign your
    outlet."
-3. **Need help?**: "Message support" ("Report a problem. The Xtend helper
+3. **Days off and leave**: "Ask for leave" ("Annual, sick or casual leave.
+   See your requests and the answers.", trailing brand "Open") →
+   `/field/leave`; "Your calendar" ("Days you clocked in, days off, leave
+   and missed days.") → `/field/history`.
+4. **Need help?**: "Message support" ("Report a problem. The Xtend helper
    replies, and the office steps in when needed.") → `/field/support`; "How
    to use Xtend" ("Step-by-step help, from clocking in to the end of the
    day.") → `/field/guide`.
-4. **Messages from the office**: `PushToggle` then the last **10**
+5. **Messages from the office**: `PushToggle` then the last **10**
    notifications (`my_notifications`), title, body, "<sender or Office> ·
    time", read ones muted.
    - PushToggle labels: "On for this device", "Blocked in your browser
@@ -1266,13 +1407,13 @@ role name or the base label). Sections:
      Notifications to Allow."), "Not supported by this browser", "Not
      switched on by your admin yet", "Checking…", "Off"; button "Turn on" /
      "Turn off".
-5. **Security**: "Change your password" ("Pick something only you know.") →
+6. **Security**: "Change your password" ("Pick something only you know.") →
    `/change-password`.
-6. **Tips**: "Keep location and notifications on" ("Xtend needs them to
+7. **Tips**: "Keep location and notifications on" ("Xtend needs them to
    clock you in and out and to reach you."); "Install Xtend to your home
    screen" ("Chrome menu → Add to Home screen. It opens full screen and
    loads faster on a weak network.").
-7. Sign out button; Xpel lockup; "Xtend · field attendance".
+8. Sign out button; Xpel lockup; "Xtend · field attendance".
 
 ### 11.3 Profile photo (`profile-photo.tsx`)
 
@@ -1331,6 +1472,58 @@ notifications blocked, camera does not open, banner waiting to send, forgot
 password). Screenshots under `/guide/staff-*.png`. It covers only what to
 do; it never explains monitoring.
 
+### 11.6 Leave (`/field/leave`, migration 059)
+
+Page `src/app/field/leave/page.tsx`, components `src/components/field/leave-form.tsx`;
+reached from the home week row, History ("Your month") and You.
+
+- Sheet **"Leave"**, back to `/field/account`. Header fields: Name;
+  "Waiting for an answer" = "<n> request(s)" pending, or "None".
+- Data: own `leave_requests` (RLS), newest first-day first, up to **60**,
+  then `sortLeave()` (pending first by soonest first day; then the rest by
+  latest first day; then newest asked).
+- **"Ask for leave"** section. Only a merchandiser or marketer gets the
+  form (an admin in the field app sees info "Leave requests are for
+  merchandisers and marketers."). Intro: "Pick the type, your first and last
+  day of leave, and say why. Your supervisor approves it, and you get a
+  message when they do."
+- Form (`LeaveForm`, `surface` card):
+  - **Type of leave** select: Annual leave (default), Sick leave, Casual
+    leave, Other (`LEAVE_KINDS`).
+  - **First day** / **Last day** date inputs side by side, both default to
+    tomorrow; min today − **7**, max today + **365**; moving the first day
+    past the last moves the last with it.
+  - A line with a calendar icon showing the date problem, or the range
+    (`leaveRangeText`): "Tue 20 Oct (1 day)" / "Tue 20 Oct to Thu 22 Oct
+    (3 days)".
+  - **Reason** textarea (3 rows, max **1000**), placeholder "For example: my
+    sister's wedding in Enugu."; validated with `writtenText(1000, 3, 'the
+    reason')`; empty → "Say why you need the leave".
+  - **"Send request"** (send icon; "Sending…") → `POST /api/leave { kind,
+    from, to, reason }`. Success: "Sent. Your supervisor will look at it.",
+    reason cleared, page refreshed. Network failure: "No network. Try again
+    when you have signal." (not queued). Server error text shown as is,
+    fallback "Your request could not be sent. Try again."
+  - Date problems checked on the phone first (`leaveDateProblem`, same order
+    and words as the database): "Pick the first and last day of your
+    leave"; "The last day cannot be before the first day"; "Leave can start
+    at most 7 days ago"; "Pick dates within the next year"; "One request can
+    cover at most 60 days"; "You already have leave asked for or approved on
+    some of those days" (only pending and approved requests block).
+- **"Your requests"** section (`LeaveList`): each a `surface` row with a
+  calendar icon tile (muted when cancelled), the kind in bold, a status
+  badge (Pending warning, Approved success, Rejected destructive, Cancelled
+  outline), the range, the reason, "Reply: <note>" when the decider wrote
+  one, and for a pending one a red **"Cancel request"** ("Cancelling…")
+  after `confirm('Cancel this leave request?')` → `POST
+  /api/leave/{id}/cancel`. Empty: "You have not asked for leave yet."
+  Load failure: "Could not load your requests. Pull down to retry."
+- Pushes: sending tells their supervisor and admins (`20-admin-dashboard.md`,
+  Leave);
+  the decision comes back to the person as **"Leave approved"** / **"Leave
+  not approved"**, "Your <annual leave> for <range> was approved|not
+  approved. <note>", opening `/field/leave`.
+
 ### Acceptance checks
 
 - History shows the badge "Not confirmed" for an unmeasured clock-in.
@@ -1339,6 +1532,14 @@ do; it never explains monitoring.
 - A support message gets a helper reply in the same request; a password
   request is shown as "With the office".
 - An office reply appears in the open thread without a manual refresh.
+- History's month calendar for a person on the default week shows every
+  Sunday grey "Off", past working days without a clock-in red "Missed", and
+  no › arrow on the current month.
+- Asking for 61 days of leave shows "One request can cover at most 60
+  days" before anything is sent; asking for days that overlap a pending
+  request shows the overlap message; a sent request appears as "Pending"
+  with "Cancel request", and after cancelling it shows "Cancelled" with no
+  button.
 
 ---
 
@@ -1357,6 +1558,7 @@ do; it never explains monitoring.
 | `/field/metrics` | field roles | §10 |
 | `/field/account` | field roles | §11.2 |
 | `/field/support` | field roles | §11.4 |
+| `/field/leave` | field roles (form: merchandiser, marketer) | §11.6 |
 | `/field/guide` | field roles | §11.5 |
 | `/offline` | public | SW fallback |
 
@@ -1525,6 +1727,10 @@ What this means in practice:
 - Do tell staff the plain result of their own action, honestly: on site /
   off site with the distance, "Not confirmed", a refused photo with what to
   fix.
+- Schedules, leave and the clock-out reminder are told as the person's own
+  plan ("Day off today", "Missed", "Your shift ended at 17:00. Clock out
+  now."), never as being watched: nothing says the office is told about a
+  missed day, that a no-show is reported, or that a reminder was logged.
 - Explain a requirement by the task, not by surveillance. Examples used in
   the app:
   - Location: "Xtend uses your location to confirm you are at your store

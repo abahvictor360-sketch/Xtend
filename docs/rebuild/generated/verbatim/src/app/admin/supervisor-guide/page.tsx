@@ -3,6 +3,8 @@ import {
   Bell,
   CalendarCheck,
   ClipboardList,
+  CalendarDays,
+  FileDown,
   Gauge,
   HelpCircle,
   LayoutDashboard,
@@ -27,6 +29,8 @@ const T = {
   stock: { id: 'stock', title: 'Stock count and X Metrics', icon: Gauge },
   checks: { id: 'checks', title: 'Integrity and Check an excuse', icon: ShieldAlert },
   people: { id: 'people', title: 'Your staff, stores and messages', icon: UserCog },
+  schedules: { id: 'schedules-leave', title: 'Schedules and leave', icon: CalendarDays },
+  reports: { id: 'marketer-reports', title: 'Marketer reports', icon: FileDown },
   faq: { id: 'questions', title: 'Questions', icon: HelpCircle },
 } satisfies Record<string, GuideTopic>
 
@@ -101,8 +105,12 @@ export default async function SupervisorGuidePage() {
                 <Ui>Support</Ui>: answer your team&apos;s messages, longest waiting first.
               </>,
               <>
-                Before close: <Ui>Attendance</Ui> for anyone who has not clocked out, and{' '}
-                <Ui>Store visits</Ui> for stores your marketers did not reach.
+                <Ui>Leave</Ui>: answer pending leave requests so people know where they stand.
+              </>,
+              <>
+                Before close: <Ui>Attendance</Ui> for anyone who has not clocked out (Xtend also
+                reminds them at the end of their shift), and <Ui>Store visits</Ui> for stores your
+                marketers did not reach.
               </>,
             ]}
           />
@@ -135,6 +143,10 @@ export default async function SupervisorGuidePage() {
           </p>
           <ul className="list-disc space-y-1.5 pl-5">
             <li>Late means after the store&apos;s shift start.</li>
+            <li>
+              Days off and approved leave never count as absent. In the calendar a day off shows
+              grey “–” and leave soft orange “Lv”.
+            </li>
             <li>Off site means outside the store&apos;s area; flagged means the location was unclear.</li>
             <li>Records cannot be changed by anyone.</li>
           </ul>
@@ -216,7 +228,8 @@ export default async function SupervisorGuidePage() {
           </p>
           <p>
             <Ui>Store allocation</Ui>: choose which stores each person works. A merchandiser&apos;s clock-in
-            is measured against their store, so keep it right.
+            is measured against their store, so keep it right. Once someone has stores allocated, they
+            can only check in at those (and their home store), and the app lists only those.
           </p>
           <p>
             <Ui>Notifications</Ui>: write a message to your team or named people, check <Ui>See who</Ui>,
@@ -226,6 +239,31 @@ export default async function SupervisorGuidePage() {
           <p>
             <Ui>Outlets</Ui> lists your stores with their hours and areas. To add a store or change one,
             ask an admin.
+          </p>
+        </GuideSection>
+
+        <GuideSection topic={T.schedules} intro="Which days each person works, and time off.">
+          <p>
+            <Ui>Schedules</Ui> (People menu): set which weekdays each person on your team works.
+            Everyone starts on Monday to Saturday. Tick several people to give them the same week at
+            once, or use the <Ui>Schedule</Ui> link on the Staff page. Add a one-off change for a single
+            date (an extra day in or an extra day off), with a note.
+          </p>
+          <p>
+            <Ui>Leave</Ui> (People menu): your team&apos;s requests, pending first. Approve or reject
+            with an optional note; the person is told on their phone either way. You cannot decide leave
+            for anyone outside your team.
+          </p>
+          <Tip>Pending leave does not excuse a day. Answer requests before the day comes.</Tip>
+        </GuideSection>
+
+        <GuideSection topic={T.reports} intro="Each marketer's day or month, ready to send.">
+          <p>
+            <Ui>Marketer reports</Ui> (Attendance menu) lists your team. Pick <Ui>A day</Ui> or{' '}
+            <Ui>A month</Ui> and download each person&apos;s report as PDF, Word or Excel: clock-in and
+            clock-out, every store visit with the time spent there, their daily report, stock counts and
+            sales. From <Ui>Store visits</Ui> → <Ui>By person</Ui>, <Ui>Day report</Ui> or{' '}
+            <Ui>Month report</Ui> opens the same thing.
           </p>
         </GuideSection>
 

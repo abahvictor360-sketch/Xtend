@@ -30,5 +30,8 @@ export const DAY_COLOUR = {
   late: ORANGE.pale,
   off_site: ORANGE.deep,
   absent: ORANGE.dark,
-  rest: ORANGE.track,
+  /** A day off on their schedule: neutral, nothing expected. */
+  off: '#e7e3df',
+  /** Approved leave: the softest orange. */
+  leave: ORANGE.track,
 } as const

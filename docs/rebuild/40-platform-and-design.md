@@ -247,7 +247,7 @@ matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|
   "regions": ["dub1"],
   "crons": [
     { "path": "/api/cron/purge-selfies", "schedule": "20 2 * * *" },
-    { "path": "/api/cron/absence-sweep", "schedule": "30 8 * * 1-6" }
+    { "path": "/api/cron/absence-sweep", "schedule": "30 8 * * *" }
   ]
 }
 ```
@@ -256,14 +256,21 @@ The every-5-minute `alerts` cron is **not** here: the Vercel Hobby plan rejects
 sub-daily crons (deploys fail with `cron_jobs_limits_reached`), so it runs from
 `.github/workflows/alerts-cron.yml` instead (a GitHub Actions schedule that
 curls `/api/cron/alerts` with `CRON_SECRET`). On Vercel Pro, or a VPS crontab,
-schedule it the normal way and drop the workflow.
+schedule it the normal way and drop the workflow. That job also sends the
+clock-out reminders (migration 0061), so it must run every 5 minutes for
+them to arrive on time.
+
+The absence sweep runs **every day**, Sundays included (it was `1-6` before
+migration 0059): `staff_no_show()` now skips anyone on a day off or on
+approved leave, so each person's schedule, not the weekday, decides who is
+chased.
 
 `regions` pins the serverless functions to Dublin (`dub1`), the same AWS
 region as the Supabase project (`eu-west-1`); each page makes several serial
 DB round-trips, so co-locating functions with the database is what keeps
 pages fast. Match this to wherever the Supabase project lives.
 
-Schedules are UTC (Lagos is UTC+1 all year: 03:20, 09:30 Mon–Sat, every 5 min).
+Schedules are UTC (Lagos is UTC+1 all year: 03:20, 09:30 daily, every 5 min).
 What each job does is in BUILD_GUIDE section 8.
 
 ### 1.10 `.env.example`
@@ -1120,7 +1127,16 @@ Animation: `animate-fade-up` (0.25 s ease-out, 6 px rise) for pop-overs; `animat
 | `ORANGE.dark` | `#52281a` |
 | `ORANGE.pale` | `#f2b48a` |
 | `ORANGE.track` | `#f6e4d8` |
-| `DAY_COLOUR` | on_time = main, late = pale, off_site = deep, absent = dark, rest = track |
+| `DAY_COLOUR` | on_time = main, late = pale, off_site = deep, absent = dark, off = `#e7e3df` (day off, neutral), leave = track (approved leave) |
+
+Attendance calendar squares: off is `#e7e3df` with text `#6f6862` and the mark "–"; leave is track with text
+deep, an inset 1 px pale ring and the mark "Lv" (`attendance-grid.tsx`).
+
+**Staff calendar marks** (`src/components/field/calendar-marks.tsx`, used by the home week row, the History day
+strip and the month calendar): worked = bordered card (brand "•"); missed = `bg-destructive/12`, red text, inset red
+ring at 50 %, word "Missed"; off = `bg-muted`, muted text, word "Off"; leave = `#fbe4d3` fill, brand-deep text, inset
+`#f2b48a` ring, word "Leave"; plain = bordered, muted. Every mark carries its word and an aria label; a legend
+(Clocked in, Missed, Day off, Leave) sits under each calendar.
 
 `src/lib/metrics/colours.ts` (X Metrics): `BRAND #d1511a`, `SOLD #9b3517`, `SUPPLIED #e8833a`,
 `DEEP #9b3517`, `TRACK #f6e4d8`.
@@ -1370,6 +1386,100 @@ MIME `application/vnd.openxmlformats-officedocument.wordprocessingml.document`.
 
 Integrity and audit exports exist too (`/api/admin/export/integrity`, `/audit`); they use the same renderer.
 Attendance subtitle text: `"<n> record(s). Times are Africa/Lagos. Clock photos are deleted 24 hours after capture; links to the ones still held expire an hour after this file was made."`
+Attendance days filter line now ends "days off and leave are not absences" (no Sundays wording); its status words
+include "Day off" and "On leave".
+
+### 7.7 Marketer reports (designed files, not the `Sheet` renderer)
+
+One person's day or month report (`MarketerReport`, built by
+`buildMarketerReport` in `src/lib/marketer-report.ts`; page and rules in
+`20-admin-dashboard.md`, Marketer reports). Route `GET
+/api/admin/export/marketer-report/[format]` (`pdf | docx | xlsx`, anything
+else 400 "Unsupported export format"), `renderMarketerReport()` in
+`src/lib/export/marketer-report.ts`: `Content-Disposition: attachment;
+filename="<fileBase>.<format>"` with `fileBase` =
+`xtend-report-<name slug ≤ 40>-<YYYY-MM-DD | YYYY-MM>` (no export date
+suffix, unlike `exportFileName`), `Cache-Control: no-store`. Audited
+`export.marketer_report.<format>`.
+
+**Logo** (`src/lib/export/brand-logo.ts`): the Xpel Beauty logo
+(`public/brand/xpel-logo.png`, 300 px wide) inlined as base64 in
+`XPEL_LOGO_PNG` with `XPEL_LOGO_RATIO` (width ÷ height), so the function
+that draws a file does not depend on the public folder being deployed.
+
+**Colours** (all three files): brand `#d1511a`, deep `#9b3517`, light
+`#e8833a`, dark `#52281a`, peach `#f2b48a`, track `#f6e4d8`, stripe
+`#fcf3ed`, wash `#fdf8f4`, text `#2b211c`, muted `#7c6c63`.
+
+**PDF** (`marketer-report-pdf.ts`, pdf-lib, dynamic import):
+
+- A4 **portrait** 595.28 × 841.89 pt, margin 40; Helvetica, Helvetica-Bold,
+  Helvetica-Oblique; text through `pdfSafe` (`₦` → `NGN `, `→` → `->`,
+  anything outside WinAnsi dropped, spaces collapsed). Metadata: title
+  "`<name>` — `<Day report|Month report>`, `<period>`", author "Xtend",
+  creator "Xtend · Xpel Beauty".
+- **Brand bar** on every page: a 5 pt strip across the top, brand, with
+  the last 28 % in light orange.
+- First page header: the logo 46 pt tall at the left; right-aligned
+  "MARKETER REPORT" (8.5 pt bold brand), the period (17 pt bold dark: "Friday
+  16 October 2026" or "October 2026"), "`<kind>`  ·  Lagos time" (muted).
+  Then the **person card** (rounded, wash fill, track border, a 3 pt brand
+  bar on the left): name 16 pt bold; "Role   ·   Supervisor: X (or No
+  supervisor)   ·   Home store: Y"; right "GENERATED" over the time.
+- **8 tiles**, four to a row (48 pt tall, white, peach border): label in
+  small caps muted, value 14 pt bold deep, optional note (Days worked "of N
+  working days" on a month). Then the **summary** sentence in a track box
+  with a 4 pt brand bar.
+- Section headings 12.5 pt bold brand with a right-hand note; tables with a
+  brand header row (white bold), striped rows, an address as a second grey
+  line under a store, away/unclear arrivals and late/missing values in deep
+  orange, empty sections as italic muted lines.
+- **Day report**: "Clock in and out" (Time, Status, Where: rows Clock in /
+  Clock out; "Did not clock in"), "Store visits" with "`<t>` in stores"
+  (Store, Checked in, Checked out, Time in store, Arrived, Time before) or
+  "No store visits recorded on this day.", "Daily report" with "Filed at
+  HH:MM" (label column, then the text; empty sections italic "Nothing
+  reported.") or "No daily report was filed for this day.", then Stock
+  counts (Store, Product, In store, Sold) and X Metrics sales (Store,
+  Product, Units, with a Total row) when any.
+- **Month report**: "Day by day" (Date, Clock in, Clock out, Stores, Visits,
+  Time in stores, Report; days with nothing muted; a "Month" total row:
+  "N in", "N missing", stores, visits, time, "N filed"), "Stores visited"
+  (Store, Visits, Total time, Last visit) or "No store visits recorded this
+  month.", then "Each day in detail": per active day a track bar with the
+  long date and chips "In HH:MM · Out HH:MM · N stores · time · Report
+  filed|No report", the day summary, a compact visits table, the report
+  and the extras; none: "Nothing was recorded this month."
+- Pages after the first: the logo 20 pt tall, right "`<name>`  ·
+  `<kind>`, `<period>`", a peach rule. **Footer** on every page: peach rule;
+  "Xtend  ·  Xpel Beauty  ·  `<name>`, `<day report|month report>` for
+  `<period>`" left, "Page i of n" bold brand right.
+
+**Word** (`marketer-report-docx.ts`, `docx`): the same content and order
+as the PDF, A4 portrait (11906 × 16838 twips, 18 mm margins), Arial 9 pt,
+the logo, tiles as a four-column table, brand tables; running header
+right-aligned "`<name>`  ·  `<kind>`, `<period>`" over a peach rule; footer
+the same left text as the PDF and "Page N of M" (PageNumber fields) in bold
+brand.
+
+**Excel** (`marketer-report-xlsx.ts`, ExcelJS): sheet **Summary** (no
+gridlines, A4 fit to width; the logo at the top right; "MARKETER REPORT",
+the period, "`<kind>` · Lagos time · generated `<time>`"; Name, Role,
+Supervisor, Home store, Period; "Summary" with the tiles two to a row and
+the summary sentence in a track box), then detail sheets with a frozen
+brand header row, striped rows and an auto-filter: **Days** (Date, Day,
+Clock in, Clock-in status, Clock out, Stores visited, Visits, Minutes in
+stores, Time in stores, Report filed, Summary), **Store visits** (Date, #,
+Store, Address, Checked in, Checked out, Minutes in store, Arrived, Minutes
+since the last store), **Stores** (Store, Address, Visits, Minutes in
+store, Total time, Last visit), **Daily reports** (Date, Filed at, How the
+day went, Sales, Stock status, Competitor activity, Issues for the office),
+and **Stock and sales** (Date, Kind "Stock count" | "X Metrics sale",
+Store, Product, In store, Sold or units) only when there are any.
+
+`scripts/check-marketer-reports.ts [out-dir]` builds a report from made-up
+rows, checks the numbers and words, and that the three files come out
+valid (with an out-dir it writes them there to look at).
 
 ---
 
@@ -1383,7 +1493,7 @@ A rebuild matches this specification when all of the following hold.
 3. `GET /sw.js` returns `Cache-Control: no-cache, no-store, must-revalidate` and `Service-Worker-Allowed: /`.
 4. Signed out, `GET /field` redirects to `/login?next=/field`; `GET /guide`, `/download`, `/offline` load; `GET /api/attendance` returns JSON 401, not a redirect.
 5. Signed in, `GET /login` redirects to `/`.
-6. `vercel.json` has exactly three crons with the schedules in 1.9; a cron call without `Authorization: Bearer $CRON_SECRET` is refused, and every call is refused when `CRON_SECRET` is unset.
+6. `vercel.json` has exactly the two crons in 1.9 (`purge-selfies` `20 2 * * *`, `absence-sweep` `30 8 * * *`, every day), and `.github/workflows/alerts-cron.yml` calls `/api/cron/alerts` every 5 minutes; a cron call without `Authorization: Bearer $CRON_SECRET` is refused, and every call is refused when `CRON_SECRET` is unset.
 
 **Sessions**
 7. A merchandiser who signed in yesterday is sent to `/api/auth/expired?reason=new-day`; an API call returns 401 `{ code: 'relogin' }`.
@@ -1418,3 +1528,6 @@ A rebuild matches this specification when all of the following hold.
 **Exports**
 27. Each export downloads as `<fileBase>-<YYYY-MM-DD>.<ext>`; the Excel header row is filled `#C1572A` with white bold text and frozen; the PDF is A4 landscape and turns `₦` into `NGN `; CSV opens in Excel with correct accents (BOM present).
 28. Link columns are clickable in Excel, Word and PDF; off-site statuses print red in Excel and PDF.
+29. A marketer report downloads as `xtend-report-<name>-<date or month>.<pdf|docx|xlsx>` (no export-date suffix); the PDF is A4 portrait with the brand bar on every page, the Xpel logo, eight tiles and "Page i of n"; the Word file has the running header and page numbers; the Excel file has Summary, Days, Store visits, Stores and Daily reports sheets (and Stock and sales when there are any).
+30. The logo in those files comes from `XPEL_LOGO_PNG` in code, so the files render even when `public/` is not deployed with the function.
+31. Staff calendars show missed working days red, days off grey and leave soft orange, each with its word and a legend; the attendance calendar shows "–" grey for a day off and "Lv" soft orange for leave.

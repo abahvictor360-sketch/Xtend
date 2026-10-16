@@ -136,15 +136,17 @@ Build in this order. Finish each stage's checks before starting the next.
 
 ### Stage 4 — The office basics
 
-- Outlets, Staff, Teams, Roles, Store allocation, Overview, Attendance,
-  Analytics, exports (`20-admin-dashboard.md`).
+- Outlets, Staff, Teams, Roles, Store allocation, Schedules, Leave (and the
+  staff leave screen and coloured calendar), Overview, Attendance, Analytics,
+  exports (`20-admin-dashboard.md`, `10-field-app.md`).
 - **Checks:** the acceptance checks for those pages; every download opens in
   Excel, Word and a PDF reader.
 
 ### Stage 5 — Where people are
 
-- Heartbeat, live locations, Movement, Store visits, places and place naming,
-  Alerts, absence sweep, scheduled jobs (`10-field-app.md`,
+- Heartbeat, live locations, Movement, Store visits (allocated stores only),
+  Marketer reports, places and place naming, Alerts, absence sweep,
+  clock-out reminders, scheduled jobs (`10-field-app.md`,
   `20-admin-dashboard.md`, `30-rules.md`, `../BUILD_GUIDE.md` §8).
 - **Checks:** the acceptance checks for those sections; each scheduled job
   refuses a request without `Authorization: Bearer $CRON_SECRET`.

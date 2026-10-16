@@ -13,11 +13,11 @@ Conventions used below:
 - All reads go through `createServerSupabase()` (the user's own session), so row-level security narrows what a supervisor sees to their own team. Pages do not filter by team themselves unless stated.
 - All human times are Africa/Lagos (`TZ` in `src/lib/utils.ts`). `formatLagos(value, withDate=true)` prints `en-NG` with 2-digit day, short month, year, 24-hour `HH:MM`; with `withDate=false` it prints only `HH:MM`. Null prints `—`. `lagosDateString()` gives today as `YYYY-MM-DD` in Lagos. `metres(v)` prints `123 m` under 1000 and `1.2 km` above, `—` for null. Date arithmetic (`addDays`) works on `YYYY-MM-DD` strings anchored at UTC noon.
 - Every page sets `export const dynamic = 'force-dynamic'` and a `metadata.title` of the form "`<Page> — Xtend`".
-- Every admin/supervisor change goes through an API route that writes an audit row (`audit()` in `src/lib/audit.ts`); every download is also audited.
+- Every admin/supervisor change goes through an API route that writes an audit row (`audit()` in `src/lib/audit.ts`); every download is also audited. Schedule and leave changes are the exception in form, not in effect: their `SECURITY DEFINER` functions write the audit row themselves in the same transaction (`schedule.pattern`, `schedule.override`, `schedule.override_remove`, `leave.approve`, `leave.reject`; migration 059).
 - The brand palette is orange. Chart colours live in `src/lib/chart-colours.ts`:
   - `ON_TIME = #d1511a`, `LATE = #c98500`, `NOT_IN = #8a3a12` (overview charts).
   - `ORANGE = { main #d1511a, deep #9b3517, light #e8833a, dark #52281a, pale #f2b48a, track #f6e4d8 }`.
-  - `DAY_COLOUR = { on_time: main, late: pale, off_site: deep, absent: dark, rest: track }`.
+  - `DAY_COLOUR = { on_time: main, late: pale, off_site: deep, absent: dark, off: #e7e3df, leave: track }` (day off neutral grey; approved leave the softest orange).
   - Rule: a part is never told by colour alone; every chart prints its figures and the calendar marks each day with a letter.
 
 ---
@@ -80,6 +80,7 @@ Groups and items, exactly in this order (label, path, icon, flags):
 | Attendance | Attendance | `/admin/attendance` | ClipboardList | — |
 | | Movement | `/admin/tracking` | Route | — |
 | | Store visits | `/admin/visits` | MapPin | — |
+| | Marketer reports | `/admin/marketer-reports` | FileText | — |
 | | Alerts | `/admin/alerts` | Siren | — |
 | | Support | `/admin/support` | Headset | — |
 | | Analytics | `/admin/analytics` | BarChart3 | — |
@@ -89,6 +90,8 @@ Groups and items, exactly in this order (label, path, icon, flags):
 | | Check an excuse | `/admin/excuses` | PhoneOff | — |
 | People | Staff | `/admin/users` | Users | — |
 | | Teams | `/admin/teams` | UsersRound | adminOnly |
+| | Schedules | `/admin/schedules` | CalendarDays | — |
+| | Leave | `/admin/leave` | CalendarCheck | — |
 | | Roles | `/admin/roles` | BadgeCheck | adminOnly |
 | | Store allocation | `/admin/assignments` | UserCog | — |
 | | Notifications | `/admin/notifications` | Bell | — |
@@ -119,7 +122,7 @@ Invisible. On mount, and then every 15 minutes (`REFRESH_MS = 15 * 60_000`), it 
 
 ### Acceptance checks (shell)
 
-- A supervisor's menu shows exactly: Overview, Ask Xtend, Guide; Attendance group (6); Stock (2); Checks (2); People: Staff, Store allocation, Notifications; Setup: Outlets. An admin's shows all but "Guide".
+- A supervisor's menu shows exactly: Overview, Ask Xtend, Guide; Attendance group (7); Stock (2); Checks (2); People: Staff, Schedules, Leave, Store allocation, Notifications; Setup: Outlets. An admin's shows all but "Guide".
 - With 3 unresolved location alerts and 2 unreviewed medium/high integrity flags, the bell shows "5"; with 150 it shows "99+"; with 0 no pill appears.
 - Typing a name in the top search and pressing Enter lands on `/admin/users?q=<text>`.
 - On a 390 px wide screen there is no sidebar; the menu button shows the current page's label and opens a grouped list.
@@ -142,6 +145,7 @@ Invisible. On mount, and then every 15 minutes (`REFRESH_MS = 15 * 60_000`), it 
 | Attendance | full | team (read) | Nothing to change: clock records are never editable by anyone |
 | Movement | full | team | — |
 | Store visits | full | team | No Team filter; coverage limited to their team's stores |
+| Marketer reports | full | team | — (lists and downloads their team only) |
 | Alerts | full | team, read-only | Resolve alerts (single or bulk) — admin only. They can run phone checks. |
 | Support | full | team | — (reply, close, reopen, assign, quick replies on their team) |
 | Analytics | full | team (read) | — |
@@ -157,6 +161,8 @@ Invisible. On mount, and then every 15 minutes (`REFRESH_MS = 15 * 60_000`), it 
 | Staff | full | team | Change email, role, store, supervisor, notification rule; delete an account; Login details (Word); Bulk import CSV. They can add merchandisers/marketers to their own stores (who report to them), edit name/phone, reset passwords, deactivate/reactivate — but not delete. |
 | Staff bulk import | full | hidden | everything |
 | Teams | full | hidden | everything |
+| Schedules | full | team | Set anyone outside their team |
+| Leave | full | team | Decide leave outside their team, or their own |
 | Roles | full | hidden | everything |
 | Store allocation | full | team | No team chips |
 | Notifications | full | team | Reach anyone outside their team; manage others' templates/scheduled items; resend others' messages |
@@ -184,8 +190,8 @@ Files: `src/app/admin/page.tsx` (data), `src/components/admin/overview-view.tsx`
 
 | Data | Source |
 |---|---|
-| Today's figures | RPC `admin_overview()` → `{date, staff_total, clocked_in, clocked_out, still_on_shift, absent, late, off_site, open_alerts}` |
-| Not clocked in | RPC `absentees_today()` → `{user_id, full_name, phone, outlet_name}` |
+| Today's figures | RPC `admin_overview()` → `{date, staff_total, clocked_in, clocked_out, still_on_shift, absent, not_expected, late, off_site, open_alerts}`. `absent` counts only people expected in today (`day_kind = 'working'`, migration 059); `not_expected` = those on a day off or approved leave (returned, not shown yet) |
+| Not clocked in | RPC `absentees_today()` → `{user_id, full_name, phone, outlet_name}`; leaves out anyone on a day off or approved leave (059) |
 | Location coverage | RPC `coverage_today()` → `{user_id, full_name, outlet_name, ping_count, coverage_pct, last_ping_at}` |
 | On shift now | RPC `live_locations()` then `withAvatars()` adds a signed `avatar_url` per person (`src/lib/avatars.ts`) |
 | Open alerts | view `alert_detail` where `is_resolved = false`, newest first, limit 20 |
@@ -260,6 +266,7 @@ Same page; all figures are their team's (RLS). The quick-action second icon is *
 - A new location alert inserted in the database appears at the top of Open alerts without a reload.
 - A person last pinged 20 minutes ago shows the last-seen text in warning colour.
 - The Least located list shows at most 4 people, lowest first, with bars orange-red (≥ 70 %) or gold (< 70 %).
+- Someone on a day off or approved leave today who has not clocked in is not in "Not clocked in" and does not make the tip say anyone is missing.
 
 ---
 
@@ -302,10 +309,12 @@ Composer: a hidden file input; paperclip button (title "Attach a spreadsheet, PD
 - Only the last 12 turns (`HISTORY_SENT = 12`) are sent, with leading assistant turns dropped; older turns with a file carry "(attached: name)" in their text; only the newest question carries the file.
 - POST `/api/admin/ask` `{messages, attachment}`; server allows 1–30 messages each ≤ 20 000 characters, `maxDuration` 300 s. Server errors: 503 "The assistant is not set up. Add ANTHROPIC_API_KEY to the environment."; 400 "Type a question to ask, or attach a file under 3 MB." / "The last message must be a question."; 429 "The assistant is busy. Try again in a moment."; 400 "The assistant could not read that. If you attached a file, try a smaller or simpler one."; 502 "The assistant could not answer right now."; 413 on the client becomes "That file is too big to send. Save it as CSV and try again."; anything else "The assistant did not answer.". On failure the question and file are put back in the box and the error shows as a red alert.
 - Model `claude-opus-5`, at most 10 tool rounds (`src/lib/assistant.ts`). The model reads through the caller's session, so a supervisor only gets their team.
+- **Schedules and leave** (migration 059). The system prompt says: "Everyone has a work schedule (days on and days off; Monday to Saturday unless changed) and may have approved leave. Never call someone absent, or say they did not come, on a day off or a day of approved leave: say it was their day off or that they were on leave. Only a working day with no clock-in is an absence." `attendance_on_day` splits people into clocked in and out, still on shift, **not clocked in (expected at work)**, **day off** and **on leave** (counts `day_off`, `on_leave`); `staff_history` gives each day's `schedule` ("working day", "day off", "on approved leave"); `attendance_summary` adds `working_days`, `days_off`, `leave_days` and `absent_days` (past working days with no clock-in, on or after the account was made; today not counted).
+- **Field reports** carry the store visits kept with each report (`visits`: "Store 09:10–10:00 (50 min); …. Total 1 h 30 min." or "No store visits", and `visit_minutes`; migration 060).
 
 ### Answer extras
 
-- **Report card** (per report): file icon + title, then four pill buttons **PDF**, **Excel**, **Word**, **CSV**, each a download link to `/api/admin/ask/report/<pdf|xlsx|docx|csv>?kind&from&to&name&title&summary`. Kinds: `daily_attendance`, `attendance_summary`, `staff_history`, `field_reports`, `store_visits`, `store_counts`. The download rebuilds rows from the database for whoever clicks; nothing the model typed goes into a table.
+- **Report card** (per report): file icon + title, then four pill buttons **PDF**, **Excel**, **Word**, **CSV**, each a download link to `/api/admin/ask/report/<pdf|xlsx|docx|csv>?kind&from&to&name&title&summary`. Kinds: `daily_attendance` (counts include "Day off" and "On leave"), `attendance_summary` (columns Staff, Role, Store, Working days, Absent, Leave days, Days clocked in, Days clocked out, In but not out, Late days, Off-site clock-ins), `staff_history` (a Schedule column after Staff), `field_reports` (Store visits and Minutes in stores after Store), `store_visits`, `store_counts`. The download rebuilds rows from the database for whoever clicks; nothing the model typed goes into a table.
 - **Plan card** (store allocations and team changes): "`N` change(s) to review"; section "STORE ALLOCATIONS" (each row: person, "only these stores" or "add to their stores", the store list or "no stores", and "Now: …" current stores); section "SUPERVISORS" ("person → supervisor" or "no supervisor", "Now: …" when different); amber box "Left out, could not be matched" listing unmatched lines. Buttons **"Apply N change(s)"** (→ POST `/api/admin/ask/apply` with ids only; label "Applying…" meanwhile) and **"Discard"** ("Discarded. Nothing was changed."). After apply: "`ok` of `N` applied." plus a red line per failure "name: detail", or "Everything was saved." in green; the page data refreshes. Only admins can change supervisors (the server refuses for supervisors).
 - **Action card** (one proposed action): wand icon + title, detail lines, optional amber warning, buttons `<verb>` (e.g. "Send", "Request", "Deactivate"; "Working…" meanwhile) and **"Cancel"** ("Cancelled. Nothing was done."). Apply POSTs `/api/admin/ask/act` `{kind, payload}`, which calls the same route as the dashboard button (same permissions, pushes and audit). Result shown green or red; e.g. notify → "Sent to N (D delivered, F failed)."; count request → "Requested from N; M told on their phone."; network error "No connection. Try again.". Kinds: `notify`, `count_request`, `close_count_request`, `phone_check`, `review_flags`, `sales_target`, `xm_store`, `outlet_hours`, `deactivate`.
 - **Page links**: pill links with an arrow to dashboard pages (only `/admin…` paths are allowed): Movement, Check an excuse, Attendance, Store visits, Integrity flags, Stock counts, Notifications, Staff, Stores (`/admin/outlets`), X Metrics, Audit log, Alerts, Support.
@@ -343,15 +352,15 @@ Sections (id, title, intro) and what each must say:
 | first-week | Your first week | Do these once, in this order, before staff start clocking in. | Steps: Outlets (radius 50–100 m small shop, 150–300 m supermarket or mall); Staff (one by one or Bulk import CSV); Store allocation; Teams; share download page and staff guide and download Login details (Word); optional X Metrics. |
 | every-day | Every day | Ten minutes each morning keeps on top of the field. | Steps: Overview; Alerts oldest first; Support longest waiting first; Integrity "Who to look at first"; late in the day Attendance and Store visits. Tip with Ask Xtend questions. |
 | overview | Overview, Ask Xtend and the guide | The top of the menu. | What Overview shows; screenshot `/guide/admin-overview.png` (2880×1800) "The overview, before anyone has clocked in"; Ask Xtend abilities and examples; nothing happens until the card's button; chats under Earlier chats. |
-| attendance | Attendance and Analytics | Who came in, when, and where. | Late = after shift start; off site = outside radius; flagged = location unclear; no clock-in on a working day = absent; Sundays only if "Sundays are working days" ticked; records cannot be edited. Analytics compares with the same number of days before. |
+| attendance | Attendance and Analytics | Who came in, when, and where. | Late = after shift start; off site = outside radius; flagged = location unclear; no clock-in on a working day = absent; each person's schedule decides their working days, and days off (grey "–") and approved leave (soft orange "Lv") never count as absent (here, Analytics, downloads, Ask Xtend, the 09:30 no-show message); records cannot be edited. Analytics compares with the same number of days before. |
 | movement | Movement and Store visits | Where staff are during their shift. | Live map, "not heard from in 15 minutes"; up to 7 days; impossible jumps faster than 150 km/h; Store coverage 7/14/30 days. "How location is recorded (not shown to staff)": pings every few minutes; Android "Xtend · On shift" notification, "Allow all the time"; iPhone wakes after about 500 m; offline positions sent later; a position after clock-out is refused; browser must stay open. |
 | alerts-support | Alerts and Support | What needs a person today. | Alerts filters; three or more alerts listed at the top; bulk resolve with one note. Support: helper answers simple ones; `{name}` in quick replies; Who answers; closes, reopens if they write again. |
 | stock | Stock count and X Metrics | What is in each store, and how staff are scored. | Count requests; back store + shop floor, expiry, sold, shelf photo; Count sheets as Excel/PDF/photo. X Metrics sub-pages listed. |
 | checks | Integrity and Check an excuse | When something does not look right. Staff never see these. | Integrity up to 120 days; Check an excuse up to 3 days; Keep on record. |
-| people | Staff, teams, roles and notifications | The People part of the menu. | Staff tabs, Add staff, Login details (Word); screenshots `/guide/admin-add-staff.png` (1932×504) and `/guide/admin-teams.png` (2000×1216); Teams "Select all shown", "Assign to supervisor"; Roles; Notifications "See who", "Later", "Send again". Tip on what supervisors can and cannot do. |
+| people | Staff, teams, roles and notifications | The People part of the menu. | Staff tabs, Add staff, Login details (Word); screenshots `/guide/admin-add-staff.png` (1932×504) and `/guide/admin-teams.png` (2000×1216); Teams "Select all shown", "Assign to supervisor"; Roles; Store allocation (once someone has any store allocated, a check-in at a store not theirs is refused); Schedules (Mon–Sat unless changed; one-off changes 60 days back to a year ahead; leave, then one-off change, then weekly pattern) and Leave (Annual/Sick/Casual/Other, 7 days back, a year ahead, 60 days, no overlaps; nobody decides their own; pending leave does not excuse a day; audited `schedule.pattern`, `schedule.override`, `leave.approve`, `leave.reject`); Notifications "See who", "Later", "Send again". Tip on what supervisors can and cannot do. |
 | setup | Outlets, places, audit log and updates | The Setup part of the menu. | Steps to add a store ("Add outlet", "I am standing here", "Create outlet"); "No location yet" tip; Places ("Save and verify", "Make it a store", "Dismiss"); Audit log; Updates ("What's new", "Required", lowest Android/iPhone build). |
 | apps | Staff phones and the app | Getting staff set up, and what their phones need. | Download page with QR; sign in, password, profile photo, allow location/camera/notifications; clocking in blocked until notifications on. |
-| exports | Downloads and records | Getting the numbers out. | Excel, PDF, Word, CSV exactly as filtered; downloads audited. |
+| exports | Downloads and records | Getting the numbers out. | Excel, PDF, Word, CSV exactly as filtered; downloads audited. Marketer reports (eight tiles, clock-in/out, visits with the time between stores, daily report, counts, sales; month adds day-by-day, per-store and each day) and the daily report's database-written copy of the day's visits. Clock-out reminders (shift end, then an hour later). |
 | questions | Questions | — | 7 Q&As: cannot clock in; clocked in but nothing shows; long silences; forgot password; left the company; store location wrong; a supervisor wants this guide (link to `/admin/supervisor-guide`). |
 
 The rule from the project: how monitoring works (location, integrity, alerts, excuses) is told only in this guide, never to staff.
@@ -384,7 +393,7 @@ The "Your team" section is the plain statement of supervisor rights: they can ad
 
 Files: `src/app/admin/attendance/page.tsx`, `src/components/admin/attendance-filters.tsx`, `attendance-grid.tsx`, `attendance-table.tsx`, `attendance-map.tsx`; logic in `src/lib/attendance-report.ts` (pure, tested by `scripts/check-attendance.ts`) and `src/lib/attendance-server.ts`. Title "Attendance — Xtend".
 
-Heading **"Attendance"**; intro: "Who came, when, and where, day by day: on time or late (against their store’s opening time), at the store or away from it, and whether they clocked out. A working day without a clock-in counts as absent. Times are Lagos time; clock records cannot be changed or deleted."
+Heading **"Attendance"**; intro: "Who came, when, and where, day by day: on time or late (against their store’s opening time), at the store or away from it, and whether they clocked out. A working day on someone’s schedule without a clock-in counts as absent; their days off and approved leave do not. Times are Lagos time; clock records cannot be changed or deleted."
 
 ### The day model (shared with Analytics and the downloads)
 
@@ -394,11 +403,11 @@ For each person × each day of the range one **day record** is built (`buildDays
 
 - Clock-in = the earliest `opening` event that day; clock-out = the latest `closing` event at or after the clock-in.
 - `present` = has a clock-in. `offSite` = clock-in status is not `on_site` (so `off_site` or `flagged`). `flagged` = status `flagged`. `late` = the clock-in's `is_late` (set by the database against the store's `shift_start`).
-- Status, in this order: present → `off_site` if offSite, else `late` if late, else `on_time` ("off site wins over late"). Not present → `none` if the day is after today, before the account was created (Lagos date of `created_at`), or the person is inactive; else `rest` if it is a Sunday and Sundays are not working days; else `absent`.
+- Status, in this order: present → `off_site` if offSite, else `late` if late, else `on_time` ("off site wins over late"). Not present → `none` if the day is after today, before the account was created (Lagos date of `created_at`), or the person is inactive; else the person's schedule for that day (`ScheduleBook.kind`, `src/lib/schedule.ts`, the same order as `day_kind()` in migration 059: approved leave → `leave`, else a one-off change for that date, else their weekly pattern, else Monday to Saturday → `off` or working): `off` (day off), `leave` (approved leave), or `absent` on a working day. The schedule is read through the caller's session (`loadScheduleSafe`, `src/lib/schedule-server.ts`: `work_patterns`, `schedule_overrides` in range, approved `leave_requests` overlapping the range, 1000 rows a page up to 20 000, only the chosen person when one is picked); if it cannot be read everyone falls back to Monday to Saturday.
 - `missingOut` = present, no clock-out, day before today. `onShift` = present, no clock-out, day is today.
 - `minutesLate` = clock-in minute − shift start minute (≥ 0) when late. `hours` = clock-out − clock-in. `sentLateMin` = minutes between the phone taking the clock-in (`client_captured_at`) and the server receiving it (`created_at`).
 - The record's store = the clock-in's store, or the person's own store on a day without one.
-- "Counted" days = present or absent (rest and none are ignored in all totals).
+- "Counted" days = present or absent (off, leave and none are ignored in all totals).
 
 **Summary** (`summarise`): people (distinct in counted days), expected (counted days), present, absent, onTime, late, offSite, flagged, missingOut, punctuality = onTime / present × 100, turnout = present / expected × 100, avgIn (mean clock-in minute), avgLateMin, avgHours. `percent()` prints a rounded "NN%" or "—".
 
@@ -411,8 +420,7 @@ For each person × each day of the range one **day record** is built (`buildDays
 | `outlet_id` | "Store": **All stores** + every store the caller can see | all. Keeps people whose own store it is or who clocked in there, then keeps only day records at that store. |
 | `team` | "Team" (only shown when more than one team): **All teams**, "`<Supervisor>`’s team" options, **"Reports to nobody"** (`none`) | all. A supervisor's own lead name is known; others read "Another team". |
 | `role` | "Role" (only when more than one): **All roles**, built-in labels and added roles as `custom:<id>` | all |
-| `status` | "Show days": **All days**, On time, Late, Off site or flagged, Flagged, No clock-out, Absent / not in, Came in (any) | all. Filters the table and download only, not the cards. |
-| `sundays=1` | Checkbox **"Sundays are working days"** | off |
+| `status` | "Show days": **All days**, On time, Late, Off site or flagged, Flagged, No clock-out, Absent / not in, Came in (any), **On leave** (`leave`), **Day off** (`off`) | all. Filters the table and download only, not the cards. On leave / Day off match days without a clock-in of that kind. |
 | `sort`, `dir`, `by` | Used by links and Analytics; table sorting itself is client-side | `date`, `desc`, `person` |
 
 Value `all` means no filter. Button **"Show"** submits. Under the form a **"Quick:"** row of preset chips: Today, Yesterday, This week (Monday start), Last 7 days, Last 30 days, This month; the chip matching the current range is filled brand. When any of person/store/team/role/status is set, a **"Clear filters"** link keeps only the dates.
@@ -466,7 +474,7 @@ Each line ends with a link **"See their days"** (same filter, that person, statu
 
 ### Calendar (only when the range is more than one day and at most **62 days**, `GRID_MAX_DAYS`)
 
-Card **"Calendar"** / "One square per day. Point at a square for the times; tap it to open that day." A table with a sticky first column "Person" (truncated at 8.5 rem / 12 rem), a column per day (header: weekday initial from "SMTWTFS" over the day number; Sundays in brand colour), and a last column **"Came"** = "came/expected". 24 px squares, 3 px apart, 5 px radius:
+Card **"Calendar"** / "One square per day. Point at a square for the times; tap it to open that day." A table with a sticky first column "Person" (truncated at 8.5 rem / 12 rem), a column per day (header: weekday initial from "SMTWTFS" over the day number, all muted), and a last column **"Came"** = "came/expected" (expected = present or absent days). 24 px squares, 3 px apart, 5 px radius:
 
 | Status | Fill | Letter |
 |---|---|---|
@@ -474,18 +482,21 @@ Card **"Calendar"** / "One square per day. Point at a square for the times; tap 
 | late | `#f2b48a`, dark text `#52281a` | L |
 | off_site | `#9b3517`, white | O |
 | absent | `#52281a`, white | A |
-| rest (Sunday) | `#f6e4d8` | — |
+| off (day off) | `#e7e3df`, text `#6f6862` | – |
+| leave (approved leave) | `#f6e4d8`, text `#9b3517`, inset 1 px `#f2b48a` ring | Lv |
 | none | dashed outline box, not a link | — |
 
-A small dot in the top-right corner marks a missing clock-out (dark `#52281a` on a late square, else `#e8833a`); a short white bar at the bottom marks "still on shift". The tooltip/aria text (`cellTitle`): "`Name`, `Weekday` `d Mon` · In HH:MM (X late) · Off site|Flagged · Out HH:MM|Still on shift|No clock-out", or the status label for absent/rest ("Sunday (not expected)"). Clicking a square goes to the same page filtered to that person and day, `#days`. People with nothing but `none` days are left out; none at all: "Nobody to show for these days." A key underneath: On time, "L  Late", "O  Off site or flagged", "A  Absent", "Sunday, not expected", "No clock-out" (dot), "Not on the team yet" (dashed). Longer than 62 days: "Pick 62 days or fewer to see the calendar."
+A small dot in the top-right corner marks a missing clock-out (dark `#52281a` on a late square, else `#e8833a`); a short white bar at the bottom marks "still on shift". The tooltip/aria text (`cellTitle`): "`Name`, `Weekday` `d Mon` · In HH:MM (X late) · Off site|Flagged · Out HH:MM|Still on shift|No clock-out", or the status label for absent/off/leave ("Absent", "Day off", "On leave"). Clicking a square goes to the same page filtered to that person and day, `#days`. People with nothing but `none` days are left out; none at all: "Nobody to show for these days." A key underneath: On time, "L  Late", "O  Off site or flagged", "A  Absent", "–  Day off", "Lv  On leave", "No clock-out" (dot), "Not on the team yet" (dashed). Longer than 62 days: "Pick 62 days or fewer to see the calendar."
 
 ### Day by day (`#days`)
+
+Which days are listed (`inDayTable`): with a status picked, the days matching it; with none, every counted day plus days of leave, and, when one person is picked, their days off too (for everyone, days off would bury the rest).
 
 Heading **"Day by day"**, right: "N day(s)[ matching] · tap a row for photos, map, phone and links". The page hands at most **1500** rows (`TABLE_MAX`) to the table, newest first; above that: "The newest 1500 of N days are listed here. The download has them all."
 
 Toggle **Table** / **Map**.
 
-**Table (≥ `md`)**, sortable by clicking a header (arrow shows direction; first click sorts name and store ascending, the rest descending; blanks always last; ties newest day then name). Columns: Day ("Wed, 14 Oct"), Person (with "`<Supervisor>`’s team" underneath), Store, In, Out (or "on shift"), Hours ("8 h 05 min"), From store (metres), How it went (badges), chevron. Badges: not present → "Absent" (or "Clock-out only" when only a clock-out exists), red; present → "Late `X`" (warning) or "On time" (success); "Flagged" or "Off site" (red); "No clock-out" (warning); "On shift" (outline); "Sent `X` later" (outline) when the clock-in arrived ≥ **5** minutes after it was taken (`OFFLINE_MIN = 5`). 100 rows at a time (`PAGE = 100`), button **"Show more (N left)"**.
+**Table (≥ `md`)**, sortable by clicking a header (arrow shows direction; first click sorts name and store ascending, the rest descending; blanks always last; ties newest day then name). Columns: Day ("Wed, 14 Oct"), Person (with "`<Supervisor>`’s team" underneath), Store, In, Out (or "on shift"), Hours ("8 h 05 min"), From store (metres), How it went (badges), chevron. Badges: not present → "Clock-out only" (red) when only a clock-out exists, else "Day off" (outline) on a day off, "On leave" (default/brand) on leave, else "Absent" (red); present → "Late `X`" (warning) or "On time" (success); "Flagged" or "Off site" (red); "No clock-out" (warning); "On shift" (outline); "Sent `X` later" (outline) when the clock-in arrived ≥ **5** minutes after it was taken (`OFFLINE_MIN = 5`). 100 rows at a time (`PAGE = 100`), button **"Show more (N left)"**.
 
 **Phone (< `md`)**: cards with name, short date, "In HH:MM · out HH:MM|on shift|no clock-out · hours" or "No clock-in", "store · distance from it", badges, and a chevron. A **Sort** picker replaces header clicks: Newest day, Oldest day, Name, Earliest in, Most late, Furthest from store, Shortest day.
 
@@ -497,7 +508,7 @@ Empty table: dashed box "Nothing matches these filters."
 
 ### Downloads
 
-- **Day by day** (`src/lib/export/attendance-days.ts`): title "Xtend attendance, day by day"; subtitle = the filter in words ("2026-10-01 to 2026-10-14 · person: Ada · one store · … · Sundays not counted as absences") + ". Times are Lagos time."; notes = three summary sentences ("N people. Came in on X of Y working days (Z%); absent on A.", "On time on … (P%); late on L, by X on average.", "Clocked in off site or flagged on … days. No clock-out on … days. Usual clock-in HH:MM.") then "Worth a look:" bullets (up to 20). Columns: Date, Person, Role, Supervisor, Store, How it went, Clock in, Late by, Clock out, Hours, From store, Also, Where they clocked in, Map (link "Map" to Google Maps; CSV keeps the URL). Sorted newest day then name. File `xtend-attendance-days.<ext>`. Audited `export.attendance_days.<fmt>`.
+- **Day by day** (`src/lib/export/attendance-days.ts`): title "Xtend attendance, day by day"; subtitle = the filter in words ("2026-10-01 to 2026-10-14 · person: Ada · one store · … · days off and leave are not absences") + ". Times are Lagos time."; notes = three summary sentences ("N people. Came in on X of Y working days (Z%); absent on A.", "On time on … (P%); late on L, by X on average.", "Clocked in off site or flagged on … days. No clock-out on … days. Usual clock-in HH:MM.") then "Worth a look:" bullets (up to 20). Columns: Date, Person, Role, Supervisor, Store, How it went (On time, Late, Off site, Absent, Day off, On leave), Clock in, Late by, Clock out, Hours, From store, Also, Where they clocked in, Map (link "Map" to Google Maps; CSV keeps the URL). Sorted newest day then name. File `xtend-attendance-days.<ext>`. Audited `export.attendance_days.<fmt>`.
 - **Every clock-in and out** (`src/lib/export/data.ts`): up to 2000 events by default (`limit` param, capped at 5000), newest first. Columns: Staff name, Date, Type, Time (Africa/Lagos), Outlet, Location (premises and street), Distance from outlet, Accuracy, Status, Selfie link (1-hour signed link, or "deleted after 24h"). Subtitle "N record(s). Times are Africa/Lagos. Clock photos are deleted 24 hours after capture; links to the ones still held expire an hour after this file was made." Status column coloured. File `xtend-attendance.<ext>`. Audited `export.<fmt>`.
 
 ### Supervisor differences
@@ -510,7 +521,9 @@ None in the UI; everything (people, stores in the choices, downloads) is their t
 - `?from=2026-01-01&to=2026-10-14` shows the "last 92 days" notice and a range starting 2026-07-15.
 - A person with 3 late days in range appears under Worth a look with the average lateness; a person with 2 late days does not.
 - With 30 days selected the calendar shows; with 63 it shows "Pick 62 days or fewer to see the calendar."
-- A Sunday without a clock-in is a pale square and not counted absent until "Sundays are working days" is ticked.
+- With the default schedule a Sunday without a clock-in is a grey "–" square and not counted absent; for someone whose pattern includes Sunday it is "A". A day of approved leave is a soft orange "Lv" square, never absent; pending or rejected leave does not excuse the day.
+- There is no "Sundays are working days" checkbox; an old `sundays=1` in the address is ignored.
+- Show days "On leave" lists only days of approved leave without a clock-in.
 - Clicking a calendar square lands on that one day and person, scrolled to Day by day.
 - Opening a row loads the photo or says it was deleted; the links open Movement and Check an excuse prefilled.
 - Every export link carries the same filter as the page.
@@ -674,7 +687,7 @@ Chips **Visits**, **By store**, **By person**, **Store coverage** (active chip f
 
 ### By store / By person
 
-Card **"Visits by store"** ("Which stores got attention, and how much. Tap a store to see its visits.") or **"Visits by person"** ("Who covered how many stores, and for how long. Tap a name to see their visits."). Columns: Store|Person, Visits, People|Stores, Time in store, Average, Under N min (bold red when > 0), Away on arrival (bold red), Last visit (time; with date when a range), and for people a **Movement** link. Sorted by visits desc, then name. A shop not in Xtend's list is not linked and shows "not on Xtend’s store list". Empty: "No store visits recorded for that period."
+Card **"Visits by store"** ("Which stores got attention, and how much. Tap a store to see its visits.") or **"Visits by person"** ("Who covered how many stores, and for how long. Tap a name to see their visits."). Columns: Store|Person, Visits, People|Stores, Time in store, Average, Under N min (bold red when > 0), Away on arrival (bold red), Last visit (time; with date when a range), and for people a **Movement** link. In the person table the last cell holds **Movement** and, beside it, **"Day report"** (single-day range) or **"Month report"** (otherwise, the month of `to`) → `/admin/marketer-reports?user_id&period=day&date=` / `period=month&month=`. Sorted by visits desc, then name. A shop not in Xtend's list is not linked and shows "not on Xtend’s store list". Empty: "No store visits recorded for that period."
 
 ### Store coverage
 
@@ -697,10 +710,73 @@ No Team picker; coverage lists only their team's stores; rows through RLS.
 - Clicking "Stores not visited in 7+ days" opens coverage with the 7+ chip active.
 - A visit older than 26 hours shows "Photo deleted after 24 hours" instead of a photo.
 - The Download chips carry the same query string as the page.
+- In By person for today, each person has "Day report" opening Marketer reports on that person and day; over a range it reads "Month report" for the month of the end date.
 
 ---
 
-## 10. Alerts — `/admin/alerts`
+## 10. Marketer reports — `/admin/marketer-reports`
+
+Files: `src/app/admin/marketer-reports/page.tsx`, `src/components/admin/marketer-report-list.tsx`; model `src/lib/marketer-report.ts` (pure, tested by `scripts/check-marketer-reports.ts`), data `src/lib/marketer-report-server.ts`, files `src/lib/export/marketer-report.ts` (+ `-pdf.ts`, `-docx.ts`, `-xlsx.ts`, layouts in `40-platform-and-design.md`). Title "Marketer reports — Xtend". `requireSession(['admin','supervisor'])`; in the menu under Attendance, after Store visits.
+
+Heading **"Marketer reports"**. Intro: "A report to download for each marketer, for one day or a whole month: when they clocked in and out, every store they checked in to and how long they spent there, the time between stores, and the daily report they filed. PDF is the one to share; Word and Excel hold the same." + for supervisors " You see your own team only." + " Times are Africa/Lagos."
+
+### Query parameters (`parseReportRequest`)
+
+| Param | Values | Default / rules |
+|---|---|---|
+| `period` | `day` or `month` | `day` (anything else) |
+| `date` | YYYY-MM-DD | today; a date after today → today |
+| `month` | YYYY-MM | the month of `date`; after the current month → that month too |
+| `user_id` | uuid | none (everyone) |
+
+Values trimmed to 80 characters. Range: a day report is that day; a month report runs from the 1st to the month's last day, or today when the month is the current one. `reportQuery(userId, kind, dateOrMonth)` builds `user_id=…&period=day&date=…` / `…&period=month&month=…`.
+
+### Form
+
+GET form: chips **"A day"** / **"A month"** (links keeping the person when one is shown); a **Day** date input (max today) or a **Month** month input (max this month); **Show**. Then "Quick:" chips: Today, Yesterday (day) or This month, Last month (month); the matching chip filled brand.
+
+### The list (`loadMarketerRows`, through the caller's session)
+
+People: every **marketer** the caller can see (inactive included, "(switched off)" after the name), plus any merchandiser who checked in to a store in the period. Each row's figures for the period: visits and distinct stores (`store_visit_detail`, ≤ 20 000 rows), minutes in stores, reports filed (`reports`). Card title: "Today, `<long date>`", the long date, or "October 2026"; description "N person/people: every marketer, and anyone else who checked in to a store in this period. Tap PDF, Word or Excel to download their day|month report." With a `user_id` that is in the list: only that row, "One person. …" and a **"Show everyone"** link.
+
+Row: name (bold), "role · `<Supervisor>`’s team"; four small tint stats **VISITS**, **STORES**, **TIME** ("—" with no visits; `duration()` text) and **REPORTS**; three download links (`download`): **PDF** (brand, download icon, primary), **Word**, **Excel** → `/api/admin/export/marketer-report/<pdf|docx|xlsx>?<reportQuery>`. Empty: dashed "No marketers to show."
+
+Also reached from Store visits → By person ("Day report" / "Month report").
+
+### What a report holds (`buildMarketerReport`)
+
+Read for one person (`loadMarketerReport`; RLS: somebody the caller cannot see → null): profile, role label (added role names included), home store, supervisor name ("Another team" when not visible, null when none), `attendance_detail` events, `store_visit_detail` visits (≤ 3000), `reports`, `store_count_detail` lines (≤ 3000) and `xm_live_sale_lines` (≤ 3000, product and store names looked up).
+
+- **Days**: every day from `from` to the earlier of `to` and today. Per day: first clock-in and the latest clock-out at or after it; status lines "On time, at the store", "12 min late, away from the store", "Late, location unclear", "… place not confirmed"; clock-out "At the store" etc.; "In" `HH:MM` or "—"; "Out" `HH:MM`, "Still on shift" (today), "Not clocked out", or "—". Missing clock-out = clocked in, no clock-out, before today.
+- **Visits** (`visitLines`, by arrival): store (store label → outlet name → "Unnamed place"), address (store's, else the arrival address), in/out (`HH:MM`; open: "Still checked in" today, else "Not checked out"), minutes, arrival ("At the store", "Away from the store", "Location unclear", "Not measured", "Shop not on the store list"), and the time before it: "First store", "`<t>` after the last store", or "—" when the last one was never closed.
+- **Daily report**: filed at (the later of created/updated), then the five sections in field order — How the day went, Sales, Stock status, Competitor activity, Issues for the office — empty ones "Nothing reported."
+- **Stock counts** (store, product, in store, sold) and **X Metrics sales** (store, product, units).
+- **Day summary** (one sentence): e.g. "Clocked in at 08:02, on time; visited 3 stores in 4 visits, 2 h 10 min in stores; filed the daily report; clocked out at 17:30." Variants "Did not clock in", "no store visits", "no daily report", "still on shift" / "did not clock out", "(still checked in)". Nothing at all: "Nothing recorded: no clock-in, no store visits, no report." ("Sunday. Nothing recorded." on a Sunday; "This day has not come yet." for a future day).
+- **Tiles (8)**: Days worked (days with a clock-in or a visit; month adds "of N working days", where working days = days of the period up to today that are not Sundays, plus any Sunday with something recorded), Stores visited, Visits, Time in stores, Average visit (closed visits; "—" when none), On-time clock-ins "A of B", Missing clock-outs, Reports filed "R of D".
+- **Month summary**: "Worked D of N working days, visited S stores T times for X in all, clocked in on time on A of B days and filed R daily reports." (+ " N days without a clock-out."); no activity: "Nothing recorded for October 2026."
+- **Stores** (month): per store visits, total minutes, last visit, most time first.
+- File name `xtend-report-<name slug, ≤ 40>-<YYYY-MM-DD | YYYY-MM>.<pdf|docx|xlsx>`.
+
+### Downloads (`GET /api/admin/export/marketer-report/[format]`)
+
+`requireApiSession(['admin','supervisor'])`; format not pdf/docx/xlsx → 400 "Unsupported export format"; no `user_id` → 400 "Choose a person first"; a person the caller cannot see → 404 "That person was not found". Audited `export.marketer_report.<fmt>` on `profiles`/<user_id> with `{ period, from, to, visits, days_worked }`. `Content-Disposition: attachment`, `Cache-Control: no-store`, `maxDuration` 60 s.
+
+### Supervisor differences
+
+Their team only (list and downloads, by RLS); someone outside it is "That person was not found".
+
+### Acceptance checks
+
+- No parameters → today's day reports for every marketer; the "Today" chip is filled.
+- `?period=month&month=2099-01` shows the current month.
+- A merchandiser with one store visit this month is listed for the month; one with none is not.
+- Downloading a PDF writes one `export.marketer_report.pdf` audit row and the file is named `xtend-report-<name>-<date>.pdf`.
+- A supervisor requesting another team's person gets 404.
+- A month report for someone who visited 2 stores on 3 occasions shows Visits 3, Stores visited 2, and a Stores visited table with both stores, most time first.
+
+---
+
+## 11. Alerts — `/admin/alerts`
 
 Files: `src/app/admin/alerts/page.tsx`, `src/components/admin/alerts-list.tsx`, `src/components/admin/phone-check.tsx`, `src/components/field/push-toggle.tsx`; logic `src/lib/alert-review.ts`; data and download `src/lib/export/alerts.ts`. Title "Alerts — Xtend".
 
@@ -798,7 +874,7 @@ Their team only (RLS). No checkboxes, no notes, no Resolve; each open alert says
 
 ---
 
-## 11. Support — `/admin/support`
+## 12. Support — `/admin/support`
 
 Files: `src/app/admin/support/page.tsx`, `src/components/admin/support-threads.tsx` (client panel), `src/components/admin/support-inbox.tsx` (server pieces); logic `src/lib/support-inbox.ts` (pure, tested by `scripts/check-support-notifications.ts`). Data: view `support_inbox`, tables `support_messages`, `support_quick_replies`, RPCs `support_assignees`, `office_name`, `resolve_notification_targets` (migration 053). Title "Support — Xtend".
 
@@ -880,7 +956,7 @@ Their team's threads only. They can reply, close, reopen, assign (to whoever `su
 
 ---
 
-## 12. Analytics — `/admin/analytics`
+## 13. Analytics — `/admin/analytics`
 
 Files: `src/app/admin/analytics/page.tsx`, `src/components/admin/analytics-charts.tsx`, plus the attendance libraries described in section 7 (same day model, same filter form). Title "Analytics — Xtend".
 
@@ -888,7 +964,7 @@ Heading **"Punctuality and attendance"**; intro: "How the team is turning up ove
 
 ### What loads
 
-`loadAnalytics`: the filter's range and the **previous period** (the same number of days straight before: `previousPeriod(from,to)` = from − n … from − 1) in one read of `attendance_detail` (light columns), plus the filter choices. Both periods are assembled with the same filter.
+`loadAnalytics`: the filter's range and the **previous period** (the same number of days straight before: `previousPeriod(from,to)` = from − n … from − 1) in one read of `attendance_detail` (light columns), the filter choices, and the schedule (patterns, one-off changes and approved leave) from the previous period's start to the end of the range (`loadScheduleSafe`). Both periods are assembled with the same filter and schedule, so a day off or a day of leave is never an absence.
 
 ### Filters
 
@@ -922,7 +998,7 @@ All stacked-column charts work like the overview chart: hovering/focusing/clicki
 
 ### Who stands out, by `<by>`
 
-Heading and the line "Punctuality is ranked only with 3 or more clock-ins. Tap a name to open their days on Attendance." (`MIN_DAYS = 3`). Six boards (1 / 2 / 3 columns), each a `RankList` of up to 5: name (truncated), a 16 px bar on a `#f6e4d8` track (against 100 for percentages, otherwise against the top value; min 4 px), and the figure. Empty board: "Nobody here. Good." Each row links to Attendance with the same dates and Sundays setting plus that person / store / team; the "none" group (no store / no supervisor) is not linked. Hover title "label: text · N clock-ins, A absent".
+Heading and the line "Punctuality is ranked only with 3 or more clock-ins. Tap a name to open their days on Attendance." (`MIN_DAYS = 3`). Six boards (1 / 2 / 3 columns), each a `RankList` of up to 5: name (truncated), a 16 px bar on a `#f6e4d8` track (against 100 for percentages, otherwise against the top value; min 4 px), and the figure. Empty board: "Nobody here. Good." Each row links to Attendance with the same dates plus that person / store / team; the "none" group (no store / no supervisor) is not linked. Hover title "label: text · N clock-ins, A absent".
 
 | Board | Rows | Bar colour |
 |---|---|---|
@@ -937,7 +1013,7 @@ Heading and the line "Punctuality is ranked only with 3 or more clock-ins. Tap a
 
 ### Store coverage
 
-Card **"Store coverage"** / "On how many working days at least one person clocked in at each store. Least covered first." Stores listed are those that are the own store of an active person in view, plus any store someone clocked in at. Working days = days up to today that are not Sundays (unless Sundays count). Per store: name (link to Attendance filtered to the store), "N person/people" (whose own store it is), a 12 px bar (`#9b3517` when coverage < **80 %**, else `#d1511a`), "covered/working · P%", and "Nobody in: `d Mon, …`" (last 4 gaps, "and N more") or "Somebody in every working day", plus " · last clock-in `d Mon`" or " · no clock-in in this period". Sorted by coverage ascending (stores without a figure last), then name. Shows the **40** least covered; more: "The 40 least covered of N stores." Empty: "No stores to show."
+Card **"Store coverage"** / "On how many working days at least one person clocked in at each store. Least covered first." Stores listed are those that are the own store of an active person in view, plus any store someone clocked in at. A store's working days = days up to today on which at least one of its own people (whose own store it is) was expected in by their schedule; a store nobody is posted to follows Monday to Saturday. Per store: name (link to Attendance filtered to the store), "N person/people" (whose own store it is), a 12 px bar (`#9b3517` when coverage < **80 %**, else `#d1511a`), "covered/working · P%", and "Nobody in: `d Mon, …`" (last 4 gaps, "and N more") or "Somebody in every working day", plus " · last clock-in `d Mon`" or " · no clock-in in this period". Sorted by coverage ascending (stores without a figure last), then name. Shows the **40** least covered; more: "The 40 least covered of N stores." Empty: "No stores to show."
 
 ### All `<people|stores|teams>` (N)
 
@@ -957,11 +1033,12 @@ None in the UI; their team only.
 - Choosing 60 days switches the trend chart heading to "Week by week".
 - A person with 2 clock-ins does not appear in Most/Least on time.
 - A store covered on 7 of 10 working days shows a deep-red bar and "7/10 · 70%".
+- A person on approved leave for the whole range has no absences on any board or in the table; the filter form has no Sundays checkbox.
 - Changing "Compare by" to Store changes the board rows, the table heading "All stores (N)" and the download file name.
 
 ---
 
-## 13. Stock count — `/admin/store-counts`
+## 14. Stock count — `/admin/store-counts`
 
 Files: `src/app/admin/store-counts/page.tsx`, `src/components/admin/count-requests.tsx`, `count-template-card.tsx`; data `storeCounts()` in `src/lib/assistant-data.ts`; sheet naming `src/lib/count-sheet.ts`; status `src/lib/store-count-status.ts`. Title "Stock count — Xtend".
 
@@ -1028,7 +1105,7 @@ Only their team's people, counts and sheets. They can ask for counts and close r
 
 ---
 
-## 14. X Metrics — `/admin/metrics` and sub-pages
+## 15. X Metrics — `/admin/metrics` and sub-pages
 
 Files: `src/app/admin/metrics/**/page.tsx`, `src/components/admin/xm/dashboard.tsx`, `widgets.tsx`, `forms.tsx`, `policy-editor.tsx`, `supply-import.tsx`, `day-bars.tsx`, `src/components/admin/score-bars.tsx`, `src/components/metrics/policy.tsx` (shared with the staff app); logic `src/lib/metrics/dashboard.ts`, `shared.ts`, `server.ts`, `supply-import.ts`, `export.ts`, `admin-route.ts`. Schema: migrations 043 (X Metrics), 044 (policy), 047 (cartons). The scoring and reconciliation rules live in Postgres (see `generated/database.md`: `xm_*` tables, views and functions).
 
@@ -1205,7 +1282,7 @@ Title "Store — X Metrics". Unknown outlet → 404. Header = store name; intro 
 
 ---
 
-## 15. Integrity — `/admin/integrity`
+## 16. Integrity — `/admin/integrity`
 
 Files: `src/app/admin/integrity/page.tsx`, `src/components/admin/integrity-overview.tsx`, `integrity-flags.tsx`, `phone-check.tsx`; logic `src/lib/integrity-review.ts` (pure apart from the fetch; tested by `scripts/check-integrity-ask.ts`), names and meanings `src/lib/integrity.ts`. Data: view `integrity_flag_detail` (migration 022 and later). Title "Integrity checks — Xtend".
 
@@ -1289,7 +1366,7 @@ Each flag (`FlagItem`): a checkbox (unreviewed) or a green tick (reviewed); a co
 - "`Severity` · `meaning`".
 - **Facts** from the flag's `detail` JSON (`detailFacts`), e.g. GPS point (6 decimals), Seen in (a clock-in / a clock-out / a store visit / location while on shift / positions saved offline / tracking with the app closed), Distance (km), Minutes late / Minutes early / Time between readings, Accuracy the phone claimed, Internet address, Country of the internet address, VPN or proxy (Yes/No), Datacentre address, Mobile network, Phone time zone, Phone offset (UTC+1), Phone (iPhone/Android), Phone clock ("right" under 60 s, else "N min ahead|behind"), Sent after, Really taken at, Phone was in touch with Xtend at, Last in touch before that, How we know, Positions refused, Positions from a fake-GPS app, Times seen there, Last count, Supplied since, and any other key humanised.
 - For count flags a small table: Product, Left last time, Sold, Counted, Missing (red).
-- Chips: **Movement that day**, **Check an excuse** (`?person&date`), plus **Places** (self-named place), **Stock counts** (count flags; that day), **X Metrics** (stock discrepancy); **The GPS point** (Google Maps) when there is one; **Is their phone on now?** toggles the phone check (section 10).
+- Chips: **Movement that day**, **Check an excuse** (`?person&date`), plus **Places** (self-named place), **Stock counts** (count flags; that day), **X Metrics** (stock discrepancy); **The GPS point** (Google Maps) when there is one; **Is their phone on now?** toggles the phone check (section 11).
 - Reviewed: "Reviewed by `name` `date time`: note". Unreviewed: input "What you found (optional)" (max 500) and **Mark reviewed** → POST `/api/admin/integrity/<id>/review` `{note}`.
 - "Flag day: `long date`".
 
@@ -1320,7 +1397,7 @@ Their team only; they can review flags (single and bulk) — the database refuse
 
 ---
 
-## 16. Check an excuse — `/admin/excuses`
+## 17. Check an excuse — `/admin/excuses`
 
 Files: `src/app/admin/excuses/page.tsx`, `src/components/admin/excuse-timeline.tsx`, `save-excuse-check.tsx`, `phone-check.tsx`; logic `src/lib/excuse.ts` (`judgeExcuse`, pure) and `src/lib/excuse-server.ts`. Data: RPCs `check_excuse` (migration 026) and `check_excuse_more` (048), `record_excuse_check`, view `excuse_check_detail`. Title "Check an excuse — Xtend".
 
@@ -1381,7 +1458,7 @@ Card **"What the phone did"** / "`from` to `to`. Point at a mark for the detail.
 
 ### Is the phone on right now?
 
-Card with "If they say their phone is off or has no network now, check it. Xtend sends the phone a notification (“Please open Xtend now”), and the phone reports when it arrives. If it arrives, the phone is on and has network." and the `PhoneCheck` (section 10).
+Card with "If they say their phone is off or has no network now, check it. Xtend sends the phone a notification (“Please open Xtend now”), and the phone reports when it arrives. If it arrives, the phone is on and has network." and the `PhoneCheck` (section 11).
 
 ### Kept checks
 
@@ -1405,7 +1482,7 @@ Only their team in the picker and the kept list; the RPCs refuse anyone else.
 
 ---
 
-## 17. Staff — `/admin/users` (and `/admin/users/import`)
+## 18. Staff — `/admin/users` (and `/admin/users/import`)
 
 Files: `src/app/admin/users/page.tsx`, `src/app/admin/users/import/page.tsx`, `src/components/admin/staff-manager.tsx`, `role-select.tsx`, `csv-importer.tsx`; login sheet `src/lib/staff-logins.ts`; roles `src/lib/staff-roles.ts`; field rules `src/lib/fields.ts`. Title "Staff — Xtend".
 
@@ -1446,7 +1523,7 @@ Success: a green alert **"Temporary password for `name`"** with the password in 
 
 - Admins edit Role, Outlet and Reports to inline with selects (each change PATCHes `/api/admin/users/<id>` immediately; Reports to only when there are supervisors, never offering the person themselves). Supervisors see plain text (role label, store or "No store", supervisor name or —).
 - Status badges: **Active** (success) / **Deactivated** (outline); **Temp password** (warning) while `must_change_password`; for field staff **Notifications on** (success), **Notifications off: cannot clock in** (warning), or **Excused from notifications** (outline) when `push_exempt`.
-- Actions (ghost buttons): **Edit details**, **Reset password** (PATCH `{reset_password: true}` → shows the new temporary password the same way), **Deactivate** / **Reactivate** (PATCH `{is_active}`, no confirmation), for admins on field staff **Excuse from notifications** / **Require notifications** (confirm "Let `name` clock in without notifications? Only do this for a phone that cannot receive them: their phone can then not be checked live."), and for admins **Delete** (red; `confirm` "Delete `name`'s account for good? …" → DELETE `/api/admin/users/<id>`). Delete removes the auth account, which cascades the profile; it is refused with a 409 ("This person has attendance history … Deactivate it instead.") when they have attendance or any other ON DELETE RESTRICT history, and you cannot delete your own account. Supervisors do not see Delete.
+- Actions (ghost buttons): **Edit details**, **Reset password** (PATCH `{reset_password: true}` → shows the new temporary password the same way), **Deactivate** / **Reactivate** (PATCH `{is_active}`, no confirmation), for admins on field staff **Excuse from notifications** / **Require notifications** (confirm "Let `name` clock in without notifications? Only do this for a phone that cannot receive them: their phone can then not be checked live."), **Schedule** (a link, for active merchandisers and marketers, to `/admin/schedules?user=<id>`; outline on phone cards), and for admins **Delete** (red; `confirm` "Delete `name`'s account for good? …" → DELETE `/api/admin/users/<id>`). Delete removes the auth account, which cascades the profile; it is refused with a 409 ("This person has attendance history … Deactivate it instead.") when they have attendance or any other ON DELETE RESTRICT history, and you cannot delete your own account. Supervisors do not see Delete.
 
 **Phone cards** (< `md`): photo, name, email, phone ("No phone"), the badges on the right; Role / Outlet / Reports to as labelled selects (admins) or text; the same buttons (Edit details and Reset password as outline; Delete red for admins).
 
@@ -1478,10 +1555,11 @@ Their team only; can add merchandisers/marketers (and added roles based on them)
 - A field worker without a live push subscription shows "Notifications off: cannot clock in".
 - A supervisor's Role, Outlet and Reports to columns are plain text; their Add staff role picker offers only field roles.
 - An admin cannot deactivate themselves.
+- Each active merchandiser or marketer row has **Schedule**, opening Schedules on that person; supervisors and admins rows have none.
 
 ---
 
-## 18. Teams — `/admin/teams` (admins only)
+## 19. Teams — `/admin/teams` (admins only)
 
 Files: `src/app/admin/teams/page.tsx`, `src/components/admin/team-manager.tsx`. Title "Teams — Xtend". `requireSession(['admin'])`.
 
@@ -1507,7 +1585,74 @@ Layout:
 
 ---
 
-## 19. Roles — `/admin/roles` (admins only)
+## 20. Schedules — `/admin/schedules`
+
+Files: `src/app/admin/schedules/page.tsx`, `src/components/admin/schedule-manager.tsx`; rules `src/lib/schedule.ts` (pure, tested by `scripts/check-schedules-leave.ts`); database migration 059 (`30-rules.md`, schedules and leave). Title "Schedules — Xtend". `requireSession(['admin','supervisor'])`.
+
+Heading **"Schedules"**. Intro: admin "Days on and days off for every merchandiser and marketer." / supervisor "Days on and days off for your team." + " A day off, or a day of approved **leave** (link to `/admin/leave`), is never counted as absent, and nobody is chased for not clocking in on one. Every change is in the audit log."
+
+**What loads** (through the session): `my_staff()` (kept: active merchandisers and marketers, never the viewer), `work_patterns` (user_id, days; ≤ 5000), `schedule_overrides` from today − **60** days on (≤ 2000, by day), outlets, `staff_roles`. Each person: name, role label, home store, "`<Supervisor>`’s team", own pattern or null (default). `?user=<id>` (from Staff → **Schedule**) starts on that person: the search holds their name, they are ticked, their row is tinted, and the one-off form and its list start on them. Load error: "Could not load staff: <message>"; nobody: info "There are no merchandisers or marketers to schedule yet."
+
+### Weekly days on and off
+
+Card **"Weekly days on and off"** / "Orange days are working days; grey days are days off. Everyone starts on Monday to Saturday. Tick several people to give them all the same week at once."
+
+- Search "Search name, store or team" (name, store, team, role) and **"Tick all shown (N)"** / **"Clear shown"**.
+- **Week toggles** (`WeekToggles`): seven round buttons, Monday first, labelled Mo Tu We Th Fr Sa Su; on = brand fill, off = muted; `aria-pressed`, title/aria "Monday: working|day off". Days are Postgres `extract(dow)` numbers, 0 = Sunday … 6 = Saturday.
+- One row per person: checkbox, name, "role · store (or No store) · team", small toggles holding a draft, and the pattern in words (`patternText`: runs of 3+ joined with a dash — "Mon–Sat", "Mon–Fri", "Mon, Wed, Fri", "Every day", "No working days"; "usual week" under it when on the default). A changed draft shows **Save** (→ one person) and **Undo**.
+- With anyone ticked, a tint bar: "N ticked · give them", toggles (start Mon–Sat), the pattern in words, **"Apply to N"** and **"Back to Mon–Sat"** (sends `days: null`).
+- Save → `POST /api/admin/schedules { user_ids (1–500), days (0–6, ≤ 7) | null }` → `set_work_pattern`. Notices: "`Name` schedule is now Mon–Fri." for one, "N people now work Mon–Fri." for several; null reads "Mon–Sat (the usual week)". Errors from the database, e.g. "You can only set schedules for your own team"; fallback "That change could not be saved."
+
+### One-off changes
+
+Card **"One-off changes"** / "Make one date an extra day in (for example a Sunday stock count) or an extra day off (a swap or a public holiday). It replaces the weekly pattern for that date only. Approved leave is on the Leave page."
+
+- Form: **Person** (select), **Date** (default today), **Make it** ("A day off" default / "A working day"), **Note (optional)** (≤ 300, "Public holiday, swap…"), **Add** (calendar-minus / calendar-plus icon) → `POST /api/admin/schedules/overrides { user_id, day, working, note }` → `set_schedule_override` (replaces any change already on that date; 60 days back to a year ahead). Notice "`Name`: Tue 20 Oct is now a day off|a working day."
+- "Show:" pills **`<person>`** / **Everyone**. List by date: "Tue 20 Oct", name, badge **"Extra day in"** (default) or **"Day off"** (outline), "past" for a date before today, the note, and **Remove** (bin) → `DELETE /api/admin/schedules/overrides/<id>`; notice "`Name`: Tue 20 Oct follows the weekly pattern again." Empty: "No one-off changes from the last 60 days onwards."
+
+### Supervisor differences
+
+Only their team is listed; the database refuses anyone else ("You can only set schedules for your own team"). All or nothing: one person outside the team in a bulk apply refuses the whole change.
+
+### Acceptance checks
+
+- Unticking Saturday for one person and pressing Save shows "… schedule is now Mon–Fri." and writes one `schedule.pattern` audit row.
+- Ticking 3 people and "Apply to 3" with Mon, Wed, Fri reports "3 people now work Mon, Wed, Fri."
+- "Back to Mon–Sat" removes their pattern; the row reads "Mon–Sat" with "usual week".
+- Adding a Sunday as "A working day" lists it as "Extra day in"; on Attendance that Sunday without a clock-in becomes "A".
+- A date more than a year ahead is refused with "Pick a date within the next year".
+- Staff → **Schedule** on a person opens this page ticked and tinted on them.
+
+---
+
+## 21. Leave — `/admin/leave`
+
+Files: `src/app/admin/leave/page.tsx`, `src/components/admin/leave-decisions.tsx`. Title "Leave — Xtend". `requireSession(['admin','supervisor'])`.
+
+Heading **"Leave"**. Intro: admin "Leave requests from every merchandiser and marketer." / supervisor "Leave requests from your team." + " Approve or reject each one; the person gets a message either way. Approved days are not counted as absent and nobody is chased for not clocking in on them. Requests still waiting come first."
+
+**Query parameters** (GET form): `status` (Status: **Any**, Pending, Approved, Rejected, Cancelled), `person` (Person: **Everyone** + merchandisers and marketers by name), `from` / `to` (date inputs; keep requests that overlap: `to_date ≥ from`, `from_date ≤ to`). **Show**; **Clear** when anything is set.
+
+**What loads**: view `leave_request_detail` (security_invoker, so RLS applies; request + `staff_name`, `staff_role`, `outlet_name`, `supervisor_id`, `decided_by_name`, `days`), newest first day first, ≤ **500**, filtered, then `sortLeave()` (pending first by soonest first day, then the rest by latest first day, then newest asked). A warning alert when any are pending: "N request(s) is/are waiting for a decision." + link **"Show only those"** (→ `?status=pending`) unless already filtered so.
+
+**Cards** (`LeaveDecisions`): name and store ("No store"), status badge (Pending warning, Approved success, Rejected destructive, Cancelled outline); "**Annual leave** · Tue 20 Oct to Thu 22 Oct (3 days)" (+ "already started" in warning for a pending one whose first day is today or earlier); the reason; "Asked `<time>`" + " · Approved|Rejected by `<name or the office>` `<time>`"; "Note: …" when written. A pending request of someone else gets a note input "Note to them (optional)" (≤ 500) and **Approve** (check) / **Reject** (outline, X) → `POST /api/admin/leave/<id> { decision: 'approve'|'reject', note }` → `decide_leave`. Your own request never shows the buttons. Notice "`Name`'s leave was approved|rejected. They have been told." Empty: "No leave requests match." Load error: "Could not load leave requests: <message>".
+
+**Pushes**: when staff ask (`POST /api/leave`), `notifyWatchers` tells their supervisor and admins: "`<Name>` asked for leave" / "Annual leave: Tue 20 Oct (1 day). `<reason>`", opening `/admin/leave?status=pending` (detail kind `leave_request`). After a decision `notifyUsers` tells the person: "Leave approved" / "Leave not approved", "Your annual leave for `<range>` was approved|not approved.` <note>`", opening `/field/leave` (kind `leave_decision`).
+
+### Supervisor differences
+
+Their team's requests only; the database refuses deciding anyone else's ("You can only decide leave for your own team") and anyone's own ("You cannot decide your own leave").
+
+### Acceptance checks
+
+- With 2 pending requests the warning reads "2 requests are waiting for a decision." and "Show only those" filters to them.
+- Approving writes `leave.approve` in the audit log, the person gets "Leave approved", and the days show "Lv" on Attendance.
+- Deciding the same request twice gives "That request has already been decided"; a cancelled one "That request was cancelled".
+- Only merchandisers and marketers can ask (`apply_leave`), so a request never belongs to the admin or supervisor viewing it; the buttons are also hidden for the viewer's own id.
+
+---
+
+## 22. Roles — `/admin/roles` (admins only)
 
 Files: `src/app/admin/roles/page.tsx`, `src/components/admin/role-manager.tsx`. Title "Roles — Xtend". Migration 042 (added roles) and 046 (who counts stock).
 
@@ -1527,11 +1672,11 @@ Loads `staff_roles` (id, name, base_role, is_active, counts_stock), active profi
 
 ---
 
-## 20. Store allocation — `/admin/assignments`
+## 23. Store allocation — `/admin/assignments`
 
 Files: `src/app/admin/assignments/page.tsx`, `src/components/admin/outlet-allocator.tsx`. Title "Store allocation — Xtend".
 
-Heading **"Store allocation"**: "Optional. Marketers do not need this: they check in wherever they are and Xtend records the store from the map. Allocate stores when you want a merchandiser measured against a particular shop, or to put someone on a supervisor’s team."
+Heading **"Store allocation"**: "Choose which stores each person works. A marketer with stores here can only check in at those (and their home store), and the app lists only those; with none, they check in wherever they are. A merchandiser is measured against their store. Allocating also puts someone on a supervisor’s team."
 
 Loads view `staff_allocation` (each field person: role, active, home outlet, allocated outlet ids and names; by name), active outlets (id, name, address), `my_staff()` (to know each person's supervisor), `available_supervisors()` (empty for a supervisor).
 
@@ -1546,6 +1691,8 @@ Layout:
 
 The home store is set on the Staff page, not here, and always counts as allocated.
 
+Effect on store visits (migration 060): once a person has at least one allocated store (an active store in `staff_outlets`), their phone's store picker lists only their allocated stores plus their home store (`my_visit_stores()`), and the database refuses a check-in at any other store, picked or recognised by location: "This store is not on your list. Ask your supervisor to add it." Someone with no allocation keeps checking in anywhere.
+
 ### Supervisor differences
 
 Only their team; no team chips. They can save allocations for their people.
@@ -1555,10 +1702,11 @@ Only their team; no team chips. They can save allocations for their people.
 - Opening Allocate stores pre-ticks the person's current allocated stores; saving with none shows "… now covers no allocated stores."
 - The home store tile says "Home store — always included".
 - A supervisor sees no team chips and only their team.
+- After allocating one store to a marketer who had none, their phone's "Pick the store myself" lists that store and their home store only.
 
 ---
 
-## 21. Notifications — `/admin/notifications`
+## 24. Notifications — `/admin/notifications`
 
 Files: `src/app/admin/notifications/page.tsx`, `src/components/admin/notification-composer.tsx`, `notification-history.tsx`, `notification-tools.tsx`; logic `src/lib/notification-log.ts` (pure), sending `src/lib/notification-send.ts`. Data (migration 053): view `notification_log`, `notification_deliveries`, `notification_templates`, `scheduled_notifications`, RPC `resolve_notification_targets(p_audience, p_detail)`. Title "Notifications — Xtend".
 
@@ -1570,7 +1718,7 @@ If the log view is missing: warning "The history, templates and scheduling need 
 
 | Param | Values | Default |
 |---|---|---|
-| `kind` | `message` (Messages), `support` (Support replies), `alert` (Automatic alerts), `all` | `message` |
+| `kind` | `message` (Messages), `support` (Support replies), `alert` (Automatic alerts: no sender, or `audience_detail.system = true`; the clock-out reminders "Time to clock out" / "You have not clocked out yet" of migration 0061 land here), `all` | `message` |
 | `q` | search words (≤ 80) in title, message, sender | none |
 | `days` | 7, 30, 90 | 30 |
 | `n` | id of the history item opened | none |
@@ -1631,7 +1779,7 @@ They can only reach their own team (the RPC decides); the audience chips are the
 
 ---
 
-## 22. Outlets — `/admin/outlets` (and `/admin/outlets/import`)
+## 25. Outlets — `/admin/outlets` (and `/admin/outlets/import`)
 
 Files: `src/app/admin/outlets/page.tsx`, `src/app/admin/outlets/import/page.tsx`, `src/components/admin/outlet-manager.tsx`, `store-importer.tsx`; geocoding `src/lib/geocode.ts`; the July stockist list `src/lib/stockists-july.ts`. Title "Outlets — Xtend".
 
@@ -1679,7 +1827,7 @@ Read-only cards; no form, no buttons, no bulk import (`requireSession(['admin'])
 
 ---
 
-## 23. Places — `/admin/places` (admins only)
+## 26. Places — `/admin/places` (admins only)
 
 Files: `src/app/admin/places/page.tsx`, `src/components/admin/place-manager.tsx`, `place-dues.tsx`. Data: view `known_place_detail` (migrations 024, 025, 034), outlets without a location, view `place_naming_due_detail` (045). Title "Places — Xtend".
 
@@ -1721,7 +1869,7 @@ Empty lists: stores view "N store(s) is/are waiting for a location. Spots appear
 
 ---
 
-## 24. Audit log — `/admin/audit` (admins only)
+## 27. Audit log — `/admin/audit` (admins only)
 
 Files: `src/app/admin/audit/page.tsx`; logic and download `src/lib/audit-log.ts` (pure helpers tested by `scripts/check-audit.ts`); writing `src/lib/audit.ts` and `src/lib/audit-context.ts`. Data: view `audit_log_detail`. Title "Audit log — Xtend". `requireSession(['admin'])`.
 
@@ -1732,7 +1880,7 @@ Heading **"Audit log"**: "Every change an admin or supervisor makes, newest firs
 | Param | Field | Notes |
 |---|---|---|
 | `person` | "Who": **Everyone** + admins and supervisors | uuid |
-| `group` | "What": **All actions** + groups: Staff accounts, Teams and stores, Roles, Stores, Places, Stock counts, Notifications, Support, Alerts, Exports, X Metrics, Updates, Other | by action prefix |
+| `group` | "What": **All actions** + groups: Staff accounts, Teams and stores, Roles, Stores, Places, Stock counts, Notifications, Support, Alerts, Exports, X Metrics, Updates, Other | by action prefix  (`ACTION_GROUPS` in `src/lib/audit-log.ts`). `schedule.*` and `leave.*` (059) have no group of their own and fall under Other; `export.marketer_report.*` is under Exports |
 | `from`, `to` | dates (max today), Lagos midnight bounds | none |
 | `q` | "Search", "Name, store, IP, device…" — matches action, label, actor, table, place, IP, device, meta JSON | ≤ 120 |
 | `flagged=1` | checkbox **"Only VPN, new device or new location"** | off |
@@ -1766,7 +1914,7 @@ Title "Audit log"; subtitle "`range | All dates` · N actions"; notes "Each acti
 
 ---
 
-## 25. Updates — `/admin/updates` (admins only)
+## 28. Updates — `/admin/updates` (admins only)
 
 Files: `src/app/admin/updates/page.tsx`, `src/components/admin/update-tools.tsx`; logic `src/lib/app-update.ts`, `src/lib/app-release.ts`. Data (migration 057): `app_releases`, `app_installs`, `app_minimum_builds`. Environment: `NEXT_PUBLIC_BUILD_ID`, `ANDROID_APK_URL`, `ANDROID_LATEST_BUILD`, `IOS_LATEST_BUILD`, `IOS_APP_URL`. Title "Updates — Xtend".
 
@@ -1813,7 +1961,7 @@ Empty: "Nobody is on an older app." / "Nobody has opened Xtend since this was se
 
 ---
 
-## 26. The shared export renderer — `src/lib/export/render.ts`
+## 29. The shared export renderer — `src/lib/export/render.ts`
 
 Every download in the dashboard (attendance, analytics, movement, visits, coverage, alerts, integrity, audit, X Metrics, Ask Xtend reports) builds one format-independent `Sheet` and hands it to `renderExport(format, sheet)`. The route always passes the same filter as the page, audits the download (`export.<…>.<fmt>`), and reads through the caller's session so a supervisor's file holds only their team.
 
@@ -1839,7 +1987,7 @@ Common to all: file name `<fileBase>-<YYYY-MM-DD>.<ext>` (UTC date of making), `
 
 ---
 
-## 27. The shared UI kit — `src/components/ui`
+## 30. The shared UI kit — `src/components/ui`
 
 Small, unstyled-library-free components (Tailwind + `class-variance-authority`), shared by the field app and the dashboard. Colours come from CSS variables (brand orange, tint, muted, success, warning, destructive, card, canvas). Utility classes used throughout: `surface` (white rounded card with border and soft shadow), `brand-surface` (brand gradient), `hatch` (diagonal white stripes over a fill), `icon-tile`, `shadow-soft`, `shadow-lift`, `animate-fade-up`.
 

@@ -148,7 +148,7 @@ The Attendance and Analytics pages and their downloads all read from here.
 Pure on purpose (no Supabase, no server-only), so
 scripts/check-attendance.ts can run it on made-up days.
 
-Exports: `ClockEvent`, `Person`, `DayStatus`, `DayRecord`, `ReportOptions`, `isDate`, `weekday`, `dayList`, `dayCount`, `previousPeriod`, `isWorkingDay`, `Preset`, `presets`, `cleanRange`, `minutesOf`, `clock`, `lateness`, `hoursText`, `deviceText`, `buildDays`, `counted`, `STATUS_FILTERS`, `StatusFilter`, `isStatusFilter`, `matchesStatus`, `Summary`, `summarise`, `percent`, `SORTS`, `SortKey`, `isSortKey`, `sortDays`, `Concern`, `CONCERN_AT`, `SENT_LATE_MIN`, `concerns`, `GroupBy`, `isGroupBy`, `GroupRow`, `group`, `leaders`, `TrendPoint`, `dayMonth`, `trend`, `WeekdayRow`, `byWeekday`, `HourRow`, `byHour`, `StoreCover`, `storeCoverage`, `Delta`, `delta`, `STATUS_LABEL`, `cellTitle`
+Exports: `ClockEvent`, `Person`, `DayStatus`, `DayRecord`, `ReportOptions`, `isDate`, `weekday`, `dayList`, `dayCount`, `previousPeriod`, `Preset`, `presets`, `cleanRange`, `minutesOf`, `clock`, `lateness`, `hoursText`, `deviceText`, `buildDays`, `counted`, `STATUS_FILTERS`, `StatusFilter`, `isStatusFilter`, `matchesStatus`, `inDayTable`, `Summary`, `summarise`, `percent`, `SORTS`, `SortKey`, `isSortKey`, `sortDays`, `Concern`, `CONCERN_AT`, `SENT_LATE_MIN`, `concerns`, `GroupBy`, `isGroupBy`, `GroupRow`, `group`, `leaders`, `TrendPoint`, `dayMonth`, `trend`, `WeekdayRow`, `byWeekday`, `HourRow`, `byHour`, `StoreCover`, `storeCoverage`, `Delta`, `delta`, `STATUS_LABEL`, `cellTitle`
 
 ## `src/lib/attendance-server.ts`
 
@@ -218,6 +218,29 @@ sets from the connection itself.
 
 Exports: `requestIp`
 
+## `src/lib/clock-out-reminder.ts`
+
+Clock-out reminders (migration 0061): when the shift has ended and the
+person is still clocked in, ask them to clock out. The database decides
+who is sent a push (claim_clock_out_reminders); this file holds the same
+timing for the phone screen, and the wording of the pushes.
+
+Plain functions with no imports so the browser, the server and the check
+script (scripts/check-clock-out-reminder.ts) all use the same rules.
+
+Exports: `DEFAULT_SHIFT_END`, `SECOND_REMINDER_MIN`, `shiftEndLabel`, `dayEndAt`, `shiftEndAt`, `ReminderState`, `clockOutDue`, `msUntilClockOutDue`, `reminderDue`, `reminderMessage`
+
+## `src/lib/clock-out-reminders.ts`
+
+The five-minute job's part: ask everyone whose shift has ended and who
+is still clocked in to clock out. The database hands each reminder over
+once (claim_clock_out_reminders, migration 0061), so a run every five
+minutes, or two at once, never sends one twice. People with the same
+reminder and shift end share one notification, which shows in the
+history as an automatic alert. Never throws.
+
+Exports: `flushClockOutReminders`
+
 ## `src/lib/count-sheet.ts`
 
 The Xpel stock count sheet as an Excel file, laid out like Xpel's own
@@ -278,11 +301,50 @@ The Attendance page's day-by-day table, every row, with a summary on top.
 
 Exports: `attendanceDaysSheet`, `analyticsSheet`
 
+## `src/lib/export/brand-logo.ts`
+
+The Xpel Beauty logo (public/brand/xpel-logo.png, 300 px wide) for the
+downloadable reports. Kept in code so the function that draws a PDF or
+Word file does not depend on the public folder being deployed with it.
+
+Exports: `XPEL_LOGO_PNG`, `XPEL_LOGO_RATIO`
+
 ## `src/lib/export/data.ts`
 
 RLS decides the rows. The filter only narrows what the caller may see.
 
 Exports: `AttendanceFilter`, `parseFilter`, `fetchAttendance`, `EXPORT_COLUMNS`, `signSelfies`, `toExportRows`, `attendanceSheet`
+
+## `src/lib/export/marketer-report-docx.ts`
+
+The marketer's day or month report as a Word document: the same content
+and order as the PDF, in the brand colours, A4 portrait, with the logo,
+a running header, and page numbers in the footer.
+
+Exports: `marketerReportDocx`
+
+## `src/lib/export/marketer-report-pdf.ts`
+
+The marketer's day or month report as a branded A4 PDF (pdf-lib). A
+layout of its own, not the generic table renderer: a header with the
+Xpel logo, the person, summary tiles, then tables and the daily report,
+with page numbers and a footer on every page.
+
+Exports: `pdfSafe`, `Cell`, `marketerReportPdf`
+
+## `src/lib/export/marketer-report-xlsx.ts`
+
+The marketer's day or month report as an Excel workbook: a Summary sheet
+(the person, the tiles, the summary), then one sheet each for the days,
+the store visits, the stores, the daily reports, and stock and sales.
+
+Exports: `marketerReportXlsx`
+
+## `src/lib/export/marketer-report.ts`
+
+The marketer's report as a file to download: PDF, Word or Excel.
+
+Exports: `MARKETER_REPORT_FORMATS`, `MarketerReportFormat`, `isMarketerReportFormat`, `renderMarketerReport`
 
 ## `src/lib/export/render.ts`
 
@@ -417,6 +479,27 @@ Leaflet, fetched from a CDN only when a map is opened, so pages without a
 map (and the phone app) never pay for it.
 
 Exports: `loadLeaflet`
+
+## `src/lib/marketer-report-server.ts`
+
+Everything one person's report needs, read through the caller's own
+client: RLS keeps a supervisor to their team, so somebody they cannot
+see comes back as null.
+
+Exports: `loadMarketerReport`, `MarketerRow`, `loadMarketerRows`
+
+## `src/lib/marketer-report.ts`
+
+A marketer's report for one day or one month: when they clocked in and
+out, each store they checked in to and for how long, the daily report
+they filed, and any stock counts and X Metrics sales they sent. The
+Marketer reports page and its PDF, Word and Excel downloads read it.
+
+Pure on purpose (no Supabase, no server-only), so
+scripts/check-marketer-reports.ts can build one from made-up rows.
+Every date and time is Africa/Lagos.
+
+Exports: `ReportKind`, `ReportPerson`, `SourceClock`, `SourceVisit`, `SourceReport`, `SourceCount`, `SourceSale`, `ReportSource`, `VisitLine`, `ClockLine`, `ReportField`, `DayDetail`, `StoreLine`, `Tile`, `MarketerReport`, `ARRIVAL_LABEL`, `arrivalText`, `REPORT_FIELDS`, `minutesText`, `shortDate`, `monthName`, `isMonth`, `lastDayOfMonth`, `ReportRequest`, `parseReportRequest`, `reportQuery`, `visitLines`, `visitTotals`, `buildDay`, `storeLines`, `buildMarketerReport`, `SnapshotVisit`, `snapshotText`
 
 ## `src/lib/metrics/admin-route.ts`
 
@@ -644,6 +727,24 @@ face on file and nothing more, so it is deleted. Everything else about
 the event — time, place, distance, status — is kept permanently.
 
 Exports: `SELFIE_RETENTION_HOURS`, `SELFIE_SWEEP_EVERY_MINUTES`, `SELFIE_RETENTION_NOTE`
+
+## `src/lib/schedule-server.ts`
+
+Every row of a query, a page at a time (PostgREST stops at 1000).
+
+Exports: `loadSchedule`, `loadScheduleSafe`
+
+## `src/lib/schedule.ts`
+
+Work schedules (days on, days off) and leave, worked out the same way as
+public.day_kind() in migration 059: approved leave first, then a change
+made for that one date, then the person's weekly pattern, and Monday to
+Saturday for anyone without one.
+
+Pure on purpose (no Supabase, no server-only), so the dashboard reports,
+the staff calendars and scripts/check-schedules-leave.ts share it.
+
+Exports: `DayKind`, `DEFAULT_WORK_DAYS`, `WEEKDAYS`, `PatternRow`, `OverrideRow`, `LEAVE_KINDS`, `LeaveKind`, `isLeaveKind`, `LEAVE_STATUS`, `LeaveStatus`, `isLeaveStatus`, `LeaveRow`, `LEAVE_LIMITS`, `dow`, `daysInclusive`, `cleanDays`, `samePattern`, `patternText`, `ScheduleBook`, `makeSchedule`, `DEFAULT_SCHEDULE`, `overlaps`, `leaveDateProblem`, `sortLeave`, `CalendarDay`, `CalendarMark`, `calendarMark`, `MARK_LABEL`, `isMissed`, `monthWeeks`, `shiftMonth`, `monthEnd`, `shortDay`, `leaveRangeText`
 
 ## `src/lib/staff-logins.ts`
 
@@ -894,6 +995,12 @@ Exports: `SEV_COLOUR`, `Stat`, `RiskList`, `SevCount`, `Trend`, `KindBars`
 
 Exports: `LEG_COLOUR`, `legTitle`, `JourneyStrip`, `JourneyKey`
 
+## `src/components/admin/leave-decisions.tsx`
+
+Each request as a card: who, when, why, and Approve / Reject while it waits.
+
+Exports: `LeaveItem`, `LeaveDecisions`
+
 ## `src/components/admin/live-alert-feed.tsx`
 
 Realtime feed. New alerts arrive without a refresh.
@@ -905,6 +1012,12 @@ Exports: `LiveAlertFeed`
 Signed link to their profile photo (037), when they have one.
 
 Exports: `LiveLocation`, `LiveLocations`
+
+## `src/components/admin/marketer-report-list.tsx`
+
+A row of the Marketer reports page (loadMarketerRows).
+
+Exports: `MarketerListRow`, `MarketerReportList`
 
 ## `src/components/admin/movement-map.tsx`
 
@@ -990,6 +1103,12 @@ Exports: `RoleSelect`
 Keeps this check on the person's record, with an optional note.
 
 Exports: `SaveExcuseCheck`
+
+## `src/components/admin/schedule-manager.tsx`
+
+Their own weekly pattern, or null for the default (Monday to Saturday).
+
+Exports: `SchedulePerson`, `ScheduleChange`, `WeekToggles`, `ScheduleManager`
 
 ## `src/components/admin/score-bars.tsx`
 
@@ -1089,6 +1208,14 @@ use on the brand block.
 
 Exports: `XpelMark`, `XpelTile`, `XpelLockup`
 
+## `src/components/field/calendar-marks.tsx`
+
+How each kind of day looks on the staff calendars: a missed working day
+in red, a day off in grey, leave in a soft orange, the rest as before.
+Every kind also carries a word, so colour is never the only sign.
+
+Exports: `MARK_CLASS`, `MARK_WORD`, `WORD_CLASS`, `byDay`, `CalendarLegend`, `MonthCalendar`
+
 ## `src/components/field/camera-capture.tsx`
 
 In-app camera. The selfie is taken here, from a live stream, and never
@@ -1096,6 +1223,12 @@ chosen from the gallery: there is deliberately no file input anywhere in
 this flow, so a saved photo cannot be submitted as a clock-in.
 
 Exports: `CameraCapture`
+
+## `src/components/field/clock-out-prompt.tsx`
+
+The clock panel listens for this and starts the clock-out (camera after location).
+
+Exports: `CLOCK_OUT_EVENT`, `startClockOut`, `ClockOutPrompt`
 
 ## `src/components/field/clock-panel.tsx`
 
@@ -1120,12 +1253,14 @@ Exports: `SentSheet`, `CountSheetPanel`
 The horizontal date picker from the reference. Seven days back from today,
 newest last, the selected one filled with brand. Seven pills do not fit a
 360px screen, so the strip scrolls and brings the selected day into view.
+A missed working day is red, a day off grey and leave soft orange, each
+with its word.
 
 Exports: `DayStrip`
 
 ## `src/components/field/field-home.tsx`
 
-The dark bar at the top: where the shift stands, and the next step.
+The last seven days from my_calendar (migration 059).
 
 Exports: `FieldHome`
 
@@ -1149,6 +1284,12 @@ Exports: `GreetingHeader`
 Absent entirely on older Android WebViews, so it is read defensively.
 
 Exports: `WakeLockState`, `HeartbeatStatus`, `useHeartbeat`
+
+## `src/components/field/leave-form.tsx`
+
+Ask for leave: the type, the first and last day, and why.
+
+Exports: `STATUS_BADGE`, `LeaveForm`, `LeaveList`
 
 ## `src/components/field/location-gate.tsx`
 
@@ -1230,6 +1371,14 @@ The day, sales and stock must be filled in; the rest may be empty.
 
 Exports: `ReportFields`, `ReportForm`
 
+## `src/components/field/report-visits.tsx`
+
+Today's store visits at the top of the daily report: each store, when
+they checked in and out, and the time spent. They go into the report on
+their own when it is saved; nothing to type.
+
+Exports: `ReportVisits`
+
 ## `src/components/field/screen.tsx`
 
 The brand-header screen from the reference: a coloured block carrying the
@@ -1256,7 +1405,7 @@ Exports: `SheetProduct`, `CountLine`, `StoreCountForm`
 
 ## `src/components/field/store-visits.tsx`
 
-The outlet's name inside its fence; the map's premises name outside.
+One of the stores allocated to the person (my_visit_stores, 060).
 
 Exports: `VisitOutlet`, `VisitRow`, `StoreVisits`
 
