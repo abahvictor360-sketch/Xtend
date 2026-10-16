@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation'
 import { REPORTING_ROLES, requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { ReportForm } from '@/components/field/report-form'
+import { ReportVisits } from '@/components/field/report-visits'
+import type { SourceVisit } from '@/lib/marketer-report'
 import { SheetScreen, HeaderField } from '@/components/field/screen'
 import { longDate } from '@/lib/utils'
 
@@ -26,7 +28,9 @@ export default async function ReportPage() {
   const { data: today } = await supabase.rpc('business_date')
   const businessDate = (today as string) ?? ''
 
-  const [{ data: report }, { data: outlet }] = await Promise.all([
+  // Today's store visits, shown above the form; the database adds them to
+  // the report itself when it is saved (060).
+  const [{ data: report }, { data: outlet }, { data: visits }] = await Promise.all([
     supabase
       .from('reports')
       .select('id, report_date, body, sales_summary, stock_status, competitor_activity, issues')
@@ -38,6 +42,7 @@ export default async function ReportPage() {
       .select('name')
       .eq('id', session.profile.outlet_id ?? '')
       .maybeSingle<{ name: string }>(),
+    supabase.rpc('my_store_visits'),
   ])
 
   const { count: photoCount } = report
@@ -62,6 +67,9 @@ export default async function ReportPage() {
         </>
       }
     >
+      <div className="mb-5">
+        <ReportVisits visits={(visits ?? []) as SourceVisit[]} today={businessDate} />
+      </div>
       <ReportForm
         existing={
           report

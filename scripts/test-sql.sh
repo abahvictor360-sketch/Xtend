@@ -78,6 +78,7 @@ run supabase/migrations/0056_realtime_field_tables.sql
 run supabase/migrations/0057_app_updates.sql
 run supabase/migrations/0058_realtime_broadcast.sql
 run supabase/migrations/0059_schedules_leave.sql
+run supabase/migrations/0060_marketer_visits_reports.sql
 run supabase/migrations/0061_clock_out_reminders.sql
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rules.sql 2>&1 | grep -E 'NOTICE|ERROR' | sed 's/^psql:[^ ]*: //'
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_counts.sql 2>&1 | grep -E 'NOTICE|ERROR|PASSED' | sed 's/^psql:[^ ]*: //'

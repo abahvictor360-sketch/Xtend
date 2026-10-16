@@ -3791,6 +3791,110 @@ begin
       perform assert(cal.clocked_in, 'calendar: a day with a clock-in shows it');
       perform act_as(boss);
     end;
+    -- Store visits keep to the person's own stores, and the report keeps
+    -- the day's visits (060).
+    declare
+      mk      uuid := gen_random_uuid();
+      allen   uuid;
+      ogba    uuid;
+      v1      uuid;
+      rep     uuid;
+      snap    jsonb;
+    begin
+      perform act_as(boss);
+      insert into auth.users (id, email) values (mk, 'chidi.mkt@xpel.ng');
+      insert into public.profiles (id, full_name, email, role, outlet_id)
+      values (mk, 'Chidi Obi', 'chidi.mkt@xpel.ng', 'marketer', null);
+      perform notifications_on(mk);
+      insert into public.outlets (name, address, lat, lng, geofence_radius_m)
+      values ('Allen Avenue Beauty', '12 Allen Avenue, Ikeja', 6.5200, 3.3700, 60) returning id into allen;
+      insert into public.outlets (name, lat, lng, geofence_radius_m)
+      values ('Ogba Cosmetics', 6.5300, 3.3700, 60) returning id into ogba;
+      perform set_staff_outlets(mk, array[allen]);
+
+      perform act_as(mk);
+      perform assert(public.has_allocated_stores(mk), 'visits: the marketer has a store allocated');
+      perform assert((select count(*) from public.my_visit_stores()) = 1
+                     and (select name from public.my_visit_stores()) = 'Allen Avenue Beauty',
+        'visits: the store picker lists only their allocated store');
+
+      begin
+        insert into public.store_visits (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
+        values (ogba, 6.5300, 3.3700, 10, now());
+        perform assert(false, 'visits: a store picked by hand that is not theirs is refused');
+      exception when others then
+        perform assert(sqlerrm = 'This store is not on your list. Ask your supervisor to add it.',
+          'visits: a store picked by hand that is not theirs is refused');
+      end;
+      begin
+        insert into public.store_visits (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
+        values (6.5301, 3.3701, 10, now());
+        perform assert(false, 'visits: standing in a store that is not theirs is refused');
+      exception when others then
+        perform assert(sqlerrm like 'This store is not on your list%',
+          'visits: standing in a store that is not theirs is refused');
+      end;
+      perform assert(not exists (select 1 from public.store_visits where user_id = mk),
+        'visits: and neither refusal left a visit behind');
+
+      insert into public.store_visits (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at,
+                                       arrived_place_name)
+      values (6.5201, 3.3701, 10, now(), 'Allen Avenue Beauty') returning id into v1;
+      perform assert((select outlet_id from public.store_visits where id = v1) = allen
+                     and (select arrived_status from public.store_visits where id = v1) = 'on_site',
+        'visits: standing in their own store is recognised and on site');
+      perform public.end_store_visit(v1, 6.5201, 3.3701, 10, null, null);
+      update public.store_visits set arrived_at = now() - interval '50 minutes', departed_at = now() - interval '5 minutes'
+       where id = v1;
+
+      insert into public.store_visits (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
+      values (allen, 6.5201, 3.3701, 10, now()) returning id into v1;
+      perform assert((select outlet_id from public.store_visits where id = v1) = allen,
+        'visits: picking their own store by hand is allowed');
+
+      -- The report: the database fills in the day's visits, whatever was sent.
+      insert into public.reports (body, sales_summary, stock_status, store_visits)
+      values ('A steady day at Allen.', 'Twelve units of toner.', 'Serum is running low.',
+              '[{"store": "Made up by the phone", "minutes": 999}]'::jsonb)
+      returning id into rep;
+      snap := (select store_visits from public.reports where id = rep);
+      perform assert(jsonb_array_length(snap) = 2,
+        'reports: the report keeps the day''s two visits');
+      perform assert(not exists (select 1 from jsonb_array_elements(snap) e where e->>'store' = 'Made up by the phone'),
+        'reports: and ignores visits the phone sent');
+      perform assert((snap->0->>'outlet_name') = 'Allen Avenue Beauty'
+                     and (snap->0->>'minutes')::int = 45
+                     and snap->0->>'departed_at' is not null
+                     and snap->1->>'departed_at' is null
+                     and (snap->0->>'address') = '12 Allen Avenue, Ikeja',
+        'reports: each visit has its store, address, times and minutes, in order');
+
+      perform public.end_store_visit(v1, 6.5201, 3.3701, 10, null, null);
+      update public.reports set issues = 'Need more testers.', store_visits = '[]'::jsonb where id = rep;
+      snap := (select store_visits from public.reports where id = rep);
+      perform assert(jsonb_array_length(snap) = 2 and snap->1->>'departed_at' is not null,
+        'reports: saving the report again refreshes the visits, and cannot clear them');
+
+      -- With no allocation, any known store will do, as before.
+      perform act_as(boss);
+      perform set_staff_outlets(mk, array[]::uuid[]);
+      perform act_as(mk);
+      perform assert(not public.has_allocated_stores(mk)
+                     and (select count(*) from public.my_visit_stores()) = 0,
+        'visits: with no allocation, the picker has no stores to offer');
+      insert into public.store_visits (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
+      values (ogba, 6.5300, 3.3700, 10, now()) returning id into v1;
+      perform assert((select outlet_id from public.store_visits where id = v1) = ogba,
+        'visits: with no allocation, a store picked by hand is allowed');
+      perform public.end_store_visit(v1, 6.5300, 3.3700, 10, null, null);
+      insert into public.store_visits (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
+      values (6.5301, 3.3701, 10, now()) returning id into v1;
+      perform assert((select outlet_id from public.store_visits where id = v1) = ogba,
+        'visits: with no allocation, standing in a known store is recognised');
+      perform public.end_store_visit(v1, 6.5301, 3.3701, 10, null, null);
+      perform act_as(boss);
+    end;
+
   end;
 
   raise notice 'ALL RULES PASSED';

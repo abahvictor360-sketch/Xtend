@@ -17,13 +17,20 @@ import { supabase } from '@/lib/supabase/client'
 import { checkPhoto } from '@/lib/offline/sync'
 import { formatLagos, metres } from '@/lib/utils'
 
+/** One of the stores allocated to the person (my_visit_stores, 060). */
 export interface VisitOutlet {
   id: string
   name: string
   address: string | null
-  lat: number
-  lng: number
+  /** Null for a store whose location is not pinned yet. */
+  lat: number | null
+  lng: number | null
   geofence_radius_m: number
+}
+
+function awayFrom(fix: { lat: number; lng: number } | null, outlet: VisitOutlet) {
+  if (!fix || outlet.lat === null || outlet.lng === null) return null
+  return haversineMetres(fix.lat, fix.lng, outlet.lat, outlet.lng)
 }
 
 export interface VisitRow {
@@ -64,7 +71,9 @@ async function namePlace(lat: number, lng: number) {
 
 /**
  * The marketer's day: check in at a store, work, check out, move on. One
- * store at a time — the database refuses a second open visit.
+ * store at a time — the database refuses a second open visit. The stores
+ * to pick from are only the ones allocated to them; the database refuses
+ * any other (060).
  */
 export function StoreVisits({
   outlets,
@@ -95,9 +104,7 @@ export function StoreVisits({
   const sorted = useMemo(() => {
     if (!currentFix) return outlets
     return [...outlets].sort(
-      (a, b) =>
-        haversineMetres(currentFix.lat, currentFix.lng, a.lat, a.lng) -
-        haversineMetres(currentFix.lat, currentFix.lng, b.lat, b.lng),
+      (a, b) => (awayFrom(currentFix, a) ?? Infinity) - (awayFrom(currentFix, b) ?? Infinity),
     )
   }, [outlets, currentFix])
 
@@ -109,11 +116,10 @@ export function StoreVisits({
   const here = useMemo(() => {
     if (!currentFix) return null
     return (
-      sorted.find(
-        (outlet) =>
-          haversineMetres(currentFix.lat, currentFix.lng, outlet.lat, outlet.lng) <=
-          outlet.geofence_radius_m,
-      ) ?? null
+      sorted.find((outlet) => {
+        const away = awayFrom(currentFix, outlet)
+        return away !== null && away <= outlet.geofence_radius_m
+      }) ?? null
     )
   }, [sorted, currentFix])
 
@@ -323,12 +329,10 @@ export function StoreVisits({
           <CardContent className="space-y-2 pt-5">
             <p className="text-sm font-semibold">Which store are you at?</p>
             <p className="text-xs text-muted-foreground">
-              Only needed if Xtend did not recognise the shop you are in.
+              These are the stores on your list. Only needed if Xtend did not recognise the shop you are in.
             </p>
             {sorted.map((outlet) => {
-              const away = currentFix
-                ? haversineMetres(currentFix.lat, currentFix.lng, outlet.lat, outlet.lng)
-                : null
+              const away = awayFrom(currentFix, outlet)
               const near = away !== null && away <= outlet.geofence_radius_m
               return (
                 <button
@@ -372,7 +376,7 @@ export function StoreVisits({
             {here ? `You are at ${here.name}.` : 'Xtend will work out where you are.'}
           </p>
 
-          {outlets.length > 1 && (
+          {outlets.length > 0 ? (
             <Button
               variant="ghost"
               className="w-full"
@@ -381,6 +385,10 @@ export function StoreVisits({
             >
               Pick the store myself
             </Button>
+          ) : (
+            <p className="rounded-2xl bg-muted px-3 py-2 text-center text-xs text-muted-foreground">
+              No stores are allocated to you yet. Ask your supervisor.
+            </p>
           )}
         </div>
       )}

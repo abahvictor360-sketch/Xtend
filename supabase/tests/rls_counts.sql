@@ -280,6 +280,21 @@ select assert(exists (select 1 from public.work_patterns where user_id = :'obi')
                 and exists (select 1 from public.schedule_overrides where user_id = :'obi')
                 and (select count(*) from public.leave_request_detail) = (select count(*) from public.leave_requests),
   'rls: an admin sees every schedule and request');
+-- Visits kept with a report (060): only the database writes them, and
+-- nobody can read another person's day through the snapshot function.
+select set_config('request.jwt.claim.sub', :'grace', false);
+do $$
+begin
+  perform public.report_visits_snapshot(auth.uid(), current_date);
+  perform assert(false, 'rls: staff cannot call the report visits snapshot');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: staff cannot call the report visits snapshot');
+end $$;
+select assert(not exists (select 1 from public.reports r where r.user_id <> :'grace'),
+  'rls: a marketer sees only their own reports and the visits in them');
+select set_config('request.jwt.claim.sub', :'boss', false);
+select assert(exists (select 1 from public.reports r where jsonb_array_length(r.store_visits) > 0),
+  'rls: the office reads the visits kept with a report');
 
 reset role;
 select 'ALL RLS CHECKS PASSED';
