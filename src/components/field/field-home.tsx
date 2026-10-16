@@ -14,6 +14,7 @@ import { ShiftTracker } from '@/components/field/shift-tracker'
 import { usePlace } from '@/components/field/use-place'
 import { OutboxBanner } from '@/components/field/outbox-banner'
 import { ClockPanel } from '@/components/field/clock-panel'
+import { ClockOutPrompt } from '@/components/field/clock-out-prompt'
 import type { VisitOutlet, VisitRow } from '@/components/field/store-visits'
 import { SectionHeader } from '@/components/field/screen'
 import { Chip } from '@/components/ui/chip'
@@ -84,8 +85,20 @@ export function FieldHome({
   ]
   const progress = Math.round((steps.filter((s) => s.done).length / steps.length) * 100)
 
+  // Still checked in at a store: that comes first, then the clock-out.
+  const openVisit = visits.find((v) => v.status === 'open') ?? null
+
   return (
     <div className="space-y-5">
+      <ClockOutPrompt
+        state={{ date: day.date, shiftEnd: day.outlet?.shift_end ?? null, clockedIn: Boolean(day.opening), clockedOut: Boolean(day.closing) }}
+        openVisitLabel={openVisit ? (openVisit.store_label ?? openVisit.outlet_name) : null}
+        onCheckOutFirst={() => {
+          setTab('stores')
+          window.setTimeout(() => document.getElementById('stores')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+        }}
+      />
+
       <GreetingHeader
         fullName={day.profile?.full_name ?? 'there'}
         avatarUrl={avatarUrl}
@@ -148,11 +161,13 @@ export function FieldHome({
       </div>
 
       {tab === 'stores' && visitsStore && (
+        <div id="stores" className="scroll-mt-4">
         <StoreVisits
           outlets={outlets}
           visits={visits}
           currentFix={gate.fix ? { lat: gate.fix.lat, lng: gate.fix.lng } : null}
         />
+        </div>
       )}
 
       {tab === 'day' && (

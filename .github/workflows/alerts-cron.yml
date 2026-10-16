@@ -2,6 +2,7 @@
 #
 # The Vercel Hobby plan only allows once-a-day crons, so the every-5-minute
 # alerts job (location-breach alerts to supervisors, scheduled notifications,
+# "time to clock out" reminders at each shift end,
 # and the hourly X Metrics sweep, all in /api/cron/alerts) is scheduled here
 # instead of in vercel.json. On Vercel Pro you could move it back to
 # vercel.json and delete this workflow.

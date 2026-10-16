@@ -3425,6 +3425,110 @@ begin
                    and exists (select 1 from realtime.messages m where m.payload->>'table' = 'support_messages'),
       'realtime: clock-ins and support replies are both announced');
 
+
+    -- Clock-out reminders (061).
+    declare
+      today date := public.business_date();
+      shop uuid;
+      cy1 uuid := gen_random_uuid();  -- clocked in at a store ending 17:00
+      cy2 uuid := gen_random_uuid();  -- clocked in, no store: 18:00
+      cy3 uuid := gen_random_uuid();  -- not clocked in
+      cy4 uuid := gen_random_uuid();  -- clocked in and out
+      cy5 uuid := gen_random_uuid();  -- the job was over an hour late
+      mine uuid[];
+      got  record;
+      n    integer;
+    begin
+      insert into auth.users (id, email) values
+        (cy1, 'cy1@xpel.ng'), (cy2, 'cy2@xpel.ng'), (cy3, 'cy3@xpel.ng'),
+        (cy4, 'cy4@xpel.ng'), (cy5, 'cy5@xpel.ng');
+      insert into public.outlets (name, lat, lng, geofence_radius_m, shift_start, shift_end)
+      values ('Surulere Shop', 6.5000, 3.3500, 150, '08:00', '17:00') returning id into shop;
+      insert into public.profiles (id, full_name, email, role, outlet_id) values
+        (cy1, 'Chiamaka One',   'cy1@xpel.ng', 'merchandiser', shop),
+        (cy2, 'Chinedu Two',    'cy2@xpel.ng', 'marketer',     null),
+        (cy3, 'Chioma Three',   'cy3@xpel.ng', 'merchandiser', shop),
+        (cy4, 'Chukwudi Four',  'cy4@xpel.ng', 'merchandiser', shop),
+        (cy5, 'Chidinma Five',  'cy5@xpel.ng', 'merchandiser', shop);
+      mine := array[cy1, cy2, cy3, cy4, cy5];
+
+      -- Clock events written straight in (the clock-in rules are tested above).
+      perform set_config('session_replication_role', 'replica', true);
+      insert into public.attendance (user_id, type, lat, lng, accuracy_m, selfie_path, client_captured_at, attendance_date)
+      values (cy1, 'opening', 6.5, 3.35, 10, 'x', now(), today),
+             (cy2, 'opening', 6.5, 3.35, 10, 'x', now(), today),
+             (cy4, 'opening', 6.5, 3.35, 10, 'x', now(), today),
+             (cy4, 'closing', 6.5, 3.35, 10, 'x', now(), today),
+             (cy5, 'opening', 6.5, 3.35, 10, 'x', now(), today);
+      perform set_config('session_replication_role', 'origin', true);
+
+      perform assert(public.shift_end_for(cy1) = time '17:00' and public.shift_end_for(cy2) = time '18:00',
+        'clock-out reminders: the shift end is the home store''s, or 18:00 with no store');
+
+      select count(*) into n from public.claim_clock_out_reminders((today + time '16:59') at time zone 'Africa/Lagos') c
+      where c.user_id = any(mine);
+      perform assert(n = 0, 'clock-out reminders: nobody is reminded before their shift ends');
+
+      select count(*) into n from public.claim_clock_out_reminders((today + time '17:00') at time zone 'Africa/Lagos') c
+      where c.user_id = any(mine) and c.user_id in (cy1) and c.stage = 1 and c.shift_end = '17:00';
+      perform assert(n = 1 and not exists (select 1 from public.clock_out_reminders r where r.user_id in (cy3, cy4)),
+        'clock-out reminders: the first goes at the shift end, not to anyone not clocked in or already out');
+      perform assert(exists (select 1 from public.clock_out_reminders r where r.user_id = cy5 and r.stage = 1),
+        'clock-out reminders: and to everyone else whose shift has ended');
+
+      select count(*) into n from public.claim_clock_out_reminders((today + time '17:05') at time zone 'Africa/Lagos') c
+      where c.user_id = any(mine);
+      perform assert(n = 0, 'clock-out reminders: claiming again hands back nothing the second time');
+
+      -- cy5 clocks out before the second reminder.
+      perform set_config('session_replication_role', 'replica', true);
+      insert into public.attendance (user_id, type, lat, lng, accuracy_m, selfie_path, client_captured_at, attendance_date)
+      values (cy5, 'closing', 6.5, 3.35, 10, 'x', now(), today);
+      perform set_config('session_replication_role', 'origin', true);
+
+      select count(*) into n from public.claim_clock_out_reminders((today + time '17:59') at time zone 'Africa/Lagos') c
+      where c.user_id = cy1;
+      perform assert(n = 0, 'clock-out reminders: the second does not go before an hour has passed');
+
+      perform assert(not exists (select 1 from public.clock_out_reminders r where r.user_id = cy2),
+        'clock-out reminders: somebody with no store is not reminded at 17:00');
+      create temp table cy_claim on commit drop as
+        select * from public.claim_clock_out_reminders((today + time '18:00') at time zone 'Africa/Lagos') c
+        where c.user_id = any(mine);
+      perform assert(exists (select 1 from cy_claim c where c.user_id = cy2 and c.stage = 1 and c.shift_end = '18:00'),
+        'clock-out reminders: somebody with no store is reminded at 18:00');
+      perform assert((select count(*) from cy_claim c where c.stage = 2) = 1
+                     and exists (select 1 from cy_claim c where c.user_id = cy1 and c.stage = 2),
+        'clock-out reminders: the second goes an hour after the shift end');
+      perform assert(not exists (select 1 from public.clock_out_reminders r where r.user_id = cy5 and r.stage = 2),
+        'clock-out reminders: none after they clock out');
+
+      select count(*) into n from public.claim_clock_out_reminders((today + time '22:00') at time zone 'Africa/Lagos') c
+      where c.user_id = any(mine);
+      perform assert(n = 1 and (select count(*) from public.clock_out_reminders r where r.user_id = cy1) = 2,
+        'clock-out reminders: never more than two a day (only the no-store member''s second is left)');
+
+      perform assert((select count(*) from public.claim_clock_out_reminders(((today + 1) + time '00:30') at time zone 'Africa/Lagos') c
+                      where c.user_id = any(mine)) = 0,
+        'clock-out reminders: nothing after midnight Lagos');
+
+      -- A job more than an hour late sends only the second, once.
+      update public.outlets set shift_end = '20:00' where id = shop;
+      perform set_config('session_replication_role', 'replica', true);
+      delete from public.attendance where user_id = cy3;
+      insert into public.attendance (user_id, type, lat, lng, accuracy_m, selfie_path, client_captured_at, attendance_date)
+      values (cy3, 'opening', 6.5, 3.35, 10, 'x', now(), today);
+      perform set_config('session_replication_role', 'origin', true);
+      select * into got from public.claim_clock_out_reminders((today + time '21:10') at time zone 'Africa/Lagos') c
+      where c.user_id = cy3;
+      perform assert(got.stage = 2 and got.shift_end = '20:00'
+                     and not exists (select 1 from public.clock_out_reminders r where r.user_id = cy3 and r.stage = 1),
+        'clock-out reminders: a late job sends one reminder, the second, not both at once');
+      perform assert((select count(*) from public.claim_clock_out_reminders((today + time '21:15') at time zone 'Africa/Lagos') c
+                      where c.user_id = cy3) = 0,
+        'clock-out reminders: and the first is not sent after it');
+      update public.outlets set shift_end = '17:00' where id = shop;
+    end;
   end;
 
   raise notice 'ALL RULES PASSED';
