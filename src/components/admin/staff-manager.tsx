@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { UserPlus } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
@@ -612,6 +612,14 @@ export function StaffManager({
                   {isAdmin && isField(person.role) && (
                     <ExemptButton person={person} busy={busy} patch={patch} />
                   )}
+                  {isField(person.role) && person.is_active && (
+                    <Link
+                      href={`/admin/schedules?user=${person.id}`}
+                      className={buttonVariants({ size: 'sm', variant: 'ghost' })}
+                    >
+                      Schedule
+                    </Link>
+                  )}
                   {isAdmin && (
                     <Button
                       size="sm"
@@ -743,6 +751,14 @@ export function StaffManager({
                 </Button>
                 {isAdmin && isField(person.role) && (
                   <ExemptButton person={person} busy={busy} patch={patch} />
+                )}
+                {isField(person.role) && person.is_active && (
+                  <Link
+                    href={`/admin/schedules?user=${person.id}`}
+                    className={buttonVariants({ size: 'sm', variant: 'outline' })}
+                  >
+                    Schedule
+                  </Link>
                 )}
                 {isAdmin && (
                   <Button

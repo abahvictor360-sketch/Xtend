@@ -23,7 +23,8 @@ const STATUS: Record<DayRecord['status'], string> = {
   late: 'Late',
   off_site: 'Off site',
   absent: 'Absent',
-  rest: 'Sunday',
+  off: 'Day off',
+  leave: 'On leave',
   none: '',
 }
 
@@ -44,7 +45,7 @@ function filterLine(f: ReportFilter, people: Person[]) {
     f.team ? 'one team' : null,
     f.role ? `role: ${f.role.replace('custom:', 'added role ')}` : null,
     f.status ? `days: ${f.status.replace('_', ' ')}` : null,
-    f.sundays ? 'Sundays count as working days' : 'Sundays not counted as absences',
+    'days off and leave are not absences',
   ]
     .filter(Boolean)
     .join(' · ')

@@ -137,16 +137,6 @@ export function AttendanceFilters({
             </Select>
           </div>
         )}
-        <label className="flex h-10 items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            name="sundays"
-            value="1"
-            defaultChecked={filter.sundays}
-            className="h-4 w-4 accent-[hsl(var(--brand))]"
-          />
-          Sundays are working days
-        </label>
         <button type="submit" className={buttonVariants({ size: 'sm', className: 'h-10' })}>
           Show
         </button>

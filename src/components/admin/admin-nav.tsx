@@ -7,6 +7,8 @@ import {
   BarChart3,
   BookOpen,
   Bell,
+  CalendarDays,
+  CalendarCheck,
   ChevronDown,
   ClipboardList,
   FileClock,
@@ -82,6 +84,8 @@ const GROUPS: { title: string | null; links: NavLink[] }[] = [
     links: [
       { href: '/admin/users', label: 'Staff', icon: Users, adminOnly: false },
       { href: '/admin/teams', label: 'Teams', icon: UsersRound, adminOnly: true },
+      { href: '/admin/schedules', label: 'Schedules', icon: CalendarDays, adminOnly: false },
+      { href: '/admin/leave', label: 'Leave', icon: CalendarCheck, adminOnly: false },
       { href: '/admin/roles', label: 'Roles', icon: BadgeCheck, adminOnly: true },
       { href: '/admin/assignments', label: 'Store allocation', icon: UserCog, adminOnly: false },
       { href: '/admin/notifications', label: 'Notifications', icon: Bell, adminOnly: false },

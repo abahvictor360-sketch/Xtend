@@ -5,6 +5,8 @@ import { FIELD_ROLES } from '@/lib/auth'
 import { addDays, formatLagos, lagosDateString, longDate } from '@/lib/utils'
 import { CLAIMS, judgeExcuse, lagosInstant, type Claim, type ExcuseEvidence } from '@/lib/excuse'
 import { detailText, fetchIntegrity, parseIntegrityFilter, personRisk } from '@/lib/integrity-review'
+import { loadScheduleSafe } from '@/lib/schedule-server'
+import type { DayKind } from '@/lib/schedule'
 
 /**
  * The lookups behind Ask Xtend: what the assistant reads to answer a
@@ -14,7 +16,18 @@ import { detailText, fetchIntegrity, parseIntegrityFilter, personRisk } from '@/
 
 export const MAX_RANGE_DAYS = 62
 
-export type Roster = Pick<Profile, 'id' | 'full_name' | 'role'> & { outlet_name: string | null }
+export type Roster = Pick<Profile, 'id' | 'full_name' | 'role'> & {
+  outlet_name: string | null
+  /** The Lagos day the account was made: nobody is absent before it. */
+  since: string
+}
+
+/** How Ask Xtend says what a day was on someone's schedule (migration 059). */
+const SCHEDULE_WORDS: Record<DayKind, string> = {
+  working: 'working day',
+  off: 'day off',
+  leave: 'on approved leave',
+}
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 
@@ -55,7 +68,7 @@ function embeddedName(value: unknown, key: string): string | null {
 export async function fetchRoster(supabase: SupabaseClient): Promise<Roster[]> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, full_name, role, outlets(name)')
+    .select('id, full_name, role, created_at, outlets(name)')
     .eq('is_active', true)
     .in('role', FIELD_ROLES)
     .order('full_name')
@@ -66,6 +79,7 @@ export async function fetchRoster(supabase: SupabaseClient): Promise<Roster[]> {
     full_name: row.full_name,
     role: row.role,
     outlet_name: embeddedName(row.outlets, 'name'),
+    since: lagosDateString(new Date(row.created_at)),
   }))
 }
 
@@ -132,15 +146,19 @@ export interface DayPerson {
 export async function attendanceOnDay(supabase: SupabaseClient, day: unknown) {
   const today = lagosDateString()
   const date = checkDate(day, today)
-  const [roster, records] = await Promise.all([
+  const [roster, records, schedule] = await Promise.all([
     fetchRoster(supabase),
     fetchRecords(supabase, date, date),
+    loadScheduleSafe(supabase, date, date),
   ])
   const days = firstAndLast(records)
 
   const clockedInAndOut: DayPerson[] = []
   const stillOnShift: DayPerson[] = []
   const notClockedIn: DayPerson[] = []
+  // Not expected in: neither is an absence.
+  const dayOff: DayPerson[] = []
+  const onLeave: DayPerson[] = []
 
   for (const person of roster) {
     const day = days.get(`${person.id}|${date}`)
@@ -152,7 +170,8 @@ export async function attendanceOnDay(supabase: SupabaseClient, day: unknown) {
       // A clock-out with no clock-in is still worth showing.
       clock_out: describeClock(day?.closing),
     }
-    if (!day?.opening) notClockedIn.push(entry)
+    const kind = schedule.kind(person.id, date)
+    if (!day?.opening) (kind === 'leave' ? onLeave : kind === 'off' ? dayOff : notClockedIn).push(entry)
     else if (!day.closing) stillOnShift.push(entry)
     else clockedInAndOut.push(entry)
   }
@@ -167,10 +186,15 @@ export async function attendanceOnDay(supabase: SupabaseClient, day: unknown) {
       clocked_out: clockedInAndOut.length,
       still_on_shift_not_clocked_out: stillOnShift.length,
       not_clocked_in: notClockedIn.length,
+      day_off: dayOff.length,
+      on_leave: onLeave.length,
     },
+    note: 'not_clocked_in lists only people expected at work that day. People on a day off or on approved leave are listed separately and are not absent.',
     clocked_in_and_out: clockedInAndOut,
     still_on_shift_not_clocked_out: stillOnShift,
     not_clocked_in: notClockedIn,
+    day_off: dayOff,
+    on_leave: onLeave,
   }
 }
 
@@ -198,12 +222,11 @@ export async function staffHistory(
     }
   }
 
-  const records = await fetchRecords(
-    supabase,
-    from,
-    to,
-    people.map((p) => p.id),
-  )
+  const ids = people.map((p) => p.id)
+  const [records, schedule] = await Promise.all([
+    fetchRecords(supabase, from, to, ids),
+    loadScheduleSafe(supabase, from, to, ids),
+  ])
   const days = firstAndLast(records)
 
   return {
@@ -217,6 +240,7 @@ export async function staffHistory(
         const day = days.get(`${person.id}|${d}`)
         return {
           date: d,
+          schedule: SCHEDULE_WORDS[schedule.kind(person.id, d)],
           clock_in: describeClock(day?.opening),
           clock_out: describeClock(day?.closing),
         }
@@ -227,9 +251,11 @@ export async function staffHistory(
 
 export async function attendanceSummary(supabase: SupabaseClient, fromDate: unknown, toDate: unknown) {
   const { from, to } = checkRange(fromDate, toDate)
-  const [roster, records] = await Promise.all([
+  const today = lagosDateString()
+  const [roster, records, schedule] = await Promise.all([
     fetchRoster(supabase),
     fetchRecords(supabase, from, to),
+    loadScheduleSafe(supabase, from, to),
   ])
   const days = firstAndLast(records)
 
@@ -237,7 +263,12 @@ export async function attendanceSummary(supabase: SupabaseClient, fromDate: unkn
     from,
     to,
     calendar_days: daysBetween(from, to) + 1,
+    note: 'absent_days counts past working days on each person\'s schedule with no clock-in (today is not counted yet). Days off and approved leave are never absences.',
     people: roster.map((person) => {
+      let working = 0
+      let off = 0
+      let leave = 0
+      let absent = 0
       let clockedIn = 0
       let clockedOut = 0
       let neverOut = 0
@@ -245,6 +276,11 @@ export async function attendanceSummary(supabase: SupabaseClient, fromDate: unkn
       let offSite = 0
       for (const d of eachDay(from, to)) {
         const day = days.get(`${person.id}|${d}`)
+        const kind = schedule.kind(person.id, d)
+        if (kind === 'working') working++
+        else if (kind === 'off') off++
+        else leave++
+        if (kind === 'working' && !day?.opening && d < today && d >= person.since) absent++
         if (day?.opening) {
           clockedIn++
           if (!day.closing) neverOut++
@@ -257,6 +293,10 @@ export async function attendanceSummary(supabase: SupabaseClient, fromDate: unkn
         name: person.full_name,
         role: person.role,
         store: person.outlet_name,
+        working_days: working,
+        days_off: off,
+        leave_days: leave,
+        absent_days: absent,
         days_clocked_in: clockedIn,
         days_clocked_out: clockedOut,
         days_clocked_in_but_not_out: neverOut,

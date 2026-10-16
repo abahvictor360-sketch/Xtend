@@ -1,17 +1,17 @@
 import Link from 'next/link'
-import { cn } from '@/lib/utils'
 import { DAY_COLOUR, ORANGE } from '@/lib/chart-colours'
 import { cellTitle, weekday, type DayRecord, type DayStatus, type Person } from '@/lib/attendance-report'
 
 /** The letter in each cell, so a day is never read by colour alone. */
-const MARK: Record<DayStatus, string> = { on_time: '', late: 'L', off_site: 'O', absent: 'A', rest: '', none: '' }
+const MARK: Record<DayStatus, string> = { on_time: '', late: 'L', off_site: 'O', absent: 'A', off: '–', leave: 'Lv', none: '' }
 
 const STYLE: Record<DayStatus, React.CSSProperties> = {
   on_time: { background: DAY_COLOUR.on_time, color: '#fff' },
   late: { background: DAY_COLOUR.late, color: ORANGE.dark },
   off_site: { background: DAY_COLOUR.off_site, color: '#fff' },
   absent: { background: DAY_COLOUR.absent, color: '#fff' },
-  rest: { background: DAY_COLOUR.rest },
+  off: { background: DAY_COLOUR.off, color: '#6f6862' },
+  leave: { background: DAY_COLOUR.leave, color: ORANGE.deep, boxShadow: `inset 0 0 0 1px ${ORANGE.pale}` },
   none: {},
 }
 
@@ -56,7 +56,7 @@ export function AttendanceGrid({
               {days.map((d) => (
                 <th
                   key={d}
-                  className={cn('w-6 min-w-6 text-center font-medium tabular-nums', weekday(d) === 0 ? 'text-brand' : 'text-muted-foreground')}
+                  className="w-6 min-w-6 text-center font-medium tabular-nums text-muted-foreground"
                   title={d}
                 >
                   <span className="block text-[10px] leading-3">{'SMTWTFS'[weekday(d)]}</span>
@@ -117,13 +117,14 @@ export function GridKey() {
     ['late', 'L  Late'],
     ['off_site', 'O  Off site or flagged'],
     ['absent', 'A  Absent'],
-    ['rest', 'Sunday, not expected'],
+    ['off', '–  Day off'],
+    ['leave', 'Lv  On leave'],
   ]
   return (
     <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
       {items.map(([s, label]) => (
         <span key={s} className="flex items-center gap-1.5">
-          <span className="h-3 w-3 rounded-[3px]" style={{ background: STYLE[s].background }} />
+          <span className="h-3 w-3 rounded-[3px]" style={{ background: STYLE[s].background, boxShadow: STYLE[s].boxShadow }} />
           {label}
         </span>
       ))}

@@ -1,6 +1,6 @@
 /**
  * Checks how clock events become attendance days (src/lib/attendance-report.ts):
- * on time, late, off site, absent, Sundays, no clock-out, the summary
+ * on time, late, off site, absent, days off and leave, no clock-out, the summary
  * figures, patterns worth a look, grouping, trends and store coverage.
  *
  *   npx tsx --tsconfig tsconfig.scripts.json scripts/check-attendance.ts
@@ -17,6 +17,7 @@ import {
   delta,
   deviceText,
   group,
+  inDayTable,
   leaders,
   matchesStatus,
   minutesOf,
@@ -29,6 +30,7 @@ import {
   type ClockEvent,
   type Person,
 } from '@/lib/attendance-report'
+import { makeSchedule } from '@/lib/schedule'
 
 let failed = 0
 function check(ok: boolean, label: string, got?: unknown) {
@@ -117,7 +119,7 @@ const events: ClockEvent[] = [
   ev('stranger', '2026-10-05', '08:00'),
 ]
 
-const records = buildDays(people, events, days, { today, sundays: false })
+const records = buildDays(people, events, days, { today })
 const rec = (u: string, d: string) => records.find((r) => r.userId === u && r.date === d)!
 check(records.length === people.length * days.length, 'a record for every person and day', records.length)
 
@@ -144,11 +146,30 @@ const flagged = rec('new', today)
 check(flagged.status === 'off_site' && flagged.flagged, 'a flagged clock-in reads as off site and flagged', flagged)
 check(rec('gone', '2026-10-06').status === 'none', 'a switched-off person is never absent', rec('gone', '2026-10-06').status)
 
-// Sundays.
-const sundayOff = buildDays([ada], [], ['2026-10-04'], { today, sundays: false })[0]
-const sundayOn = buildDays([ada], [], ['2026-10-04'], { today, sundays: true })[0]
-check(sundayOff.status === 'rest' && sundayOn.status === 'absent', 'a Sunday is only an absence when Sundays count', [sundayOff.status, sundayOn.status])
-const sundayIn = buildDays([ada], [ev('ada', '2026-10-04', '09:00', 'opening', { shift_start: null, is_late: false })], ['2026-10-04'], { today, sundays: false })[0]
+// Schedules (migration 059): Sunday is off for anyone without a pattern;
+// someone who works Sundays is absent then; days off and leave never are.
+const sundayOff = buildDays([ada], [], ['2026-10-04'], { today })[0]
+const sundayWorker = makeSchedule([{ user_id: 'ada', days: [0, 1, 2, 3, 4] }])
+const sundayOn = buildDays([ada], [], ['2026-10-04', '2026-10-03'], { today, schedule: sundayWorker })
+check(sundayOff.status === 'off' && sundayOn[0].status === 'absent' && sundayOn[1].status === 'off',
+  'Sunday off by default; a Sunday worker is absent on Sunday and off on Saturday', [sundayOff.status, sundayOn.map((r) => r.status)])
+const onLeave = buildDays([ada], [], ['2026-10-06', '2026-10-07'], {
+  today,
+  schedule: makeSchedule([], [{ user_id: 'ada', day: '2026-10-07', working: false }], [
+    { user_id: 'ada', from_date: '2026-10-06', to_date: '2026-10-06', status: 'approved' },
+  ]),
+})
+check(onLeave[0].status === 'leave' && onLeave[1].status === 'off', 'approved leave and a day changed to off are not absences', onLeave.map((r) => r.status))
+check(summarise(onLeave).expected === 0 && !matchesStatus(onLeave[0], null) && matchesStatus(onLeave[0], 'leave'),
+  'leave is not an expected day, but the leave filter finds it')
+check(inDayTable(onLeave[0], null, false) && !inDayTable(onLeave[1], null, false) && inDayTable(onLeave[1], null, true),
+  'the day table lists leave, and days off only for one person')
+const pendingLeave = buildDays([ada], [], ['2026-10-06'], {
+  today,
+  schedule: makeSchedule([], [], [{ user_id: 'ada', from_date: '2026-10-06', to_date: '2026-10-06', status: 'pending' }]),
+})[0]
+check(pendingLeave.status === 'absent', 'leave still waiting does not excuse the day', pendingLeave.status)
+const sundayIn = buildDays([ada], [ev('ada', '2026-10-04', '09:00', 'opening', { shift_start: null, is_late: false })], ['2026-10-04'], { today })[0]
 check(sundayIn.present && sundayIn.status === 'on_time' && sundayIn.minutesLate === null, 'coming in on a Sunday still counts, with no shift start no lateness', sundayIn)
 
 // Summary.
@@ -185,7 +206,7 @@ const lateWeek = buildDays(
   [ada],
   ['2026-10-05', '2026-10-06', '2026-10-07'].map((d, i) => ev('ada', d, ['08:10', '08:20', '08:30'][i])),
   dayList('2026-10-05', '2026-10-07'),
-  { today, sundays: false },
+  { today },
 )
 const lateC = concerns(lateWeek, [ada]).filter((c) => c.kind === 'late')
 check(lateC.length === 1 && lateC[0].text.includes('3 days') && lateC[0].text.includes('20 min'), 'three late days, 20 min on average', lateC)
@@ -213,12 +234,16 @@ const hours = byHour(records)
 check(hours[0].hour === 6 && hours.find((h) => h.hour === 7)!.onTime === 5 && hours.find((h) => h.hour === 8)!.late === 1, 'clock-ins by hour', hours)
 
 // Store coverage: working days up to today Mon-Thu = 4.
-const cover = storeCoverage(records, people, days, { today, sundays: false })
+const cover = storeCoverage(records, people, days, { today })
 const lekiC = cover.find((c) => c.id === 'leki')!
 const mallC = cover.find((c) => c.id === 'mall')!
 check(lekiC.workingDays === 4 && lekiC.covered === 1 && lekiC.gaps.length === 3, 'Leki covered 1 of 4 working days', lekiC)
 check(mallC.covered === 4 && mallC.pct === 100 && mallC.people === 2, 'the mall every day, two people (switched-off one not counted)', mallC)
 check(cover[0].id === 'leki', 'least covered store first', cover[0].id)
+// Tunde (Leki's only person) works Monday and Tuesday only: two working days there.
+const coverShort = storeCoverage(records, people, days, { today, schedule: makeSchedule([{ user_id: 'tunde', days: [1, 2] }]) })
+const lekiShort = coverShort.find((c) => c.id === 'leki')!
+check(lekiShort.workingDays === 2 && lekiShort.covered === 1 && lekiShort.gaps[0] === '2026-10-06', 'a store counts only the days its people are expected', lekiShort)
 
 // Ranges and presets.
 check(dayCount('2026-10-01', '2026-10-31') === 31, 'October has 31 days')

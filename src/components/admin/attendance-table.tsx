@@ -266,11 +266,10 @@ function shortDate(d: string) {
 
 function StatusBadges({ row }: { row: Row }) {
   if (!row.present) {
-    return row.clockOut ? (
-      <Badge variant="destructive">Clock-out only</Badge>
-    ) : (
-      <Badge variant="destructive">Absent</Badge>
-    )
+    if (row.clockOut) return <Badge variant="destructive">Clock-out only</Badge>
+    if (row.status === 'off') return <Badge variant="outline">Day off</Badge>
+    if (row.status === 'leave') return <Badge variant="default">On leave</Badge>
+    return <Badge variant="destructive">Absent</Badge>
   }
   return (
     <>

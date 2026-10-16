@@ -3,12 +3,14 @@ import { ArrowLeft, CalendarDays, LogIn, LogOut, MapPin } from 'lucide-react'
 import { FIELD_ROLES, requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { DayStrip } from '@/components/field/day-strip'
+import { CalendarLegend, MonthCalendar } from '@/components/field/calendar-marks'
+import { MARK_LABEL, calendarMark, monthEnd, type CalendarDay } from '@/lib/schedule'
 import { TaskRow } from '@/components/field/task-row'
 import { SectionHeader } from '@/components/field/screen'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { buttonVariants } from '@/components/ui/button'
-import { formatLagos, lagosDateString, longDate, metres, monthLabel } from '@/lib/utils'
+import { addDays, formatLagos, lagosDateString, longDate, metres, monthLabel } from '@/lib/utils'
 import type { AttendanceDetail } from '@/lib/types'
 
 export const dynamic = 'force-dynamic'
@@ -23,8 +25,12 @@ export default async function HistoryPage({
   const { d } = await searchParams
 
   const supabase = await createServerSupabase()
-  const [{ data: serverToday }, { data }] = await Promise.all([
-    supabase.rpc('business_date'),
+  const { data: serverToday } = await supabase.rpc('business_date')
+  const today = (serverToday as string) ?? lagosDateString()
+  const selected = d && /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= today ? d : today
+  const monthStart = `${selected.slice(0, 7)}-01`
+
+  const [{ data }, { data: stripDays }, { data: monthDays }] = await Promise.all([
     supabase
       .from('attendance_detail')
       .select('*')
@@ -32,9 +38,13 @@ export default async function HistoryPage({
       .order('attendance_date', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(90),
+    // Each day: working, day off or leave, and whether it was missed (059).
+    supabase.rpc('my_calendar', { p_from: addDays(today, -6), p_to: today }),
+    supabase.rpc('my_calendar', { p_from: monthStart, p_to: monthEnd(monthStart) }),
   ])
-  const today = (serverToday as string) ?? lagosDateString()
-  const selected = d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : today
+  const strip = (stripDays ?? []) as CalendarDay[]
+  const month = (monthDays ?? []) as CalendarDay[]
+  const selectedMark = calendarMark([...month, ...strip].find((c) => c.day === selected))
 
   const rows = (data ?? []) as AttendanceDetail[]
   const marks = new Set(rows.map((row) => row.attendance_date))
@@ -69,7 +79,10 @@ export default async function HistoryPage({
         )}
       </div>
 
-      <DayStrip today={today} selected={selected} basePath="/field/history" marks={marks} />
+      <div className="space-y-2">
+        <DayStrip today={today} selected={selected} basePath="/field/history" marks={marks} calendar={strip} />
+        <CalendarLegend />
+      </div>
 
       <section className="space-y-3">
         <SectionHeader
@@ -84,7 +97,13 @@ export default async function HistoryPage({
         {forDay.length === 0 ? (
           <Card>
             <CardContent className="pt-5 text-sm text-muted-foreground">
-              Nothing recorded on this day.
+              {selectedMark === 'missed' ? (
+                <span className="font-semibold text-destructive">Missed: no clock-in on this working day.</span>
+              ) : selectedMark === 'off' || selectedMark === 'leave' ? (
+                `${MARK_LABEL[selectedMark]}. Nothing recorded on this day.`
+              ) : (
+                'Nothing recorded on this day.'
+              )}
             </CardContent>
           </Card>
         ) : (
@@ -113,6 +132,18 @@ export default async function HistoryPage({
             />
           ))
         )}
+      </section>
+
+      <section className="space-y-3">
+        <SectionHeader
+          title="Your month"
+          action={
+            <Link href="/field/leave" className="text-xs font-semibold text-brand">
+              Ask for leave
+            </Link>
+          }
+        />
+        <MonthCalendar month={selected} today={today} selected={selected} calendar={month} basePath="/field/history" />
       </section>
 
       <section className="space-y-3">

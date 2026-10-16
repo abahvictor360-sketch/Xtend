@@ -7,6 +7,7 @@
  * scripts/check-attendance.ts can run it on made-up days.
  */
 import { addDays } from '@/lib/utils'
+import { DEFAULT_SCHEDULE, type ScheduleBook } from '@/lib/schedule'
 
 /** The fields of an attendance_detail row this file reads. */
 export interface ClockEvent {
@@ -51,10 +52,11 @@ export interface Person {
 /**
  * How a day reads at a glance. Off site wins over late: being somewhere
  * else matters more than being somewhere a few minutes after time.
- * 'rest' is a Sunday nobody expected them; 'none' is a day before they
+ * 'off' is a day off on their schedule and 'leave' a day of approved leave
+ * (migration 059): neither is an absence. 'none' is a day before they
  * joined, or after they were switched off, with nothing recorded.
  */
-export type DayStatus = 'on_time' | 'late' | 'off_site' | 'absent' | 'rest' | 'none'
+export type DayStatus = 'on_time' | 'late' | 'off_site' | 'absent' | 'off' | 'leave' | 'none'
 
 export interface DayRecord<E extends ClockEvent = ClockEvent> {
   key: string
@@ -85,8 +87,11 @@ export interface DayRecord<E extends ClockEvent = ClockEvent> {
 
 export interface ReportOptions {
   today: string
-  /** Whether a Sunday without a clock-in counts as an absence. */
-  sundays: boolean
+  /**
+   * Each person's days on, days off and approved leave. Left out, everyone
+   * works Monday to Saturday.
+   */
+  schedule?: ScheduleBook
 }
 
 /* ------------------------------------------------------------------ */
@@ -117,10 +122,6 @@ export function dayCount(from: string, to: string) {
 export function previousPeriod(from: string, to: string) {
   const n = dayCount(from, to)
   return { from: addDays(from, -n), to: addDays(from, -1) }
-}
-
-export function isWorkingDay(date: string, sundays: boolean) {
-  return sundays || weekday(date) !== 0
 }
 
 export interface Preset {
@@ -261,8 +262,10 @@ export function buildDays<E extends ClockEvent>(
       let status: DayStatus
       if (present) status = offSite ? 'off_site' : late ? 'late' : 'on_time'
       else if (date > opts.today || date < p.since || !p.active) status = 'none'
-      else if (!isWorkingDay(date, opts.sundays)) status = 'rest'
-      else status = 'absent'
+      else {
+        const kind = (opts.schedule ?? DEFAULT_SCHEDULE).kind(p.id, date)
+        status = kind === 'working' ? 'absent' : kind
+      }
 
       records.push({
         key: `${p.id}|${date}`,
@@ -305,11 +308,14 @@ export const STATUS_FILTERS = {
   missing_out: 'No clock-out',
   absent: 'Absent / not in',
   present: 'Came in (any)',
+  leave: 'On leave',
+  off: 'Day off',
 } as const
 export type StatusFilter = keyof typeof STATUS_FILTERS
 export const isStatusFilter = (v: unknown): v is StatusFilter => typeof v === 'string' && v in STATUS_FILTERS
 
 export function matchesStatus(r: DayRecord, status: StatusFilter | null) {
+  if (status === 'leave' || status === 'off') return !r.present && r.status === status
   if (!counted(r)) return false
   switch (status) {
     case null:
@@ -329,6 +335,16 @@ export function matchesStatus(r: DayRecord, status: StatusFilter | null) {
     case 'present':
       return r.present
   }
+}
+
+/**
+ * The rows of the Attendance page's day table. With no status picked:
+ * every day that counts, days of leave, and, when one person is picked,
+ * their days off too (for everyone, days off would bury the rest).
+ */
+export function inDayTable(r: DayRecord, status: StatusFilter | null, onePerson: boolean) {
+  if (status) return matchesStatus(r, status)
+  return counted(r) || (!r.present && (r.status === 'leave' || (onePerson && r.status === 'off')))
 }
 
 export interface Summary {
@@ -663,7 +679,7 @@ export function storeCoverage(
   days: string[],
   opts: ReportOptions,
 ): StoreCover[] {
-  const working = days.filter((d) => d <= opts.today && isWorkingDay(d, opts.sundays))
+  const schedule = opts.schedule ?? DEFAULT_SCHEDULE
   const stores = new Map<string, { name: string; people: Set<string>; dates: Set<string>; last: string | null }>()
   const ensure = (id: string, name: string) => {
     const s = stores.get(id) ?? { name, people: new Set<string>(), dates: new Set<string>(), last: null }
@@ -677,8 +693,19 @@ export function storeCoverage(
     s.dates.add(r.date)
     if (!s.last || r.date > s.last) s.last = r.date
   }
+  // A store's working days: days at least one of its own people was
+  // expected in. A store nobody is posted to follows the usual week.
+  const workingFor = (s: { people: Set<string> }) =>
+    days.filter(
+      (d) =>
+        d <= opts.today &&
+        (s.people.size
+          ? [...s.people].some((id) => schedule.kind(id, d) === 'working')
+          : DEFAULT_SCHEDULE.kind('', d) === 'working'),
+    )
   return [...stores.entries()]
     .map(([id, s]) => {
+      const working = workingFor(s)
       const covered = working.filter((d) => s.dates.has(d)).length
       return {
         id,
@@ -717,7 +744,8 @@ export const STATUS_LABEL: Record<DayStatus, string> = {
   late: 'Late',
   off_site: 'Off site',
   absent: 'Absent',
-  rest: 'Sunday (not expected)',
+  off: 'Day off',
+  leave: 'On leave',
   none: 'Not on the team yet, or switched off',
 }
 

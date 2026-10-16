@@ -8,8 +8,8 @@ import {
   dayList,
   isGroupBy,
   isSortKey,
+  inDayTable,
   isStatusFilter,
-  matchesStatus,
   previousPeriod,
   type ClockEvent,
   type DayRecord,
@@ -19,6 +19,8 @@ import {
   type StatusFilter,
 } from '@/lib/attendance-report'
 import { addDays, lagosDateString } from '@/lib/utils'
+import { loadScheduleSafe } from '@/lib/schedule-server'
+import type { ScheduleBook } from '@/lib/schedule'
 
 /** The longest range the Attendance and Analytics pages read at once. */
 export const MAX_RANGE_DAYS = 92
@@ -40,8 +42,6 @@ export interface ReportFilter {
   /** 'merchandiser', 'marketer' or 'custom:<id>'. */
   role: string | null
   status: StatusFilter | null
-  /** Count a Sunday without a clock-in as an absence. */
-  sundays: boolean
   sort: SortKey
   dir: 'asc' | 'desc'
   by: GroupBy
@@ -76,7 +76,6 @@ export function parseReportFilter(params: Params, fallbackDays: number): ReportF
     team: get('team'),
     role: get('role'),
     status: isStatusFilter(status) ? status : null,
-    sundays: get('sundays') === '1',
     sort: isSortKey(sort) ? sort : 'date',
     dir: get('dir') === 'asc' ? 'asc' : 'desc',
     by: isGroupBy(by) ? by : 'person',
@@ -93,7 +92,6 @@ export function reportQuery(f: Partial<ReportFilter>, extra: Record<string, stri
   if (f.team) q.set('team', f.team)
   if (f.role) q.set('role', f.role)
   if (f.status) q.set('status', f.status)
-  if (f.sundays) q.set('sundays', '1')
   if (f.sort && f.sort !== 'date') q.set('sort', f.sort)
   if (f.dir === 'asc') q.set('dir', 'asc')
   if (f.by && f.by !== 'person') q.set('by', f.by)
@@ -257,6 +255,7 @@ export function assemble<E extends ClockEvent>(
   from: string,
   to: string,
   today: string,
+  schedule?: ScheduleBook,
 ) {
   let people = peopleInScope(allPeople, filter)
   if (filter.outlet_id) {
@@ -266,7 +265,7 @@ export function assemble<E extends ClockEvent>(
   const ids = new Set(people.map((p) => p.id))
   const mine = events.filter((e) => ids.has(e.user_id))
   const days = dayList(from, to)
-  let records = buildDays(people, mine, days, { today, sundays: filter.sundays })
+  let records = buildDays(people, mine, days, { today, schedule })
   if (filter.outlet_id) records = records.filter((r) => r.outletId === filter.outlet_id)
   return { people, days, records, events: mine }
 }
@@ -274,13 +273,15 @@ export function assemble<E extends ClockEvent>(
 /** Everything the Attendance page and its download show, through RLS. */
 export async function loadAttendance(supabase: SupabaseClient, filter: ReportFilter) {
   const today = lagosDateString()
-  const [choices, got] = await Promise.all([
+  const [choices, got, schedule] = await Promise.all([
     loadChoices(supabase),
     fetchEvents<AttendanceDetail>(supabase, filter.from, filter.to, { full: true, userId: filter.user_id }),
+    // Days off and leave are not absences (migration 059).
+    loadScheduleSafe(supabase, filter.from, filter.to, filter.user_id ? [filter.user_id] : null),
   ])
-  const built = assemble(choices.people, got.events, filter, filter.from, filter.to, today)
+  const built = assemble(choices.people, got.events, filter, filter.from, filter.to, today, schedule)
   const report: Report<AttendanceDetail> = { filter, today, ...built, truncated: got.truncated }
-  return { choices, report, shown: report.records.filter((r) => matchesStatus(r, filter.status)) }
+  return { choices, report, shown: report.records.filter((r) => inDayTable(r, filter.status, Boolean(filter.user_id))) }
 }
 
 /**
@@ -290,8 +291,12 @@ export async function loadAttendance(supabase: SupabaseClient, filter: ReportFil
 export async function loadAnalytics(supabase: SupabaseClient, filter: ReportFilter) {
   const today = lagosDateString()
   const previous = previousPeriod(filter.from, filter.to)
-  const [choices, got] = await Promise.all([loadChoices(supabase), fetchEvents(supabase, previous.from, filter.to)])
-  const now = assemble(choices.people, got.events, filter, filter.from, filter.to, today)
-  const before = assemble(choices.people, got.events, filter, previous.from, previous.to, today)
-  return { choices, today, previous, now, before, truncated: got.truncated }
+  const [choices, got, schedule] = await Promise.all([
+    loadChoices(supabase),
+    fetchEvents(supabase, previous.from, filter.to),
+    loadScheduleSafe(supabase, previous.from, filter.to, filter.user_id ? [filter.user_id] : null),
+  ])
+  const now = assemble(choices.people, got.events, filter, filter.from, filter.to, today, schedule)
+  const before = assemble(choices.people, got.events, filter, previous.from, previous.to, today, schedule)
+  return { choices, today, previous, now, before, schedule, truncated: got.truncated }
 }
