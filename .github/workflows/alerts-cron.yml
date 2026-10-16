@@ -36,4 +36,8 @@ jobs:
             -H "Authorization: Bearer $CRON_SECRET" \
             https://xtend-brown.vercel.app/api/cron/alerts)
           echo "HTTP $code"; cat /tmp/out.json || true
-          test "$code" = "200"
+          case "$code" in
+            200) ;;
+            401) echo "::error::HTTP 401: CRON_SECRET here does not match CRON_SECRET in Vercel (or Vercel was not redeployed after it changed)"; exit 1 ;;
+            *) echo "::error::HTTP $code from /api/cron/alerts"; exit 1 ;;
+          esac
