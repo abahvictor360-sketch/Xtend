@@ -53,10 +53,10 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
       </div>
     )
   }
-  const { choices, today, previous, now, before } = loaded
+  const { choices, today, previous, now, before, schedule } = loaded
   const s = summarise(now.records)
   const was = summarise(before.records)
-  const opts = { today, sundays: filter.sundays }
+  const opts = { today, schedule }
 
   const rows = group(now.records, now.people, filter.by)
   const earlier = new Map(group(before.records, before.people, filter.by).map((r) => [r.key, r]))
@@ -65,7 +65,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
     r.key === 'none'
       ? undefined
       : `/admin/attendance?${reportQuery(
-          { from: filter.from, to: filter.to, sundays: filter.sundays },
+          { from: filter.from, to: filter.to },
           filter.by === 'person' ? { user_id: r.key } : filter.by === 'store' ? { outlet_id: r.key } : { team: r.key },
         )}`
   const days = (n: number) => `${n} day${n === 1 ? '' : 's'}`
@@ -272,7 +272,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
               {cover.slice(0, 40).map((c) => (
                 <li key={c.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-2.5">
                   <Link
-                    href={`/admin/attendance?${reportQuery({ from: filter.from, to: filter.to, outlet_id: c.id, sundays: filter.sundays })}`}
+                    href={`/admin/attendance?${reportQuery({ from: filter.from, to: filter.to, outlet_id: c.id })}`}
                     className="min-w-0 flex-1 basis-40 truncate font-semibold hover:text-brand hover:underline"
                   >
                     {c.name}

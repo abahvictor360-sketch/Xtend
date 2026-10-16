@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, Clock3, FileText, LogIn, LogOut, MapPin, Store } from 'lucide-react'
+import { CalendarDays, CheckCircle2, ChevronRight, Clock3, FileText, LogIn, LogOut, MapPin, Palmtree, Store } from 'lucide-react'
 import { GreetingHeader } from '@/components/field/greeting-header'
 import { LocationGate } from '@/components/field/location-gate'
 import { useLocationGate } from '@/components/field/use-location-gate'
@@ -22,6 +22,8 @@ import { Card, CardContent } from '@/components/ui/card'
 import { haversineMetres } from '@/lib/geo'
 import { addDays, cn, dayOfMonth, formatLagos, metres, weekdayShort } from '@/lib/utils'
 import type { DayState } from '@/lib/types'
+import { calendarMark, type CalendarDay } from '@/lib/schedule'
+import { CalendarLegend, MARK_CLASS, MARK_WORD, WORD_CLASS } from '@/components/field/calendar-marks'
 
 type Tab = 'stores' | 'day' | 'outlet'
 
@@ -40,6 +42,7 @@ export function FieldHome({
   notificationsRequired = true,
   avatarUrl = null,
   userId,
+  calendar = [],
 }: {
   day: DayState
   visits: VisitRow[]
@@ -48,6 +51,8 @@ export function FieldHome({
   notificationsRequired?: boolean
   avatarUrl?: string | null
   userId: string
+  /** The last seven days from my_calendar (migration 059). */
+  calendar?: CalendarDay[]
 }) {
   const router = useRouter()
   const gate = useLocationGate()
@@ -62,6 +67,7 @@ export function FieldHome({
   ]
 
   const onShift = Boolean(day.opening) && !day.closing
+  const todayKind = calendar.find((c) => c.day === day.date)?.kind ?? 'working'
   // Runs quietly while on shift; nothing about it is shown here.
   useHeartbeat(onShift && gate.status === 'ready')
   useDashboardRefresh(onShift, userId)
@@ -125,7 +131,9 @@ export function FieldHome({
         outletName={day.outlet?.name ?? null}
       />
 
-      <WeekRow today={day.date} />
+      {todayKind !== 'working' && !day.opening && <NotWorkingToday kind={todayKind} />}
+
+      <WeekRow today={day.date} calendar={calendar} />
 
       <DayCard day={day} steps={steps} progress={progress} onShift={onShift} />
 
@@ -329,31 +337,76 @@ function ShiftPill({
   )
 }
 
-/** The last seven days as round dates; each opens that day in History. */
-function WeekRow({ today }: { today: string }) {
-  const days = Array.from({ length: 7 }, (_, i) => addDays(today, i - 6))
+/** Today is a day off or leave. Clocking in still works if they are in. */
+function NotWorkingToday({ kind }: { kind: 'off' | 'leave' }) {
   return (
-    <div className="grid grid-cols-7 gap-1.5 text-center">
-      {days.map((date) => {
-        const isToday = date === today
-        return (
-          <Link key={date} href={`/field/history?d=${date}`} className="flex flex-col items-center gap-2">
-            <span className={cn('text-xs', isToday ? 'font-bold text-foreground' : 'text-muted-foreground')}>
-              {weekdayShort(date)}
-            </span>
-            <span
-              className={cn(
-                'flex aspect-square w-full max-w-[2.75rem] items-center justify-center rounded-full text-sm tabular-nums transition-colors',
-                isToday
-                  ? 'bg-card font-bold text-foreground shadow-[0_8px_20px_-12px_rgb(24_18_14/0.45)]'
-                  : 'border border-border text-muted-foreground hover:bg-card',
-              )}
+    <div className="flex items-start gap-3 rounded-2xl bg-muted px-4 py-3">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-card text-muted-foreground">
+        <Palmtree className="h-5 w-5" />
+      </span>
+      <div className="min-w-0">
+        <p className="text-sm font-bold">{kind === 'leave' ? 'On leave today' : 'Day off today'}</p>
+        <p className="text-xs text-muted-foreground">
+          {kind === 'leave' ? 'Enjoy your leave.' : 'Enjoy your rest.'} If you are working today, clock in as usual.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * The last seven days as round dates; each opens that day in History. A
+ * missed working day is red, a day off grey and leave soft orange, each
+ * with its word under it.
+ */
+function WeekRow({ today, calendar }: { today: string; calendar: CalendarDay[] }) {
+  const days = Array.from({ length: 7 }, (_, i) => addDays(today, i - 6))
+  const byDay = new Map(calendar.map((c) => [c.day, c]))
+  return (
+    <div className="space-y-2">
+      <div className="grid grid-cols-7 gap-1.5 text-center">
+        {days.map((date) => {
+          const isToday = date === today
+          const mark = calendarMark(byDay.get(date))
+          const word = MARK_WORD[mark]
+          return (
+            <Link
+              key={date}
+              href={`/field/history?d=${date}`}
+              aria-label={`${weekdayShort(date)} ${dayOfMonth(date)}${word ? `, ${word === 'Off' ? 'day off' : word.toLowerCase()}` : ''}`}
+              className="flex flex-col items-center gap-1.5"
             >
-              {dayOfMonth(date)}
-            </span>
-          </Link>
-        )
-      })}
+              <span className={cn('text-xs', isToday ? 'font-bold text-foreground' : 'text-muted-foreground')}>
+                {weekdayShort(date)}
+              </span>
+              <span
+                className={cn(
+                  'flex aspect-square w-full max-w-[2.75rem] items-center justify-center rounded-full text-sm tabular-nums transition-colors',
+                  mark === 'plain' || mark === 'worked'
+                    ? isToday
+                      ? 'bg-card font-bold text-foreground shadow-[0_8px_20px_-12px_rgb(24_18_14/0.45)]'
+                      : 'border border-border text-muted-foreground hover:bg-card'
+                    : MARK_CLASS[mark],
+                  isToday && 'font-bold',
+                )}
+              >
+                {dayOfMonth(date)}
+              </span>
+              <span className={cn('h-3 text-[9px] leading-3', WORD_CLASS[mark])}>
+                {word || (mark === 'worked' ? '•' : '')}
+              </span>
+            </Link>
+          )
+        })}
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <CalendarLegend />
+        <Link href="/field/leave" className="flex items-center gap-1 text-xs font-semibold text-brand">
+          <CalendarDays className="h-3.5 w-3.5" />
+          Ask for leave
+          <ChevronRight className="h-3.5 w-3.5" />
+        </Link>
+      </div>
     </div>
   )
 }

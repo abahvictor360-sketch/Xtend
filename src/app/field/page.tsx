@@ -7,6 +7,8 @@ import { getCountStatus } from '@/lib/store-count-status'
 import { avatarUrls } from '@/lib/avatars'
 import type { DayState } from '@/lib/types'
 import type { VisitOutlet, VisitRow } from '@/components/field/store-visits'
+import type { CalendarDay } from '@/lib/schedule'
+import { addDays, lagosDateString } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Clock — Xtend' }
@@ -25,6 +27,7 @@ export default async function FieldPage() {
     { data: canVisitStores },
     countStatus,
     photos,
+    { data: calendar },
   ] = await Promise.all([
     supabase.rpc('my_day'),
     supabase.rpc('my_store_visits'),
@@ -36,6 +39,8 @@ export default async function FieldPage() {
     supabase.rpc('can_visit_stores'),
     getCountStatus(supabase),
     avatarUrls(supabase, [session.userId]),
+    // The week row: worked, missed, day off or leave (migration 059).
+    supabase.rpc('my_calendar', { p_from: addDays(lagosDateString(), -6), p_to: lagosDateString() }),
   ])
 
   const photo = photos.get(session.userId) ?? null
@@ -55,6 +60,7 @@ export default async function FieldPage() {
         notificationsRequired={!session.profile.push_exempt}
         avatarUrl={photo}
         userId={session.userId}
+        calendar={(calendar ?? []) as CalendarDay[]}
       />
     </>
   )

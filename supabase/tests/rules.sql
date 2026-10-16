@@ -109,6 +109,10 @@ begin
   perform notifications_on(ada);
   perform notifications_on(bala);
   perform notifications_on(grace);
+  -- Every day is a working day for these three, so the absence checks
+  -- below pass whatever day of the week the tests run on (059).
+  insert into public.work_patterns (user_id, days) values
+    (ada, '{0,1,2,3,4,5,6}'), (bala, '{0,1,2,3,4,5,6}'), (grace, '{0,1,2,3,4,5,6}');
 
   -- ---------------------------------------------------------------
   -- The trigger owns distance and status.
@@ -3528,6 +3532,264 @@ begin
                       where c.user_id = cy3) = 0,
         'clock-out reminders: and the first is not sent after it');
       update public.outlets set shift_end = '17:00' where id = shop;
+    end;
+
+    -- Work schedules and leave (059).
+    declare
+      kemi  uuid := gen_random_uuid();  -- on Sola's team
+      obi   uuid := gen_random_uuid();  -- on nobody's team
+      uche  uuid := gen_random_uuid();  -- on Sola's team, on leave today
+      sola  uuid := gen_random_uuid();  -- supervisor
+      sade  uuid := gen_random_uuid();  -- another supervisor
+      shop  uuid;
+      d0    date := public.business_date();
+      sat   date;
+      sun   date;
+      mon   date;
+      lv    uuid;
+      lv2   uuid;
+      res   jsonb;
+      cal   record;
+    begin
+      sat := d0 + ((6 - extract(dow from d0)::int + 7) % 7) + 7;
+      sun := sat + 1;
+      mon := sat + 2;
+      insert into auth.users (id, email) values
+        (kemi, 'kemi.rota@xpel.ng'), (obi, 'obi.rota@xpel.ng'), (uche, 'uche.rota@xpel.ng'),
+        (sola, 'sola.rota@xpel.ng'), (sade, 'sade.rota@xpel.ng');
+      insert into public.outlets (name, lat, lng, geofence_radius_m, shift_start, shift_end)
+      values ('Yaba Early Store', 6.5095, 3.3711, 100, '00:00', '23:59')
+      returning id into shop;
+      insert into public.profiles (id, full_name, email, role) values
+        (sola, 'Sola Martins', 'sola.rota@xpel.ng', 'supervisor'),
+        (sade, 'Sade Lawal', 'sade.rota@xpel.ng', 'supervisor');
+      insert into public.profiles (id, full_name, email, role, outlet_id, supervisor_id) values
+        (kemi, 'Kemi Adeyemi', 'kemi.rota@xpel.ng', 'merchandiser', shop, sola),
+        (obi,  'Obi Nwosu',    'obi.rota@xpel.ng',  'merchandiser', shop, null),
+        (uche, 'Uche Okeke',   'uche.rota@xpel.ng', 'marketer',     shop, sola);
+
+      -- Nobody given a pattern works Monday to Saturday.
+      perform act_as(boss);
+      perform assert(public.is_working_day(obi, sat) and public.is_working_day(obi, mon)
+                     and not public.is_working_day(obi, sun),
+        'schedules: without a pattern, Monday to Saturday are working days and Sunday is off');
+
+      -- Staff cannot set schedules; a supervisor only for their own team.
+      perform act_as(kemi);
+      begin
+        perform public.set_work_pattern(array[kemi], '{0,1}'::smallint[]);
+        perform assert(false, 'schedules: staff must not set schedules');
+      exception when others then
+        perform assert(sqlerrm like '%Only admins and supervisors%', 'schedules: staff cannot set their own schedule');
+      end;
+      perform act_as(sola);
+      begin
+        perform public.set_work_pattern(array[obi], '{1,2,3}'::smallint[]);
+        perform assert(false, 'schedules: a supervisor must not set another team''s schedule');
+      exception when others then
+        perform assert(sqlerrm like '%own team%', 'schedules: a supervisor cannot set a schedule outside their team');
+      end;
+      begin
+        perform public.set_work_pattern(array[kemi, obi], '{1,2,3}'::smallint[]);
+        perform assert(false, 'schedules: a mixed list must be refused');
+      exception when others then
+        perform assert(sqlerrm like '%own team%', 'schedules: one person outside the team refuses the whole list');
+      end;
+      perform assert(not exists (select 1 from public.work_patterns where user_id = kemi),
+        'schedules: and nobody on the list was changed');
+      begin
+        perform public.set_work_pattern(array[sade], '{1,2,3}'::smallint[]);
+        perform assert(false, 'schedules: a supervisor has no schedule');
+      exception when others then
+        perform assert(sqlerrm like '%merchandisers and marketers%', 'schedules: only field staff have schedules');
+      end;
+      perform assert(public.is_working_day(obi, mon) is null,
+        'schedules: a supervisor cannot read the schedule of someone outside their team');
+
+      perform assert(public.set_work_pattern(array[kemi, uche], '{1,2,3,4,5,5}'::smallint[]) = 2,
+        'schedules: a supervisor sets one pattern for several of their team at once');
+      perform assert((select days from public.work_patterns where user_id = kemi) = '{1,2,3,4,5}'::smallint[],
+        'schedules: the days are kept once each, in order');
+      perform assert(not public.is_working_day(kemi, sat) and public.is_working_day(kemi, mon),
+        'schedules: Monday to Friday means Saturday is off');
+      perform assert((select count(*) from public.audit_log
+                      where action = 'schedule.pattern' and actor_id = sola and target_id in (kemi, uche)) = 2,
+        'schedules: each person changed has an audit row');
+
+      -- One date changed: an extra day in, an extra day off.
+      lv := public.set_schedule_override(kemi, sat, true, 'Stock count weekend');
+      perform assert(public.is_working_day(kemi, sat), 'schedules: an extra day in makes a day off a working day');
+      perform public.set_schedule_override(kemi, mon, false, '');
+      perform assert(not public.is_working_day(kemi, mon), 'schedules: an extra day off makes a working day off');
+      perform public.set_schedule_override(kemi, mon, true, 'Changed my mind');
+      perform assert((select count(*) from public.schedule_overrides where user_id = kemi and day = mon) = 1
+                     and public.is_working_day(kemi, mon),
+        'schedules: a second change on the same date replaces the first');
+      perform public.remove_schedule_override(lv);
+      perform assert(not public.is_working_day(kemi, sat), 'schedules: removing the change puts the pattern back');
+      perform assert(exists (select 1 from public.audit_log where action = 'schedule.override_remove' and target_id = kemi),
+        'schedules: date changes are audited');
+      begin
+        perform public.set_schedule_override(kemi, d0 + 400, true, '');
+        perform assert(false, 'schedules: a date years ahead must be refused');
+      exception when others then
+        perform assert(sqlerrm like '%within the next year%', 'schedules: a date more than a year ahead is refused');
+      end;
+      perform act_as(sade);
+      begin
+        perform public.set_schedule_override(kemi, sat, true, '');
+        perform assert(false, 'schedules: another supervisor must not change the date');
+      exception when others then
+        perform assert(sqlerrm like '%own team%', 'schedules: another supervisor cannot change someone''s dates');
+      end;
+
+      -- Leave: asking, overlaps, limits.
+      perform act_as(kemi);
+      lv := public.apply_leave('annual', mon, mon + 2, 'Family wedding in Enugu');
+      perform assert((select status from public.leave_requests where id = lv) = 'pending',
+        'leave: a request starts as pending');
+      perform assert(public.is_working_day(kemi, mon + 1), 'leave: a pending request does not change the day');
+      begin
+        perform public.apply_leave('sick', mon + 1, mon + 5, 'Malaria treatment');
+        perform assert(false, 'leave: an overlap must be refused');
+      exception when others then
+        perform assert(sqlerrm like '%already have leave%', 'leave: a request overlapping one still waiting is refused');
+      end;
+      begin
+        perform public.apply_leave('sick', d0 - 8, d0 - 8, 'Was ill');
+        perform assert(false, 'leave: too far back must be refused');
+      exception when others then
+        perform assert(sqlerrm like '%7 days ago%', 'leave: a start more than 7 days back is refused');
+      end;
+      perform assert(public.apply_leave('sick', d0 - 7, d0 - 7, 'Was ill with fever') is not null,
+        'leave: a start exactly 7 days back is accepted');
+      begin
+        perform public.apply_leave('casual', mon + 20, mon + 19, 'Errand');
+        perform assert(false, 'leave: dates the wrong way round must be refused');
+      exception when others then
+        perform assert(sqlerrm like '%before the first day%', 'leave: the last day cannot be before the first');
+      end;
+      begin
+        perform public.apply_leave('casual', mon + 20, mon + 20, '  ');
+        perform assert(false, 'leave: a reason is required');
+      exception when others then
+        perform assert(sqlerrm like '%Say why%', 'leave: a reason is required');
+      end;
+      begin
+        perform public.apply_leave('holiday', mon + 20, mon + 20, 'Rest');
+        perform assert(false, 'leave: an unknown type must be refused');
+      exception when others then
+        perform assert(sqlerrm like '%type of leave%', 'leave: only the four types are accepted');
+      end;
+
+      -- Deciding: never the person themselves, only their supervisor or an admin.
+      begin
+        perform public.decide_leave(lv, true, '');
+        perform assert(false, 'leave: staff must not decide leave');
+      exception when others then
+        perform assert(sqlerrm like '%Only admins and supervisors%', 'leave: staff cannot approve their own request');
+      end;
+      perform act_as(sade);
+      begin
+        perform public.decide_leave(lv, true, '');
+        perform assert(false, 'leave: another team''s supervisor must not decide');
+      exception when others then
+        perform assert(sqlerrm like '%own team%', 'leave: a supervisor cannot decide leave outside their team');
+      end;
+      insert into public.leave_requests (user_id, kind, from_date, to_date, reason)
+      values (boss, 'annual', mon, mon, 'Admin''s own day') returning id into lv2;
+      perform act_as(boss);
+      begin
+        perform public.decide_leave(lv2, true, '');
+        perform assert(false, 'leave: nobody decides their own leave');
+      exception when others then
+        perform assert(sqlerrm like '%your own leave%', 'leave: an admin cannot approve their own leave');
+      end;
+      delete from public.leave_requests where id = lv2;
+
+      perform act_as(sola);
+      res := public.decide_leave(lv, true, 'Enjoy the wedding');
+      perform assert(res->>'status' = 'approved' and (res->>'user_id')::uuid = kemi,
+        'leave: the supervisor approves, and is told whose request it was');
+      perform assert(not public.is_working_day(kemi, mon) and not public.is_working_day(kemi, mon + 2),
+        'leave: approved leave makes each of its days a non-working day');
+      perform assert(public.day_kind(kemi, mon + 1) = 'leave' and public.day_kind(kemi, mon + 3) = 'working',
+        'leave: the days read as leave, and the day after as working');
+      perform assert(exists (select 1 from public.audit_log
+                             where action = 'leave.approve' and actor_id = sola and target_id = lv),
+        'leave: the decision is audited');
+      begin
+        perform public.decide_leave(lv, false, '');
+        perform assert(false, 'leave: a decided request must not be decided again');
+      exception when others then
+        perform assert(sqlerrm like '%already been decided%', 'leave: a decision cannot be changed by deciding again');
+      end;
+
+      perform act_as(kemi);
+      begin
+        perform public.cancel_leave(lv);
+        perform assert(false, 'leave: an approved request must not be cancelled by the person');
+      exception when others then
+        perform assert(sqlerrm like '%still waiting%', 'leave: only a pending request can be cancelled');
+      end;
+      begin
+        perform public.apply_leave('casual', mon + 2, mon + 4, 'Another errand');
+        perform assert(false, 'leave: an overlap with approved leave must be refused');
+      exception when others then
+        perform assert(sqlerrm like '%already have leave%', 'leave: a request overlapping approved leave is refused');
+      end;
+      lv2 := public.apply_leave('casual', mon + 10, mon + 10, 'Bank visit');
+      perform public.cancel_leave(lv2);
+      perform assert((select status from public.leave_requests where id = lv2) = 'cancelled',
+        'leave: the person cancels a request still waiting');
+      lv2 := public.apply_leave('casual', mon + 10, mon + 10, 'Bank visit again');
+      perform act_as(boss);
+      perform public.decide_leave(lv2, false, 'We are short that day');
+      perform assert(public.is_working_day(kemi, mon + 10)
+                     and (select decision_note from public.leave_requests where id = lv2) = 'We are short that day',
+        'leave: an admin rejects with a note, and the day stays a working day');
+      perform act_as(kemi);
+      perform assert(public.apply_leave('casual', mon + 10, mon + 10, 'Bank visit, third try') is not null,
+        'leave: cancelled and rejected requests do not block asking again');
+
+      -- The no-show sweep and the absentee list skip days off and leave.
+      perform act_as(boss);
+      perform public.set_work_pattern(array[kemi, obi, uche], '{0,1,2,3,4,5,6}'::smallint[]);
+      perform public.set_schedule_override(kemi, d0, false, 'Swapped for Saturday');
+      perform act_as(uche);
+      lv := public.apply_leave('sick', d0, d0, 'Hospital appointment');
+      perform act_as(boss);
+      perform public.decide_leave(lv, true, '');
+      perform assert(exists (select 1 from public.staff_no_show(0) where user_id = obi),
+        'sweep: someone working today with no clock-in is reported');
+      perform assert(not exists (select 1 from public.staff_no_show(0) where user_id in (kemi, uche)),
+        'sweep: nobody on a day off or on leave is reported');
+      perform assert(exists (select 1 from public.absentees_today() where user_id = obi)
+                     and not exists (select 1 from public.absentees_today() where user_id in (kemi, uche)),
+        'sweep: the absentee list leaves out days off and leave');
+      perform assert((public.admin_overview()->>'not_expected')::int >= 2,
+        'sweep: the overview counts who is not expected today');
+
+      -- The staff calendar: missed days in the past, days off, today.
+      update public.profiles set created_at = now() - interval '10 days' where id = obi;
+      perform public.set_schedule_override(obi, d0 - 2, false, '');
+      perform act_as(obi);
+      select * into cal from public.my_calendar(d0 - 1, d0 - 1);
+      perform assert(cal.kind = 'working' and cal.missed and not cal.clocked_in,
+        'calendar: a past working day with no clock-in is missed');
+      select * into cal from public.my_calendar(d0 - 2, d0 - 2);
+      perform assert(cal.kind = 'off' and not cal.missed, 'calendar: a day off is never missed');
+      select * into cal from public.my_calendar(d0, d0);
+      perform assert(not cal.missed, 'calendar: today is not missed yet');
+      perform assert((select count(*) from public.my_calendar(d0 - 30, d0 - 1) where missed) = 9,
+        'calendar: nothing is missed before the account was made');
+      perform act_as(uche);
+      select * into cal from public.my_calendar(d0, d0);
+      perform assert(cal.kind = 'leave', 'calendar: approved leave shows as leave');
+      perform act_as(ada);
+      select * into cal from public.my_calendar(d0, d0);
+      perform assert(cal.clocked_in, 'calendar: a day with a clock-in shows it');
+      perform act_as(boss);
     end;
   end;
 

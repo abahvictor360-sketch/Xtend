@@ -40,6 +40,8 @@ async function build(supabase: SupabaseClient, spec: ReportSpec): Promise<Built>
         ['Clocked in and out', day.clocked_in_and_out],
         ['On shift, not clocked out', day.still_on_shift_not_clocked_out],
         ['Not clocked in', day.not_clocked_in],
+        ['Day off', day.day_off],
+        ['On leave', day.on_leave],
       ]
       return {
         period: period(day.date, day.date),
@@ -64,12 +66,15 @@ async function build(supabase: SupabaseClient, spec: ReportSpec): Promise<Built>
       const s = await attendanceSummary(supabase, spec.from, spec.to)
       return {
         period: period(s.from, s.to),
-        columns: ['Staff', 'Role', 'Store', 'Days clocked in', 'Days clocked out', 'In but not out', 'Late days', 'Off-site clock-ins'],
-        weights: [4, 2, 4, 2, 2, 2, 1.6, 2.2],
+        columns: ['Staff', 'Role', 'Store', 'Working days', 'Absent', 'Leave days', 'Days clocked in', 'Days clocked out', 'In but not out', 'Late days', 'Off-site clock-ins'],
+        weights: [4, 2, 4, 1.6, 1.4, 1.4, 2, 2, 2, 1.6, 2.2],
         rows: s.people.map((p) => [
           p.name,
           p.role,
           p.store ?? '—',
+          String(p.working_days),
+          String(p.absent_days),
+          String(p.leave_days),
           String(p.days_clocked_in),
           String(p.days_clocked_out),
           String(p.days_clocked_in_but_not_out),
@@ -82,12 +87,13 @@ async function build(supabase: SupabaseClient, spec: ReportSpec): Promise<Built>
       const h = await staffHistory(supabase, spec.name, spec.from, spec.to)
       return {
         period: period(h.from, h.to),
-        columns: ['Date', 'Staff', 'Clock in', 'Late', 'In status', 'Clock-in location', 'Clock out', 'Out status'],
-        weights: [2, 4, 1.6, 1.2, 1.8, 7, 1.6, 1.8],
+        columns: ['Date', 'Staff', 'Schedule', 'Clock in', 'Late', 'In status', 'Clock-in location', 'Clock out', 'Out status'],
+        weights: [2, 4, 2, 1.6, 1.2, 1.8, 6, 1.6, 1.8],
         rows: h.matches.flatMap((m) =>
           m.history.map((d) => [
             d.date,
             m.name,
+            'schedule' in d ? d.schedule : '—',
             time(d.clock_in),
             d.clock_in ? yesNo(d.clock_in.late) : '—',
             status(d.clock_in),

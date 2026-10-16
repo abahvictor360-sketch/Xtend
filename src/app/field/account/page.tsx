@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Bell, BookOpen, Clock, Headset, KeyRound, MapPin, Smartphone } from 'lucide-react'
+import { Bell, BookOpen, CalendarCheck, CalendarDays, Clock, Headset, KeyRound, MapPin, Smartphone } from 'lucide-react'
 import { FIELD_ROLES, requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { BASE_LABEL } from '@/lib/staff-roles'
@@ -88,6 +88,25 @@ export default async function AccountPage() {
             }
             muted={!outlet}
           />
+        </section>
+
+        <section className="space-y-3">
+          <SectionHeader title="Days off and leave" />
+          <Link href="/field/leave" className="block">
+            <TaskRow
+              icon={<CalendarDays className="h-5 w-5" />}
+              title="Ask for leave"
+              meta="Annual, sick or casual leave. See your requests and the answers."
+              trailing={<span className="text-xs font-semibold text-brand">Open</span>}
+            />
+          </Link>
+          <Link href="/field/history" className="block">
+            <TaskRow
+              icon={<CalendarCheck className="h-5 w-5" />}
+              title="Your calendar"
+              meta="Days you clocked in, days off, leave and missed days."
+            />
+          </Link>
         </section>
 
         <section className="space-y-3">

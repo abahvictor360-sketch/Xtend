@@ -72,8 +72,9 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
         <h1 className="text-xl font-semibold">Attendance</h1>
         <p className="text-sm text-muted-foreground">
           Who came, when, and where, day by day: on time or late (against their store’s opening time), at the store or
-          away from it, and whether they clocked out. A working day without a clock-in counts as absent. Times are
-          Lagos time; clock records cannot be changed or deleted.
+          away from it, and whether they clocked out. A working day on someone’s schedule without a clock-in counts as
+          absent; their days off and approved leave do not. Times are Lagos time; clock records cannot be changed or
+          deleted.
         </p>
       </div>
 

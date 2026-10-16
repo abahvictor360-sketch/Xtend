@@ -20,6 +20,10 @@ interface NoShow {
  * and who has not clocked in is reported to their admin and supervisor,
  * once per day per person.
  *
+ * Nobody on a day off or on approved leave is reported: staff_no_show()
+ * follows each person's schedule (migration 059), so the sweep runs every
+ * day, Sundays included, for anyone whose schedule has them in.
+ *
  * Scheduled daily at 08:30 UTC (09:30 Lagos), which is past the 30-minute
  * grace for both an 08:00 and a 09:00 shift. Vercel's Hobby plan allows one
  * run per day per cron; on Pro, change the schedule in vercel.json to
