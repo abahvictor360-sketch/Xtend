@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Bell, BookOpen, KeyRound, LogOut } from 'lucide-react'
@@ -30,14 +30,37 @@ export function GreetingHeader({
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
+  const header = useRef<HTMLElement>(null)
+  const trigger = useRef<HTMLButtonElement>(null)
+  const menuId = useId()
+  useEffect(() => {
+    if (!open) return
+    const outside = (event: PointerEvent) => {
+      if (!header.current?.contains(event.target as Node)) setOpen(false)
+    }
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setOpen(false)
+        trigger.current?.focus()
+      }
+    }
+    document.addEventListener('pointerdown', outside)
+    document.addEventListener('keydown', escape)
+    return () => {
+      document.removeEventListener('pointerdown', outside)
+      document.removeEventListener('keydown', escape)
+    }
+  }, [open])
   const firstName = fullName.split(' ')[0] ?? fullName
 
   return (
-    <header className="safe-top relative">
+    <header ref={header} className="safe-top relative">
       <div className="flex items-center gap-3">
         <button
           type="button"
           aria-label={open ? 'Close menu' : 'Open menu'}
+          ref={trigger}
+          aria-controls={menuId}
           aria-expanded={open}
           onClick={() => setOpen((v) => !v)}
           className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-brand text-base font-bold text-primary-foreground ring-4 ring-card"
@@ -63,11 +86,11 @@ export function GreetingHeader({
       </div>
 
       {open && (
-        <div className="surface absolute left-0 top-16 z-40 w-56 animate-fade-up p-2">
+        <div id={menuId} className="surface absolute left-0 top-16 z-40 w-56 animate-fade-up p-2">
           <Link
             href="/field/account"
             onClick={() => setOpen(false)}
-            className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-tint"
+            className="flex min-h-11 items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-tint"
           >
             <KeyRound className="h-4 w-4 text-brand" />
             Account and password
@@ -75,14 +98,14 @@ export function GreetingHeader({
           <Link
             href="/field/guide"
             onClick={() => setOpen(false)}
-            className="flex items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-tint"
+            className="flex min-h-11 items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium hover:bg-tint"
           >
             <BookOpen className="h-4 w-4 text-brand" />
             How to use Xtend
           </Link>
           <button
             type="button"
-            className="flex w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10"
+            className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10"
             onClick={async () => {
               await supabase().auth.signOut()
               router.replace('/login')

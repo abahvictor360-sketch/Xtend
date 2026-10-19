@@ -132,7 +132,7 @@ export default async function AdminGuidePage() {
           </Tip>
         </GuideSection>
 
-        <GuideSection topic={T.overview} intro="The top of the menu.">
+        <GuideSection topic={T.overview} intro="The top of the menu. On a phone, tap the page name at the top to open navigation. Tap outside it or press Escape to close it.">
           <p>
             <Ui>Overview</Ui> is the first page each day: the week&apos;s clock-ins (point at a day for its
             figures), today&apos;s clocked in, late and not-in-store counts, who has not clocked in yet,

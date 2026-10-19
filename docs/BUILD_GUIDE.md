@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-19, after mobile dashboard usability improvements._
+_Last updated: 2026-10-19, after responsive dashboard and navigation fixes._
 
 ---
 
@@ -397,6 +397,12 @@ from the server's crontab instead:
 
 ## 9. The phone apps
 
+Admin and supervisor headers wrap at constrained desktop widths. Mobile dashboard
+navigation is a disclosure with normal links, closes on selection/outside press/Escape,
+and restores trigger focus on Escape. User account menus also dismiss outside and
+on Escape. Attendance notes wrap, and narrow screens stack summary figures.
+Verified with local sample data at 390, 1024 and 1280px; no live attendance was changed.
+
 Mobile usability: clock controls sit directly below shift status; every bottom navigation
 item has a visible label. Filters and the password visibility button have 44px targets.
 Failed dashboard reads offer Try again. Place naming times out after 2.5 seconds
@@ -550,6 +556,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-19 | All dashboards: responsive header, readable attendance notes, larger controls and accessible menu dismissal | — |
 | 2026-10-19 | Mobile dashboard: prominent clock controls, labelled navigation, larger tap targets, retry button, bounded place lookup; fewer profile queries and parallel History reads | — |
 | 2026-10-19 | Movement: each person on the live map is their profile photo (initials when there is none or the link has expired); clicking it opens their movement for the day. Their photo also marks the latest point on their route | — |
 | 2026-10-19 | Schedules page: category tabs (All, Merchandisers, Marketers) and chips for the usual Mon–Sat week or their own week | — |

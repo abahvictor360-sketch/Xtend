@@ -8,7 +8,7 @@ import { NativeBridge } from '@/components/native-bridge'
 
 function Brand() {
   return (
-    <Link href="/admin" className="flex items-center gap-2.5">
+    <Link href="/admin" className="flex shrink-0 items-center gap-2.5">
       <span className="brand-surface flex h-9 w-9 items-center justify-center rounded-xl">
         <XpelMark className="h-4 w-4" tone="light" />
       </span>
@@ -117,20 +117,20 @@ export function AdminFrame({
 
         <div className="min-w-0 flex-1 bg-canvas">
           {/* Phone and tablet: a top bar with the menu as a drop-down. */}
-          <header className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur lg:hidden">
+          <header className="safe-top sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur lg:hidden">
             <div className="flex items-center justify-between gap-3 px-4 py-3">
               <Brand />
               <div className="flex items-center gap-2">
                 {bell}
-                <SignOutButton className="h-9 px-3 text-xs" />
+                <SignOutButton className="h-11 px-3 text-xs" />
               </div>
             </div>
             <AdminNav readOnly={readOnly} />
           </header>
 
           {/* Desktop: search on the left; alerts, who is signed in and a quick action on the right. */}
-          <div className="hidden items-center justify-between gap-4 px-6 pb-1 pt-5 lg:flex">
-            <form action="/admin/users" className="relative w-full max-w-sm">
+          <div className="hidden flex-wrap items-center justify-between gap-4 px-6 pb-1 pt-5 lg:flex">
+            <form action="/admin/users" className="relative min-w-48 flex-1 max-w-sm">
               <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <input
                 name="q"
@@ -140,7 +140,7 @@ export function AdminFrame({
                 className="h-11 w-full rounded-xl border border-border/80 bg-card pl-11 pr-4 text-sm placeholder:text-muted-foreground focus-visible:border-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand/20"
               />
             </form>
-            <div className="flex items-center gap-2.5">
+            <div className="flex min-w-0 flex-wrap items-center gap-2.5">
               {bell}
               <div className="flex h-11 items-center gap-2.5 rounded-xl border border-border/80 bg-card pl-1.5 pr-4">
                 <span className="flex h-8 w-8 items-center justify-center rounded-full bg-tint text-xs font-bold text-tint-foreground">

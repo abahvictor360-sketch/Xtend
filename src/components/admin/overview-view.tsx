@@ -188,7 +188,7 @@ export function OverviewView({
               <AttendanceChart days={week} />
             </div>
 
-            <div className="grid grid-cols-3 gap-4 border-t border-border p-5 sm:p-6 md:w-60 md:grid-cols-1 md:content-center md:gap-8 md:border-l md:border-t-0">
+            <div className="grid grid-cols-1 min-[380px]:grid-cols-3 gap-4 border-t border-border p-5 sm:p-6 md:w-60 md:grid-cols-1 md:content-center md:gap-8 md:border-l md:border-t-0">
               <Figure
                 label="Clocked in"
                 value={clockedIn}
@@ -288,7 +288,7 @@ export function OverviewView({
                 </div>
                 <Link
                   href="/admin/tracking"
-                  className="rounded-lg border border-border px-2.5 py-1 text-xs font-semibold hover:bg-tint"
+                  className="inline-flex min-h-11 items-center rounded-lg border border-border px-2.5 py-1 text-xs font-semibold hover:bg-tint"
                 >
                   Map
                 </Link>
@@ -337,7 +337,7 @@ export function OverviewView({
               </div>
               <Link
                 href="/admin/users?new=1"
-                className="rounded-lg border border-border px-2.5 py-1 text-xs font-semibold hover:bg-tint"
+                className="inline-flex min-h-11 items-center rounded-lg border border-border px-2.5 py-1 text-xs font-semibold hover:bg-tint"
               >
                 + Add staff
               </Link>
@@ -478,7 +478,7 @@ function Figure({
       <p className="mt-1 text-2xl font-bold tabular-nums tracking-tight sm:text-3xl">{value}</p>
       <p className={cn('mt-1 flex items-center gap-1 text-[11px] sm:text-xs', good ? 'text-success' : 'text-brand')}>
         {trend && <Arrow className="h-3.5 w-3.5 shrink-0" />}
-        <span className="truncate">{note}</span>
+        <span className="min-w-0 break-words">{note}</span>
       </p>
     </div>
   )

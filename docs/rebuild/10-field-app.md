@@ -313,6 +313,9 @@ merchandiser who has more than one outlet. The visit routes
 (`FIELD_ROLES`); the database trigger `store_visit_enforce()` refuses anyone
 `can_visit_stores()` says no to, so a multi-store merchandiser can check in.
 
+Account menu: outside pointer presses and Escape close it; Escape restores focus
+to the avatar button. Links and sign-out have minimum 44px touch targets.
+
 ### 3.4 Home layout, top to bottom (`field-home.tsx`)
 
 0. (Layout) NamePlace card if due; (page) **CountDueBanner** if a count is

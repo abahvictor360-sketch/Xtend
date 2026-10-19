@@ -119,7 +119,7 @@ export default async function SupervisorGuidePage() {
           </Tip>
         </GuideSection>
 
-        <GuideSection topic={T.overview} intro="The top of the menu.">
+        <GuideSection topic={T.overview} intro="The top of the menu. On a phone, tap the page name at the top to open navigation. Tap outside it or press Escape to close it.">
           <p>
             <Ui>Overview</Ui> shows your team today: clocked in, late, not in their store, not in yet, and
             open alerts, with the week at a glance.

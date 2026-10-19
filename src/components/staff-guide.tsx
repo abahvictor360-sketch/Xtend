@@ -99,7 +99,7 @@ export function StaffGuide() {
         <Steps
           items={[
             <>
-              Go to <Ui>You</Ui> and tap <Ui>Take your photo</Ui> (or the camera on your picture).
+              The profile menu closes when you tap outside it or press Escape. Go to <Ui>You</Ui> and tap <Ui>Take your photo</Ui> (or the camera on your picture).
             </>,
             <>Face the camera in good light and take the photo. Tap it again any time to retake it.</>,
           ]}

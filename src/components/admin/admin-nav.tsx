@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -165,6 +165,8 @@ export function AdminNav({ readOnly }: { readOnly: boolean }) {
   const { pathname, groups, isActive } = useLinks(readOnly)
   const [open, setOpen] = useState(false)
   const menu = useRef<HTMLDivElement | null>(null)
+  const trigger = useRef<HTMLButtonElement | null>(null)
+  const menuId = useId()
   const current =
     groups.flatMap((g) => g.links).find((l) => isActive(l.href))?.label ?? 'Menu'
 
@@ -172,15 +174,20 @@ export function AdminNav({ readOnly }: { readOnly: boolean }) {
   useEffect(() => setOpen(false), [pathname])
   useEffect(() => {
     if (!open) return
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false)
-    const onClick = (e: MouseEvent) => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpen(false)
+        trigger.current?.focus()
+      }
+    }
+    const onClick = (e: PointerEvent) => {
       if (menu.current && !menu.current.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener('keydown', onKey)
-    document.addEventListener('mousedown', onClick)
+    document.addEventListener('pointerdown', onClick)
     return () => {
       document.removeEventListener('keydown', onKey)
-      document.removeEventListener('mousedown', onClick)
+      document.removeEventListener('pointerdown', onClick)
     }
   }, [open])
 
@@ -188,10 +195,11 @@ export function AdminNav({ readOnly }: { readOnly: boolean }) {
     <div ref={menu} className="relative px-4 pb-3 lg:hidden">
       <button
         type="button"
-        aria-haspopup="menu"
+        ref={trigger}
+        aria-controls={menuId}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between rounded-2xl border border-border bg-card px-4 py-2.5 text-sm font-semibold shadow-soft"
+        className="flex w-full items-center justify-between min-h-11 rounded-2xl border border-border bg-card px-4 py-2.5 text-sm font-semibold shadow-soft"
       >
         <span className="flex items-center gap-2">
           <Menu className="h-4 w-4 text-brand" />
@@ -202,7 +210,9 @@ export function AdminNav({ readOnly }: { readOnly: boolean }) {
 
       {open && (
         <div
-          role="menu"
+          id={menuId}
+          role="navigation"
+          aria-label="Dashboard pages"
           className="surface absolute left-4 right-4 top-full z-40 mt-1 max-h-[70dvh] animate-fade-up overflow-y-auto p-1"
         >
           {groups.map((group, i) => (
@@ -218,9 +228,10 @@ export function AdminNav({ readOnly }: { readOnly: boolean }) {
                   <Link
                     key={link.href}
                     href={link.href}
-                    role="menuitem"
+                    aria-current={isActive(link.href) ? 'page' : undefined}
+                    onClick={() => setOpen(false)}
                     className={cn(
-                      'flex items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium',
+                      'flex min-h-11 items-center gap-3 rounded-xl px-4 py-2.5 text-sm font-medium',
                       isActive(link.href)
                         ? 'bg-brand text-primary-foreground'
                         : 'text-foreground hover:bg-tint',

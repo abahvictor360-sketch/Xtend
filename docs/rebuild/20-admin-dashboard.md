@@ -2012,3 +2012,13 @@ Page-level conventions built on the kit, used by almost every dashboard page:
 - "Worth a look" blocks are destructive `Alert`s headed "Worth a look" with a bullet list and links to the next page to check.
 - Every page works at 390 px wide: tables turn into cards or scroll horizontally; filter fields go full width.
 
+
+
+### Responsive navigation and summary controls (2026-10-19)
+
+The desktop header wraps when space is tight. Mobile navigation uses a disclosure
+button with aria-controls and ordinary navigation links (not an ARIA application
+menu). It closes on a chosen link, outside pointer press, route change or Escape;
+Escape restores trigger focus. Supervisor links remain role-filtered. Mobile
+sign-out, menu links and Add staff have 44px minimum touch targets. Overview
+summary notes wrap rather than truncate; below 380px the three figures stack.
