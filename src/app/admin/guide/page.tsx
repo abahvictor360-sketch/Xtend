@@ -186,8 +186,9 @@ export default async function AdminGuidePage() {
 
         <GuideSection topic={T.movement} intro="Where staff are during their shift.">
           <p>
-            <Ui>Movement</Ui> opens on a live map of everyone on shift, with how many are in a store, away
-            from it, or not heard from in 15 minutes. Pick a person and up to 7 days to see their journey:
+            <Ui>Movement</Ui> opens on a live map of everyone on shift, shown as their profile photo, with
+            how many are in a store, away from it, or not heard from in 15 minutes. Click a photo to follow
+            that person&apos;s movement. Pick a person and up to 7 days to see their journey:
             the stops they made (at their store or elsewhere, by name), the travel between them and the
             times nothing was heard, with a strip per day and totals. <Ui>Worth a look</Ui> points out
             impossible jumps (faster than 150 km/h, which a fake-location app makes), long silences
