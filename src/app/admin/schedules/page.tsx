@@ -46,6 +46,7 @@ export default async function SchedulesPage({ searchParams }: { searchParams: Pr
       id: p.id,
       name: p.full_name,
       role: roleLabel(p, roleById),
+      kind: p.role as SchedulePerson['kind'],
       store: p.outlet_id ? (outletName.get(p.outlet_id) ?? null) : null,
       team: p.supervisor_id ? `${leadName.get(p.supervisor_id) ?? 'Another'}’s team` : null,
       days: daysOf.get(p.id) ?? null,

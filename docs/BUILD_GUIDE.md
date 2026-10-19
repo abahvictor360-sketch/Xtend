@@ -5,9 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-16, after work schedules and leave (0059), marketer
-store lists, visits in the daily report and marketer reports (0060), and
-clock-out reminders (0061)._
+_Last updated: 2026-10-19, after category tabs on the Schedules page._
 
 ---
 
@@ -545,6 +543,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-19 | Schedules page: category tabs (All, Merchandisers, Marketers) and chips for the usual Mon–Sat week or their own week | — |
 | 2026-10-16 | Clock-out reminders: a push at the end of the shift ("Time to clock out") and one an hour later, from the alerts job, plus a **Clock out** prompt at the top of the home screen (check out of the store first) | 0061 |
 | 2026-10-16 | Marketers: the store list shows only their allocated stores and check-ins elsewhere are refused once they have any; the daily report shows and keeps the day's visits; new **Marketer reports** page with day and month PDF, Word and Excel downloads | 0060 |
 | 2026-10-16 | Work schedules and leave: weekly patterns and one-off changes (`/admin/schedules`), leave requests in the app and decisions on `/admin/leave`; missed working days red on the staff calendar; absence everywhere follows schedules and leave; absence sweep now daily | 0059 |

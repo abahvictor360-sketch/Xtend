@@ -317,7 +317,8 @@ export default async function AdminGuidePage() {
             no allocation can check in anywhere, as before.
           </p>
           <p>
-            <Ui>Schedules</Ui>: which weekdays each person works (Monday to Saturday unless changed), and
+            <Ui>Schedules</Ui>: which weekdays each person works (Monday to Saturday unless changed; tabs
+            for merchandisers and marketers, and chips for the usual week or their own), and
             one-off changes for single dates (60 days back to a year ahead). A day is decided by approved
             leave first, then a one-off change, then the weekly pattern. <Ui>Leave</Ui>: staff ask in the
             app (Annual, Sick, Casual or Other; up to 7 days back, a year ahead, 60 days per request, no

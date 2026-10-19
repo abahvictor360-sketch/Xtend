@@ -245,8 +245,9 @@ export default async function SupervisorGuidePage() {
         <GuideSection topic={T.schedules} intro="Which days each person works, and time off.">
           <p>
             <Ui>Schedules</Ui> (People menu): set which weekdays each person on your team works.
-            Everyone starts on Monday to Saturday. Tick several people to give them the same week at
-            once, or use the <Ui>Schedule</Ui> link on the Staff page. Add a one-off change for a single
+            Everyone starts on Monday to Saturday. Use the tabs to show merchandisers or marketers, and{' '}
+            <Ui>Mon–Sat</Ui> or <Ui>Own week</Ui> to see who works the usual week. Tick several people to
+            give them the same week at once, or use the <Ui>Schedule</Ui> link on the Staff page. Add a one-off change for a single
             date (an extra day in or an extra day off), with a note.
           </p>
           <p>

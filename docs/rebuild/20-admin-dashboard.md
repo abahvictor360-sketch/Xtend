@@ -1597,7 +1597,9 @@ Heading **"Schedules"**. Intro: admin "Days on and days off for every merchandis
 
 Card **"Weekly days on and off"** / "Orange days are working days; grey days are days off. Everyone starts on Monday to Saturday. Tick several people to give them all the same week at once."
 
-- Search "Search name, store or team" (name, store, team, role) and **"Tick all shown (N)"** / **"Clear shown"**.
+- Category tabs (same style as Teams): **"All (N)"**, **"Merchandisers (N)"**, **"Marketers (N)"**, by built-in role (`kind`); `?user=` starts on that person's category. Switching category unticks anyone no longer shown.
+- Chips under the tabs, counted within the category: **"Everyone (N)"**, **"Mon–Sat (N)"** (default pattern, or one equal to Mon–Sat), **"Own week (N)"** (any other pattern).
+- Search "Search name, store or team" (name, store, team, role) and **"Tick all shown (N)"** / **"Clear shown"**; search, category and chip combine.
 - **Week toggles** (`WeekToggles`): seven round buttons, Monday first, labelled Mo Tu We Th Fr Sa Su; on = brand fill, off = muted; `aria-pressed`, title/aria "Monday: working|day off". Days are Postgres `extract(dow)` numbers, 0 = Sunday … 6 = Saturday.
 - One row per person: checkbox, name, "role · store (or No store) · team", small toggles holding a draft, and the pattern in words (`patternText`: runs of 3+ joined with a dash — "Mon–Sat", "Mon–Fri", "Mon, Wed, Fri", "Every day", "No working days"; "usual week" under it when on the default). A changed draft shows **Save** (→ one person) and **Undo**.
 - With anyone ticked, a tint bar: "N ticked · give them", toggles (start Mon–Sat), the pattern in words, **"Apply to N"** and **"Back to Mon–Sat"** (sends `days: null`).
