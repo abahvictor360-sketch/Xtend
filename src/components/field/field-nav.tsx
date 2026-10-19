@@ -6,8 +6,8 @@ import { BarChart3, CalendarDays, ClipboardList, FileText, Home, User } from 'lu
 import { cn } from '@/lib/utils'
 
 /**
- * A floating dark bar at the bottom, thumb-reachable. The current tab opens
- * into a white pill with its name; the others are round icons. The Report
+ * A floating dark bar at the bottom, thumb-reachable. Every destination has a visible label
+ * and an equal-width touch target. The Report
  * and Count tabs only exist for the people who use them.
  */
 export function FieldNav({
@@ -33,7 +33,7 @@ export function FieldNav({
 
   return (
     <nav className="safe-bottom pointer-events-none fixed inset-x-0 bottom-0 z-30 px-4 pb-2">
-      <div className="pointer-events-auto mx-auto flex w-full max-w-md items-center justify-between gap-1 rounded-full bg-[hsl(24_14%_11%)] p-1.5 shadow-[0_18px_40px_-16px_rgb(24_18_14/0.6)]">
+      <div className="pointer-events-auto mx-auto flex w-full max-w-md items-center justify-between gap-1 rounded-3xl bg-[hsl(24_14%_11%)] p-1.5 shadow-[0_18px_40px_-16px_rgb(24_18_14/0.6)]">
         {links.map(({ href, label, icon: Icon }) => {
           const active = href === '/field' ? pathname === href : pathname.startsWith(href)
           return (
@@ -43,14 +43,14 @@ export function FieldNav({
               aria-label={label}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'flex h-12 items-center justify-center gap-2 rounded-full text-sm font-semibold transition-all',
+                'flex min-w-0 flex-1 h-14 flex-col items-center justify-center gap-1 rounded-2xl text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand',
                 active
-                  ? 'flex-[2] bg-white px-4 text-foreground'
-                  : 'w-12 flex-1 bg-white/10 text-white/75 hover:bg-white/15 hover:text-white',
+                  ? 'bg-white text-foreground'
+                  : 'bg-white/10 text-white/90 hover:bg-white/15 hover:text-white',
               )}
             >
               <Icon className={cn('h-5 w-5 shrink-0', active && 'text-brand')} strokeWidth={active ? 2.3 : 1.9} />
-              {active && <span className="truncate">{label}</span>}
+              <span>{label}</span>
             </Link>
           )
         })}

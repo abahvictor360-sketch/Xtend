@@ -25,12 +25,8 @@ export default async function HistoryPage({
   const { d } = await searchParams
 
   const supabase = await createServerSupabase()
-  const { data: serverToday } = await supabase.rpc('business_date')
-  const today = (serverToday as string) ?? lagosDateString()
-  const selected = d && /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= today ? d : today
-  const monthStart = `${selected.slice(0, 7)}-01`
-
-  const [{ data }, { data: stripDays }, { data: monthDays }] = await Promise.all([
+  const [{ data: serverToday }, { data }] = await Promise.all([
+    supabase.rpc('business_date'),
     supabase
       .from('attendance_detail')
       .select('*')
@@ -38,6 +34,12 @@ export default async function HistoryPage({
       .order('attendance_date', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(90),
+  ])
+  const today = (serverToday as string) ?? lagosDateString()
+  const selected = d && /^\d{4}-\d{2}-\d{2}$/.test(d) && d <= today ? d : today
+  const monthStart = `${selected.slice(0, 7)}-01`
+
+  const [{ data: stripDays }, { data: monthDays }] = await Promise.all([
     // Each day: working, day off or leave, and whether it was missed (059).
     supabase.rpc('my_calendar', { p_from: addDays(today, -6), p_to: today }),
     supabase.rpc('my_calendar', { p_from: monthStart, p_to: monthEnd(monthStart) }),

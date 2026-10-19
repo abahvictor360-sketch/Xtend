@@ -1,10 +1,10 @@
 import { FIELD_ROLES, requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { FieldHome } from '@/components/field/field-home'
-import { Alert } from '@/components/ui/alert'
+import { DashboardRetry } from '@/components/field/dashboard-retry'
 import { CountDueBanner } from '@/components/field/count-due-banner'
 import { getCountStatus } from '@/lib/store-count-status'
-import { avatarUrls } from '@/lib/avatars'
+import { profileAvatarUrl } from '@/lib/avatars'
 import type { DayState } from '@/lib/types'
 import type { VisitOutlet, VisitRow } from '@/components/field/store-visits'
 import type { CalendarDay } from '@/lib/schedule'
@@ -25,7 +25,7 @@ export default async function FieldPage() {
     { data: outlets },
     { data: canVisitStores },
     countStatus,
-    photos,
+    photo,
     { data: calendar },
   ] = await Promise.all([
     supabase.rpc('my_day'),
@@ -33,15 +33,13 @@ export default async function FieldPage() {
     supabase.rpc('my_visit_stores'),
     supabase.rpc('can_visit_stores'),
     getCountStatus(supabase),
-    avatarUrls(supabase, [session.userId]),
+    profileAvatarUrl(supabase, session.profile.avatar_path),
     // The week row: worked, missed, day off or leave (migration 059).
     supabase.rpc('my_calendar', { p_from: addDays(lagosDateString(), -6), p_to: lagosDateString() }),
   ])
 
-  const photo = photos.get(session.userId) ?? null
-
   if (error || !data) {
-    return <Alert variant="destructive">Could not load today. Pull down to retry.</Alert>
+    return <DashboardRetry />
   }
 
   return (

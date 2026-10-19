@@ -131,6 +131,17 @@ export function FieldHome({
         outletName={day.outlet?.name ?? null}
       />
 
+      <div id="clock" className="scroll-mt-4">
+      <LocationGate
+        status={gate.status}
+        reason={gate.reason}
+        message={gate.message}
+        onRetry={() => void gate.retry()}
+      >
+        <ClockPanel day={day} notificationsRequired={notificationsRequired} />
+      </LocationGate>
+      </div>
+
       {todayKind !== 'working' && !day.opening && <NotWorkingToday kind={todayKind} />}
 
       <WeekRow today={day.date} calendar={calendar} />
@@ -156,17 +167,6 @@ export function FieldHome({
           </p>
         </div>
       )}
-
-      <div id="clock" className="scroll-mt-4">
-      <LocationGate
-        status={gate.status}
-        reason={gate.reason}
-        message={gate.message}
-        onRetry={() => void gate.retry()}
-      >
-        <ClockPanel day={day} notificationsRequired={notificationsRequired} />
-      </LocationGate>
-      </div>
 
       {tab === 'stores' && visitsStore && (
         <div id="stores" className="scroll-mt-4">

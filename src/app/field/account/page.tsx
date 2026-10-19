@@ -9,7 +9,7 @@ import { SignOutButton } from '@/components/sign-out-button'
 import { XpelLockup } from '@/components/brand/logo'
 import { PushToggle } from '@/components/field/push-toggle'
 import { formatLagos } from '@/lib/utils'
-import { avatarUrls } from '@/lib/avatars'
+import { profileAvatarUrl } from '@/lib/avatars'
 import { ProfilePhoto } from '@/components/field/profile-photo'
 
 export const dynamic = 'force-dynamic'
@@ -19,9 +19,9 @@ export default async function AccountPage() {
   const session = await requireSession(FIELD_ROLES)
   const supabase = await createServerSupabase()
 
-  // A role an admin added (042) shows by its own name.
-  const [{ data: inbox }, { data: addedRole }, { data: outlet }, photoUrls] = await Promise.all([
+  const [{ data: inbox }, { data: addedRole }, { data: outlet }, photo] = await Promise.all([
     supabase.rpc('my_notifications', { p_limit: 10 }),
+    // A role an admin added (042) shows by its own name.
     session.profile.staff_role_id
       ? supabase
           .from('staff_roles')
@@ -29,18 +29,20 @@ export default async function AccountPage() {
           .eq('id', session.profile.staff_role_id)
           .maybeSingle<{ name: string }>()
       : Promise.resolve({ data: null }),
-    supabase
-      .from('outlets')
-      .select('name, address, geofence_radius_m, shift_start, shift_end')
-      .eq('id', session.profile.outlet_id ?? '')
-      .maybeSingle<{
-        name: string
-        address: string | null
-        geofence_radius_m: number
-        shift_start: string
-        shift_end: string
-      }>(),
-    avatarUrls(supabase, [session.userId]),
+    session.profile.outlet_id
+      ? supabase
+          .from('outlets')
+          .select('name, address, geofence_radius_m, shift_start, shift_end')
+          .eq('id', session.profile.outlet_id)
+          .maybeSingle<{
+            name: string
+            address: string | null
+            geofence_radius_m: number
+            shift_start: string
+            shift_end: string
+          }>()
+      : Promise.resolve({ data: null }),
+    profileAvatarUrl(supabase, session.profile.avatar_path),
   ])
   const messages = (inbox ?? []) as {
     id: string
@@ -50,8 +52,6 @@ export default async function AccountPage() {
     sender_name: string | null
     read_at: string | null
   }[]
-
-  const photo = photoUrls.get(session.userId) ?? null
 
   return (
     <SheetScreen

@@ -110,9 +110,9 @@ export function StaffGuide() {
       <GuideSection topic={T.clockIn} intro="Do this when you arrive at your store, once a day.">
         <Steps
           items={[
-            <>Open Xtend while you are inside your store.</>,
+            <>Open Xtend while you are inside your store. If Home cannot load, check your connection and tap <Ui>Try again</Ui>.</>,
             <>
-              Tap <Ui>Clock in with selfie</Ui> and take a clear photo of your face.
+              Below your shift status, tap <Ui>Clock in with selfie</Ui> and take a clear photo of your face.
             </>,
             <>
               Wait while Xtend checks your location and the photo. When it is done, the home

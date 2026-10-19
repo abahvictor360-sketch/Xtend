@@ -17,7 +17,7 @@ export function Chip({
       type="button"
       aria-pressed={active}
       className={cn(
-        'h-9 shrink-0 rounded-full px-4 text-xs font-semibold transition-all active:scale-95',
+        'min-h-11 shrink-0 rounded-full px-4 text-xs font-semibold transition-all active:scale-95',
         active
           ? 'bg-brand text-primary-foreground shadow-lift'
           : 'bg-tint text-tint-foreground hover:brightness-95',
@@ -36,7 +36,7 @@ export function ChipLink({
   return (
     <a
       className={cn(
-        'inline-flex h-9 shrink-0 items-center rounded-full px-4 text-xs font-semibold transition-all',
+        'inline-flex min-h-11 shrink-0 items-center rounded-full px-4 text-xs font-semibold transition-all',
         active ? 'bg-brand text-primary-foreground shadow-lift' : 'bg-tint text-tint-foreground',
         className,
       )}

@@ -283,8 +283,8 @@ and try again."
 ### 3.2 Bottom navigation (`field-nav.tsx`)
 
 Floating dark pill fixed at the bottom (`safe-bottom`, 8px from the edge).
-Items in order, each an icon link; the active one expands into a white pill
-showing its label; others are 48px round icons:
+Items in order, each an equal-width, 56px-high icon link with a visible label.
+The active item has a white background; all labels remain visible:
 
 1. **Home** `/field` (active only on exact match)
 2. **History** `/field/history`
@@ -303,8 +303,9 @@ the picker: id, name, address, lat, lng, geofence_radius_m, by name; **none**
 when nothing is allocated, migration 060), `can_visit_stores()`, count
 status, the user's avatar signed URL (1 hour), and
 `my_calendar(p_from = today − 6, p_to = today)` for the week row (migration
-059). If `my_day` fails: destructive alert "Could not load today. Pull down
-to retry."
+059). Sign the avatar path from the authorized session profile without another
+profile lookup. If `my_day` fails, show a connection error and a Try again button
+which refreshes the route, disables while pending and announces loading.
 
 `can_visit_stores()` is true for marketers and admins, and for a
 merchandiser who has more than one outlet. The visit routes
@@ -345,6 +346,11 @@ merchandiser who has more than one outlet. The visit routes
    today"** / **"On leave today"** and "Enjoy your rest." / "Enjoy your
    leave." + " If you are working today, clock in as usual." Clocking in is
    never blocked on a day off.
+The **LocationGate and ClockPanel** appear directly after the shift pill,
+before the day-off notice, calendar and progress card. The place-name request
+has a 2.5-second timeout and falls back to coordinates; GPS and selfie remain required.
+Filters have minimum 44px height, and the login password toggle has a 44px square target.
+
 6. **Week row**: the last 7 days ending today (6 days ago … today), weekday
    short name above a round date, a small word under it; today emphasised.
    Each links to `/field/history?d=<date>` (aria "<Wed> <14>, missed / day

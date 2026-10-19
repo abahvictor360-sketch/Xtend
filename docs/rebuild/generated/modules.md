@@ -188,12 +188,9 @@ Exports: `Session`, `ReloginReason`, `getSession`, `requireSession`, `ApiError`,
 
 ## `src/lib/avatars.ts`
 
-Profile photos (migration 037) live in the private "avatars" bucket.
-Pages read them through signed links that expire after an hour; storage
-RLS decides whose photos this session may see (their own, an admin's
-everyone, a supervisor's team).
+Sign the photo path already read by the session guard, without querying the profile again.
 
-Exports: `avatarUrls`, `withAvatars`
+Exports: `profileAvatarUrl`, `avatarUrls`, `withAvatars`
 
 ## `src/lib/chart-colours.ts`
 
@@ -1250,6 +1247,10 @@ A count sheet already sent today.
 
 Exports: `SentSheet`, `CountSheetPanel`
 
+## `src/components/field/dashboard-retry.tsx`
+
+Exports: `DashboardRetry`
+
 ## `src/components/field/day-strip.tsx`
 
 The horizontal date picker from the reference. Seven days back from today,
@@ -1268,8 +1269,8 @@ Exports: `FieldHome`
 
 ## `src/components/field/field-nav.tsx`
 
-A floating dark bar at the bottom, thumb-reachable. The current tab opens
-into a white pill with its name; the others are round icons. The Report
+A floating dark bar at the bottom, thumb-reachable. Every destination has a visible label
+and an equal-width touch target. The Report
 and Count tabs only exist for the people who use them.
 
 Exports: `FieldNav`

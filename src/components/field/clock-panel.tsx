@@ -34,12 +34,16 @@ interface ResolvedPlace {
 }
 
 async function reverseGeocode(lat: number, lng: number): Promise<ResolvedPlace> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 2500)
   try {
-    const res = await fetch(`/api/geocode?lat=${lat}&lng=${lng}`)
+    const res = await fetch(`/api/geocode?lat=${lat}&lng=${lng}`, { signal: controller.signal })
     if (!res.ok) return { name: null, address: null, label: null, source: null }
     return (await res.json()) as ResolvedPlace
   } catch {
     return { name: null, address: null, label: null, source: null }
+  } finally {
+    clearTimeout(timeout)
   }
 }
 

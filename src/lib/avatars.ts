@@ -1,5 +1,19 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+/** Sign the photo path already read by the session guard, without querying the profile again. */
+export async function profileAvatarUrl(
+  supabase: SupabaseClient,
+  path: string | null | undefined,
+): Promise<string | null> {
+  if (!path) return null
+  try {
+    const { data, error } = await supabase.storage.from('avatars').createSignedUrl(path, 3600)
+    return error ? null : data?.signedUrl ?? null
+  } catch {
+    return null
+  }
+}
+
 /**
  * Profile photos (migration 037) live in the private "avatars" bucket.
  * Pages read them through signed links that expire after an hour; storage

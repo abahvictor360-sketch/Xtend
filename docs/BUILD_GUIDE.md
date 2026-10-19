@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-19, after clickable profile photos on the Movement map._
+_Last updated: 2026-10-19, after mobile dashboard usability improvements._
 
 ---
 
@@ -397,6 +397,13 @@ from the server's crontab instead:
 
 ## 9. The phone apps
 
+Mobile usability: clock controls sit directly below shift status; every bottom navigation
+item has a visible label. Filters and the password visibility button have 44px targets.
+Failed dashboard reads offer Try again. Place naming times out after 2.5 seconds
+and falls back to coordinates; required GPS and selfie checks remain unchanged.
+Home and Account sign the session profile photo directly; History fetches attendance
+and the business date together. Account skips outlet lookup when none is assigned.
+
 `mobile/` is a Capacitor 8 project. The apps load the live site, so a web
 deploy reaches phones at once; a new app build is needed only when something
 in `mobile/` changes.
@@ -543,6 +550,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-19 | Mobile dashboard: prominent clock controls, labelled navigation, larger tap targets, retry button, bounded place lookup; fewer profile queries and parallel History reads | — |
 | 2026-10-19 | Movement: each person on the live map is their profile photo (initials when there is none or the link has expired); clicking it opens their movement for the day. Their photo also marks the latest point on their route | — |
 | 2026-10-19 | Schedules page: category tabs (All, Merchandisers, Marketers) and chips for the usual Mon–Sat week or their own week | — |
 | 2026-10-16 | Clock-out reminders: a push at the end of the shift ("Time to clock out") and one an hour later, from the alerts job, plus a **Clock out** prompt at the top of the home screen (check out of the store first) | 0061 |
