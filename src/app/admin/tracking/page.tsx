@@ -168,13 +168,13 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
       {liveView && (
         <div className="grid gap-5 xl:grid-cols-3">
           <div className="xl:col-span-2">
-            <LiveMap rows={onShift} />
+            <LiveMap rows={onShift} date={today} />
             <Legend />
           </div>
           <div className="surface p-5">
             <h2 className="text-lg font-bold">On shift now ({onShift.length})</h2>
             <p className="mb-3 text-sm text-muted-foreground">
-              Tap a name to see their route today.
+              Click a photo on the map, or a name here, to see their route today.
             </p>
             {onShift.length === 0 ? (
               <p className="text-sm text-muted-foreground">Nobody is on shift right now.</p>
@@ -328,7 +328,7 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
 
               <div className="grid gap-5 xl:grid-cols-3">
                 <div className="xl:col-span-2">
-                  <TrailMap trail={trail} />
+                  <TrailMap trail={trail} name={person.full_name} photo={personPhoto} />
                   <Legend trail />
                 </div>
                 <div className="surface p-5">

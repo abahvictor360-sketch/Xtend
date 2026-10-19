@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-19, after category tabs on the Schedules page._
+_Last updated: 2026-10-19, after clickable profile photos on the Movement map._
 
 ---
 
@@ -543,6 +543,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-19 | Movement: each person on the live map is their profile photo (initials when there is none or the link has expired); clicking it opens their movement for the day. Their photo also marks the latest point on their route | — |
 | 2026-10-19 | Schedules page: category tabs (All, Merchandisers, Marketers) and chips for the usual Mon–Sat week or their own week | — |
 | 2026-10-16 | Clock-out reminders: a push at the end of the shift ("Time to clock out") and one an hour later, from the alerts job, plus a **Clock out** prompt at the top of the home screen (check out of the store first) | 0061 |
 | 2026-10-16 | Marketers: the store list shows only their allocated stores and check-ins elsewhere are refused once they have any; the daily report shows and keeps the day's visits; new **Marketer reports** page with day and month PDF, Word and Excel downloads | 0060 |

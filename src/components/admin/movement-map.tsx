@@ -27,14 +27,31 @@ function pin(L: any, text: string, colour: string) {
   })
 }
 
-/** A round photo pin with a ring in the status colour, and the first name under it. */
-function photoPin(L: any, url: string, name: string, colour: string) {
+const initialsOf = (name: string) =>
+  name
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((w) => w[0]?.toUpperCase() ?? '')
+    .join('')
+
+/**
+ * A round photo pin with a ring in the status colour, and the first name
+ * under it. Without a photo (or if its link has expired) the circle shows
+ * their initials instead.
+ */
+function photoPin(L: any, url: string | null | undefined, name: string, colour: string) {
+  const letters = escape(initialsOf(name))
+  const circle = `width:40px;height:40px;border-radius:9999px;border:3px solid ${colour};box-shadow:0 0 0 2px #fff,0 6px 14px rgb(0 0 0/.3)`
+  const fallback = `<span style="${circle};display:flex;align-items:center;justify-content:center;background:${colour};color:#fff;font:700 13px system-ui">${letters}</span>`
+  const face = url
+    ? `<img src="${escape(url)}" alt="" style="${circle};object-fit:cover;background:#eee" onerror="this.outerHTML=this.dataset.fallback" data-fallback="${escape(fallback)}"/>`
+    : fallback
   return L.divIcon({
     className: '',
     html:
-      `<span style="display:flex;flex-direction:column;align-items:center;gap:2px">` +
-      `<img src="${escape(url)}" alt="" style="width:40px;height:40px;border-radius:9999px;object-fit:cover;border:3px solid ${colour};box-shadow:0 0 0 2px #fff,0 6px 14px rgb(0 0 0/.3);background:#eee"/>` +
-      `<span style="padding:1px 6px;border-radius:8px;background:#fff;color:#2b211c;font:700 10px system-ui;box-shadow:0 2px 6px rgb(0 0 0/.2);white-space:nowrap">${escape(name)}</span>` +
+      `<span style="display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer">` +
+      face +
+      `<span style="padding:1px 6px;border-radius:8px;background:#fff;color:#2b211c;font:700 10px system-ui;box-shadow:0 2px 6px rgb(0 0 0/.2);white-space:nowrap">${escape(name.split(/\s+/)[0])}</span>` +
       `</span>`,
     iconSize: [60, 60],
     iconAnchor: [30, 22],
@@ -93,8 +110,12 @@ function Frame({
   )
 }
 
-/** Everyone on shift, where the app last placed them. */
-export function LiveMap({ rows }: { rows: LiveLocation[] }) {
+/**
+ * Everyone on shift, where the app last placed them, as their profile photo.
+ * Clicking a photo opens that person's movement for the day.
+ */
+export function LiveMap({ rows, date }: { rows: LiveLocation[]; date: string }) {
+  const router = useRouter()
   const map = useMap(
     (L, m) => {
       const bounds: [number, number][] = []
@@ -118,26 +139,25 @@ export function LiveMap({ rows }: { rows: LiveLocation[] }) {
         if (r.last_lat == null || r.last_lng == null) continue
         const stale = (r.minutes_since_ping ?? 999) > 15
         const colour = stale ? STALE : r.inside_geofence === false ? OUTSIDE : INSIDE
-        const initials = r.full_name
-          .split(/\s+/)
-          .slice(0, 2)
-          .map((w) => w[0]?.toUpperCase())
-          .join('')
-        const icon = r.avatar_url
-          ? photoPin(L, r.avatar_url, r.full_name.split(/\s+/)[0], colour)
-          : pin(L, initials, colour)
-        L.marker([r.last_lat, r.last_lng], { icon })
+        const href = `/admin/tracking?person=${encodeURIComponent(r.user_id)}&date=${encodeURIComponent(date)}`
+        L.marker([r.last_lat, r.last_lng], {
+          icon: photoPin(L, r.avatar_url, r.full_name, colour),
+          title: `${r.full_name}: see their movement`,
+          riseOnHover: true,
+          keyboard: true,
+        })
           .addTo(m)
-          .bindPopup(
-            (r.avatar_url
-              ? `<img src="${escape(r.avatar_url)}" alt="" style="width:64px;height:64px;border-radius:12px;object-fit:cover;margin-bottom:6px"/><br/>`
-              : '') +
-              `<strong>${escape(r.full_name)}</strong><br/>` +
+          .bindTooltip(
+            `<strong>${escape(r.full_name)}</strong><br/>` +
               `${escape(r.last_place_name ?? 'Last position')} · ${formatLagos(r.last_ping_at, false)}` +
               (r.minutes_since_ping != null ? ` (${r.minutes_since_ping} min ago)` : '') +
-              `<br/>${r.distance_from_outlet_m != null ? `${metres(r.distance_from_outlet_m)} from ${escape(r.outlet_name ?? 'their store')}` : ''}` +
-              `<br/><a href="/admin/tracking?person=${r.user_id}">Follow ${escape(r.full_name.split(' ')[0])}'s day →</a>`,
+              (r.distance_from_outlet_m != null
+                ? `<br/>${metres(r.distance_from_outlet_m)} from ${escape(r.outlet_name ?? 'their store')}`
+                : '') +
+              `<br/><em>Click to see their movement</em>`,
+            { direction: 'top', offset: [0, -24] },
           )
+          .on('click', () => router.push(href))
         bounds.push([r.last_lat, r.last_lng])
       }
       return bounds
@@ -148,7 +168,16 @@ export function LiveMap({ rows }: { rows: LiveLocation[] }) {
 }
 
 /** One person's day as a route: where they went, in order, and the gaps. */
-export function TrailMap({ trail }: { trail: Trail }) {
+export function TrailMap({
+  trail,
+  name,
+  photo,
+}: {
+  trail: Trail
+  /** Shown as their photo on the latest point. */
+  name?: string
+  photo?: string | null
+}) {
   const map = useMap(
     (L, m) => {
       const bounds: [number, number][] = []
@@ -216,9 +245,21 @@ export function TrailMap({ trail }: { trail: Trail }) {
         }
         bounds.push([p.lat, p.lng])
       })
+      const last = points[points.length - 1]
+      if (last && name) {
+        L.marker([last.lat, last.lng], {
+          icon: photoPin(L, photo, name, storeAt(last, trail.stores) ? INSIDE : OUTSIDE),
+          zIndexOffset: 2000,
+        })
+          .addTo(m)
+          .bindTooltip(`<strong>${escape(name)}</strong><br/>Latest: ${formatLagos(last.at, false)}`, {
+            direction: 'top',
+            offset: [0, -24],
+          })
+      }
       return bounds
     },
-    [trail],
+    [trail, name, photo],
   )
   return <Frame map={map} />
 }

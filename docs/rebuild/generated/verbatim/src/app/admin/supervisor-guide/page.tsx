@@ -158,7 +158,8 @@ export default async function SupervisorGuidePage() {
 
         <GuideSection topic={T.movement} intro="Where your team is during the shift.">
           <p>
-            <Ui>Movement</Ui> shows your team on shift on a map. Pick a person and up to 7 days to see where
+            <Ui>Movement</Ui> shows your team on shift on a map, each as their profile photo; click a photo
+            to follow that person. Pick a person and up to 7 days to see where
             they went: the places they stopped, the time at their store and away, and when nothing came in.
             <Ui> Worth a look</Ui> points out what needs a question.
           </p>

@@ -1021,7 +1021,9 @@ Exports: `MarketerListRow`, `MarketerReportList`
 
 ## `src/components/admin/movement-map.tsx`
 
-A round photo pin with a ring in the status colour, and the first name under it.
+A round photo pin with a ring in the status colour, and the first name
+under it. Without a photo (or if its link has expired) the circle shows
+their initials instead.
 
 Exports: `LiveMap`, `TrailMap`, `AutoRefresh`
 
