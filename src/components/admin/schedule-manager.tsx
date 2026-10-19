@@ -16,6 +16,8 @@ export interface SchedulePerson {
   id: string
   name: string
   role: string
+  /** Built-in role, for the category tabs. */
+  kind: 'merchandiser' | 'marketer'
   store: string | null
   team: string | null
   /** Their own weekly pattern, or null for the default (Monday to Saturday). */
@@ -29,6 +31,18 @@ export interface ScheduleChange {
   working: boolean
   note: string
 }
+
+type Category = 'all' | SchedulePerson['kind']
+const CATEGORIES: { value: Category; label: string }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'merchandiser', label: 'Merchandisers' },
+  { value: 'marketer', label: 'Marketers' },
+]
+
+type WeekFilter = 'all' | 'usual' | 'own'
+
+/** Works a week of their own, not the usual Monday to Saturday. */
+const ownWeek = (p: SchedulePerson) => p.days !== null && !samePattern(p.days, [...DEFAULT_WORK_DAYS])
 
 async function send(url: string, method: string, body?: unknown) {
   const res = await fetch(url, {
@@ -96,6 +110,8 @@ export function ScheduleManager({
 }) {
   const router = useRouter()
   const focused = people.find((p) => p.id === focus) ?? null
+  const [category, setCategory] = useState<Category>(focused?.kind ?? 'all')
+  const [week, setWeek] = useState<WeekFilter>('all')
   const [search, setSearch] = useState(focused?.name ?? '')
   const [chosen, setChosen] = useState<Set<string>>(new Set(focused ? [focused.id] : []))
   const [drafts, setDrafts] = useState<Record<string, number[]>>({})
@@ -111,13 +127,31 @@ export function ScheduleManager({
   const [changeFilter, setChangeFilter] = useState<'focus' | 'all'>(focused ? 'focus' : 'all')
 
   const nameOf = useMemo(() => new Map(people.map((p) => [p.id, p.name])), [people])
+  const roleCounts = useMemo(() => {
+    const map = new Map<Category, number>([['all', people.length]])
+    for (const p of people) map.set(p.kind, (map.get(p.kind) ?? 0) + 1)
+    return map
+  }, [people])
+  const inCategory = useMemo(
+    () => (category === 'all' ? people : people.filter((p) => p.kind === category)),
+    [people, category],
+  )
+  const ownCount = inCategory.filter(ownWeek).length
   const visible = useMemo(() => {
     const needle = search.trim().toLowerCase()
-    if (!needle) return people
-    return people.filter((p) =>
-      [p.name, p.store ?? '', p.team ?? '', p.role].some((v) => v.toLowerCase().includes(needle)),
+    return inCategory.filter(
+      (p) =>
+        (week === 'all' || (week === 'own') === ownWeek(p)) &&
+        (!needle || [p.name, p.store ?? '', p.team ?? '', p.role].some((v) => v.toLowerCase().includes(needle))),
     )
-  }, [people, search])
+  }, [inCategory, search, week])
+
+  // Switching category drops anyone ticked who is no longer shown, so a
+  // pattern is never applied to people out of sight.
+  function chooseCategory(next: Category) {
+    setCategory(next)
+    setChosen((cur) => new Set([...cur].filter((id) => next === 'all' || people.find((p) => p.id === id)?.kind === next)))
+  }
   const allChosen = visible.length > 0 && visible.every((p) => chosen.has(p.id))
   const shownChanges = changes
     .filter((c) => changeFilter === 'all' || c.user_id === who)
@@ -187,6 +221,53 @@ export function ScheduleManager({
             Orange days are working days; grey days are days off. Everyone starts on Monday to Saturday. Tick several
             people to give them all the same week at once.
           </p>
+        </div>
+
+        <div
+          role="tablist"
+          aria-label="Category"
+          className="flex w-full rounded-2xl bg-muted p-1 sm:inline-flex sm:w-auto"
+        >
+          {CATEGORIES.map((c) => (
+            <button
+              key={c.value}
+              type="button"
+              role="tab"
+              aria-selected={category === c.value}
+              onClick={() => chooseCategory(c.value)}
+              className={cn(
+                'flex-1 whitespace-nowrap rounded-xl px-2 py-2 text-[13px] font-semibold transition-colors sm:flex-none sm:px-4 sm:text-sm',
+                category === c.value ? 'bg-card text-foreground shadow-soft' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {c.label} ({roleCounts.get(c.value) ?? 0})
+            </button>
+          ))}
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          {(
+            [
+              ['all', `Everyone (${inCategory.length})`],
+              ['usual', `Mon–Sat (${inCategory.length - ownCount})`],
+              ['own', `Own week (${ownCount})`],
+            ] as [WeekFilter, string][]
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              aria-pressed={week === value}
+              onClick={() => setWeek(value)}
+              className={cn(
+                'rounded-full border px-3 py-1 text-xs font-semibold transition-colors',
+                week === value
+                  ? 'border-brand bg-brand text-primary-foreground'
+                  : 'border-border bg-card text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">

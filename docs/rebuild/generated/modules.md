@@ -1106,7 +1106,7 @@ Exports: `SaveExcuseCheck`
 
 ## `src/components/admin/schedule-manager.tsx`
 
-Their own weekly pattern, or null for the default (Monday to Saturday).
+Built-in role, for the category tabs.
 
 Exports: `SchedulePerson`, `ScheduleChange`, `WeekToggles`, `ScheduleManager`
 
