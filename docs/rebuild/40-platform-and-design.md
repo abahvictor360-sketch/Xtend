@@ -239,7 +239,7 @@ Matcher:
 matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|icons/|brand/|api/cron).*)']
 ```
 
-### 1.9 `vercel.json`
+### 1.9 `vercel.json` (and the VPS)
 
 ```json
 {
@@ -252,7 +252,29 @@ matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|
 }
 ```
 
-The every-5-minute `alerts` cron is **not** here: the Vercel Hobby plan rejects
+Production runs on a Hostinger VPS instead (`deploy/`, verbatim in the
+repository; steps in `deploy/README.md`):
+
+- **PM2:** cluster, `instances: 'max'`, `next start -p 3000 -H 127.0.0.1`,
+  restart at 1500 MB.
+- **Nginx:** proxies to it with `X-Forwarded-For` (so `TRUSTED_PROXY_HOPS=1`),
+  allows 25 MB uploads, and serves `/_next/static` with a one-year
+  immutable cache. It has no per-address rate limit, because mobile
+  networks share addresses.
+- **Crontab:** runs the three jobs through `deploy/cron.sh` against
+  `127.0.0.1:3000`.
+- **Deploys:** `deploy/deploy.sh` builds each commit in `releases/<sha12>`
+  with `XTEND_BUILD_ID=<sha12>`, links `shared/.env.production`, switches
+  `current` atomically, `pm2 startOrReload`s, and rolls back unless
+  `/api/version` returns `"build":"<sha12>"` within a minute. It keeps 5
+  releases.
+- **GitHub workflow:** `.github/workflows/deploy-vps.yml` runs it over SSH on
+  each push to the main branch, skipping when `VPS_HOST` is unset.
+- **Repository variables:** `APP_URL` sets `XTEND_URL` for the phone builds
+  and the release notes. `JOBS_ON_VPS=true` turns the GitHub alerts workflow
+  off.
+
+The every-5-minute `alerts` cron is **not** in `vercel.json`: the Vercel Hobby plan rejects
 sub-daily crons (deploys fail with `cron_jobs_limits_reached`), so it runs from
 `.github/workflows/alerts-cron.yml` instead (a GitHub Actions schedule that
 curls `/api/cron/alerts` with `CRON_SECRET`). On Vercel Pro, or a VPS crontab,
@@ -1016,7 +1038,7 @@ version set by a "Version" step: `XTEND_VERSION_CODE = 100 + git rev-list --coun
 10. If a key: `./gradlew assembleRelease bundleRelease --no-daemon` with `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`
 11. `actions/upload-artifact@v4` name `xtend-android-<run>`, APKs and AABs, `if-no-files-found: error`
 12. On the default branch: copy the signed release APK (or the debug APK) to `xtend.apk`; create or edit release
-    tag `android` titled `Xtend for Android 1.0.<code>` with notes `Built from <sha7>, run <run> (<kind>). Install from https://xtend-brown.vercel.app/download`;
+    tag `android` titled `Xtend for Android 1.0.<code>` with notes `Built from <sha7>, run <run> (<kind>). Install from ${XTEND_URL}/download` (`XTEND_URL` = repository variable `APP_URL`, default `https://xtend-brown.vercel.app`);
     `gh release upload android xtend.apk --clobber`.
 
 **Job `ios`** (macos-latest): checkout, node 22, select newest `/Applications/Xcode_*.app`,

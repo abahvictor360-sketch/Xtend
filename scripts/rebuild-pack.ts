@@ -102,7 +102,8 @@ for (const f of ['supabase_stub.sql', 'rules.sql', 'rls_counts.sql']) {
 // ---------------------------------------------------------------------------
 // Words and settings that must match exactly, copied verbatim: the three
 // guides, every instruction given to Claude, the wording of flags and
-// excuses, the design tokens, the service worker and the app manifest.
+// excuses, the design tokens, the service worker, the app manifest and the
+// VPS hosting files.
 // ---------------------------------------------------------------------------
 const VERBATIM = [
   'src/components/staff-guide.tsx',
@@ -119,6 +120,16 @@ const VERBATIM = [
   'src/lib/chart-colours.ts',
   'public/sw.js',
   'public/manifest.webmanifest',
+  // Hosting on the VPS: server setup, deploys, PM2, Nginx and the jobs.
+  'deploy/README.md',
+  'deploy/setup-server.sh',
+  'deploy/deploy.sh',
+  'deploy/ecosystem.config.cjs',
+  'deploy/nginx/xtend.conf',
+  'deploy/nginx/xtend-proxy.conf',
+  'deploy/crontab',
+  'deploy/cron.sh',
+  '.github/workflows/deploy-vps.yml',
 ]
 for (const f of VERBATIM) {
   const to = join(OUT, 'verbatim', f)

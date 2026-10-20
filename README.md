@@ -114,12 +114,17 @@ Vercel picks up `vercel.json`, which schedules `/api/cron/purge-selfies`
 nightly at 02:20 UTC (03:20 Lagos). Set `CRON_SECRET` in the project; the route
 refuses anything without the matching bearer token.
 
-On a VPS nothing reads `vercel.json`, so schedule the jobs in the server's
-crontab instead (times in UTC; `$CRON_SECRET` as in the app's environment):
+**Hostinger VPS (production):** see [`deploy/README.md`](deploy/README.md).
+One script sets the server up; every push then deploys itself, with an
+automatic rollback if the new build is unhealthy.
+
+On a VPS nothing reads `vercel.json`. `deploy/setup-server.sh` installs the
+jobs from `deploy/crontab`. By hand, they are (times in UTC; `$CRON_SECRET` as
+in the app's environment):
 
 ```
 20 2 * * *      curl -s -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/purge-selfies
-30 8 * * 1-6    curl -s -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/absence-sweep
+30 8 * * *      curl -s -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/absence-sweep
 0-59/5 * * * *  curl -s -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/alerts
 ```
 

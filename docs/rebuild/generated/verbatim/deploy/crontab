@@ -1,0 +1,13 @@
+# Xtend's scheduled jobs on a VPS. setup-server.sh installs this for the
+# xtend user. Times are UTC (the setup sets the server clock to UTC);
+# Lagos is UTC+1. Failures go to shared/logs/cron.log.
+SHELL=/bin/bash
+APP=/var/www/xtend
+
+# Every 5 minutes: unsent integrity alerts, scheduled notifications,
+# clock-out reminders, and hourly the X Metrics checks.
+*/5 * * * *  $APP/current/deploy/cron.sh alerts          2>> $APP/shared/logs/cron.log
+# 09:30 Lagos every day: who has not clocked in (skips days off and leave).
+30 8 * * *   $APP/current/deploy/cron.sh absence-sweep   2>> $APP/shared/logs/cron.log
+# 03:20 Lagos: delete clock photos older than 24 hours.
+20 2 * * *   $APP/current/deploy/cron.sh purge-selfies   2>> $APP/shared/logs/cron.log

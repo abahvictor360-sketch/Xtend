@@ -1,0 +1,60 @@
+# Deploys Xtend to the Hostinger VPS on every push to the main branch
+# (deploy/README.md). It logs in over SSH as the xtend user and runs
+# deploy/deploy.sh, which builds the commit beside the live one, switches
+# over only when it is healthy, and rolls back if not.
+#
+# Needs repository secrets VPS_HOST and VPS_SSH_KEY (optional VPS_PORT,
+# VPS_USER, default 22 and xtend). Without VPS_HOST it does nothing, so
+# the repository works before the server exists.
+name: Deploy to VPS
+
+on:
+  push:
+    branches: [claude/new-session-sgmxdg]
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
+      - 'mobile/**'
+      - 'load-test/**'
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit to deploy (blank for the newest; an older one rolls back)
+        required: false
+
+concurrency:
+  group: deploy-vps
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Check the server is set up
+        id: check
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+        run: |
+          if [ -z "$VPS_HOST" ]; then
+            echo "::notice::VPS_HOST is not set, so there is nothing to deploy to yet (deploy/README.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy over SSH
+        if: steps.check.outputs.ready == 'true'
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          REF: ${{ github.event.inputs.ref || github.sha }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key && chmod 600 ~/.ssh/deploy_key
+          port="${VPS_PORT:-22}"; user="${VPS_USER:-xtend}"
+          ssh-keyscan -p "$port" -H "$VPS_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/deploy_key -p "$port" -o BatchMode=yes "$user@$VPS_HOST" \
+            "cd /var/www/xtend/repo && git fetch --quiet origin && git checkout --quiet --detach '$REF' && bash deploy/deploy.sh '$REF'"

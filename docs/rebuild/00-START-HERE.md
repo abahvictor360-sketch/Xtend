@@ -45,7 +45,7 @@ Read in this order.
 | `generated/modules.md` | Every shared file: purpose and exports | From the code |
 | `generated/constants.md` | Every tunable number in the code | From the code |
 | `generated/tests/` | The database acceptance tests and the Supabase stand-in they run on | From the code |
-| `generated/verbatim/` | Files whose words or values must match exactly: the three guides, every instruction given to Claude (Ask Xtend, the support helper, photo checks, invoice reading), flag and excuse wording, design tokens, service worker, app manifest. Copy them as they are | From the code |
+| `generated/verbatim/` | Files whose words or values must match exactly: the three guides, every instruction given to Claude (Ask Xtend, the support helper, photo checks, invoice reading), flag and excuse wording, design tokens, service worker, app manifest, the VPS hosting files (`deploy/`). Copy them as they are | From the code |
 
 The `generated/` files are rebuilt from the code by `scripts/rebuild-pack.ts`
 and are always exact. The hand-written files explain behaviour, intent and
@@ -60,7 +60,7 @@ default in the last column.
 
 | Topic | Decision | Default where unspecified |
 |---|---|---|
-| Stack | Next.js 15 App Router, React 19, TypeScript strict, Tailwind 3, Supabase, Vercel, Capacitor 8 | Latest patch of the versions in `40-platform-and-design.md` |
+| Stack | Next.js 15 App Router, React 19, TypeScript strict, Tailwind 3, Supabase, a Hostinger VPS (Nginx + PM2; Vercel also works), Capacitor 8 | Latest patch of the versions in `40-platform-and-design.md` |
 | Where logic lives | Postgres (triggers, `SECURITY DEFINER` functions); thin route handlers; React only displays | Put new rules in SQL, not React |
 | Database | Apply `generated/schema.sql`, `seed.sql`, `platform.sql` as given | Never rewrite the SQL by hand |
 | Who sees what | Row-level security; supervisors see their own team only | Read through the caller's client, never the service role |
@@ -170,7 +170,7 @@ Build in this order. Finish each stage's checks before starting the next.
 - `mobile/` Capacitor project, native plugins, GitHub Actions workflow,
   `/download`, push (FCM, APNs), the shift tracker (`40-platform-and-design.md`
   §5).
-- Deploy to Vercel with every environment variable (`../BUILD_GUIDE.md` §7).
+- Deploy to the VPS with `deploy/` (`deploy/README.md`) or to Vercel, with every environment variable (`../BUILD_GUIDE.md` §7).
 - **Checks:** the workflow builds a debug APK; the download page links to it;
   a test phone clocks in from the app and receives a notification; the
   update banner appears after a second deploy.
