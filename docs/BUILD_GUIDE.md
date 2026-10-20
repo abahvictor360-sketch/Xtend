@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-19, after responsive dashboard and navigation fixes._
+_Last updated: 2026-10-20, after the Hostinger VPS setup (`deploy/`)._
 
 ---
 
@@ -149,6 +149,23 @@ allocation, teams.
    Supabase project is ever moved, change this region to match.
 3. Run any new migrations in Supabase **before or right after** the deploy
    that needs them. A page that needs a missing migration says which one.
+
+**On a Hostinger VPS** (the production host): follow `deploy/README.md`.
+In short:
+
+- `deploy/setup-server.sh` sets up a fresh Ubuntu server once: Node 22, PM2,
+  Nginx with HTTPS, firewall, automatic updates, swap, UTC clock, the
+  `xtend` user, and the scheduled jobs in its crontab.
+- Settings live in `/var/www/xtend/shared/.env.production`.
+- `.github/workflows/deploy-vps.yml` deploys every push to the main branch
+  over SSH with `deploy/deploy.sh`. That script builds the commit in its own
+  `releases/<build>` folder, switches the `current` symlink and reloads PM2
+  one process at a time. It rolls back if `/api/version` does not answer
+  with the new build id.
+- Choose a European data centre near the Supabase database in Ireland.
+- Set the repository variables `APP_URL` (the site the phone apps open) and
+  `JOBS_ON_VPS=true`, so the GitHub alerts job stands down.
+- `vercel.json` is ignored there.
 
 ### 4.6 Phone apps
 
@@ -349,7 +366,7 @@ Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
 
 ## 7. Environment variables
 
-Set in `.env.local` for development and in Vercel for production.
+Set in `.env.local` for development, and for production in Vercel or, on the VPS, in `/var/www/xtend/shared/.env.production` (a `NEXT_PUBLIC_…` change needs a deploy; others `pm2 reload xtend --update-env`).
 
 | Variable | Needed | What for |
 |---|---|---|
@@ -369,7 +386,7 @@ Set in `.env.local` for development and in Vercel for production.
 | `CREDENTIALS_WEBHOOK_URL`, `CREDENTIALS_WEBHOOK_TOKEN` | Optional | Relay that sends temporary passwords by SMS or email |
 | `TRUSTED_PROXY_HOPS` | Optional | 1 behind Vercel/Nginx, 2 with Cloudflare in front |
 | `IP_API_KEY`, `IP_GEO_URL`, `IP_GEO_DISABLED` | Optional | IP lookup for VPN checks and the audit log |
-| `XTEND_BUILD_ID` | Optional | Build id outside Vercel (Vercel sets `VERCEL_DEPLOYMENT_ID`) |
+| `XTEND_BUILD_ID` | Optional | Build id outside Vercel (Vercel sets `VERCEL_DEPLOYMENT_ID`); `deploy/deploy.sh` sets it to the commit's first 12 characters |
 | `NEXT_PUBLIC_REALTIME_DISABLED` | Optional | Set `1` to turn the client realtime sockets off fleet-wide and ride the safety poll instead — the release valve when Supabase's concurrent-connection cap is the bottleneck under heavy load |
 
 ## 8. Scheduled jobs
@@ -388,8 +405,11 @@ once-a-day crons, so the five-minute `alerts` job is **not** in `vercel.json`
 (it would make every deploy fail with `cron_jobs_limits_reached`); instead it
 runs from `.github/workflows/alerts-cron.yml` (a GitHub Actions schedule that
 curls the endpoint with `CRON_SECRET`, set as a repo secret). On Vercel Pro you
-can move it back into `vercel.json` and delete that workflow. On a VPS, run it
-from the server's crontab instead:
+can move it back into `vercel.json` and delete that workflow. On the Hostinger
+VPS all three jobs run from the server's crontab (`deploy/crontab`, installed by
+`deploy/setup-server.sh`, calling `deploy/cron.sh` on `127.0.0.1`; failures in
+`shared/logs/cron.log`); set the repository variable `JOBS_ON_VPS=true` so the
+GitHub workflow stands down. The plain crontab equivalent:
 
 ```
 0-59/5 * * * *  curl -s -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/alerts
@@ -502,7 +522,8 @@ supabase/tests/           Database tests and the Supabase stand-in
 scripts/                  Admin bootstrap, logic checks, SQL test runner
 mobile/                   Capacitor Android and iOS apps
 docs/                     This guide, LOCATION-INTEGRITY.md, and rebuild/ (the rebuild pack)
-.github/workflows/        Phone app builds
+.github/workflows/        Phone app builds, the 5-minute alerts job, deploy to the VPS
+deploy/                   Hostinger VPS: setup, deploy with rollback, PM2, Nginx, crontab
 ```
 
 ## 12. Making a change
@@ -556,6 +577,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-20 | Hostinger VPS hosting: `deploy/` (one-time `setup-server.sh`, `deploy.sh` with health check and rollback, PM2 cluster, Nginx, crontab for the three jobs) and `.github/workflows/deploy-vps.yml` deploying every push over SSH. Repository variables `APP_URL` (site the phone apps open; release notes) and `JOBS_ON_VPS` (GitHub alerts job stands down) | — |
 | 2026-10-19 | All dashboards: responsive header, readable attendance notes, larger controls and accessible menu dismissal | — |
 | 2026-10-19 | Mobile dashboard: prominent clock controls, labelled navigation, larger tap targets, retry button, bounded place lookup; fewer profile queries and parallel History reads | — |
 | 2026-10-19 | Movement: each person on the live map is their profile photo (initials when there is none or the link has expired); clicking it opens their movement for the day. Their photo also marks the latest point on their route | — |
@@ -604,6 +626,10 @@ Newest first. Dates are when the work landed on the main branch.
 - **iPhone app** is not yet on TestFlight or the App Store (needs the Apple
   account steps); until then iPhone staff use Chrome/Safari and get site
   updates only.
+- **Moving to the VPS**: set `APP_URL` and ship an app update before turning
+  the old address off, since installed apps open the address they were
+  built with. On the VPS the IP-location fallback has no Vercel headers, so
+  keep an IP lookup (`IP_API_KEY` / `IP_GEO_URL`) configured.
 - **Five-minute job** (`/api/cron/alerts`): runs from GitHub Actions and needs
   the `CRON_SECRET` repo secret to match Vercel's exactly (a 401 means they
   differ). Until it runs, scheduled notifications show as "Late" and

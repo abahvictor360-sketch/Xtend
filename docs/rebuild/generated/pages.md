@@ -66,7 +66,7 @@ On screen: Every change an admin or supervisor makes, newest first: who, what, w
 
 How often each excuse came up, and how often it did not hold.
 
-On screen: Someone says their network was bad, their phone was off, their location would not work, they were at the store all along, or the app would not let them clock in? Pick who, when, and what they said. Xtend lays out everything their phone did in that time, on a timeline, and says whether it fits. Keep the check on their record to see a pattern. Staff are not told any
+On screen: Someone says their network was bad, their phone was off, their location would not work, they were at the store all along, or the app would not let them clock in? Pick who, when, and what they said. Xtend lays out everything their phone did in that time, on a timeline, and says whether it fits. Keep the check on their record to see a pattern. Staff are not told any of
 
 ## `/admin/guide` — Admin guide — Xtend
 
@@ -284,7 +284,7 @@ On screen: Where staff are and where they have been since clocking in. While som
 - Who: ['admin']
 - Components: `ui/badge`, `ui/card`, `admin/update-tools`
 
-On screen: Xtend updates itself: every phone and browser runs the live site, and anyone with Xtend open is told when a newer version is ready (&ldquo;A new version of Xtend is ready&rdquo;) and moves to it with one tap. A new phone app is only needed when something on the phone itself changes; then they are offered the download, or required to install it if you set the lowest
+On screen: Xtend updates itself: every phone and browser runs the live site, and anyone with Xtend open is told when a newer version is ready (&ldquo;A new version of Xtend is ready&rdquo;) and moves to it with one tap. A new phone app is only needed when something on the phone itself changes; then they are offered the download, or required to install it if you set the lowest ap
 
 ## `/admin/users/import` — Bulk import — Xtend
 

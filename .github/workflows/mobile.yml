@@ -24,6 +24,12 @@ concurrency:
   group: mobile-${{ github.ref }}
   cancel-in-progress: true
 
+# The live site the apps open. Set the repository variable APP_URL (for
+# example https://app.example.com) when the site moves, e.g. to the VPS;
+# phones pick up the new address with their next app update.
+env:
+  XTEND_URL: ${{ vars.APP_URL || 'https://xtend-brown.vercel.app' }}
+
 jobs:
   android:
     name: Android
@@ -133,7 +139,7 @@ jobs:
             kind="debug build: set the Android signing secrets for updates that install over each other"
           fi
           title="Xtend for Android $XTEND_VERSION_NAME"
-          notes="Built from ${GITHUB_SHA::7}, run ${{ github.run_number }} ($kind). Install from https://xtend-brown.vercel.app/download"
+          notes="Built from ${GITHUB_SHA::7}, run ${{ github.run_number }} ($kind). Install from ${XTEND_URL}/download"
           if gh release view android >/dev/null 2>&1; then
             gh release edit android --title "$title" --notes "$notes"
           else

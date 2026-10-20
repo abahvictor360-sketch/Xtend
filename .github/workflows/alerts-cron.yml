@@ -7,6 +7,10 @@
 # instead of in vercel.json. On Vercel Pro you could move it back to
 # vercel.json and delete this workflow.
 #
+# On the Hostinger VPS the server's own crontab runs this job
+# (deploy/crontab): set the repository variable JOBS_ON_VPS to true and this
+# workflow stands down. APP_URL (repository variable) is the site to call.
+#
 # Needs a repository secret CRON_SECRET matching the deployed CRON_SECRET env
 # var. GitHub's scheduled runs can be delayed or skipped under load, so the
 # cadence is best-effort, which is fine for alerts.
@@ -23,11 +27,13 @@ concurrency:
 
 jobs:
   alerts:
+    if: vars.JOBS_ON_VPS != 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Hit the alerts endpoint
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          APP_URL: ${{ vars.APP_URL || 'https://xtend-brown.vercel.app' }}
         run: |
           if [ -z "$CRON_SECRET" ]; then
             echo "::error::CRON_SECRET repository secret is not set"
@@ -35,7 +41,7 @@ jobs:
           fi
           code=$(curl -s -o /tmp/out.json -w '%{http_code}' --max-time 60 \
             -H "Authorization: Bearer $CRON_SECRET" \
-            https://xtend-brown.vercel.app/api/cron/alerts)
+            "$APP_URL/api/cron/alerts")
           echo "HTTP $code"; cat /tmp/out.json || true
           case "$code" in
             200) ;;
