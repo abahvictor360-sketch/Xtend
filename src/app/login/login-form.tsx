@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert } from '@/components/ui/alert'
+import { loginDestination } from '@/lib/login-destination'
 
 export function LoginForm() {
   const router = useRouter()
@@ -37,7 +38,7 @@ export function LoginForm() {
       }
 
       const next = params.get('next')
-      router.replace(next && next.startsWith('/') ? next : '/')
+      router.replace(loginDestination(next))
       router.refresh()
     } catch {
       setError('No connection. Check your data and try again.')

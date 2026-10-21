@@ -1553,3 +1553,11 @@ A rebuild matches this specification when all of the following hold.
 29. A marketer report downloads as `xtend-report-<name>-<date or month>.<pdf|docx|xlsx>` (no export-date suffix); the PDF is A4 portrait with the brand bar on every page, the Xpel logo, eight tiles and "Page i of n"; the Word file has the running header and page numbers; the Excel file has Summary, Days, Store visits, Stores and Daily reports sheets (and Stock and sales when there are any).
 30. The logo in those files comes from `XPEL_LOGO_PNG` in code, so the files render even when `public/` is not deployed with the function.
 31. Staff calendars show missed working days red, days off grey and leave soft orange, each with its word and a legend; the attendance calendar shows "–" grey for a day off and "Lv" soft orange for leave.
+
+
+### VPS recovery (2026-10-21)
+
+A failed PM2 reload or new-build health check enters rollback. A reload failure
+cannot be masked by a successful pm2 save. The previous release is reloaded and
+its build ID health-checked before reporting rollback success; otherwise the
+script reports that manual recovery is required and exits nonzero.

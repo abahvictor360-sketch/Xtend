@@ -1773,3 +1773,12 @@ What this means in practice:
   "supervisor will be notified", "alert", "beacon" or "integrity".
 - A late clock-in shows exactly the same success text as an on-time one.
 - A rejected photo message says only what is wrong and how to retake it.
+
+
+### Recovery fixes (2026-10-21)
+
+After sign-in, loginDestination accepts only root-relative local destinations;
+external, protocol-relative, backslash, control-character and malformed paths
+fall back to `/`. Photo-check 401 (expired login) and 429 (rate limit) responses
+are retryable rather than permanent photo rejections. Existing queue age and
+attempt limits remain in effect. Other rejected photos still require retaking.

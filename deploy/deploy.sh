@@ -47,7 +47,7 @@ ln -sfn "$REL" "$APP_DIR/current.next"
 mv -Tf "$APP_DIR/current.next" "$APP_DIR/current"
 
 reload() {
-  pm2 startOrReload "$APP_DIR/current/deploy/ecosystem.config.cjs" --update-env >/dev/null
+  pm2 startOrReload "$APP_DIR/current/deploy/ecosystem.config.cjs" --update-env >/dev/null || return 1
   pm2 save >/dev/null
 }
 healthy() {
@@ -59,16 +59,18 @@ healthy() {
 }
 
 log "reloading"
-reload
-if healthy "$BUILD_ID"; then
+if reload && healthy "$BUILD_ID"; then
   log "live: $BUILD_ID"
 else
   log "the new build did not come up healthy"
   if [ -n "$PREVIOUS" ] && [ -d "$PREVIOUS" ] && [ "$PREVIOUS" != "$REL" ]; then
     ln -sfn "$PREVIOUS" "$APP_DIR/current.next"
     mv -Tf "$APP_DIR/current.next" "$APP_DIR/current"
-    reload
-    log "rolled back to $(basename "$PREVIOUS")"
+    if reload && healthy "$(basename "$PREVIOUS")"; then
+      log "rolled back to $(basename "$PREVIOUS")"
+    else
+      log "rollback failed: previous release selected, but it is not healthy; manual recovery required"
+    fi
   fi
   exit 1
 fi

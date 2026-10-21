@@ -56,6 +56,11 @@ export async function checkPhoto(
   })
   const data = (await res.json().catch(() => ({}))) as { verdict?: string; error?: string }
   if (res.ok) return data.verdict ?? 'pass'
+  // An expired session or temporary rate limit says nothing about the photo.
+  // Keep it in the outbox so it can be checked again later.
+  if (res.status === 401 || res.status === 429) {
+    throw new Error(data.error ?? 'Photo check temporarily unavailable. Try again later.')
+  }
   if (res.status >= 400 && res.status < 500) {
     throw new PermanentJobError(data.error ?? 'That photo cannot be used. Take it again.')
   }

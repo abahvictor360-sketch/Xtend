@@ -128,3 +128,10 @@ the old one off.
 Set up Hostinger's backups or snapshots for the VPS. The data itself is in
 Supabase, so also turn on Supabase backups (point-in-time recovery on the Pro
 plan).
+
+
+Recovery checks: both PM2 reload failures and failed new-build health checks
+trigger rollback. The script verifies the previous build before reporting
+successful rollback; if that fails, it reports manual recovery is required.
+Run `npx tsx --tsconfig tsconfig.scripts.json scripts/check-deploy.ts` locally
+to exercise these paths with mocked server commands.

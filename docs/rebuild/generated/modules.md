@@ -477,6 +477,12 @@ map (and the phone app) never pay for it.
 
 Exports: `loadLeaflet`
 
+## `src/lib/login-destination.ts`
+
+Accept only a local page after sign-in, never a protocol-relative or external URL.
+
+Exports: `loginDestination`
+
 ## `src/lib/marketer-report-server.ts`
 
 Everything one person's report needs, read through the caller's own

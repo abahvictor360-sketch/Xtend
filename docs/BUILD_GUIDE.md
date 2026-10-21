@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-20, after the Hostinger VPS setup (`deploy/`)._
+_Last updated: 2026-10-21, after sign-in, offline photo and deployment recovery fixes._
 
 ---
 
@@ -457,6 +457,12 @@ in `mobile/` changes.
 
 ## 10. Testing and checks
 
+Regression checks added 2026-10-21: run `npx tsx --tsconfig tsconfig.scripts.json
+scripts/check-login-destination.ts`, `scripts/check-photo-retry.ts` and
+`scripts/check-deploy.ts` (use the same command prefix for each). The deploy check
+requires Bash and mocks PM2/network/symlink commands; it never contacts a server.
+Set BASH_BIN if Bash is not at the usual Git for Windows path.
+
 Run all of these before pushing. CI builds the phone apps; the rest is on you.
 
 ```bash
@@ -577,6 +583,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-21 | Restrict post-login destinations to local pages; retain photos on temporary 401/429 check failures; roll back failed PM2 reloads and verify rollback health. Added three regression scripts | — |
 | 2026-10-20 | Hostinger VPS hosting: `deploy/` (one-time `setup-server.sh`, `deploy.sh` with health check and rollback, PM2 cluster, Nginx, crontab for the three jobs) and `.github/workflows/deploy-vps.yml` deploying every push over SSH. Repository variables `APP_URL` (site the phone apps open; release notes) and `JOBS_ON_VPS` (GitHub alerts job stands down) | — |
 | 2026-10-19 | All dashboards: responsive header, readable attendance notes, larger controls and accessible menu dismissal | — |
 | 2026-10-19 | Mobile dashboard: prominent clock controls, labelled navigation, larger tap targets, retry button, bounded place lookup; fewer profile queries and parallel History reads | — |
