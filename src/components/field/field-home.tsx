@@ -324,7 +324,7 @@ function ShiftPill({
       {state === 'before' ? (
         <a
           href="#clock"
-          className="shrink-0 rounded-full bg-white px-4 py-2 text-xs font-bold uppercase tracking-wide text-brand transition-opacity hover:opacity-90"
+          className="inline-flex min-h-[2.75rem] shrink-0 items-center rounded-full bg-white px-5 py-2 text-xs font-bold uppercase tracking-wide text-brand transition-opacity hover:opacity-90"
         >
           Clock in
         </a>
@@ -392,7 +392,7 @@ function WeekRow({ today, calendar }: { today: string; calendar: CalendarDay[] }
               >
                 {dayOfMonth(date)}
               </span>
-              <span className={cn('h-3 text-[9px] leading-3', WORD_CLASS[mark])}>
+              <span className={cn('h-3 text-[10px] leading-3', WORD_CLASS[mark])}>
                 {word || (mark === 'worked' ? '•' : '')}
               </span>
             </Link>
@@ -449,7 +449,7 @@ function DayCard({
         <div className="min-w-0">
           <p className="text-2xl font-bold italic">My day</p>
           <p className="mt-1 text-lg italic text-white/90">{progress}% done</p>
-          <p className="mt-1 truncate text-xs text-white/75">
+          <p className="mt-1 truncate text-xs text-white/90">
             {day.outlet
               ? `${day.outlet.name} · ${day.outlet.shift_start.slice(0, 5)}–${day.outlet.shift_end.slice(0, 5)}`
               : 'Have a good day'}

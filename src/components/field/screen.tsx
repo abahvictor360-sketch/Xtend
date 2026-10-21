@@ -51,7 +51,7 @@ export function SheetScreen({
 export function HeaderField({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-white/70">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-white/85">{label}</p>
       <p className="mt-1 text-sm font-medium text-white/95">{value}</p>
     </div>
   )

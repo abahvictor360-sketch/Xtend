@@ -56,7 +56,7 @@ export function KpiCards({ kpis }: { kpis: Kpi[] }) {
             </div>
             <div className="mt-4 flex items-center justify-between gap-2">
               <ChangePill kpi={k} onDeep={deep} />
-              <span className={cn('text-right text-[11px] leading-tight', deep ? 'text-white/70' : 'text-muted-foreground')}>{k.note}</span>
+              <span className={cn('text-right text-[11px] leading-tight', deep ? 'text-white/85' : 'text-muted-foreground')}>{k.note}</span>
             </div>
           </div>
         )

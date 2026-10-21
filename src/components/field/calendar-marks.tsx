@@ -150,7 +150,7 @@ export function MonthCalendar({
                   )}
                 >
                   <span className="leading-none">{Number(date.slice(8, 10))}</span>
-                  <span className={cn('mt-0.5 text-[8.5px] leading-none', WORD_CLASS[mark])}>
+                  <span className={cn('mt-0.5 text-[10px] leading-none', WORD_CLASS[mark])}>
                     {MARK_WORD[mark] || (mark === 'worked' ? '•' : isToday ? 'Today' : '')}
                   </span>
                 </Link>
