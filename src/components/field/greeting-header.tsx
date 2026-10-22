@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Bell, BookOpen, KeyRound, LogOut } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
+import { sendActivity } from '@/lib/activity-client'
 
 function initials(name: string) {
   return name
@@ -107,6 +108,7 @@ export function GreetingHeader({
             type="button"
             className="flex min-h-11 w-full items-center gap-2 rounded-xl px-3 py-2.5 text-sm font-medium text-destructive hover:bg-destructive/10"
             onClick={async () => {
+              await sendActivity('sign_out')
               await supabase().auth.signOut()
               router.replace('/login')
               router.refresh()

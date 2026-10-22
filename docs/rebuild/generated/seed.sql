@@ -517,6 +517,12 @@ INSERT INTO public.support_quick_replies VALUES ('00000000-0000-4000-8000-000000
 
 
 --
+-- Data for Name: user_activity; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
 -- Data for Name: work_patterns; Type: TABLE DATA; Schema: public; Owner: -
 --
 
@@ -626,6 +632,13 @@ INSERT INTO public.xm_settings VALUES (true, 5.00, 40, 30, 20, 10, 40, 70, '{730
 -- Data for Name: xm_targets; Type: TABLE DATA; Schema: public; Owner: -
 --
 
+
+
+--
+-- Name: user_activity_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.user_activity_id_seq', 1, false);
 
 
 --

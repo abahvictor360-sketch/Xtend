@@ -39,7 +39,7 @@ const T = {
   stock: { id: 'stock', title: 'Stock count and X Metrics', icon: Gauge },
   checks: { id: 'checks', title: 'Integrity and Check an excuse', icon: ShieldAlert },
   people: { id: 'people', title: 'Staff, teams, roles and notifications', icon: Users },
-  setup: { id: 'setup', title: 'Outlets, places, audit log and updates', icon: Settings2 },
+  setup: { id: 'setup', title: 'Outlets, places, audit and activity logs, updates', icon: Settings2 },
   apps: { id: 'apps', title: 'Staff phones and the app', icon: Smartphone },
   analytics: { id: 'exports', title: 'Downloads and records', icon: BarChart3 },
   faq: { id: 'questions', title: 'Questions', icon: HelpCircle },
@@ -77,7 +77,7 @@ export default async function AdminGuidePage() {
               <>
                 <Ui>Outlets</Ui>: add every store with its address, its map position, its shift start
                 and end, and its radius (50–100 m for a kiosk or small shop, 150–300 m for a
-                supermarket or mall). See <Ui>Outlets, places, audit log and updates</Ui> below.
+                supermarket or mall). See <Ui>Outlets, places, audit and activity logs, updates</Ui> below.
               </>,
               <>
                 <Ui>Staff</Ui>: add everyone, one by one or with <Ui>Bulk import CSV</Ui>, choosing
@@ -376,6 +376,23 @@ export default async function AdminGuidePage() {
           <p>
             <Ui>Audit log</Ui>: every change an admin or supervisor makes, with when, where they were and on
             what device and IP address. Actions from a VPN, a new device or a new location are marked.
+          </p>
+          <p>
+            <Ui>Activity log</Ui>: what everyone does in Xtend — staff, supervisors and admins. It shows when
+            each person signed in and out, opened the app (at most once every 30 minutes per phone or
+            browser), clocked in and out, checked in and out of stores, filed the daily report, sent a stock
+            count or X Metrics count or sales, asked for or cancelled leave, wrote to Support, and changed
+            their password or profile photo. Each line has the Lagos time, the device, whether it was the
+            Android app, the iPhone app or the web, and the IP address where it was recorded (sign-ins,
+            sign-outs, app opens and account changes). Pick <Ui>Today</Ui>, <Ui>Yesterday</Ui>,{' '}
+            <Ui>Last 7 days</Ui> or <Ui>Last 30 days</Ui>, or your own dates (up to 92 days), one person and one
+            kind of activity. The cards count who was active, sign-ins and app opens and name the most active
+            person; <Ui>By person</Ui> gives each person&apos;s first and last activity, their counts and their
+            last device, with links to their <Ui>Movement</Ui> and <Ui>Attendance</Ui> for the same days; the
+            timeline lists everything day by day. Download it as Excel, PDF, Word or CSV exactly as filtered
+            (each download is in the audit log). Only admins see this page, and staff are not told about it.
+            Sign-ins, app opens and account changes are kept for 180 days; clock-ins, visits and the rest
+            come from their own records. If the page says it needs migration 062, run that file in Supabase.
           </p>
           <p>
             <Ui>Updates</Ui>: Xtend updates itself. Anyone with Xtend open is told when a newer version is

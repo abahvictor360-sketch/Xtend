@@ -3895,6 +3895,158 @@ begin
       perform act_as(boss);
     end;
 
+    -- Activity log (062): sign-ins, app opens and the rest, for admins only.
+    declare
+      femi   uuid := gen_random_uuid();
+      d0     date := (now() at time zone 'Africa/Lagos')::date;
+      lv     uuid;
+      tid    uuid;
+      ok     boolean;
+      n      integer;
+      pic    text;
+      feed   record;
+    begin
+      perform act_as(boss);
+      insert into auth.users (id, email) values (femi, 'femi.activity@xpel.ng');
+      insert into public.profiles (id, full_name, email, role, outlet_id)
+      values (femi, 'Femi Adebayo', 'femi.activity@xpel.ng', 'merchandiser', mall_id);
+
+      ok := public.record_activity(femi, 'sign_in', '102.89.33.7', 'android', 131,
+              'Mozilla/5.0 (Linux; Android 14; SM-A546E) Chrome/128 Mobile Safari/537.36 XtendApp',
+              '{"type": "phone", "os": "Android 14", "browser": "Xtend app", "app": true}'::jsonb);
+      perform assert(ok, 'activity: a sign-in is recorded');
+      perform assert((select platform from public.user_activity where user_id = femi and kind = 'sign_in') = 'android'
+                     and (select app_build from public.user_activity where user_id = femi and kind = 'sign_in') = 131
+                     and (select ip from public.user_activity where user_id = femi and kind = 'sign_in') = '102.89.33.7',
+        'activity: with the platform, app build and IP');
+
+      ok := public.record_activity(femi, 'app_open', '102.89.33.7', 'android', 131, null, null, '{}'::jsonb, now() - interval '50 minutes');
+      perform assert(ok, 'activity: the first app open is recorded');
+      ok := public.record_activity(femi, 'app_open', '102.89.33.7', 'android', 131, null, null, '{}'::jsonb, now() - interval '30 minutes' + interval '10 seconds');
+      perform assert(not ok, 'activity: another open within 30 minutes on the same platform is skipped');
+      ok := public.record_activity(femi, 'app_open', '102.89.33.8', 'web', null, null, null, '{}'::jsonb, now() - interval '25 minutes');
+      perform assert(ok, 'activity: an open on another platform is its own row');
+      ok := public.record_activity(femi, 'app_open', '102.89.33.7', 'android', 131, null, null, '{}'::jsonb, now() - interval '15 minutes');
+      perform assert(ok, 'activity: 35 minutes later the app open counts again');
+      perform assert((select count(*) from public.user_activity where user_id = femi and kind = 'app_open') = 3,
+        'activity: three app opens kept, one skipped');
+      ok := public.record_activity(femi, 'app_open', null, 'symbian', null,
+              'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) Safari XtendApp');
+      perform assert(ok and (select platform from public.user_activity where user_id = femi order by id desc limit 1) = 'ios',
+        'activity: an unknown platform is read from the browser string instead');
+
+      begin
+        perform public.record_activity(femi, 'clock_in');
+        perform assert(false, 'activity: only the known kinds are recorded');
+      exception when others then
+        perform assert(sqlerrm like 'Unknown activity%', 'activity: only the known kinds are recorded');
+      end;
+      begin
+        insert into public.user_activity (user_id, kind) values (femi, 'hacked');
+        perform assert(false, 'activity: the table refuses an unknown kind');
+      exception when check_violation then
+        perform assert(true, 'activity: the table refuses an unknown kind');
+      end;
+
+      -- Things already kept elsewhere show up in the feed too.
+      perform notifications_on(femi);
+      insert into public.work_patterns (user_id, days) values (femi, '{0,1,2,3,4,5,6}');
+      perform act_as(femi);
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, device_info)
+      values ('opening', 6.6019, 3.3516, 12, fresh_photo('selfies', 'femi-1.jpg'), now(),
+              '{"ua": "Mozilla/5.0 (Linux; Android 14) XtendApp", "native": {"platform": "android"}}'::jsonb);
+      lv := public.apply_leave('annual', d0 + 20, d0 + 22, 'My sister''s wedding');
+      perform public.cancel_leave(lv);
+      tid := public.open_support_thread('Phone is slow', 'The app is slow on my phone.');
+      perform act_as(boss);
+      perform public.post_support_message(tid, 'Try restarting the phone.');
+
+      -- A new profile photo is recorded where it is set, with the browser.
+      perform act_as(femi);
+      perform set_config('request.headers',
+        '{"user-agent": "Mozilla/5.0 (Linux; Android 14) XtendApp", "x-forwarded-for": "41.58.1.2, 10.0.0.1"}', true);
+      insert into storage.buckets (id, name) values ('avatars', 'avatars') on conflict do nothing;
+      pic := femi::text || '/face.jpg';
+      insert into storage.objects (bucket_id, name) values ('avatars', pic);
+      perform public.set_my_avatar(pic);
+      perform set_config('request.headers', '', true);
+      perform assert(exists (select 1 from public.user_activity where user_id = femi and kind = 'photo_changed'
+                             and ip = '41.58.1.2' and platform = 'android'),
+        'activity: a new profile photo is recorded with its IP and platform');
+
+      -- Only admins read the feed.
+      begin
+        perform * from public.activity_feed(d0, d0);
+        perform assert(false, 'activity: staff cannot read the activity log');
+      exception when others then
+        perform assert(sqlerrm = 'Only admins can see the activity log', 'activity: staff cannot read the activity log');
+      end;
+      perform act_as(tunde);
+      begin
+        perform * from public.activity_feed(d0, d0);
+        perform assert(false, 'activity: supervisors cannot read the activity log');
+      exception when others then
+        perform assert(sqlerrm = 'Only admins can see the activity log', 'activity: supervisors cannot read the activity log');
+      end;
+
+      perform act_as(boss);
+      perform assert((select array_agg(label) from public.activity_feed(d0, d0, femi))
+                       @> array['Signed in', 'Opened the app', 'Clocked in at Ikeja City Mall', 'Asked for leave',
+                                'Cancelled a leave request', 'Sent a support message', 'Changed their profile photo'],
+        'activity: the feed has sign-in, app opens, clock-in, leave, support and photo, in plain English');
+      perform assert((select count(*) from public.activity_feed(d0, d0, femi) where kind = 'support_message') = 1,
+        'activity: the office''s reply is not counted as the person''s message');
+      select * into feed from public.activity_feed(d0, d0, femi) f where f.kind = 'clock_in';
+      perform assert(feed.platform = 'android' and feed.full_name = 'Femi Adebayo' and feed.role = 'merchandiser'
+                     and feed.detail->>'store' = 'Ikeja City Mall',
+        'activity: a clock-in carries the person, the platform and the store');
+      select * into feed from public.activity_feed(d0, d0, femi) f where f.kind = 'sign_in';
+      perform assert(feed.device = 'Xtend app on Android 14' and feed.ip = '102.89.33.7'
+                     and (feed.detail->>'app_build')::int = 131,
+        'activity: a sign-in carries the device, IP and app build');
+      perform assert((select bool_and(a.at >= b.at)
+                      from (select f.at, row_number() over () as i from public.activity_feed(d0, d0, femi) f) a
+                      join (select f.at, row_number() over () as i from public.activity_feed(d0, d0, femi) f) b on b.i = a.i + 1),
+        'activity: newest first');
+      perform assert(exists (select 1 from public.activity_feed(d0, d0) f where f.label = 'Checked in at Allen Avenue Beauty')
+                     and exists (select 1 from public.activity_feed(d0, d0) f where f.label = 'Checked out of Allen Avenue Beauty')
+                     and exists (select 1 from public.activity_feed(d0, d0) f where f.label = 'Filed the daily report')
+                     and exists (select 1 from public.activity_feed(d0, d0) f where f.label like 'Submitted a stock count at %'),
+        'activity: store visits, reports and stock counts are in the feed');
+      perform assert((select count(*) from public.activity_feed(d0, d0, femi, array['sign_in', 'app_open']))
+                       = (select count(*) from public.user_activity a
+                          where a.user_id = femi and a.kind in ('sign_in', 'app_open')
+                            and a.at >= d0::timestamp at time zone 'Africa/Lagos')
+                     and not exists (select 1 from public.activity_feed(d0, d0, femi, array['sign_in', 'app_open']) f
+                                     where f.kind not in ('sign_in', 'app_open')),
+        'activity: the kinds filter keeps only what was asked for');
+      perform assert((select count(*) from public.activity_feed(d0, d0, null, null, 3)) = 3,
+        'activity: the limit is kept');
+
+      -- Dates are Lagos days.
+      ok := public.record_activity(femi, 'sign_out', null, 'web', null, null, null, '{}'::jsonb,
+              ((d0 - 40)::timestamp + interval '23 hours 30 minutes') at time zone 'Africa/Lagos');
+      perform assert(not exists (select 1 from public.activity_feed(d0 - 30, d0, femi) f where f.kind = 'sign_out'),
+        'activity: an older sign-out is outside the range');
+      perform assert((select count(*) from public.activity_feed(d0 - 40, d0 - 40, femi) f where f.label = 'Signed out') = 1,
+        'activity: and inside its own Lagos day, even late in the evening');
+      perform assert(not exists (select 1 from public.activity_feed(d0 - 39, d0 - 39, femi)),
+        'activity: not on the next day');
+      begin
+        perform * from public.activity_feed(d0, d0 - 1);
+        perform assert(false, 'activity: the end cannot be before the start');
+      exception when others then
+        perform assert(sqlerrm like 'The end date cannot be before%', 'activity: the end cannot be before the start');
+      end;
+
+      -- Kept 180 days.
+      ok := public.record_activity(femi, 'sign_in', null, 'web', null, null, null, '{}'::jsonb, now() - interval '200 days');
+      n := public.purge_user_activity();
+      perform assert(n = 1 and not exists (select 1 from public.user_activity where user_id = femi and at < now() - interval '180 days')
+                     and exists (select 1 from public.user_activity where user_id = femi and kind = 'sign_out'),
+        'activity: rows older than 180 days are purged, newer ones kept');
+    end;
+
   end;
 
   raise notice 'ALL RULES PASSED';

@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -32,18 +31,16 @@ export function ChangePasswordForm({ forced }: { forced: boolean }) {
 
     setBusy(true)
     try {
-      const client = supabase()
-      const { error: authError } = await client.auth.updateUser({ password })
-      if (authError) {
-        setError(authError.message)
+      // The server sets the password and clears the "must change" mark.
+      const res = await fetch('/api/auth/password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password }),
+      })
+      if (!res.ok) {
+        const { error: message } = (await res.json().catch(() => ({}))) as { error?: string }
+        setError(message ?? 'The password could not be saved. Try again.')
         return
-      }
-
-      const {
-        data: { user },
-      } = await client.auth.getUser()
-      if (user) {
-        await client.from('profiles').update({ must_change_password: false }).eq('id', user.id)
       }
 
       router.replace('/')

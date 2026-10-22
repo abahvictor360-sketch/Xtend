@@ -98,9 +98,10 @@ Groups and items, exactly in this order (label, path, icon, flags):
 | Setup | Outlets | `/admin/outlets` | Store | — |
 | | Places | `/admin/places` | MapPinned | adminOnly |
 | | Audit log | `/admin/audit` | FileClock | adminOnly |
+| | Activity log | `/admin/activity` | Activity | adminOnly |
 | | Updates | `/admin/updates` | RefreshCw | adminOnly |
 
-Filtering: an item shows when `(!adminOnly || !readOnly) && (!supervisorOnly || readOnly)`. A group with no items left is dropped. So an admin sees "Admin guide" and not "Guide"; a supervisor sees "Guide" (the supervisor guide) and none of Teams, Roles, Places, Audit log, Updates.
+Filtering: an item shows when `(!adminOnly || !readOnly) && (!supervisorOnly || readOnly)`. A group with no items left is dropped. So an admin sees "Admin guide" and not "Guide"; a supervisor sees "Guide" (the supervisor guide) and none of Teams, Roles, Places, Audit log, Activity log, Updates.
 
 Active item: `/admin` is active only on an exact match; every other item is active when the path starts with its href (so `/admin/metrics/grades` lights "X Metrics").
 
@@ -170,13 +171,14 @@ Invisible. On mount, and then every 15 minutes (`REFRESH_MS = 15 * 60_000`), it 
 | Outlets bulk add | full | hidden | everything |
 | Places | full | hidden | everything |
 | Audit log | full | hidden | everything |
+| Activity log | full | hidden | everything (the `activity_feed` RPC refuses them too) |
 | Updates | full | hidden | everything |
 
-Underlying API permissions worth knowing (from `generated/routes.md`): alert resolve routes, X Metrics admin routes (`xmAdminAction`), X Metrics exports, `/api/admin/metrics/run`, `/api/admin/teams`, `/api/admin/staff-roles`, `/api/admin/staff-logins`, `/api/admin/count-template`, `/api/admin/export/audit/*` are `['admin']`; everything else under `/api/admin` admits both and relies on RLS/RPC checks.
+Underlying API permissions worth knowing (from `generated/routes.md`): alert resolve routes, X Metrics admin routes (`xmAdminAction`), X Metrics exports, `/api/admin/metrics/run`, `/api/admin/teams`, `/api/admin/staff-roles`, `/api/admin/staff-logins`, `/api/admin/count-template`, `/api/admin/export/audit/*`, `/api/admin/export/activity/*` are `['admin']`; everything else under `/api/admin` admits both and relies on RLS/RPC checks.
 
 ### Acceptance checks
 
-- Signed in as a supervisor, typing each hidden URL (`/admin/guide`, `/admin/teams`, `/admin/roles`, `/admin/places`, `/admin/audit`, `/admin/updates`, `/admin/users/import`, `/admin/outlets/import`, `/admin/metrics/supplies`, `/admin/metrics/targets`, `/admin/metrics/setup`, `/admin/metrics/settings`) lands on `/`.
+- Signed in as a supervisor, typing each hidden URL (`/admin/guide`, `/admin/teams`, `/admin/roles`, `/admin/places`, `/admin/audit`, `/admin/activity`, `/admin/updates`, `/admin/users/import`, `/admin/outlets/import`, `/admin/metrics/supplies`, `/admin/metrics/targets`, `/admin/metrics/setup`, `/admin/metrics/settings`) lands on `/`.
 - A field worker typing any `/admin` URL lands on `/`; a signed-out visitor on `/login`.
 - A supervisor never sees a person outside their team on any page or in any download.
 
@@ -358,7 +360,7 @@ Sections (id, title, intro) and what each must say:
 | stock | Stock count and X Metrics | What is in each store, and how staff are scored. | Count requests; back store + shop floor, expiry, sold, shelf photo; Count sheets as Excel/PDF/photo. X Metrics sub-pages listed. |
 | checks | Integrity and Check an excuse | When something does not look right. Staff never see these. | Integrity up to 120 days; Check an excuse up to 3 days; Keep on record. |
 | people | Staff, teams, roles and notifications | The People part of the menu. | Staff tabs, Add staff, Login details (Word); screenshots `/guide/admin-add-staff.png` (1932×504) and `/guide/admin-teams.png` (2000×1216); Teams "Select all shown", "Assign to supervisor"; Roles; Store allocation (once someone has any store allocated, a check-in at a store not theirs is refused); Schedules (Mon–Sat unless changed; one-off changes 60 days back to a year ahead; leave, then one-off change, then weekly pattern) and Leave (Annual/Sick/Casual/Other, 7 days back, a year ahead, 60 days, no overlaps; nobody decides their own; pending leave does not excuse a day; audited `schedule.pattern`, `schedule.override`, `leave.approve`, `leave.reject`); Notifications "See who", "Later", "Send again". Tip on what supervisors can and cannot do. |
-| setup | Outlets, places, audit log and updates | The Setup part of the menu. | Steps to add a store ("Add outlet", "I am standing here", "Create outlet"); "No location yet" tip; Places ("Save and verify", "Make it a store", "Dismiss"); Audit log; Updates ("What's new", "Required", lowest Android/iPhone build). |
+| setup | Outlets, places, audit and activity logs, updates | The Setup part of the menu. | Steps to add a store ("Add outlet", "I am standing here", "Create outlet"); "No location yet" tip; Places ("Save and verify", "Make it a store", "Dismiss"); Audit log; Activity log (what it records, quick ranges, By person with Movement/Attendance links, downloads, admins only, 180 days for sign-ins and app opens, migration 062); Updates ("What's new", "Required", lowest Android/iPhone build). |
 | apps | Staff phones and the app | Getting staff set up, and what their phones need. | Download page with QR; sign in, password, profile photo, allow location/camera/notifications; clocking in blocked until notifications on. |
 | exports | Downloads and records | Getting the numbers out. | Excel, PDF, Word, CSV exactly as filtered; downloads audited. Marketer reports (eight tiles, clock-in/out, visits with the time between stores, daily report, counts, sales; month adds day-by-day, per-store and each day) and the daily report's database-written copy of the day's visits. Clock-out reminders (shift end, then an hour later). |
 | questions | Questions | — | 7 Q&As: cannot clock in; clocked in but nothing shows; long silences; forgot password; left the company; store location wrong; a supervisor wants this guide (link to `/admin/supervisor-guide`). |
@@ -1913,6 +1915,63 @@ Title "Audit log"; subtitle "`range | All dates` · N actions"; notes "Each acti
 - Resetting a password elsewhere adds a "Reset a password" entry at the top with the actor's name.
 - An action from a new browser after earlier ones from the app shows "New device"; the person's very first entry never does.
 - "Only VPN, new device or new location" hides every unflagged entry.
+
+---
+
+## 27a. Activity log — `/admin/activity` (admins only)
+
+What everybody (staff, supervisors, admins) does in Xtend; the Audit log covers only office changes. Files: `src/app/admin/activity/page.tsx`, view `src/components/admin/activity-view.tsx`; pure logic `src/lib/activity-log.ts` (tested by `scripts/check-activity.ts`); server `src/lib/activity-server.ts` (`recordActivity`, `fetchActivity`); download `src/app/api/admin/export/activity/[format]/route.ts`. Data (migration 062): table `user_activity`, RPC `activity_feed` (admins only; raises "Only admins can see the activity log" for anyone else). Title "Activity log — Xtend". `requireSession(['admin'])`. Menu: Setup group, after Audit log, label **Activity log**, lucide icon `Activity`, adminOnly.
+
+Heading **"Activity log"**: "What everyone does in Xtend — staff, supervisors and admins — newest first, in Lagos time: signing in and out, opening the app, clocking in and out, store visits, reports, counts, leave and support messages, with the device and IP address where known. Only admins can see this page."
+
+### Recording (all server-side or silent; never shown to staff)
+
+| Kind | Where it is recorded |
+|---|---|
+| `sign_in` | `POST /api/auth/sign-in` after a successful sign-in (service role → `record_activity`) |
+| `sign_out` | The two Sign out buttons (`sign-out-button.tsx`, `greeting-header.tsx`) call `POST /api/activity` (`sendActivity('sign_out')`, waits at most 1.5 s) before `auth.signOut()`; `/api/auth/expired` records it with `detail.reason` (`new-day` / `clocked-out`) |
+| `app_open` | `<ActivityPing />` (renders nothing) in the field and admin layouts: on mount and whenever the page becomes visible again, at most once per 5 minutes per page; sends `platform` (`nativePlatform()` or `web`) and the app build (`App.getInfo`). The database keeps at most one per person per platform per 30 minutes |
+| `password_changed` | `POST /api/auth/password` (the change-password form now posts here; the server calls `auth.updateUser`, clears `must_change_password`, records `detail.first` when it replaced the temporary password) |
+| `photo_changed` | Inside `set_my_avatar()` (SQL), with the IP and browser string from PostgREST's `request.headers` |
+
+`POST /api/activity`: `requireApiSession()` (any role), zod `{ kind: 'sign_out' | 'app_open', platform?: 'web'|'android'|'ios', app_build?: int }`. Signing in, passwords and photos are not accepted from the browser. IP from `requestIp` (`src/lib/client-ip.ts`), device from `parseUserAgent` (`audit-context.ts`). Failures are logged and ignored.
+
+### Filters (GET form, `parseActivityFilter`)
+
+| Param | Field | Notes |
+|---|---|---|
+| `person` | "Who": **Everyone** + every profile ("Name (Role)") | uuid |
+| `group` | "What": **All activity**, Signing in and out, Opening the app, Clocking in and out, Store visits, Reports and counts, Leave, Support messages, Password and photo (`ACTIVITY_GROUPS`) | sent to the RPC as `p_kinds` |
+| `from`, `to` | dates, never after today; default today; swapped if reversed; at most **92 days** (`MAX_RANGE_DAYS`, the start is moved) | Lagos days |
+
+**Show**; "Quick:" **Today**, **Yesterday**, **Last 7 days**, **Last 30 days** (the active one filled brand); **Clear** (→ `/admin/activity`) when not the default; "**Download:**" Excel / PDF / Word / CSV → `/api/admin/export/activity/<fmt>?<query>`. Reads up to **2000** rows (downloads 5000) newest first; "Showing the newest N entries…" when cut.
+
+Missing migration: "Could not load the activity log. The activity log needs migration 062 (supabase/migrations/0062_user_activity.sql). Run it in Supabase, then reload."
+
+### Figures (2 / 4 columns)
+
+**People active** (note "N actions in all"), **Sign-ins**, **App opens** ("At most one per 30 minutes"), **Most active** (name, "N entries"). "Actions" = everything except sign-in, sign-out and app open.
+
+### By person
+
+Busiest first (then latest). Phone: a list; ≥ 640 px a table: Person (links to `?person=`) and role, First, Last, Sign-ins, App opens, Actions, Last device (device; platform · IP), See: **Movement** (`/admin/tracking?person=&date=from&until=to`) and **Attendance** (`/admin/attendance?user_id=&from=&to=`).
+
+### Timeline
+
+Grouped by Lagos day (heading "Thursday, 22 October 2026", "N entries"), newest first. Each line: time (HH:MM), a dot coloured by group (brand palette), name (role), the label · plain detail ("on site · 12 m from the store", "45 min in the store", "14 products", "Annual leave, 10 Nov to 12 Nov", "“subject”", "app build 131", "a new day"), and "device · platform · IP x" when known. On ≥ 640 px the Movement / Attendance links for that day sit on the right. Empty: "Nothing matches."
+
+Labels (from SQL): Signed in; Signed out; Signed out (login expired); Opened the app; Changed their password; Changed their profile photo; Clocked in at `store`; Clocked out at `store`; Checked in at `store`; Checked out of `store`; Filed the daily report; Submitted a stock count at `store`; Submitted an X Metrics count at `store` (voided); Logged the day's sales at `store` (voided); Asked for leave; Cancelled a leave request; Sent a support message.
+
+### Download
+
+Through the shared renderer (§29). Title "Activity log"; subtitle "`range` · `Everyone | name` · `All activity | group` · N entries"; notes summarise people, sign-ins, app opens and other actions and the 30-minute rule. Columns When, Person, Role, What, Detail, Platform, Device, IP address. File `xtend-activity-log`. Audited as `export.activity.<fmt>` with the filter and row count.
+
+### Acceptance checks
+
+- A supervisor or a field worker opening `/admin/activity` lands on `/`; `activity_feed` raises for them.
+- Signing in on the Android app adds "Signed in" with "Xtend app on Android … · Android app · IP …".
+- Opening the app twice within 30 minutes adds one "Opened the app".
+- Nothing in the staff app or the staff or supervisor guides mentions this page.
 
 ---
 

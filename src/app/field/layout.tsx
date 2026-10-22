@@ -4,6 +4,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { FieldNav } from '@/components/field/field-nav'
 import { PhoneBeacon } from '@/components/field/phone-beacon'
 import { NativeBridge } from '@/components/native-bridge'
+import { ActivityPing } from '@/components/activity-ping'
 import { NamePlace, type PlaceDue } from '@/components/field/name-place'
 import { getCountStatus } from '@/lib/store-count-status'
 
@@ -52,6 +53,7 @@ export default async function FieldLayout({ children }: { children: React.ReactN
         </main>
         <PhoneBeacon />
         <NativeBridge />
+        <ActivityPing />
         <FieldNav canFileReport={canFileReport === true} canCountStock={countStatus.open} hasMetrics={hasMetrics} />
       </div>
     </div>

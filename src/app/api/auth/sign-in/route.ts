@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { allowAttempt, clientAddress } from '@/lib/rate-limit'
+import { recordActivity } from '@/lib/activity-server'
 
 const schema = z.object({
   identifier: z.string().trim().min(3).max(120),
@@ -36,8 +37,11 @@ export async function POST(request: Request) {
 
   // The user-scoped client writes the session cookies onto this response.
   const supabase = await createServerSupabase()
-  const { error } = await supabase.auth.signInWithPassword({ email, password })
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) return Response.json({ error: WRONG }, { status: 401 })
+
+  // For the office's activity log (062); never holds up the sign-in.
+  if (data.user) await recordActivity(data.user.id, 'sign_in', request.headers)
 
   return Response.json({ ok: true })
 }
