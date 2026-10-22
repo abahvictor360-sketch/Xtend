@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth'
+import { recordActivity } from '@/lib/activity-server'
 
 /**
  * Ends a login that no longer counts (yesterday's, or one that has already
@@ -17,6 +18,7 @@ export async function GET(request: Request) {
   if (session && !session.relogin) return NextResponse.redirect(new URL('/', url.origin))
 
   if (session) {
+    await recordActivity(session.userId, 'sign_out', request.headers, { detail: { reason: session.relogin } })
     const supabase = await createServerSupabase()
     await supabase.auth.signOut()
   }

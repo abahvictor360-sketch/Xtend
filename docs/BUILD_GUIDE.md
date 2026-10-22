@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-21, after sign-in, offline photo and deployment recovery fixes._
+_Last updated: 2026-10-22, after the admin Activity log (migration 0062)._
 
 ---
 
@@ -38,7 +38,7 @@ marketers across Nigeria.
 |---|---|---|
 | Merchandisers, marketers | The Xtend app (Android, iPhone) or Chrome | Clock in and out with a GPS fix and an in-app selfie, check in at stores (marketers), stock counts, daily reports, X Metrics sales, support messages |
 | Supervisors | Web dashboard (`/admin`) | Their own team only: attendance, movement, visits, alerts, support, stock counts, notifications, integrity, excuses |
-| Admins | Web dashboard (`/admin`) | Everything, plus stores, places, teams, roles, X Metrics setup, audit log, updates |
+| Admins | Web dashboard (`/admin`) | Everything, plus stores, places, teams, roles, X Metrics setup, audit log, activity log, updates |
 
 Three guides exist, one per audience: staff at `/guide` (and in the app),
 supervisors at `/admin/supervisor-guide`, admins at `/admin/guide`.
@@ -295,6 +295,16 @@ the code lives.
   pushes "Time to clock out", and again an hour later; the home screen shows a
   **Clock out** prompt (`src/lib/clock-out-reminder*.ts`,
   `src/components/field/clock-out-prompt.tsx`).
+- **Activity log** (0062, admins only, `/admin/activity`): what everyone does
+  in Xtend with time, device, platform and IP. Sign-ins (`/api/auth/sign-in`),
+  sign-outs and app opens (`POST /api/activity`, `ActivityPing` in the field
+  and admin layouts; one app open per person and platform per 30 minutes),
+  password changes (`POST /api/auth/password`) and profile photos
+  (`set_my_avatar`) go in `user_activity`; `activity_feed()` adds clock-ins,
+  visits, reports, counts, leave and support messages from their own tables.
+  Recorded silently: staff are never told. Downloads in four formats, audited
+  as `export.activity.<fmt>` (`src/lib/activity-*.ts`,
+  `src/components/admin/activity-view.tsx`).
 
 ## 6. The database: every migration
 
@@ -363,6 +373,7 @@ Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
 | 0059 | Work schedules, one-off changes, leave requests; absence skips days off and leave |
 | 0060 | Marketers check in only at their own stores; visits kept with the daily report |
 | 0061 | Clock-out reminders at the end of the shift |
+| 0062 | Activity log: sign-ins, sign-outs, app opens, password and photo changes (`user_activity`), the admin-only `activity_feed`, 180-day purge |
 
 ## 7. Environment variables
 
@@ -395,7 +406,7 @@ All need `Authorization: Bearer $CRON_SECRET`.
 
 | Path | When | Does |
 |---|---|---|
-| `/api/cron/purge-selfies` | 02:20 UTC daily | Deletes clock photos older than 24 hours |
+| `/api/cron/purge-selfies` | 02:20 UTC daily | Deletes clock photos older than 24 hours; activity log rows older than 180 days (0062) |
 | `/api/cron/absence-sweep` | 08:30 UTC daily | Tells the office who has not clocked in (skips anyone on a day off or on leave, 0059) |
 | `/api/cron/alerts` | Every 5 minutes | Sends unsent integrity flags, scheduled notifications, clock-out reminders (at shift end and an hour later, 0061), and hourly the X Metrics checks |
 | `/api/cron/metrics` | Optional, hourly | X Metrics checks on their own schedule |
@@ -498,7 +509,7 @@ for s in check-allocate check-assistant-actions check-attendance check-audit \
          check-excuses check-exports check-fields check-geo check-integrity-ask \
          check-movement check-push-endpoints check-supply-import \
          check-support-notifications check-updates check-visits-alerts check-xm-exports \
-         check-schedules-leave check-marketer-reports check-clock-out-reminder; do
+         check-schedules-leave check-marketer-reports check-clock-out-reminder check-activity; do
   npx tsx --tsconfig tsconfig.scripts.json scripts/$s.ts | tail -1
 done
 ```
@@ -583,6 +594,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-22 | Admin **Activity log** (`/admin/activity`, menu after Audit log): everyone's sign-ins, sign-outs, app opens, clock-ins, visits, reports, counts, leave, support messages, password and photo changes with time, device, platform and IP; filters, summary cards, per-person table with Movement/Attendance links, day-by-day timeline, Excel/PDF/Word/CSV downloads. New `POST /api/activity` and `POST /api/auth/password` (the change-password form now saves through the server); nightly purge after 180 days; check script `check-activity` | 0062 |
 | 2026-10-21 | Restrict post-login destinations to local pages; retain photos on temporary 401/429 check failures; roll back failed PM2 reloads and verify rollback health. Added three regression scripts | — |
 | 2026-10-21 | UI/UX pass: the "Clock in" quick-action on the shift pill meets the 44 px touch target; white-on-orange small text (DayCard outlet line, HeaderField label, X Metrics deep-tile note) raised to pass 4.5:1 contrast; calendar day-labels enlarged from 8.5–9 px to 10 px for readability | — |
 | 2026-10-20 | Hostinger VPS hosting: `deploy/` (one-time `setup-server.sh`, `deploy.sh` with health check and rollback, PM2 cluster, Nginx, crontab for the three jobs) and `.github/workflows/deploy-vps.yml` deploying every push over SSH. Repository variables `APP_URL` (site the phone apps open; release notes) and `JOBS_ON_VPS` (GitHub alerts job stands down) | — |
@@ -642,6 +654,10 @@ Newest first. Dates are when the work landed on the main branch.
   the `CRON_SECRET` repo secret to match Vercel's exactly (a 401 means they
   differ). Until it runs, scheduled notifications show as "Late" and
   clock-out reminders are not sent. GitHub's schedule is best-effort.
+- **Activity log** (0062): clock-ins, visits, reports, counts, leave and
+  support messages carry no IP address (those tables never stored one); only
+  sign-ins, sign-outs, app opens and password/photo changes do. A sign-in
+  made before 0062 ran is not recorded (the route logs and carries on).
 - **Clock-out reminders** ignore schedules: they go to anyone clocked in and
   not out, which covers someone working on a day off.
 - **Android signing secrets**: until they are set, the published APK is a

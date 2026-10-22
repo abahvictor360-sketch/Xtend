@@ -296,5 +296,69 @@ select set_config('request.jwt.claim.sub', :'boss', false);
 select assert(exists (select 1 from public.reports r where jsonb_array_length(r.store_visits) > 0),
   'rls: the office reads the visits kept with a report');
 
+-- Activity log (062): admins read it all; staff and supervisors read
+-- nothing; nobody writes it directly or calls the recorder.
+reset role;
+select id as femi from auth.users where email = 'femi.activity@xpel.ng' \gset
+select count(*) as activity_total from public.user_activity \gset
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'femi', false);
+select assert((select count(*) from public.user_activity) = 0,
+  'rls: staff do not see their own activity log');
+select set_config('request.jwt.claim.sub', :'ada', false);
+select assert((select count(*) from public.user_activity) = 0,
+  'rls: nor anybody else''s');
+select set_config('request.jwt.claim.sub', :'tunde', false);
+select assert((select count(*) from public.user_activity) = 0,
+  'rls: supervisors do not see the activity log');
+select set_config('request.jwt.claim.sub', :'boss', false);
+select assert((select count(*) from public.user_activity) = :activity_total and :activity_total >= 5,
+  'rls: an admin sees all of it');
+do $$
+begin
+  insert into public.user_activity (user_id, kind) values (auth.uid(), 'sign_in');
+  perform assert(false, 'rls: activity cannot be written directly');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: activity cannot be written directly, even by an admin');
+end $$;
+do $$
+begin
+  update public.user_activity set ip = '1.1.1.1';
+  perform assert(false, 'rls: activity cannot be changed');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: activity cannot be changed');
+end $$;
+do $$
+begin
+  delete from public.user_activity;
+  perform assert(false, 'rls: activity cannot be deleted');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: activity cannot be deleted');
+end $$;
+do $$
+begin
+  perform public.record_activity(auth.uid(), 'sign_in');
+  perform assert(false, 'rls: only the server records activity');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: only the server records activity');
+end $$;
+do $$
+begin
+  perform public.purge_user_activity();
+  perform assert(false, 'rls: only the nightly job purges activity');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: only the nightly job purges activity');
+end $$;
+select assert((select count(*) from public.activity_feed(current_date - 1, current_date + 1)) > 0,
+  'rls: an admin reads the activity feed');
+select set_config('request.jwt.claim.sub', :'femi', false);
+do $$
+begin
+  perform * from public.activity_feed(current_date, current_date);
+  perform assert(false, 'rls: staff cannot read the activity feed');
+exception when others then
+  perform assert(sqlerrm = 'Only admins can see the activity log', 'rls: staff cannot read the activity feed');
+end $$;
+
 reset role;
 select 'ALL RLS CHECKS PASSED';

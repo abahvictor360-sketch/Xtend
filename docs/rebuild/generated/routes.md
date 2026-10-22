@@ -2,7 +2,25 @@
 
 # API routes
 
-107 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+110 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+
+## `POST /api/activity`
+
+- File: `src/app/api/activity/route.ts`
+- Who: public / own check
+
+The signed-in person's app opening or signing out (migration 062). Signing
+in, a new password and a new photo are recorded where they happen, on the
+server, so they are not accepted here. Always answers quickly; the
+database keeps one app open per 30 minutes.
+
+```ts
+const schema = z.object({
+  kind: z.enum(['sign_out', 'app_open']),
+  platform: z.enum(['web', 'android', 'ios']).nullable().optional(),
+  app_build: z.number().int().min(0).max(100_000_000).nullable().optional(),
+})
+```
 
 ## `POST /api/admin/alerts/[id]`
 
@@ -195,6 +213,14 @@ const schema = z.object({
 - Who: ['admin', 'supervisor']
 
 Exports are generated server-side, for whatever filter is applied.
+
+## `GET /api/admin/export/activity/[format]`
+
+- File: `src/app/api/admin/export/activity/[format]/route.ts`
+- Who: ['admin']
+
+The activity log, as filtered on screen, as Excel, Word, PDF or CSV.
+- Tables and views: `profiles`
 
 ## `GET /api/admin/export/alerts/[format]`
 
@@ -1088,6 +1114,22 @@ The server decides whether the login has expired, not the link: anyone
 can put this address in a page or a message, and opening it must not
 sign out somebody whose login is still good.
 
+## `POST /api/auth/password`
+
+- File: `src/app/api/auth/password/route.ts`
+- Who: public / own check
+
+The signed-in person sets their own password. Done here rather than in the
+browser so the change is recorded with where it came from (migration 062).
+Supabase still decides whether the new password is acceptable.
+
+```ts
+const schema = z.object({
+  password: z.string().min(8, 'Use at least 8 characters.').max(200),
+})
+```
+- Tables and views: `profiles`
+
 ## `POST /api/auth/sign-in`
 
 - File: `src/app/api/auth/sign-in/route.ts`
@@ -1180,7 +1222,7 @@ using the app.
 
 Vercel Cron sends `Authorization: Bearer $CRON_SECRET`.
 
-- Database functions: `close_abandoned_visits`
+- Database functions: `close_abandoned_visits`, `purge_user_activity`
 - Tables and views: `device_beacons`, `phone_checks`
 
 ## `GET /api/geocode`

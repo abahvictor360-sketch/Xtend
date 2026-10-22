@@ -2,7 +2,15 @@
 
 # Pages
 
-54 pages. "Who" is what `requireSession` admits (field pages are also guarded by their layout).
+55 pages. "Who" is what `requireSession` admits (field pages are also guarded by their layout).
+
+## `/admin/activity` — Activity log — Xtend
+
+- File: `src/app/admin/activity/page.tsx`
+- Who: ['admin']
+- Components: `admin/activity-view`
+
+Everybody's activity in Xtend (migration 062). Admins only.
 
 ## `/admin/alerts` — Alerts — Xtend
 

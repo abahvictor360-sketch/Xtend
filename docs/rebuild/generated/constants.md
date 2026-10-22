@@ -4,6 +4,16 @@
 
 Every exported UPPER_CASE constant in `src/lib`, with the comment above it. These are the numbers the rules use.
 
+## `src/lib/activity-log.ts`
+
+- `ACTIVITY_GROUPS` = `{ signin: { label: 'Signing in and out', kinds: ['sign_in', 'sign_out'] }, app: { label: 'Opening the app', kinds: ['app_open'] }, clock: { label: 'Clocking in and out', kinds: ['clock_in', 'clock_out'] }, visits: { label: 'Store visits', kinds: ['visit_in', 'visit_out'] }, work: { label: 'Reports and counts', kinds: ['report', 'stock_count', 'xm_count', 'xm_sales'] }, leave: { label: 'Leave', kinds: ['leave_applied', 'leave_cancelled'] }, support: { label: 'Support messages', kinds: ['support_message'] }, account: { label: 'Password and photo', kinds: ['password_changed', 'photo_changed'] }, }` — The Activity log (migration 062) as the page and its downloads read it: what each person did in Xtend, when, on what device and from what address. Pure, so scripts/check-activity.ts can exercise it. Admins only; nothing here is ever shown to staff. / export interface ActivityRow { at: string user_id: string full_name: string role: string kind: string label: string detail: Record<string, unknown> | null ip: string | null platform: 'web' | 'android' | 'ios' | null device: string | null user_agent: string | null } The kinds of activity, grouped the way the filter offers them.
+- `MAX_RANGE_DAYS` = `92` — Not counted as "actions": being signed in, and the app being open. const PRESENCE = new Set(['sign_in', 'sign_out', 'app_open']) export interface ActivityFilter { from: string to: string person: string | null group: ActivityGroup | null } The longest range the page asks for at once.
+- `ACTIVITY_COLUMNS` = `['When', 'Person', 'Role', 'What', 'Detail', 'Platform', 'Device', 'IP address']`
+
+## `src/lib/activity-server.ts`
+
+- `MISSING` = `'The activity log needs migration 062 (supabase/migrations/0062_user_activity.sql). Run it in Supabase, then reload.'`
+
 ## `src/lib/alert-review.ts`
 
 - `ALERT_SHORT` = `{ left_geofence: 'Left the store', low_accuracy: 'Rough location', permission_denied: 'Location off', off_site_clock: 'Away from the store', }` — Location alerts (location_alerts, alert_detail) turned into what a supervisor asks about: what is still open and for how long, who keeps coming up, and where to look next. Plain functions, used by the Alerts page, its downloads and scripts/check-visits-alerts.ts. / import { duration } from '@/lib/movement' import { addDays, formatLagos, lagosDateString } from '@/lib/utils' import type { AlertDetail, AlertType } from '@/lib/types' export const ALERT_LABEL: Record<AlertType, string> = { left_geofence: 'Left the store during their shift', low_accuracy: 'Location fix too rough to trust', permission_denied: 'Tried to open Xtend with location off', off_site_clock: 'Clocked in or out away from the store', } The same, short enough for a chip or a table heading.

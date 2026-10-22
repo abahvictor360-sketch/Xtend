@@ -3,6 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { assistantConfigured } from '@/lib/assistant'
 import { AdminFrame } from '@/components/admin/admin-frame'
 import { AdminLocation } from '@/components/admin/admin-location'
+import { ActivityPing } from '@/components/activity-ping'
 
 export const dynamic = 'force-dynamic'
 
@@ -36,6 +37,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       assistant={assistantConfigured()}
     >
       <AdminLocation />
+      <ActivityPing />
       {children}
     </AdminFrame>
   )

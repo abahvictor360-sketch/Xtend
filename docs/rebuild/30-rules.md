@@ -1233,7 +1233,8 @@ sets (created_by null): 4 templates, 5 quick replies (quick replies use a
 
 All need `Authorization: Bearer $CRON_SECRET` (`vercel.json`):
 - `/api/cron/purge-selfies` — 02:20 UTC daily: photo sweep, abandoned
-  visits, beacons older than 60 days deleted.
+  visits, beacons older than 60 days deleted, activity log rows older than
+  180 days (`purge_user_activity()`, 0062).
 - `/api/cron/absence-sweep` — 08:30 UTC daily (`"30 8 * * *"`): no-shows
   (only people expected that day, 0059), then flag alerts.
 - `/api/cron/alerts` — every 5 minutes, run by
@@ -1771,6 +1772,15 @@ Testable statements, grouped by area. They mirror the assertions in
 - Nobody is reminded before their shift ends; the first goes at the shift end, not to anyone not clocked in or already out, and to everyone else whose shift has ended; claiming again hands back nothing the second time.
 - The second does not go before an hour has passed and goes an hour after the shift end; never more than two a day; none after they clock out; somebody with no store is not reminded at 17:00 but is at 18:00.
 - A late job sends one reminder, the second, not both at once, and the first is not sent after it.
+
+### Activity log (0062)
+- `user_activity` holds sign-ins, sign-outs, app opens, password and profile photo changes; the kind is checked (`sign_in`, `sign_out`, `app_open`, `password_changed`, `photo_changed`), platform is `web`/`android`/`ios` or null. Append-only: nobody (not even an admin or the service role) inserts, updates or deletes directly.
+- Only `record_activity()` (service role only) and `set_my_avatar()` write it. An unknown kind is refused ("Unknown activity: …"); an unknown platform is read from the browser string (`XtendApp` + Android/iPhone, else web).
+- An app open is kept at most once per person per platform in 30 minutes (`record_activity` returns false otherwise); a different platform is its own row.
+- A new profile photo is recorded inside `set_my_avatar` with the IP (`cf-connecting-ip`, `x-real-ip`, else the first `x-forwarded-for`) and browser string from the request headers.
+- Admins read every row; staff (even their own) and supervisors read none.
+- `activity_feed(from, to, user, kinds, limit)` is admins only ("Only admins can see the activity log" for anyone else); Lagos days (a sign-out at 23:30 Lagos is on that day, not the next); end before start is refused; at most a year; newest first; limit kept (max 5000). It adds clock-ins/outs (`attendance`), store check-ins/outs (`store_visits`), daily reports, stock counts (one per person, store and day), X Metrics counts and sales, leave asked for and cancelled, and support messages the person wrote (not office replies), each with a plain-English label.
+- `purge_user_activity()` (service role only, nightly) deletes rows older than 180 days and keeps newer ones.
 
 ### Teams
 - A supervisor with no shared outlet and no reporting line does not supervise someone; naming them as supervisor does; they may edit that person but not an admin; sharing an outlet with an admin is not supervision.

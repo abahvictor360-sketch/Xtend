@@ -792,6 +792,24 @@ Policies:
 | last_used_at | timestamp with time zone(timestamptz) | yes |  |
 | points | integer(int4) |  | 0 |
 
+### `user_activity`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| id | bigint(int8) |  |  |
+| user_id | uuid(uuid) |  |  |
+| kind | text(text) |  |  |
+| at | timestamp with time zone(timestamptz) |  | now() |
+| ip | text(text) | yes |  |
+| platform | text(text) | yes |  |
+| app_build | integer(int4) | yes |  |
+| user_agent | text(text) | yes |  |
+| device | jsonb(jsonb) | yes |  |
+| detail | jsonb(jsonb) |  | '{}'::jsonb |
+
+Policies:
+- `user_activity_admin_read` SELECT to public: using `is_admin()`
+
 ### `work_patterns`
 
 | Column | Type | Null | Default |
@@ -1122,6 +1140,8 @@ Policies:
 `definer` runs with the owner's rights (it enforces its own checks). Who may call it is in `schema.sql` (GRANT EXECUTE).
 
 - `absentees_today()` → TABLE(user_id uuid, full_name text, phone text, outlet_name text) · definer · 0059_schedules_leave.sql
+- `activity_feed(p_from date, p_to date, p_user uuid, p_kinds text[], p_limit integer)` → TABLE(at timestamp with time zone, user_id uuid, full_name text, role text, kind text, label text, detail jsonb, ip text, platform text, device text, user_agent text) · definer · 0062_user_activity.sql
+- `activity_platform(p_ua text)` → text · 0062_user_activity.sql
 - `admin_overview()` → jsonb · definer · 0059_schedules_leave.sql
 - `alert_watchers(p_user uuid)` → TABLE(user_id uuid, full_name text, role user_role) · definer · 0036_supervisor_alerts.sql
 - `apply_leave(p_kind text, p_from date, p_to date, p_reason text)` → uuid · definer · 0059_schedules_leave.sql
@@ -1269,9 +1289,11 @@ Policies:
 - `profiles_staff_role_sync()` → trigger · definer · 0042_staff_roles.sql
 - `profiles_supervisor_check()` → trigger · definer · 0017_supervisor_manages_staff.sql
 - `punctuality_grace_minutes()` → integer · 0036_supervisor_alerts.sql
+- `purge_user_activity(p_days integer)` → integer · definer · 0062_user_activity.sql
 - `raise_place_due(p_user uuid, p_lat double precision, p_lng double precision, p_accuracy double precision, p_kind text, p_source uuid, p_position jsonb)` → void · definer · 0045_mandatory_place_naming.sql
 - `realtime_notify_field_owner()` → trigger · definer · 0058_realtime_broadcast.sql
 - `realtime_notify_support_message()` → trigger · definer · 0058_realtime_broadcast.sql
+- `record_activity(p_user uuid, p_kind text, p_ip text, p_platform text, p_app_build integer, p_user_agent text, p_device jsonb, p_detail jsonb, p_at timestamp with time zone)` → boolean · definer · 0062_user_activity.sql
 - `record_background_pings(p_token text, p_points jsonb, p_sent_at timestamp with time zone)` → jsonb · definer · 0055_reject_post_clockout_tracking.sql
 - `record_beacon(p jsonb)` → jsonb · definer · 0026_phone_evidence.sql
 - `record_excuse_check(p_user uuid, p_claim text, p_from timestamp with time zone, p_to timestamp with time zone, p_verdict text, p_headline text, p_note text)` → uuid · definer · 0048_excuse_check_advanced.sql
@@ -1301,7 +1323,7 @@ Policies:
 - `selfie_check()` → trigger · definer · 0023_photo_checks.sql
 - `selfie_retention_status()` → jsonb · definer · 0012_selfie_retention_24h.sql
 - `set_count_sheet_template(p_path text, p_file_name text)` → uuid · definer · 0035_store_count_sheets.sql
-- `set_my_avatar(p_path text)` → void · definer · 0037_profile_photos.sql
+- `set_my_avatar(p_path text)` → void · definer · 0062_user_activity.sql
 - `set_schedule_override(p_user uuid, p_day date, p_working boolean, p_note text)` → uuid · definer · 0059_schedules_leave.sql
 - `set_staff_outlets(p_user_id uuid, p_outlet_ids uuid[])` → SETOF uuid · definer · 0011_store_allocation.sql
 - `set_work_pattern(p_users uuid[], p_days smallint[])` → integer · definer · 0059_schedules_leave.sql

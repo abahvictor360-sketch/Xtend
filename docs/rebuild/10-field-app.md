@@ -162,9 +162,11 @@ sheet overlapping it (`-mt-10`, `rounded-t-[2rem]`).
 - Fields **"New password"** and **"Repeat it"**. Minimum **8** characters
   (`MIN_LENGTH` in `form.tsx`): "Use at least 8 characters." Mismatch: "The
   two passwords do not match."
-- Save: `supabase.auth.updateUser({ password })`, then update own profile
-  `must_change_password = false` (a trigger clears the stored temp password),
-  then `replace('/')`. Button **"Save password"** / **"Saving…"**; a ghost
+- Save: `POST /api/auth/password { password }`, which calls
+  `auth.updateUser({ password })` on the server, sets own profile
+  `must_change_password = false` (a trigger clears the stored temp password)
+  and records the change for the office's activity log (0062); on an error
+  the form shows the server's message; then `replace('/')`. Button **"Save password"** / **"Saving…"**; a ghost
   **"Cancel"** (router back) only when not forced. Network failure: "No
   connection. Try again when you have data."
 
@@ -276,7 +278,15 @@ and try again."
 - `hasMetrics` = any of `my_outlets` is an active X Metrics store.
 - Renders: the column; if a place is due, the **NamePlace** card at the top
   of every field page (§6); the page; `PhoneBeacon` (§13.2); `NativeBridge`
-  (§13.6); `FieldNav`.
+  (§13.6); `ActivityPing`; `FieldNav`.
+- **Note for the builder (activity log, 0062):** the field app records
+  activity silently for the admins' Activity log: `ActivityPing` (renders
+  nothing) posts `app_open` to `/api/activity` on start and on return to the
+  front; both Sign out buttons post `sign_out` first (waiting at most 1.5 s);
+  sign-in, password and profile photo changes are recorded on the server.
+  Failures are ignored and never shown. Staff see no text about this
+  anywhere — not in the app, not in the staff guide. See
+  `20-admin-dashboard.md` §27a.
 - Error boundary title: "Your dashboard could not load" (home link
   `/field`).
 

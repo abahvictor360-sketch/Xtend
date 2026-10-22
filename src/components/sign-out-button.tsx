@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation'
 import { LogOut } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
+import { sendActivity } from '@/lib/activity-client'
 import { Button } from '@/components/ui/button'
 
 export function SignOutButton({ className }: { className?: string }) {
@@ -13,6 +14,7 @@ export function SignOutButton({ className }: { className?: string }) {
       variant="outline"
       className={className}
       onClick={async () => {
+        await sendActivity('sign_out')
         await supabase().auth.signOut()
         router.replace('/login')
         router.refresh()

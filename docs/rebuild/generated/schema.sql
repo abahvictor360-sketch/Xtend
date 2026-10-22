@@ -155,6 +155,232 @@ $$;
 
 
 --
+-- Name: activity_feed(date, date, uuid, text[], integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.activity_feed(p_from date, p_to date, p_user uuid DEFAULT NULL::uuid, p_kinds text[] DEFAULT NULL::text[], p_limit integer DEFAULT 1000) RETURNS TABLE(at timestamp with time zone, user_id uuid, full_name text, role text, kind text, label text, detail jsonb, ip text, platform text, device text, user_agent text)
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+#variable_conflict use_column
+declare
+  d_from date := coalesce(p_from, (now() at time zone 'Africa/Lagos')::date);
+  d_to   date := coalesce(p_to, (now() at time zone 'Africa/Lagos')::date);
+  t_from timestamptz;
+  t_to   timestamptz;
+  lim    integer := least(greatest(coalesce(p_limit, 1000), 1), 5000);
+begin
+  if not public.is_admin() then
+    raise exception 'Only admins can see the activity log';
+  end if;
+  if d_to < d_from then
+    raise exception 'The end date cannot be before the start date';
+  end if;
+  if d_to - d_from > 366 then
+    raise exception 'Pick at most a year at a time';
+  end if;
+  t_from := d_from::timestamp at time zone 'Africa/Lagos';
+  t_to   := (d_to + 1)::timestamp at time zone 'Africa/Lagos';
+
+  return query
+  with events as (
+    -- Sign-ins, sign-outs, app opens, password and photo changes.
+    select a.at, a.user_id, a.kind,
+           case a.kind
+             when 'sign_in' then 'Signed in'
+             when 'sign_out' then case when a.detail ? 'reason' then 'Signed out (login expired)' else 'Signed out' end
+             when 'app_open' then 'Opened the app'
+             when 'password_changed' then 'Changed their password'
+             when 'photo_changed' then 'Changed their profile photo'
+           end as label,
+           a.detail || case when a.app_build is not null then jsonb_build_object('app_build', a.app_build) else '{}'::jsonb end as detail,
+           a.ip, a.platform,
+           nullif(concat_ws(' on ',
+             case when coalesce((a.device->>'app')::boolean, false) then 'Xtend app' else a.device->>'browser' end,
+             a.device->>'os'), '') as device,
+           a.user_agent
+    from public.user_activity a
+    where a.at >= t_from and a.at < t_to
+      and (p_user is null or a.user_id = p_user)
+      and (p_kinds is null or a.kind = any (p_kinds))
+
+    union all
+    -- Clocking in and out.
+    select t.created_at,
+           t.user_id,
+           case when t.type = 'opening' then 'clock_in' else 'clock_out' end,
+           case when t.type = 'opening' then 'Clocked in' else 'Clocked out' end
+             || coalesce(' at ' || coalesce(o.name, t.place_name), ''),
+           jsonb_strip_nulls(jsonb_build_object(
+             'store', o.name, 'place', t.place_name, 'status', t.status,
+             'distance_m', round(t.distance_m::numeric))),
+           null::text,
+           coalesce(t.device_info->'native'->>'platform', public.activity_platform(t.device_info->>'ua')),
+           null::text,
+           left(t.device_info->>'ua', 500)
+    from public.attendance t
+    left join public.outlets o on o.id = t.outlet_id
+    where t.attendance_date between d_from - 1 and d_to + 1
+      and t.created_at >= t_from and t.created_at < t_to
+      and (p_user is null or t.user_id = p_user)
+      and (p_kinds is null or (case when t.type = 'opening' then 'clock_in' else 'clock_out' end) = any (p_kinds))
+
+    union all
+    -- Checking in at a store.
+    select coalesce(v.arrived_at, v.created_at), v.user_id, 'visit_in',
+           'Checked in at ' || coalesce(o.name, v.arrived_place_name, 'a store'),
+           jsonb_strip_nulls(jsonb_build_object('store', coalesce(o.name, v.arrived_place_name),
+             'status', v.arrived_status, 'distance_m', round(v.arrived_distance_m::numeric))),
+           null::text,
+           coalesce(v.device_info->'native'->>'platform', public.activity_platform(v.device_info->>'ua')),
+           null::text,
+           left(v.device_info->>'ua', 500)
+    from public.store_visits v
+    left join public.outlets o on o.id = v.outlet_id
+    where v.visit_date between d_from - 1 and d_to + 1
+      and coalesce(v.arrived_at, v.created_at) >= t_from and coalesce(v.arrived_at, v.created_at) < t_to
+      and (p_user is null or v.user_id = p_user)
+      and (p_kinds is null or 'visit_in' = any (p_kinds))
+
+    union all
+    -- Checking out of it.
+    select v.departed_at, v.user_id, 'visit_out',
+           'Checked out of ' || coalesce(o.name, v.departed_place_name, v.arrived_place_name, 'a store'),
+           jsonb_strip_nulls(jsonb_build_object('store', coalesce(o.name, v.departed_place_name, v.arrived_place_name),
+             'status', v.departed_status,
+             'minutes', round(extract(epoch from (v.departed_at - coalesce(v.arrived_at, v.created_at))) / 60))),
+           null::text,
+           coalesce(v.device_info->'native'->>'platform', public.activity_platform(v.device_info->>'ua')),
+           null::text,
+           left(v.device_info->>'ua', 500)
+    from public.store_visits v
+    left join public.outlets o on o.id = v.outlet_id
+    where v.departed_at is not null
+      and v.visit_date between d_from - 1 and d_to + 1
+      and v.departed_at >= t_from and v.departed_at < t_to
+      and (p_user is null or v.user_id = p_user)
+      and (p_kinds is null or 'visit_out' = any (p_kinds))
+
+    union all
+    -- The daily report.
+    select r.created_at, r.user_id, 'report', 'Filed the daily report',
+           jsonb_strip_nulls(jsonb_build_object('date', r.report_date, 'store', o.name,
+             'visits', jsonb_array_length(coalesce(r.store_visits, '[]'::jsonb)))),
+           null::text, null::text, null::text, null::text
+    from public.reports r
+    left join public.outlets o on o.id = r.outlet_id
+    where r.report_date between d_from - 1 and d_to + 1
+      and r.created_at >= t_from and r.created_at < t_to
+      and (p_user is null or r.user_id = p_user)
+      and (p_kinds is null or 'report' = any (p_kinds))
+
+    union all
+    -- A stock count: one per person, store and day, however many products.
+    select min(c.created_at), c.user_id, 'stock_count',
+           'Submitted a stock count' || coalesce(' at ' || min(o.name), ''),
+           jsonb_strip_nulls(jsonb_build_object('store', min(o.name), 'date', c.count_date, 'products', count(*))),
+           null::text, null::text, null::text, null::text
+    from public.store_counts c
+    left join public.outlets o on o.id = c.outlet_id
+    where c.count_date between d_from - 1 and d_to + 1
+      and (p_user is null or c.user_id = p_user)
+      and (p_kinds is null or 'stock_count' = any (p_kinds))
+    group by c.user_id, c.outlet_id, c.count_date
+    having min(c.created_at) >= t_from and min(c.created_at) < t_to
+
+    union all
+    -- X Metrics batch counts.
+    select x.created_at, x.user_id, 'xm_count',
+           'Submitted an X Metrics count' || coalesce(' at ' || o.name, '')
+             || case when x.voided_at is not null then ' (voided)' else '' end,
+           jsonb_strip_nulls(jsonb_build_object('store', o.name, 'date', x.count_date,
+             'opening', case when x.is_opening then true end,
+             'voided', case when x.voided_at is not null then true end)),
+           null::text, null::text, null::text, null::text
+    from public.xm_counts x
+    left join public.outlets o on o.id = x.outlet_id
+    where x.count_date between d_from - 1 and d_to + 1
+      and x.created_at >= t_from and x.created_at < t_to
+      and (p_user is null or x.user_id = p_user)
+      and (p_kinds is null or 'xm_count' = any (p_kinds))
+
+    union all
+    -- X Metrics daily sales.
+    select s.created_at, s.user_id, 'xm_sales',
+           'Logged the day''s sales' || coalesce(' at ' || o.name, '')
+             || case when s.voided_at is not null then ' (voided)' else '' end,
+           jsonb_strip_nulls(jsonb_build_object('store', o.name, 'date', s.sale_date,
+             'voided', case when s.voided_at is not null then true end)),
+           null::text, null::text, null::text, null::text
+    from public.xm_sales s
+    left join public.outlets o on o.id = s.outlet_id
+    where s.sale_date between d_from - 1 and d_to + 1
+      and s.created_at >= t_from and s.created_at < t_to
+      and (p_user is null or s.user_id = p_user)
+      and (p_kinds is null or 'xm_sales' = any (p_kinds))
+
+    union all
+    -- Asking for leave.
+    select l.created_at, l.user_id, 'leave_applied', 'Asked for leave',
+           jsonb_build_object('type', l.kind, 'from', l.from_date, 'to', l.to_date),
+           null::text, null::text, null::text, null::text
+    from public.leave_requests l
+    where l.created_at >= t_from and l.created_at < t_to
+      and (p_user is null or l.user_id = p_user)
+      and (p_kinds is null or 'leave_applied' = any (p_kinds))
+
+    union all
+    -- Withdrawing it.
+    select l.cancelled_at, l.user_id, 'leave_cancelled', 'Cancelled a leave request',
+           jsonb_build_object('type', l.kind, 'from', l.from_date, 'to', l.to_date),
+           null::text, null::text, null::text, null::text
+    from public.leave_requests l
+    where l.cancelled_at is not null
+      and l.cancelled_at >= t_from and l.cancelled_at < t_to
+      and (p_user is null or l.user_id = p_user)
+      and (p_kinds is null or 'leave_cancelled' = any (p_kinds))
+
+    union all
+    -- Support messages the person wrote (not the office's replies).
+    select m.created_at, m.sender_id, 'support_message', 'Sent a support message',
+           jsonb_build_object('subject', th.subject),
+           null::text, null::text, null::text, null::text
+    from public.support_messages m
+    join public.support_threads th on th.id = m.thread_id
+    where m.sender_role = 'staff'
+      and m.sender_id is not null
+      and m.created_at >= t_from and m.created_at < t_to
+      and (p_user is null or m.sender_id = p_user)
+      and (p_kinds is null or 'support_message' = any (p_kinds))
+  )
+  select e.at, e.user_id, p.full_name, p.role::text, e.kind, e.label, e.detail,
+         e.ip, e.platform, e.device, e.user_agent
+  from events e
+  join public.profiles p on p.id = e.user_id
+  order by e.at desc
+  limit lim;
+end;
+$$;
+
+
+--
+-- Name: activity_platform(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.activity_platform(p_ua text) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    SET search_path TO 'public'
+    AS $$
+  select case
+    when p_ua is null or p_ua = '' then null
+    when p_ua like '%XtendApp%' and p_ua ~ 'Android' then 'android'
+    when p_ua like '%XtendApp%' and p_ua ~ 'iPhone|iPad|iPod' then 'ios'
+    else 'web'
+  end;
+$$;
+
+
+--
 -- Name: admin_overview(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3500,6 +3726,24 @@ CREATE FUNCTION public.punctuality_grace_minutes() RETURNS integer
 
 
 --
+-- Name: purge_user_activity(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.purge_user_activity(p_days integer DEFAULT 180) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  gone integer;
+begin
+  delete from public.user_activity where at < now() - make_interval(days => greatest(coalesce(p_days, 180), 30));
+  get diagnostics gone = row_count;
+  return gone;
+end;
+$$;
+
+
+--
 -- Name: raise_place_due(uuid, double precision, double precision, double precision, text, uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3601,6 +3845,50 @@ begin
     );
   end if;
   return null;
+end;
+$$;
+
+
+--
+-- Name: record_activity(uuid, text, text, text, integer, text, jsonb, jsonb, timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.record_activity(p_user uuid, p_kind text, p_ip text DEFAULT NULL::text, p_platform text DEFAULT NULL::text, p_app_build integer DEFAULT NULL::integer, p_user_agent text DEFAULT NULL::text, p_device jsonb DEFAULT NULL::jsonb, p_detail jsonb DEFAULT '{}'::jsonb, p_at timestamp with time zone DEFAULT NULL::timestamp with time zone) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  plat text := case when p_platform in ('web', 'android', 'ios') then p_platform
+                    else public.activity_platform(p_user_agent) end;
+  stamp timestamptz := coalesce(p_at, now());
+begin
+  if p_user is null or not exists (select 1 from public.profiles where id = p_user) then
+    raise exception 'Unknown person';
+  end if;
+  if p_kind is null or p_kind not in ('sign_in', 'sign_out', 'app_open', 'password_changed', 'photo_changed') then
+    raise exception 'Unknown activity: %', coalesce(p_kind, 'none');
+  end if;
+
+  if p_kind = 'app_open' then
+    -- One at a time per person and platform, so two opens sent together
+    -- cannot both pass the check.
+    perform pg_advisory_xact_lock(hashtext('user_activity:' || p_user::text || ':' || coalesce(plat, '')));
+    if exists (select 1 from public.user_activity a
+               where a.user_id = p_user and a.kind = 'app_open'
+                 and a.platform is not distinct from plat
+                 and a.at > stamp - interval '30 minutes'
+                 and a.at <= stamp + interval '30 minutes') then
+      return false;
+    end if;
+  end if;
+
+  insert into public.user_activity (user_id, kind, at, ip, platform, app_build, user_agent, device, detail)
+  values (p_user, p_kind, stamp, left(p_ip, 64), plat,
+          case when p_app_build between 0 and 100000000 then p_app_build end,
+          left(p_user_agent, 500),
+          case when jsonb_typeof(p_device) = 'object' then p_device end,
+          case when jsonb_typeof(p_detail) = 'object' then p_detail else '{}'::jsonb end);
+  return true;
 end;
 $$;
 
@@ -4597,6 +4885,9 @@ CREATE FUNCTION public.set_my_avatar(p_path text) RETURNS void
     AS $$
 declare
   uid uuid := auth.uid();
+  hdr jsonb;
+  ua text;
+  ip text;
 begin
   if uid is null then
     raise exception 'Not authenticated';
@@ -4609,6 +4900,17 @@ begin
   end if;
   perform set_config('xtend.own_photo', 'on', true);
   update public.profiles set avatar_path = p_path where id = uid;
+
+  begin
+    hdr := nullif(current_setting('request.headers', true), '')::jsonb;
+  exception when others then
+    hdr := null;
+  end;
+  ua := left(hdr->>'user-agent', 500);
+  ip := coalesce(hdr->>'cf-connecting-ip', hdr->>'x-real-ip',
+                 nullif(btrim(split_part(coalesce(hdr->>'x-forwarded-for', ''), ',', 1)), ''));
+  insert into public.user_activity (user_id, kind, ip, platform, user_agent)
+  values (uid, 'photo_changed', left(ip, 64), public.activity_platform(ua), ua);
 end;
 $$;
 
@@ -7594,6 +7896,40 @@ CREATE TABLE public.tracking_tokens (
 
 
 --
+-- Name: user_activity; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.user_activity (
+    id bigint NOT NULL,
+    user_id uuid NOT NULL,
+    kind text NOT NULL,
+    at timestamp with time zone DEFAULT now() NOT NULL,
+    ip text,
+    platform text,
+    app_build integer,
+    user_agent text,
+    device jsonb,
+    detail jsonb DEFAULT '{}'::jsonb NOT NULL,
+    CONSTRAINT user_activity_kind_check CHECK ((kind = ANY (ARRAY['sign_in'::text, 'sign_out'::text, 'app_open'::text, 'password_changed'::text, 'photo_changed'::text]))),
+    CONSTRAINT user_activity_platform_check CHECK ((platform = ANY (ARRAY['web'::text, 'android'::text, 'ios'::text])))
+);
+
+
+--
+-- Name: user_activity_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.user_activity ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.user_activity_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: work_patterns; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -8559,6 +8895,14 @@ ALTER TABLE ONLY public.tracking_tokens
 
 
 --
+-- Name: user_activity user_activity_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_activity
+    ADD CONSTRAINT user_activity_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: work_patterns work_patterns_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -9139,6 +9483,20 @@ CREATE INDEX support_threads_open ON public.support_threads USING btree (status,
 --
 
 CREATE INDEX tracking_tokens_by_user ON public.tracking_tokens USING btree (user_id, created_at DESC);
+
+
+--
+-- Name: user_activity_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX user_activity_at ON public.user_activity USING btree (at DESC);
+
+
+--
+-- Name: user_activity_user_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX user_activity_user_at ON public.user_activity USING btree (user_id, at DESC);
 
 
 --
@@ -10027,6 +10385,14 @@ ALTER TABLE ONLY public.support_threads
 
 ALTER TABLE ONLY public.tracking_tokens
     ADD CONSTRAINT tracking_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: user_activity user_activity_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_activity
+    ADD CONSTRAINT user_activity_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 
 
 --
@@ -11111,6 +11477,19 @@ CREATE POLICY support_threads_select ON public.support_threads FOR SELECT USING 
 ALTER TABLE public.tracking_tokens ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: user_activity; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.user_activity ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: user_activity user_activity_admin_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY user_activity_admin_read ON public.user_activity FOR SELECT USING (public.is_admin());
+
+
+--
 -- Name: work_patterns; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -11338,6 +11717,23 @@ CREATE POLICY xm_targets_read ON public.xm_targets FOR SELECT USING ((public.is_
 REVOKE ALL ON FUNCTION public.absentees_today() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.absentees_today() TO authenticated;
 GRANT ALL ON FUNCTION public.absentees_today() TO service_role;
+
+
+--
+-- Name: FUNCTION activity_feed(p_from date, p_to date, p_user uuid, p_kinds text[], p_limit integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.activity_feed(p_from date, p_to date, p_user uuid, p_kinds text[], p_limit integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.activity_feed(p_from date, p_to date, p_user uuid, p_kinds text[], p_limit integer) TO authenticated;
+
+
+--
+-- Name: FUNCTION activity_platform(p_ua text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.activity_platform(p_ua text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.activity_platform(p_ua text) TO authenticated;
+GRANT ALL ON FUNCTION public.activity_platform(p_ua text) TO service_role;
 
 
 --
@@ -12140,10 +12536,26 @@ REVOKE ALL ON FUNCTION public.profiles_staff_role_sync() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION purge_user_activity(p_days integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.purge_user_activity(p_days integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.purge_user_activity(p_days integer) TO service_role;
+
+
+--
 -- Name: FUNCTION raise_place_due(p_user uuid, p_lat double precision, p_lng double precision, p_accuracy double precision, p_kind text, p_source uuid, p_position jsonb); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.raise_place_due(p_user uuid, p_lat double precision, p_lng double precision, p_accuracy double precision, p_kind text, p_source uuid, p_position jsonb) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION record_activity(p_user uuid, p_kind text, p_ip text, p_platform text, p_app_build integer, p_user_agent text, p_device jsonb, p_detail jsonb, p_at timestamp with time zone); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.record_activity(p_user uuid, p_kind text, p_ip text, p_platform text, p_app_build integer, p_user_agent text, p_device jsonb, p_detail jsonb, p_at timestamp with time zone) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.record_activity(p_user uuid, p_kind text, p_ip text, p_platform text, p_app_build integer, p_user_agent text, p_device jsonb, p_detail jsonb, p_at timestamp with time zone) TO service_role;
 
 
 --
@@ -12945,6 +13357,13 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.support_quick_replies TO authe
 --
 
 GRANT SELECT ON TABLE public.support_thread_detail TO authenticated;
+
+
+--
+-- Name: TABLE user_activity; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT ON TABLE public.user_activity TO authenticated;
 
 
 --

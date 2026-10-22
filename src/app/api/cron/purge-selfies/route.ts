@@ -39,7 +39,11 @@ export async function GET(request: Request) {
   await supabase.from('device_beacons').delete().lt('received_at', cutoff)
   await supabase.from('phone_checks').delete().lt('created_at', cutoff)
 
+  // The activity log (062) keeps 180 days. Missing before the migration runs.
+  const { data: activityCleared } = await supabase.rpc('purge_user_activity')
+
   return Response.json({
+    activity_cleared: activityCleared ?? 0,
     photos_deleted: purge.photos_deleted,
     records_cleared: purge.records_cleared,
     failed: purge.failed,

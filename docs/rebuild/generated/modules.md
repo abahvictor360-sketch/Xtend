@@ -4,6 +4,31 @@
 
 Every shared file, what it is for (its own header comment) and what it exports.
 
+## `src/lib/activity-client.ts`
+
+Tells the server about a sign-out or an app open (migration 062). Never
+throws and never waits long: the person's tap or screen comes first.
+
+Exports: `sendActivity`
+
+## `src/lib/activity-log.ts`
+
+The Activity log (migration 062) as the page and its downloads read it:
+what each person did in Xtend, when, on what device and from what
+address. Pure, so scripts/check-activity.ts can exercise it. Admins only;
+nothing here is ever shown to staff.
+
+Exports: `ActivityRow`, `ACTIVITY_GROUPS`, `ActivityGroup`, `isActivityGroup`, `filterKinds`, `kindGroup`, `ActivityFilter`, `MAX_RANGE_DAYS`, `parseActivityFilter`, `daysBetween`, `activityQueryString`, `activityPresets`, `platformLabel`, `deviceText`, `detailText`, `lagosDay`, `groupByDay`, `PersonActivity`, `perPerson`, `ActivitySummary`, `summarise`, `roleLabel`, `personLinks`, `ACTIVITY_COLUMNS`, `activityExportRows`, `activitySheet`
+
+## `src/lib/activity-server.ts`
+
+Records something a person did (migration 062) with the address and the
+device the request came from. The database decides whether an app open
+is new enough to keep. Never throws: a missed row must not stop anyone
+signing in, out or changing a password.
+
+Exports: `RecordedKind`, `recordActivity`, `fetchActivity`, `MISSING`
+
 ## `src/lib/alert-review.ts`
 
 Location alerts (location_alerts, alert_detail) turned into what a
@@ -869,6 +894,18 @@ store_coverage rows (migrations 016 and 052), used by the page, the
 downloads and scripts/check-visits-alerts.ts.
 
 Exports: `VisitRow`, `SHORT_MINUTES`, `FAR_M`, `HOP_KMH`, `HOP_MIN_M`, `VisitView`, `GAPS`, `VisitFilter`, `parseVisitFilter`, `visitQueryString`, `storeName`, `visitFigures`, `Breakdown`, `storeBreakdown`, `personBreakdown`, `Finding`, `hops`, `worthALook`, `visitFlags`, `FLAG_WORDS`, `CoverageRow`, `Covered`, `coverage`, `notVisitedIn`, `coverageCounts`, `movementHref`
+
+## `src/components/activity-ping.tsx`
+
+At most one call from this page every few minutes; the database keeps one per 30.
+
+Exports: `ActivityPing`
+
+## `src/components/admin/activity-view.tsx`
+
+How each kind of activity is marked in the timeline.
+
+Exports: `ActivityView`
 
 ## `src/components/admin/admin-frame.tsx`
 
