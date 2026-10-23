@@ -9,12 +9,16 @@ import type { DayState } from '@/lib/types'
 import type { VisitOutlet, VisitRow } from '@/components/field/store-visits'
 import type { CalendarDay } from '@/lib/schedule'
 import { addDays, lagosDateString } from '@/lib/utils'
+import { getActingRole } from '@/lib/acting'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Clock — Xtend' }
 
 export default async function FieldPage() {
   const session = await requireSession(FIELD_ROLES)
+  // An admin viewing as a merchandiser sees no store visits or report; as a
+  // marketer, both. Real field staff are unaffected (acting is null for them).
+  const acting = await getActingRole(session)
   const supabase = await createServerSupabase()
 
   // The day itself, today's store visits, and the stores allocated to
@@ -42,6 +46,11 @@ export default async function FieldPage() {
     return <DashboardRetry />
   }
 
+  // When an admin is acting, the role decides the experience; otherwise the
+  // database's own answer stands.
+  const showStores = acting ? acting === 'marketer' : canVisitStores === true
+  const canFileReport = acting ? acting === 'marketer' : undefined
+
   return (
     <>
       {countStatus.open && <CountDueBanner status={countStatus} />}
@@ -49,7 +58,8 @@ export default async function FieldPage() {
         day={data as DayState}
         visits={(visits ?? []) as VisitRow[]}
         outlets={(outlets ?? []) as VisitOutlet[]}
-        canVisitStores={canVisitStores === true}
+        canVisitStores={showStores}
+        canFileReport={canFileReport}
         notificationsRequired={!session.profile.push_exempt}
         avatarUrl={photo}
         userId={session.userId}

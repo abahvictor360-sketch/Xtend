@@ -39,6 +39,7 @@ export function FieldHome({
   visits,
   outlets,
   canVisitStores,
+  canFileReport,
   notificationsRequired = true,
   avatarUrl = null,
   userId,
@@ -48,12 +49,15 @@ export function FieldHome({
   visits: VisitRow[]
   outlets: VisitOutlet[]
   canVisitStores: boolean
+  /** Overrides the day's own answer when an admin views as a role. */
+  canFileReport?: boolean
   notificationsRequired?: boolean
   avatarUrl?: string | null
   userId: string
   /** The last seven days from my_calendar (migration 059). */
   calendar?: CalendarDay[]
 }) {
+  const reportAllowed = canFileReport ?? day.can_file_report
   const router = useRouter()
   const gate = useLocationGate()
   // Marketers work store to store, so that is their first screen.
@@ -86,7 +90,7 @@ export function FieldHome({
   const steps = [
     { done: Boolean(day.opening), label: 'Clock in' },
     { done: onShift || Boolean(day.closing), label: 'On shift' },
-    ...(day.can_file_report ? [{ done: day.report_filed, label: 'Daily report' }] : []),
+    ...(reportAllowed ? [{ done: day.report_filed, label: 'Daily report' }] : []),
     { done: Boolean(day.closing), label: 'Clock out' },
   ]
   const progress = Math.round((steps.filter((s) => s.done).length / steps.length) * 100)
@@ -197,7 +201,7 @@ export function FieldHome({
             warn={day.opening?.status === 'off_site'}
           />
 
-          {day.can_file_report && (
+          {reportAllowed && (
             <Link href="/field/report" className="block">
               <RingRow
                 icon={<FileText className="h-5 w-5" />}

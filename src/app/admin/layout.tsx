@@ -49,6 +49,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       assistant={assistantConfigured()}
       xmEnabled={xmFeatures.enabled}
       testMode={testMode}
+      isAdmin={session.profile.role === 'admin'}
     >
       <AdminLocation />
       <ActivityPing />

@@ -5,6 +5,7 @@ import { AdminNav, AdminSidebarNav } from '@/components/admin/admin-nav'
 import { XpelMark } from '@/components/brand/logo'
 import { AssistantLauncher } from '@/components/admin/assistant-launcher'
 import { NativeBridge } from '@/components/native-bridge'
+import { RoleSwitch } from '@/components/role-switch'
 
 function Brand() {
   return (
@@ -39,6 +40,7 @@ export function AdminFrame({
   assistant,
   xmEnabled = true,
   testMode = false,
+  isAdmin = false,
   children,
 }: {
   name: string
@@ -50,6 +52,8 @@ export function AdminFrame({
   xmEnabled?: boolean
   /** Test mode is on (0066): admins see a banner across the top. */
   testMode?: boolean
+  /** Only an admin gets the "view as" role switch. */
+  isAdmin?: boolean
   children: React.ReactNode
 }) {
   const bell = (
@@ -78,6 +82,13 @@ export function AdminFrame({
           <div className="flex-1 overflow-y-auto px-4 pb-4">
             <AdminSidebarNav readOnly={readOnly} xmEnabled={xmEnabled} />
           </div>
+
+          {isAdmin && (
+            <div className="space-y-1.5 px-4 pb-3">
+              <p className="px-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">View as</p>
+              <RoleSwitch current="admin" />
+            </div>
+          )}
 
           {/* Hidden on short screens, where the menu needs the room. */}
           <div className="px-4 pb-3 [@media(max-height:1150px)]:hidden">
@@ -141,6 +152,11 @@ export function AdminFrame({
               </div>
             </div>
             <AdminNav readOnly={readOnly} xmEnabled={xmEnabled} />
+            {isAdmin && (
+              <div className="px-4 pb-3">
+                <RoleSwitch current="admin" />
+              </div>
+            )}
           </header>
 
           {/* Desktop: search on the left; alerts, who is signed in and a quick action on the right. */}

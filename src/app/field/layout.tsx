@@ -8,6 +8,8 @@ import { ActivityPing } from '@/components/activity-ping'
 import { NamePlace, type PlaceDue } from '@/components/field/name-place'
 import { getCountStatus } from '@/lib/store-count-status'
 import { readXmFeatures } from '@/lib/metrics/features-server'
+import { getActingRole } from '@/lib/acting'
+import { RoleSwitchBar } from '@/components/field/role-switch-bar'
 
 export const dynamic = 'force-dynamic'
 
@@ -17,16 +19,23 @@ export const dynamic = 'force-dynamic'
  */
 export default async function FieldLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession(FIELD_ROLES)
+  const isAdmin = session.profile.role === 'admin'
+  // An admin can view the field app as a merchandiser or a marketer (acting);
+  // the effective role drives the experience below.
+  const acting = await getActingRole(session)
   // New staff see the walkthrough first, once (037). Undefined before the
-  // migration runs, so nobody is sent there until it exists.
-  if (session.profile.onboarded_at === null) redirect('/welcome')
+  // migration runs, so nobody is sent there until it exists. Admins never did
+  // the walkthrough, so they are not sent there when viewing the field app.
+  if (session.profile.onboarded_at === null && !isAdmin) redirect('/welcome')
 
   const supabase = await createServerSupabase()
   // Who may file a report is purely role (can_file_report() is just
   // role in marketer/admin), and the session already holds the role, so read
   // it from there rather than spend a round-trip on every navigation. The
-  // insert policy and trigger still enforce it in the database.
-  const canFileReport = session.profile.role === 'marketer' || session.profile.role === 'admin'
+  // insert policy and trigger still enforce it in the database. An admin
+  // viewing as a merchandiser sees it as a merchandiser would.
+  const effectiveRole = acting ?? session.profile.role
+  const canFileReport = effectiveRole === 'marketer' || effectiveRole === 'admin'
   // The Count tab only appears while a count is due: asked for, or month end.
   const [countStatus, { data: myStores }, { data: xmStores }, { data: placeDue }, xmFeatures] = await Promise.all([
     getCountStatus(supabase),
@@ -47,6 +56,7 @@ export default async function FieldLayout({ children }: { children: React.ReactN
     <div className="field-shell min-h-dvh bg-background">
       <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col overflow-x-hidden">
         <main className="flex-1 px-4 pb-28 pt-4">
+          {isAdmin && <RoleSwitchBar acting={acting} />}
           {due && (
             <div className="mb-4">
               <NamePlace due={due} />
