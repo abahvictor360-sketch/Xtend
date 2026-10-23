@@ -381,6 +381,66 @@ $$;
 
 
 --
+-- Name: add_report_file(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.add_report_file(p_path text, p_name text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'storage'
+    AS $$
+declare
+  rep record;
+  obj record;
+  kind text;
+  clean_name text := left(btrim(regexp_replace(coalesce(p_name, ''), '[\r\n\t/\\]+', ' ', 'g')), 200);
+  new_id uuid;
+begin
+  if not public.can_file_report() then
+    raise exception 'Only marketers file the daily report';
+  end if;
+
+  select r.id, r.report_date into rep
+  from public.reports r
+  where r.user_id = auth.uid() and r.report_date = public.business_date()
+  for update;
+  if not found then
+    raise exception 'Save today''s report first, then attach documents';
+  end if;
+
+  select o.metadata->>'mimetype' as mimetype, (o.metadata->>'size')::bigint as size
+    into obj
+  from storage.objects o
+  where o.bucket_id = 'report-files'
+    and o.name = p_path
+    and p_path like auth.uid()::text || '/%'
+    and o.created_at >= now() - interval '30 minutes';
+  if not found then
+    raise exception 'Upload the document again, then save the report';
+  end if;
+  if exists (select 1 from public.report_files f where f.path = p_path) then
+    raise exception 'That document is already attached';
+  end if;
+
+  kind := lower(coalesce(obj.mimetype, ''));
+  if not public.report_file_mime_ok(kind) then
+    raise exception 'Attach a PDF, Word, Excel or CSV file, or a picture (JPG, PNG)';
+  end if;
+  if coalesce(obj.size, 0) <= 0 then
+    raise exception 'That document is empty';
+  end if;
+  if obj.size > 10 * 1024 * 1024 then
+    raise exception 'Each document must be 10 MB or smaller';
+  end if;
+
+  insert into public.report_files (report_id, user_id, path, name, mime, size_bytes)
+  values (rep.id, auth.uid(), p_path, coalesce(nullif(clean_name, ''), 'Document'), kind, obj.size)
+  returning id into new_id;
+  return new_id;
+end;
+$$;
+
+
+--
 -- Name: admin_overview(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4221,6 +4281,33 @@ $$;
 
 
 --
+-- Name: remove_report_file(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.remove_report_file(p_id uuid) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  f record;
+begin
+  select rf.id, rf.path, rf.user_id, r.report_date into f
+  from public.report_files rf
+  join public.reports r on r.id = rf.report_id
+  where rf.id = p_id;
+  if not found or f.user_id is distinct from auth.uid() then
+    raise exception 'That document is not on your report';
+  end if;
+  if f.report_date <> public.business_date() then
+    raise exception 'Documents can only be removed on the day the report was filed';
+  end if;
+  delete from public.report_files where id = p_id;
+  return f.path;
+end;
+$$;
+
+
+--
 -- Name: remove_schedule_override(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4341,6 +4428,74 @@ begin
   end if;
   return new;
 end;
+$$;
+
+
+--
+-- Name: report_file_attached(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.report_file_attached(p_name text) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select exists (select 1 from public.report_files f where f.path = p_name);
+$$;
+
+
+--
+-- Name: report_file_limit(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.report_file_limit() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  perform 1 from public.reports where id = new.report_id for update;
+  if (select count(*) from public.report_files where report_id = new.report_id) >= 5 then
+    raise exception 'A report can have up to 5 documents. Remove one to add another';
+  end if;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: report_file_mime_ok(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.report_file_mime_ok(p_mime text) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  select lower(coalesce(p_mime, '')) in (
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/csv',
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/heic',
+    'image/heif'
+  );
+$$;
+
+
+--
+-- Name: report_file_readable(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.report_file_readable(p_name text) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'storage'
+    AS $$
+  select (storage.foldername(p_name))[1] = auth.uid()::text
+      or public.is_admin()
+      or exists (select 1 from public.report_files f
+                 where f.path = p_name and public.supervises_user(f.user_id));
 $$;
 
 
@@ -5360,24 +5515,23 @@ CREATE FUNCTION public.submit_count_sheet(p_outlet_id uuid, p_path text, p_file_
     AS $$
 declare
   status jsonb := public.store_count_status();
+  due boolean := coalesce((status->>'open')::boolean, false);
   obj record;
   kind text;
   clean_name text := left(btrim(regexp_replace(coalesce(p_file_name, ''), '[\r\n\t/\\]+', ' ', 'g')), 200);
   new_id uuid;
 begin
+  -- Only people whose role takes stock counts (046). Whether a count is
+  -- due no longer matters: a sheet sent at any other time is kept for the
+  -- office, and counts towards nothing.
   if not public.can_count_stock() then
     raise exception 'You cannot submit a store count';
-  end if;
-  if not coalesce((status->>'open')::boolean, false) then
-    raise exception 'No store count is due: counts are taken when a supervisor asks, or at the end of the month';
   end if;
   if p_outlet_id is null
      or p_outlet_id not in (select outlet_id from public.outlets_for_user(auth.uid())) then
     raise exception 'That store is not one of yours';
   end if;
 
-  -- Uploaded into their own folder in the last 30 minutes. (Not
-  -- photo_is_fresh(): that also wants a photo check, which a PDF never has.)
   select o.metadata->>'mimetype' as mimetype, (o.metadata->>'size')::bigint as size
     into obj
   from storage.objects o
@@ -5402,11 +5556,11 @@ begin
   end if;
 
   insert into public.store_count_sheets
-    (user_id, outlet_id, count_date, request_id, path, file_name, content_type, size_bytes)
+    (user_id, outlet_id, count_date, request_id, path, file_name, content_type, size_bytes, count_was_due)
   values
     (auth.uid(), p_outlet_id, public.business_date(),
-     nullif(status->>'request_id', '')::uuid, p_path,
-     coalesce(nullif(clean_name, ''), 'Count sheet'), kind, obj.size)
+     case when due then nullif(status->>'request_id', '')::uuid end, p_path,
+     coalesce(nullif(clean_name, ''), 'Count sheet'), kind, obj.size, due)
   returning id into new_id;
   return new_id;
 end;
@@ -7068,6 +7222,7 @@ CREATE TABLE public.store_count_sheets (
     content_type text NOT NULL,
     size_bytes bigint NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    count_was_due boolean DEFAULT true NOT NULL,
     CONSTRAINT store_count_sheets_file_name_check CHECK (((length(file_name) >= 1) AND (length(file_name) <= 200)))
 );
 
@@ -7653,15 +7808,21 @@ CREATE TABLE public.push_subscriptions (
 
 
 --
--- Name: report_photos; Type: TABLE; Schema: public; Owner: -
+-- Name: report_files; Type: TABLE; Schema: public; Owner: -
 --
 
-CREATE TABLE public.report_photos (
+CREATE TABLE public.report_files (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     report_id uuid NOT NULL,
-    storage_path text NOT NULL,
-    caption text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    user_id uuid NOT NULL,
+    path text NOT NULL,
+    name text NOT NULL,
+    mime text NOT NULL,
+    size_bytes bigint NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT report_files_mime_check CHECK (public.report_file_mime_ok(mime)),
+    CONSTRAINT report_files_name_check CHECK (((length(name) >= 1) AND (length(name) <= 200))),
+    CONSTRAINT report_files_size_bytes_check CHECK (((size_bytes >= 1) AND (size_bytes <= 10485760)))
 );
 
 
@@ -7690,6 +7851,40 @@ CREATE TABLE public.reports (
 --
 
 COMMENT ON COLUMN public.reports.store_visits IS 'The store visits of that person and day when the report was last saved (060). Set by trigger only.';
+
+
+--
+-- Name: report_file_detail; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.report_file_detail WITH (security_invoker='true') AS
+ SELECT f.id,
+    f.report_id,
+    f.user_id,
+    p.full_name AS staff_name,
+    r.report_date,
+    f.path,
+    f.name,
+    f.mime,
+    f.size_bytes,
+    f.created_at,
+    (r.report_date = public.business_date()) AS editable
+   FROM ((public.report_files f
+     JOIN public.reports r ON ((r.id = f.report_id)))
+     JOIN public.profiles p ON ((p.id = f.user_id)));
+
+
+--
+-- Name: report_photos; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.report_photos (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    report_id uuid NOT NULL,
+    storage_path text NOT NULL,
+    caption text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
 
 
 --
@@ -7831,7 +8026,8 @@ CREATE VIEW public.store_count_sheet_detail WITH (security_invoker='true') AS
     s.file_name,
     s.content_type,
     s.size_bytes,
-    s.created_at
+    s.created_at,
+    s.count_was_due
    FROM ((public.store_count_sheets s
      JOIN public.profiles p ON ((p.id = s.user_id)))
      JOIN public.outlets o ON ((o.id = s.outlet_id)));
@@ -8840,6 +9036,22 @@ ALTER TABLE ONLY public.push_subscriptions
 
 
 --
+-- Name: report_files report_files_path_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_files
+    ADD CONSTRAINT report_files_path_key UNIQUE (path);
+
+
+--
+-- Name: report_files report_files_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_files
+    ADD CONSTRAINT report_files_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: report_photos report_photos_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -9468,6 +9680,20 @@ CREATE INDEX push_subscriptions_user ON public.push_subscriptions USING btree (u
 
 
 --
+-- Name: report_files_by_report; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX report_files_by_report ON public.report_files USING btree (report_id, created_at);
+
+
+--
+-- Name: report_files_by_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX report_files_by_user ON public.report_files USING btree (user_id, created_at DESC);
+
+
+--
 -- Name: reports_one_per_day; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -9871,6 +10097,13 @@ CREATE TRIGGER trg_release_reports_on_demotion AFTER UPDATE OF role ON public.pr
 --
 
 CREATE TRIGGER trg_report_enforce BEFORE INSERT OR UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION public.report_enforce();
+
+
+--
+-- Name: report_files trg_report_file_limit; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_report_file_limit BEFORE INSERT ON public.report_files FOR EACH ROW EXECUTE FUNCTION public.report_file_limit();
 
 
 --
@@ -10331,6 +10564,22 @@ ALTER TABLE ONLY public.profiles
 
 ALTER TABLE ONLY public.push_subscriptions
     ADD CONSTRAINT push_subscriptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: report_files report_files_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_files
+    ADD CONSTRAINT report_files_report_id_fkey FOREIGN KEY (report_id) REFERENCES public.reports(id) ON DELETE CASCADE;
+
+
+--
+-- Name: report_files report_files_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_files
+    ADD CONSTRAINT report_files_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE RESTRICT;
 
 
 --
@@ -11389,6 +11638,19 @@ CREATE POLICY push_subs_own_update ON public.push_subscriptions FOR UPDATE USING
 ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: report_files; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.report_files ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: report_files report_files_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY report_files_select ON public.report_files FOR SELECT USING (((user_id = auth.uid()) OR public.is_admin() OR public.supervises_user(user_id)));
+
+
+--
 -- Name: report_photos; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -11912,6 +12174,15 @@ GRANT ALL ON FUNCTION public.activity_feed(p_from date, p_to date, p_user uuid, 
 REVOKE ALL ON FUNCTION public.activity_platform(p_ua text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.activity_platform(p_ua text) TO authenticated;
 GRANT ALL ON FUNCTION public.activity_platform(p_ua text) TO service_role;
+
+
+--
+-- Name: FUNCTION add_report_file(p_path text, p_name text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.add_report_file(p_path text, p_name text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.add_report_file(p_path text, p_name text) TO authenticated;
+GRANT ALL ON FUNCTION public.add_report_file(p_path text, p_name text) TO service_role;
 
 
 --
@@ -12780,6 +13051,15 @@ GRANT ALL ON FUNCTION public.record_selfie_sweep(p_result jsonb) TO service_role
 
 
 --
+-- Name: FUNCTION remove_report_file(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.remove_report_file(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.remove_report_file(p_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.remove_report_file(p_id uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION remove_schedule_override(p_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -12816,6 +13096,39 @@ REVOKE ALL ON FUNCTION public.report_capture_visits() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public.report_enforce() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION report_file_attached(p_name text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.report_file_attached(p_name text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.report_file_attached(p_name text) TO authenticated;
+GRANT ALL ON FUNCTION public.report_file_attached(p_name text) TO service_role;
+
+
+--
+-- Name: FUNCTION report_file_limit(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.report_file_limit() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION report_file_mime_ok(p_mime text); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.report_file_mime_ok(p_mime text) TO authenticated;
+GRANT ALL ON FUNCTION public.report_file_mime_ok(p_mime text) TO service_role;
+
+
+--
+-- Name: FUNCTION report_file_readable(p_name text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.report_file_readable(p_name text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.report_file_readable(p_name text) TO authenticated;
+GRANT ALL ON FUNCTION public.report_file_readable(p_name text) TO service_role;
 
 
 --
@@ -13518,6 +13831,13 @@ GRANT SELECT(opened_at) ON TABLE public.phone_checks TO authenticated;
 --
 
 GRANT SELECT ON TABLE public.place_naming_due_detail TO authenticated;
+
+
+--
+-- Name: TABLE report_file_detail; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT ON TABLE public.report_file_detail TO authenticated;
 
 
 --

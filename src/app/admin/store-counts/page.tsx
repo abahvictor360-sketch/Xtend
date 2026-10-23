@@ -107,7 +107,7 @@ export default async function StoreCountsPage({
     // Paper count sheets (migration 035); RLS narrows them like the counts.
     supabase
       .from('store_count_sheet_detail')
-      .select('id, staff_name, outlet_name, count_date, file_name, content_type, path, created_at')
+      .select('id, staff_name, outlet_name, count_date, file_name, content_type, path, created_at, request_id, count_was_due')
       .gte('count_date', from)
       .lte('count_date', to)
       .order('created_at', { ascending: false })
@@ -145,6 +145,9 @@ export default async function StoreCountsPage({
     content_type: string
     path: string
     created_at: string
+    request_id: string | null
+    /** Undefined before 0064; false for a sheet sent from the profile with no count due. */
+    count_was_due?: boolean | null
   }[]
 
   // Each person with their role (an added role's own name) and their team,
@@ -297,7 +300,8 @@ export default async function StoreCountsPage({
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
               Counts done on paper and sent as a file. Their figures are not in the totals above;
-              open the sheet to read them.
+              open the sheet to read them. Staff can also send a sheet from their profile when no
+              count is due; those show as &ldquo;Sent any time&rdquo;.
             </p>
             <Table>
               <TableHeader>
@@ -305,6 +309,7 @@ export default async function StoreCountsPage({
                   <TableHead>Date</TableHead>
                   <TableHead>Staff</TableHead>
                   <TableHead>Store</TableHead>
+                  <TableHead>For</TableHead>
                   <TableHead>Sheet</TableHead>
                 </TableRow>
               </TableHeader>
@@ -314,6 +319,13 @@ export default async function StoreCountsPage({
                     <TableCell className="whitespace-nowrap">{sheet.count_date}</TableCell>
                     <TableCell>{sheet.staff_name}</TableCell>
                     <TableCell>{sheet.outlet_name}</TableCell>
+                    <TableCell className="whitespace-nowrap text-xs">
+                      {sheet.request_id
+                        ? 'Requested count'
+                        : sheet.count_was_due === false
+                          ? 'Sent any time'
+                          : 'Month-end count'}
+                    </TableCell>
                     <TableCell className="text-xs">
                       {photoUrls.get(sheet.path) ? (
                         <a
@@ -322,7 +334,12 @@ export default async function StoreCountsPage({
                           rel="noreferrer"
                           className="font-semibold text-brand underline-offset-2 hover:underline"
                         >
-                          Open {sheet.content_type === 'application/pdf' ? 'PDF' : 'photo'}
+                          Open{' '}
+                          {sheet.content_type === 'application/pdf'
+                            ? 'PDF'
+                            : sheet.content_type.includes('spreadsheet')
+                              ? 'Excel'
+                              : 'photo'}
                         </a>
                       ) : (
                         <span className="text-muted-foreground">Link unavailable</span>

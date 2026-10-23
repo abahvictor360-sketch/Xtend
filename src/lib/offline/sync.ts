@@ -1,6 +1,7 @@
 'use client'
 
 import { supabase } from '@/lib/supabase/client'
+import { REPORT_FILE_BUCKET, reportFilePath } from '@/lib/report-files'
 import {
   dropOutbox,
   enqueue,
@@ -183,6 +184,19 @@ async function runReport(job: ReportJob) {
     paths.push(path)
   }
 
+  // Documents go to their own private bucket (0064), each under a new name
+  // so a retry never overwrites one already sent.
+  const files: { path: string; name: string }[] = []
+  for (const file of job.files ?? []) {
+    const path = reportFilePath(userId, uuid(), file.mime)
+    const { error } = await client.storage.from(REPORT_FILE_BUCKET).upload(path, file.blob, {
+      contentType: file.mime,
+      upsert: false,
+    })
+    if (error) throw new Error(error.message)
+    files.push({ path, name: file.name })
+  }
+
   return postJson('/api/reports', {
     body: job.body,
     sales_summary: job.sales_summary,
@@ -190,6 +204,7 @@ async function runReport(job: ReportJob) {
     competitor_activity: job.competitor_activity,
     issues: job.issues,
     photo_paths: paths,
+    files,
   })
 }
 

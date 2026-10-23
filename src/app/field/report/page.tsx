@@ -3,6 +3,7 @@ import { REPORTING_ROLES, requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { ReportForm } from '@/components/field/report-form'
 import { ReportVisits } from '@/components/field/report-visits'
+import type { SavedReportFile } from '@/components/field/report-files'
 import type { SourceVisit } from '@/lib/marketer-report'
 import { SheetScreen, HeaderField } from '@/components/field/screen'
 import { longDate } from '@/lib/utils'
@@ -45,12 +46,20 @@ export default async function ReportPage() {
     supabase.rpc('my_store_visits'),
   ])
 
-  const { count: photoCount } = report
-    ? await supabase
-        .from('report_photos')
-        .select('id', { count: 'exact', head: true })
-        .eq('report_id', report.id)
-    : { count: 0 }
+  const [{ count: photoCount }, { data: fileRows }] = report
+    ? await Promise.all([
+        supabase
+          .from('report_photos')
+          .select('id', { count: 'exact', head: true })
+          .eq('report_id', report.id),
+        // Documents attached to it (0064). Empty before the migration runs.
+        supabase
+          .from('report_files')
+          .select('id, name, mime, size_bytes')
+          .eq('report_id', report.id)
+          .order('created_at'),
+      ])
+    : [{ count: 0 }, { data: [] }]
 
   return (
     <SheetScreen
@@ -83,6 +92,7 @@ export default async function ReportPage() {
             : null
         }
         photosAlready={photoCount ?? 0}
+        files={(fileRows ?? []) as SavedReportFile[]}
       />
     </SheetScreen>
   )

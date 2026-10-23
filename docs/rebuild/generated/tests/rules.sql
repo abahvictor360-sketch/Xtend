@@ -2105,14 +2105,8 @@ begin
       ('reports', sade || '/sheet-3.pdf', '{"mimetype":"application/pdf","size":20000000}'),
       ('reports', bala || '/not-mine.pdf', '{"mimetype":"application/pdf","size":100}');
 
-    if not public.is_month_end_window() then
-      begin
-        perform public.submit_count_sheet(shop, sade || '/sheet-1.pdf', 'count.pdf');
-        perform assert(false, 'a sheet nobody asked for is refused');
-      exception when others then
-        perform assert(sqlerrm like '%No store count is due%', 'a sheet nobody asked for is refused');
-      end;
-    end if;
+    -- A sheet nobody asked for is kept since 0064 (sent from the profile);
+    -- see "Count sheets from the profile" near the end.
 
     perform act_as(boss);
     req_id := public.request_store_count(array[sade], public.business_date() + 1, null);
@@ -4258,6 +4252,203 @@ begin
         'xm features: other setting changes leave the restart date alone');
     end;
 
+  end;
+
+  -- ---------------------------------------------------------------
+  -- Documents on the daily report (0064).
+  -- ---------------------------------------------------------------
+  declare
+    tobi   uuid := gen_random_uuid();
+    lead   uuid := gen_random_uuid();
+    merch  uuid := gen_random_uuid();
+    shop   uuid;
+    rep    uuid;
+    f1     uuid;
+    f2     uuid;
+    gone   text;
+    k      integer;
+  begin
+    perform act_as(boss);
+    insert into auth.users (id, email) values
+      (tobi, 'tobi.rf@xpel.ng'), (lead, 'lead.rf@xpel.ng'), (merch, 'merch.rf@xpel.ng');
+    insert into public.outlets (name, lat, lng) values ('RF Store', 6.45, 3.4) returning id into shop;
+    insert into public.profiles (id, full_name, email, role) values
+      (lead, 'Lara Lead', 'lead.rf@xpel.ng', 'supervisor');
+    insert into public.profiles (id, full_name, email, role, outlet_id, supervisor_id) values
+      (tobi, 'Tobi Adeyemi', 'tobi.rf@xpel.ng', 'marketer', shop, lead),
+      (merch, 'Mide Merch', 'merch.rf@xpel.ng', 'merchandiser', shop, null);
+    perform assert(exists (select 1 from storage.buckets where id = 'report-files' and not public),
+      'report files: the report-files bucket exists and is private');
+
+    perform act_as(tobi);
+    insert into storage.objects (bucket_id, name, metadata) values
+      ('report-files', tobi || '/a.pdf', '{"mimetype":"application/pdf","size":200000}'),
+      ('report-files', tobi || '/b.docx', '{"mimetype":"application/vnd.openxmlformats-officedocument.wordprocessingml.document","size":40000}'),
+      ('report-files', tobi || '/c.exe', '{"mimetype":"application/x-msdownload","size":100}'),
+      ('report-files', tobi || '/d.pdf', '{"mimetype":"application/pdf","size":10485761}'),
+      ('report-files', tobi || '/e.pdf', '{"mimetype":"application/pdf","size":0}'),
+      ('report-files', lead || '/not-mine.pdf', '{"mimetype":"application/pdf","size":100}'),
+      ('reports', tobi || '/wrong-bucket.pdf', '{"mimetype":"application/pdf","size":100}');
+
+    begin
+      perform public.add_report_file(tobi || '/a.pdf', 'a.pdf');
+      perform assert(false, 'report files: nothing is attached before the report is saved');
+    exception when others then
+      perform assert(sqlerrm like 'Save today''s report first%', 'report files: nothing is attached before the report is saved');
+    end;
+
+    insert into public.reports (body, sales_summary, stock_status)
+    values ('Good day at the store', 'Sold twenty units', 'Shelves are full') returning id into rep;
+
+    f1 := public.add_report_file(tobi || '/a.pdf', E'Price\nsurvey.pdf');
+    perform assert((select rf.report_id = rep and rf.user_id = tobi and rf.mime = 'application/pdf'
+                           and rf.size_bytes = 200000 and rf.name = 'Price survey.pdf'
+                    from public.report_files rf where rf.id = f1),
+      'report files: a PDF is attached to today''s report, with its type and size from storage');
+    f2 := public.add_report_file(tobi || '/b.docx', 'Display plan.docx');
+    perform assert(f2 is not null, 'report files: a Word document is accepted');
+    begin
+      perform public.add_report_file(tobi || '/a.pdf', 'again.pdf');
+      perform assert(false, 'report files: the same file cannot be attached twice');
+    exception when others then
+      perform assert(sqlerrm like '%already attached%', 'report files: the same file cannot be attached twice');
+    end;
+    begin
+      perform public.add_report_file(tobi || '/c.exe', 'tool.exe');
+      perform assert(false, 'report files: a program is refused');
+    exception when others then
+      perform assert(sqlerrm like 'Attach a PDF, Word, Excel%', 'report files: only documents and pictures are accepted');
+    end;
+    begin
+      perform public.add_report_file(tobi || '/d.pdf', 'big.pdf');
+      perform assert(false, 'report files: over 10 MB is refused');
+    exception when others then
+      perform assert(sqlerrm like '%10 MB or smaller%', 'report files: a document over 10 MB is refused');
+    end;
+    begin
+      perform public.add_report_file(tobi || '/e.pdf', 'empty.pdf');
+      perform assert(false, 'report files: an empty file is refused');
+    exception when others then
+      perform assert(sqlerrm like '%empty%', 'report files: an empty file is refused');
+    end;
+    begin
+      perform public.add_report_file(lead || '/not-mine.pdf', 'x.pdf');
+      perform assert(false, 'report files: a file from somebody else''s folder is refused');
+    exception when others then
+      perform assert(sqlerrm like 'Upload the document again%', 'report files: a file from somebody else''s folder is refused');
+    end;
+    begin
+      perform public.add_report_file(tobi || '/wrong-bucket.pdf', 'x.pdf');
+      perform assert(false, 'report files: only files in the report-files bucket');
+    exception when others then
+      perform assert(sqlerrm like 'Upload the document again%', 'report files: a file in another bucket is refused');
+    end;
+    begin
+      insert into public.report_files (report_id, user_id, path, name, mime, size_bytes)
+      values (rep, tobi, tobi || '/zz.txt', 'zz.txt', 'text/plain', 10);
+      perform assert(false, 'report files: the table refuses a type not on the list');
+    exception when others then
+      perform assert(sqlerrm like '%report_files_mime_check%', 'report files: the table itself refuses a type not on the list');
+    end;
+
+    -- Five at most.
+    for k in 1..3 loop
+      insert into storage.objects (bucket_id, name, metadata)
+      values ('report-files', tobi || '/more-' || k || '.xlsx',
+              '{"mimetype":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","size":5000}');
+      perform public.add_report_file(tobi || '/more-' || k || '.xlsx', 'Sheet ' || k || '.xlsx');
+    end loop;
+    insert into storage.objects (bucket_id, name, metadata)
+    values ('report-files', tobi || '/sixth.csv', '{"mimetype":"text/csv","size":50}');
+    begin
+      perform public.add_report_file(tobi || '/sixth.csv', 'sixth.csv');
+      perform assert(false, 'report files: a sixth document is refused');
+    exception when others then
+      perform assert(sqlerrm like '%up to 5 documents%', 'report files: a report has at most five documents');
+    end;
+
+    -- Removing: only your own, only on the day.
+    perform act_as(merch);
+    begin
+      perform public.remove_report_file(f2);
+      perform assert(false, 'report files: nobody else removes a document');
+    exception when others then
+      perform assert(sqlerrm like '%not on your report%', 'report files: nobody else removes a document');
+    end;
+    begin
+      perform public.add_report_file(merch || '/x.pdf', 'x.pdf');
+      perform assert(false, 'report files: a merchandiser cannot attach to a report');
+    exception when others then
+      perform assert(sqlerrm like 'Only marketers%', 'report files: someone who does not file reports cannot attach documents');
+    end;
+    perform act_as(tobi);
+    gone := public.remove_report_file(f2);
+    perform assert(gone = tobi || '/b.docx' and not exists (select 1 from public.report_files where id = f2),
+      'report files: the owner removes a document the same day, and is told which file to delete');
+    perform assert((select editable from public.report_file_detail where id = f1),
+      'report files: today''s documents read as editable');
+    perform public.add_report_file(tobi || '/sixth.csv', 'sixth.csv');
+    perform assert((select count(*) from public.report_files rf where rf.report_id = rep) = 5,
+      'report files: once one is removed, another can be attached');
+
+    -- The next day the report and its documents are locked.
+    alter table public.reports disable trigger trg_report_enforce;
+    update public.reports set report_date = report_date - 1 where id = rep;
+    alter table public.reports enable trigger trg_report_enforce;
+    begin
+      perform public.remove_report_file(f1);
+      perform assert(false, 'report files: no removing after the day');
+    exception when others then
+      perform assert(sqlerrm like '%only be removed on the day%', 'report files: documents cannot be removed after the day');
+    end;
+    insert into storage.objects (bucket_id, name, metadata)
+    values ('report-files', tobi || '/late.pdf', '{"mimetype":"application/pdf","size":50}');
+    begin
+      perform public.add_report_file(tobi || '/late.pdf', 'late.pdf');
+      perform assert(false, 'report files: no adding to yesterday''s report');
+    exception when others then
+      perform assert(sqlerrm like 'Save today''s report first%', 'report files: nothing is added to a past report');
+    end;
+    perform assert(not (select editable from public.report_file_detail where id = f1),
+      'report files: a past day''s documents read as locked');
+
+    -- Who may read the stored files.
+    perform assert(public.report_file_readable(tobi || '/a.pdf'), 'report files: the owner reads their file');
+    perform act_as(lead);
+    perform assert(public.report_file_readable(tobi || '/a.pdf'), 'report files: their supervisor reads an attached file');
+    perform assert(not public.report_file_readable(tobi || '/late.pdf'),
+      'report files: but not a file that is not on a report');
+    perform act_as(merch);
+    perform assert(not public.report_file_readable(tobi || '/a.pdf'), 'report files: other staff cannot read it');
+    perform act_as(boss);
+    perform assert(public.report_file_readable(tobi || '/late.pdf'), 'report files: an admin reads any of them');
+    perform assert(public.report_file_attached(tobi || '/a.pdf') and not public.report_file_attached(tobi || '/late.pdf'),
+      'report files: the delete rule can tell attached files from loose ones');
+  end;
+
+  -- ---------------------------------------------------------------
+  -- Count sheets from the profile, any time (0064).
+  -- ---------------------------------------------------------------
+  declare
+    yemi  uuid := gen_random_uuid();
+    shop  uuid;
+    s1    uuid;
+  begin
+    perform act_as(boss);
+    insert into auth.users (id, email) values (yemi, 'yemi.sheet@xpel.ng');
+    insert into public.outlets (name, lat, lng) values ('Yemi Store', 6.44, 3.41) returning id into shop;
+    insert into public.profiles (id, full_name, email, role, outlet_id)
+    values (yemi, 'Yemi Bello', 'yemi.sheet@xpel.ng', 'merchandiser', shop);
+    perform act_as(yemi);
+    insert into storage.objects (bucket_id, name, metadata) values
+      ('reports', yemi || '/any-time.xlsx',
+       '{"mimetype":"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","size":30000}');
+    s1 := public.submit_count_sheet(shop, yemi || '/any-time.xlsx', 'XPEL sheet.xlsx');
+    perform assert((select count_was_due = public.is_month_end_window() and request_id is null
+                    from public.store_count_sheets where id = s1),
+      'count sheets: a sheet sent from the profile with no count due is kept, against no request');
+    perform assert(exists (select 1 from public.store_count_sheet_detail where id = s1 and outlet_name = 'Yemi Store'),
+      'count sheets: and the office sees it with the store''s name');
   end;
 
   raise notice 'ALL RULES PASSED';

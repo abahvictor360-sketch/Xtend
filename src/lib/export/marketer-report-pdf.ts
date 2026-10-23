@@ -4,7 +4,7 @@
  * Xpel logo, the person, summary tiles, then tables and the daily report,
  * with page numbers and a footer on every page.
  */
-import { minutesText, type MarketerReport, type DayDetail } from '@/lib/marketer-report'
+import { minutesText, reportFieldsWithDocuments, type MarketerReport, type DayDetail } from '@/lib/marketer-report'
 import { XPEL_LOGO_PNG, XPEL_LOGO_RATIO } from '@/lib/export/brand-logo'
 
 type RGB = { r: number; g: number; b: number }
@@ -416,7 +416,7 @@ export async function marketerReportPdf(report: MarketerReport): Promise<Uint8Ar
     else paragraph('No store visits recorded on this day.', 9, C.muted, italic)
 
     heading('Daily report', d.report ? `Filed at ${d.report.filedAt}` : undefined)
-    if (d.report) fields(d.report.fields)
+    if (d.report) fields(reportFieldsWithDocuments(d.report))
     else paragraph('No daily report was filed for this day.', 9, C.muted, italic)
 
     extras(d, false)
@@ -491,7 +491,7 @@ export async function marketerReportPdf(report: MarketerReport): Promise<Uint8Ar
       y -= barH + 6
       paragraph(d.summary, 8, C.muted)
       if (d.visits.length) visitsTable(d, true)
-      if (d.report) fields(d.report.fields, 7.8, 108)
+      if (d.report) fields(reportFieldsWithDocuments(d.report), 7.8, 108)
       extras(d, true)
       y -= 4
     }

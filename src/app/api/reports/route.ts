@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, REPORTING_ROLES, dbErrorMessage, dbErrorResponse } from '@/lib/auth'
-import { writtenText } from '@/lib/fields'
+import { fileName, writtenText } from '@/lib/fields'
+import { MAX_REPORT_FILES } from '@/lib/report-files'
 
 const schema = z.object({
   // What the day, sales and stock were like must be said; competitors and
@@ -12,6 +13,12 @@ const schema = z.object({
   competitor_activity: writtenText(2000, 0, '"Competitors"'),
   issues: writtenText(2000, 0, '"Issues"'),
   photo_paths: z.array(z.string().min(1)).max(5).default([]),
+  // Documents already uploaded to report-files (0064); the database checks
+  // each one: theirs, just uploaded, an allowed type, small enough, room left.
+  files: z
+    .array(z.object({ path: z.string().min(1).max(300), name: fileName }))
+    .max(MAX_REPORT_FILES)
+    .default([]),
 })
 
 /**
@@ -32,7 +39,7 @@ export async function POST(request: Request) {
     }
     const input = parsed.data
 
-    for (const path of input.photo_paths) {
+    for (const path of [...input.photo_paths, ...input.files.map((f) => f.path)]) {
       if (!path.startsWith(`${session.userId}/`)) {
         return Response.json({ error: 'Photo path does not belong to you' }, { status: 400 })
       }
@@ -81,6 +88,16 @@ export async function POST(request: Request) {
         input.photo_paths.map((storage_path) => ({ report_id: reportId, storage_path })),
       )
       if (error) return dbErrorResponse(error)
+    }
+
+    for (const file of input.files) {
+      const { error } = await supabase.rpc('add_report_file', { p_path: file.path, p_name: file.name })
+      if (error) {
+        return Response.json(
+          { error: `Your report is saved, but ${file.name || 'a document'} was not attached: ${dbErrorMessage(error)}` },
+          { status: 400 },
+        )
+      }
     }
 
     return Response.json({ report_id: reportId }, { status: 201 })

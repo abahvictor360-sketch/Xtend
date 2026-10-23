@@ -12,6 +12,7 @@ import { CameraCapture } from '@/components/field/camera-capture'
 import { submitOrQueue, PermanentJobError } from '@/lib/offline/sync'
 import { cn } from '@/lib/utils'
 import { writtenText } from '@/lib/fields'
+import { ReportFiles, type PendingReportFile, type SavedReportFile } from '@/components/field/report-files'
 
 const MAX_PHOTOS = 5
 
@@ -94,15 +95,19 @@ const EMPTY: ReportFields = {
 export function ReportForm({
   existing,
   photosAlready,
+  files = [],
 }: {
   existing: ReportFields | null
   photosAlready: number
+  /** Documents already on today's report (0064). */
+  files?: SavedReportFile[]
 }) {
   const router = useRouter()
   const [fields, setFields] = useState<ReportFields>(existing ?? EMPTY)
   const [active, setActive] = useState<keyof ReportFields>('body')
   const [photos, setPhotos] = useState<{ blob: Blob; url: string }[]>([])
   const [camera, setCamera] = useState(false)
+  const [docs, setDocs] = useState<PendingReportFile[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -165,6 +170,7 @@ export function ReportForm({
         kind: 'report',
         ...fields,
         photos: photos.map((p) => p.blob),
+        files: docs.map((d) => ({ blob: d.blob, name: d.name, mime: d.mime })),
         client_captured_at: new Date().toISOString(),
       })
 
@@ -176,6 +182,7 @@ export function ReportForm({
           : 'Report saved. You can keep editing it until midnight.',
       )
       setPhotos([])
+      setDocs([])
       router.refresh()
     } catch (err) {
       if (err instanceof PermanentJobError) setError(err.message)
@@ -292,6 +299,8 @@ export function ReportForm({
           onClose={() => setCamera(false)}
         />
       </div>
+
+      <ReportFiles saved={files} pending={docs} onPendingChange={setDocs} disabled={busy} />
 
       <Button type="submit" size="xl" className="w-full" disabled={busy}>
         <Send className="h-4 w-4" />

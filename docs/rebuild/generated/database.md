@@ -513,6 +513,22 @@ Policies:
 - `push_subs_own_select` SELECT to public: using `((user_id = auth.uid()) OR is_admin())`
 - `push_subs_own_update` UPDATE to public: using `(user_id = auth.uid())`; check `(user_id = auth.uid())`
 
+### `report_files`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| id | uuid(uuid) |  | gen_random_uuid() |
+| report_id | uuid(uuid) |  |  |
+| user_id | uuid(uuid) |  |  |
+| path | text(text) |  |  |
+| name | text(text) |  |  |
+| mime | text(text) |  |  |
+| size_bytes | bigint(int8) |  |  |
+| created_at | timestamp with time zone(timestamptz) |  | now() |
+
+Policies:
+- `report_files_select` SELECT to public: using `((user_id = auth.uid()) OR is_admin() OR supervises_user(user_id))`
+
 ### `report_photos`
 
 | Column | Type | Null | Default |
@@ -656,6 +672,7 @@ Policies:
 | content_type | text(text) |  |  |
 | size_bytes | bigint(int8) |  |  |
 | created_at | timestamp with time zone(timestamptz) |  | now() |
+| count_was_due | boolean(bool) |  | true |
 
 Policies:
 - `store_count_sheets_select` SELECT to public: using `((user_id = auth.uid()) OR is_admin() OR supervises_user(user_id))`
@@ -1115,6 +1132,7 @@ Policies:
 - `leave_request_detail`
 - `notification_log`
 - `place_naming_due_detail`
+- `report_file_detail`
 - `staff_allocation`
 - `store_count_detail`
 - `store_count_sheet_detail`
@@ -1148,6 +1166,7 @@ Policies:
 - `absentees_today()` → TABLE(user_id uuid, full_name text, phone text, outlet_name text) · definer · 0059_schedules_leave.sql
 - `activity_feed(p_from date, p_to date, p_user uuid, p_kinds text[], p_limit integer)` → TABLE(at timestamp with time zone, user_id uuid, full_name text, role text, kind text, label text, detail jsonb, ip text, platform text, device text, user_agent text) · definer · 0062_user_activity.sql
 - `activity_platform(p_ua text)` → text · 0062_user_activity.sql
+- `add_report_file(p_path text, p_name text)` → uuid · definer · 0064_count_sheets_any_time_report_files.sql
 - `admin_overview()` → jsonb · definer · 0059_schedules_leave.sql
 - `alert_watchers(p_user uuid)` → TABLE(user_id uuid, full_name text, role user_role) · definer · 0036_supervisor_alerts.sql
 - `apply_leave(p_kind text, p_from date, p_to date, p_reason text)` → uuid · definer · 0059_schedules_leave.sql
@@ -1306,11 +1325,16 @@ Policies:
 - `record_offline_pings(p_points jsonb, p_sent_at timestamp with time zone)` → integer · definer · 0029_offline_positions.sql
 - `record_selfie_sweep(p_result jsonb)` → void · definer · 0012_selfie_retention_24h.sql
 - `release_reports_on_demotion()` → trigger · definer · 0018_reporting_line_upkeep.sql
+- `remove_report_file(p_id uuid)` → text · definer · 0064_count_sheets_any_time_report_files.sql
 - `remove_schedule_override(p_id uuid)` → void · definer · 0059_schedules_leave.sql
 - `reopen_support_thread(p_thread uuid)` → void · definer · 0053_support_notifications.sql
 - `report_app_install(p_platform text, p_app_version text, p_app_build integer, p_web_build text)` → void · definer · 0057_app_updates.sql
 - `report_capture_visits()` → trigger · definer · 0060_marketer_visits_reports.sql
 - `report_enforce()` → trigger · definer · 0005_marketer_role.sql
+- `report_file_attached(p_name text)` → boolean · definer · 0064_count_sheets_any_time_report_files.sql
+- `report_file_limit()` → trigger · definer · 0064_count_sheets_any_time_report_files.sql
+- `report_file_mime_ok(p_mime text)` → boolean · 0064_count_sheets_any_time_report_files.sql
+- `report_file_readable(p_name text)` → boolean · definer · 0064_count_sheets_any_time_report_files.sql
 - `report_photo_limit()` → trigger · definer · 0002_logic.sql
 - `report_visits_snapshot(p_user uuid, p_date date)` → jsonb · definer · 0060_marketer_visits_reports.sql
 - `request_phone_check(p_user uuid)` → uuid · definer · 0026_phone_evidence.sql
@@ -1341,7 +1365,7 @@ Policies:
 - `store_visit_alert()` → trigger · definer · 0016_visits_without_allocation.sql
 - `store_visit_enforce()` → trigger · definer · 0060_marketer_visits_reports.sql
 - `store_visits_today()` → SETOF store_visit_detail · definer · 0016_visits_without_allocation.sql
-- `submit_count_sheet(p_outlet_id uuid, p_path text, p_file_name text)` → uuid · definer · 0040_xpel_count_sheet.sql
+- `submit_count_sheet(p_outlet_id uuid, p_path text, p_file_name text)` → uuid · definer · 0064_count_sheets_any_time_report_files.sql
 - `submit_store_count(p_outlet_id uuid, p_lines jsonb, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_photo_path text)` → integer · definer · 0040_xpel_count_sheet.sql
 - `supervises_user(target uuid)` → boolean · definer · 0017_supervisor_manages_staff.sql
 - `support_assignees(p_thread uuid)` → TABLE(user_id uuid, full_name text, role user_role) · definer · 0053_support_notifications.sql
@@ -1406,6 +1430,7 @@ Policies:
 - `profiles`: `trg_profiles_supervisor_check` — BEFORE INSERT OR UPDATE OF supervisor_id ON public.profiles FOR EACH ROW EXECUTE FUNCTION profiles_supervisor_check()
 - `profiles`: `trg_profiles_touch` — BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION touch_updated_at()
 - `profiles`: `trg_release_reports_on_demotion` — AFTER UPDATE OF role ON public.profiles FOR EACH ROW EXECUTE FUNCTION release_reports_on_demotion()
+- `report_files`: `trg_report_file_limit` — BEFORE INSERT ON public.report_files FOR EACH ROW EXECUTE FUNCTION report_file_limit()
 - `report_photos`: `trg_report_photo_limit` — BEFORE INSERT ON public.report_photos FOR EACH ROW EXECUTE FUNCTION report_photo_limit()
 - `reports`: `trg_report_enforce` — BEFORE INSERT OR UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION report_enforce()
 - `reports`: `trg_report_visits` — BEFORE INSERT OR UPDATE ON public.reports FOR EACH ROW EXECUTE FUNCTION report_capture_visits()

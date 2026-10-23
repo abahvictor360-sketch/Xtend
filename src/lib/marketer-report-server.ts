@@ -9,6 +9,7 @@ import {
   type ReportRequest,
   type SourceCount,
   type SourceReport,
+  type SourceReportFile,
   type SourceSale,
   type SourceVisit,
 } from '@/lib/marketer-report'
@@ -36,7 +37,7 @@ export async function loadMarketerReport(supabase: SupabaseClient, req: ReportRe
 
   // X Metrics sales are left out while sales are switched off (0063).
   const salesOn = xmOn(await readXmFeatures(supabase), 'sales')
-  const [roles, home, lead, got, visits, reports, counts, sales] = await Promise.all([
+  const [roles, home, lead, got, visits, reports, counts, sales, files] = await Promise.all([
     supabase.from('staff_roles').select('id, name, base_role, is_active'),
     profile.outlet_id
       ? supabase.from('outlets').select('name').eq('id', profile.outlet_id).maybeSingle<{ name: string }>()
@@ -75,6 +76,15 @@ export async function loadMarketerReport(supabase: SupabaseClient, req: ReportRe
           .lte('sale_date', req.to)
           .limit(3000)
       : Promise.resolve({ data: [] as { sale_date: string; outlet_id: string; product_id: string; units: number }[] }),
+    // Documents attached to the reports (0064); none before it runs.
+    supabase
+      .from('report_file_detail')
+      .select('report_date, name, mime, size_bytes')
+      .eq('user_id', req.userId)
+      .gte('report_date', req.from)
+      .lte('report_date', req.to)
+      .order('created_at')
+      .limit(500),
   ])
   if (visits.error) throw new Error(visits.error.message)
   if (reports.error) throw new Error(reports.error.message)
@@ -113,6 +123,7 @@ export async function loadMarketerReport(supabase: SupabaseClient, req: ReportRe
     reports: (reports.data ?? []) as SourceReport[],
     counts: (counts.data ?? []) as SourceCount[],
     sales: saleLines,
+    files: (files.data ?? []) as SourceReportFile[],
   })
 }
 

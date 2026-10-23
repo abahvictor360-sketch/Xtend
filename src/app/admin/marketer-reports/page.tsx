@@ -3,6 +3,7 @@ import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { loadMarketerRows, type MarketerRow } from '@/lib/marketer-report-server'
 import { MarketerReportList } from '@/components/admin/marketer-report-list'
+import { ReportFileList, type OfficeReportFile } from '@/components/admin/report-file-list'
 import { monthName, parseReportRequest, type ReportKind } from '@/lib/marketer-report'
 import { chip } from '@/components/admin/visit-views'
 import { Alert } from '@/components/ui/alert'
@@ -34,6 +35,20 @@ export default async function MarketerReportsPage({ searchParams }: { searchPara
   }
   const only = req.userId ? rows.filter((r) => r.id === req.userId) : []
   const shown = only.length ? only : rows
+
+  // Documents attached to the daily reports in the period (0064), for the
+  // people shown. RLS keeps a supervisor to their own team.
+  let files: OfficeReportFile[] = []
+  {
+    let q = supabase
+      .from('report_file_detail')
+      .select('id, user_id, staff_name, report_date, name, mime, size_bytes')
+      .gte('report_date', req.from)
+      .lte('report_date', req.to)
+    if (only.length && req.userId) q = q.eq('user_id', req.userId)
+    const { data } = await q.order('report_date', { ascending: false }).order('created_at').limit(500)
+    files = (data ?? []) as OfficeReportFile[]
+  }
 
   const period = req.kind === 'day' ? (req.date === today ? `Today, ${longDate(req.date)}` : longDate(req.date)) : monthName(req.month)
   const key = req.kind === 'day' ? req.date : req.month
@@ -130,6 +145,19 @@ export default async function MarketerReportsPage({ searchParams }: { searchPara
         </CardHeader>
         <CardContent>
           <MarketerReportList rows={shown} kind={req.kind} periodKey={key} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Documents attached ({files.length})</CardTitle>
+          <CardDescription>
+            Files staff attached to their daily reports in this period: price lists, plans, invoices, pictures.
+            The PDF, Word and Excel reports list them by name.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ReportFileList files={files} />
         </CardContent>
       </Card>
     </div>

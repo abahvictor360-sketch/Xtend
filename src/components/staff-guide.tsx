@@ -213,7 +213,14 @@ export function StaffGuide() {
               Tap <Ui>Report</Ui>, fill in how the day went, and add a photo if asked.
             </>,
             <>
-              Tap <Ui>Submit report</Ui>. You can edit it until midnight.
+              Have a price list, a display plan, an invoice or a picture for the office? Under{' '}
+              <Ui>Attach documents</Ui>, tap <Ui>Choose documents</Ui> and pick them: PDF, Word,
+              Excel or CSV files, or pictures. Up to 5, each 10 MB or smaller. Each one shows with
+              its name and size; tap the <Ui>×</Ui> to take one off.
+            </>,
+            <>
+              Tap <Ui>Submit report</Ui>. Your documents go with it. You can edit the report, and
+              add or remove documents, until midnight.
             </>,
           ]}
         />
@@ -222,6 +229,10 @@ export function StaffGuide() {
           and out, how long you were there, and the total. They are added to your report when you
           save it; there is nothing to type for them.
         </p>
+        <Tip>
+          No data? Your report and its documents wait on your phone and send themselves when you
+          get signal.
+        </Tip>
       </GuideSection>
 
       <GuideSection topic={T.count} intro="When a stock count is due, a Count tab appears and the home screen tells you.">
@@ -250,6 +261,12 @@ export function StaffGuide() {
           Counts are done when your supervisor asks, and at the end of every month. Prefer paper?
           Under <Ui>Count on paper</Ui>, download the month&apos;s sheet for your store, fill it
           in, and upload it back as the Excel file, a PDF or a photo.
+        </Tip>
+        <Tip>
+          The stock count sheet is also on your profile, any day: tap <Ui>You</Ui>, then under{' '}
+          <Ui>Stock count sheet</Ui> tap <Ui>Download</Ui> to get this month&apos;s sheet for
+          your store as Excel. Fill it in, then tap <Ui>Upload filled sheet</Ui> and send the
+          Excel file, a PDF or a photo of it. What you sent this month is listed underneath.
         </Tip>
       </GuideSection>
 

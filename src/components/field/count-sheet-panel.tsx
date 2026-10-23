@@ -9,12 +9,14 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { supabase } from '@/lib/supabase/client'
 
-/** A count sheet already sent today. */
+/** A count sheet already sent. */
 export interface SentSheet {
   id: string
   outlet_name: string
   file_name: string
   created_at: string
+  /** Shown instead of "Sent today", e.g. "Sent 12 Oct · Received". */
+  status?: string
 }
 
 const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
@@ -37,6 +39,8 @@ export function CountSheetPanel({
   sent,
   hasTemplate,
   month,
+  title = 'Count on paper',
+  sentHeading,
 }: {
   stores: { id: string; name: string }[]
   sent: SentSheet[]
@@ -44,6 +48,10 @@ export function CountSheetPanel({
   hasTemplate: boolean
   /** The month being counted, e.g. "OCTOBER 2026". */
   month: string
+  /** The panel's heading; the You page calls it "Stock count sheet". */
+  title?: string
+  /** A heading over the sheets already sent, e.g. "Sent this month". */
+  sentHeading?: string
 }) {
   const router = useRouter()
   const input = useRef<HTMLInputElement>(null)
@@ -108,7 +116,7 @@ export function CountSheetPanel({
       <div>
         <p className="flex items-center gap-2 text-sm font-semibold">
           <FileText className="h-4 w-4 text-brand" />
-          Count on paper
+          {title}
         </p>
         <p className="mt-1 text-sm text-muted-foreground">
           Download the {monthLabel} stock count sheet for your store, fill it in on your phone or print
@@ -164,7 +172,7 @@ export function CountSheetPanel({
         />
       </div>
 
-      {sent.length > 0 && (
+      {sent.length > 0 && !sentHeading && (
         <ul className="space-y-1 text-xs text-muted-foreground">
           {sent.map((s) => (
             <li key={s.id} className="flex items-center gap-1.5">
@@ -175,6 +183,27 @@ export function CountSheetPanel({
             </li>
           ))}
         </ul>
+      )}
+      {sentHeading && (
+        <div className="space-y-2">
+          <p className="text-xs font-semibold text-muted-foreground">{sentHeading}</p>
+          {sent.length === 0 ? (
+            <p className="text-xs text-muted-foreground">Nothing sent yet this month.</p>
+          ) : (
+            <ul className="space-y-2">
+              {sent.map((s) => (
+                <li key={s.id} className="flex items-center gap-3 rounded-xl bg-tint/50 px-3 py-2">
+                  <FileText className="h-4 w-4 shrink-0 text-brand" />
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-2 text-sm font-semibold [overflow-wrap:anywhere]">{s.file_name}</p>
+                    <p className="text-[11px] text-muted-foreground">{s.outlet_name}</p>
+                    {s.status && <p className="text-[11px] text-muted-foreground">{s.status}</p>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </section>
   )

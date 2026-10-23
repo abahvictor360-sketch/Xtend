@@ -4,6 +4,7 @@ import type { AttendanceDetail, Profile } from '@/lib/types'
 import { FIELD_ROLES } from '@/lib/auth'
 import { addDays, formatLagos, lagosDateString, longDate } from '@/lib/utils'
 import { snapshotText } from '@/lib/marketer-report'
+import { reportFileLine } from '@/lib/report-files'
 import { CLAIMS, judgeExcuse, lagosInstant, type Claim, type ExcuseEvidence } from '@/lib/excuse'
 import { detailText, fetchIntegrity, parseIntegrityFilter, personRisk } from '@/lib/integrity-review'
 import { loadScheduleSafe } from '@/lib/schedule-server'
@@ -321,9 +322,12 @@ export interface FieldReport {
   /** The store visits kept with the report (060): store, times, minutes. */
   visits: string
   visit_minutes: number
+  /** Names of the documents attached to it (0064), or "". */
+  documents: string
 }
 
 interface ReportRow {
+  id: string
   report_date: string
   body: string | null
   sales_summary: string | null
@@ -344,7 +348,7 @@ export async function fieldReports(
 ): Promise<{ from: string; to: string; reports: FieldReport[] }> {
   const { from, to } = checkRange(fromDate, toDate)
   const columns = (withVisits: boolean): string =>
-    `report_date, body, sales_summary, stock_status, competitor_activity, issues, ${withVisits ? 'store_visits, ' : ''}profiles(full_name), outlets(name)`
+    `id, report_date, body, sales_summary, stock_status, competitor_activity, issues, ${withVisits ? 'store_visits, ' : ''}profiles(full_name), outlets(name)`
   const read = (withVisits: boolean) =>
     supabase
       .from('reports')
@@ -358,6 +362,20 @@ export async function fieldReports(
   // Before migration 060 runs there is no store_visits column yet.
   if (error && error.message.includes('store_visits')) ({ data, error } = await read(false))
   if (error) throw new Error(error.message)
+
+  // Documents attached to these reports (0064), by name. Before the
+  // migration runs the read fails and the reports carry none.
+  const { data: fileRows } = await supabase
+    .from('report_file_detail')
+    .select('report_id, name, mime, size_bytes')
+    .gte('report_date', from)
+    .lte('report_date', to)
+    .order('created_at')
+    .limit(5000)
+  const docs = new Map<string, string[]>()
+  for (const f of (fileRows ?? []) as { report_id: string; name: string; mime: string; size_bytes: number }[]) {
+    docs.set(f.report_id, [...(docs.get(f.report_id) ?? []), reportFileLine(f)])
+  }
 
   const clip = (v: unknown) => {
     const text = typeof v === 'string' ? v.trim() : ''
@@ -380,6 +398,7 @@ export async function fieldReports(
         const v = snapshotText(r.store_visits)
         return { visits: clip(v.text), visit_minutes: v.minutes }
       })(),
+      documents: (docs.get(r.id) ?? []).join('; '),
     })),
   }
 }
