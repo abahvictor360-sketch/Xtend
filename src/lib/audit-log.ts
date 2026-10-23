@@ -66,6 +66,7 @@ export const ACTION_GROUPS: Record<string, string> = {
   export: 'Exports',
   xm: 'X Metrics',
   app: 'Updates',
+  system: 'System',
 }
 
 const LABELS: Record<string, string> = {
@@ -117,6 +118,9 @@ const LABELS: Record<string, string> = {
   'xm.supply.import_log': 'Logged supplies from an invoice',
   'xm.grade.review': 'Reviewed a grade',
   'xm.grades.finalise': 'Finalised the grades',
+  'system.reset': 'Reset test records',
+  'system.reset.files': 'Removed stored files left from a reset',
+  'system.go_live': 'Turned off test mode (went live)',
 }
 
 export function actionGroup(action: string) {

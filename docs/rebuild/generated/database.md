@@ -795,6 +795,30 @@ Policies:
 Policies:
 - `support_threads_select` SELECT to public: using `((user_id = auth.uid()) OR is_admin() OR supervises_user(user_id))`
 
+### `system_reset_files`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| bucket | text(text) |  |  |
+| name | text(text) |  |  |
+| queued_at | timestamp with time zone(timestamptz) |  | now() |
+
+### `system_settings`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| id | boolean(bool) |  | true |
+| test_mode | boolean(bool) |  | true |
+| went_live_at | timestamp with time zone(timestamptz) | yes |  |
+| went_live_by | uuid(uuid) | yes |  |
+| last_reset_at | timestamp with time zone(timestamptz) | yes |  |
+| last_reset_by | uuid(uuid) | yes |  |
+| last_reset | jsonb(jsonb) | yes |  |
+| updated_at | timestamp with time zone(timestamptz) |  | now() |
+
+Policies:
+- `system_settings_admin_read` SELECT to authenticated: using `is_admin()`
+
 ### `tracking_tokens`
 
 | Column | Type | Null | Default |
@@ -1340,6 +1364,14 @@ Policies:
 - `report_visits_snapshot(p_user uuid, p_date date)` → jsonb · definer · 0060_marketer_visits_reports.sql
 - `request_phone_check(p_user uuid)` → uuid · definer · 0026_phone_evidence.sql
 - `request_store_count(p_user_ids uuid[], p_due_date date, p_note text)` → uuid · definer · 0046_role_store_counts.sql
+- `reset_category_keys()` → text[] · 0066_test_mode_reset.sql
+- `reset_category_tables()` → TABLE(category text, table_name text, step integer) · 0066_test_mode_reset.sql
+- `reset_files_done(p_bucket text, p_names text[])` → integer · definer · 0066_test_mode_reset.sql
+- `reset_files_next(p_limit integer)` → TABLE(bucket text, name text) · definer · 0066_test_mode_reset.sql
+- `reset_files_pending()` → integer · definer · 0066_test_mode_reset.sql
+- `reset_resolve_categories(p_categories text[])` → text[] · 0066_test_mode_reset.sql
+- `reset_staff_tables()` → text[] · 0066_test_mode_reset.sql
+- `reset_test_data(p_actor uuid, p_categories text[])` → jsonb · definer · 0066_test_mode_reset.sql
 - `resolve_alert(p_alert_id uuid, p_note text)` → void · definer · 0002_logic.sql
 - `resolve_alerts(p_alert_ids uuid[], p_note text)` → integer · definer · 0052_visits_alerts.sql
 - `resolve_notification_targets(p_audience notification_audience, p_detail jsonb)` → TABLE(user_id uuid, full_name text, role user_role, outlet_name text, devices integer) · definer · 0006_push_notifications.sql
@@ -1370,6 +1402,8 @@ Policies:
 - `submit_store_count(p_outlet_id uuid, p_lines jsonb, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_photo_path text)` → integer · definer · 0040_xpel_count_sheet.sql
 - `supervises_user(target uuid)` → boolean · definer · 0017_supervisor_manages_staff.sql
 - `support_assignees(p_thread uuid)` → TABLE(user_id uuid, full_name text, role user_role) · definer · 0053_support_notifications.sql
+- `system_go_live(p_actor uuid)` → jsonb · definer · 0066_test_mode_reset.sql
+- `system_settings_guard()` → trigger · 0066_test_mode_reset.sql
 - `text_has_words(p_text text, p_min_length integer)` → boolean · 0039_field_rules.sql
 - `text_is_clean(p_text text)` → boolean · 0039_field_rules.sql
 - `touch_updated_at()` → trigger · 0002_logic.sql
@@ -1446,6 +1480,8 @@ Policies:
 - `store_visits`: `trg_store_visits_zz_place_due` — AFTER INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION visit_place_due()
 - `support_messages`: `realtime_broadcast` — AFTER INSERT OR DELETE OR UPDATE ON public.support_messages FOR EACH ROW EXECUTE FUNCTION realtime_notify_support_message()
 - `support_threads`: `realtime_broadcast` — AFTER INSERT OR DELETE OR UPDATE ON public.support_threads FOR EACH ROW EXECUTE FUNCTION realtime_notify_field_owner()
+- `system_settings`: `trg_system_settings_guard` — BEFORE DELETE OR UPDATE ON public.system_settings FOR EACH ROW EXECUTE FUNCTION system_settings_guard()
+- `system_settings`: `trg_system_settings_no_truncate` — BEFORE TRUNCATE ON public.system_settings FOR EACH STATEMENT EXECUTE FUNCTION system_settings_guard()
 - `xm_counts`: `trg_xm_counts_feature_guard` — BEFORE INSERT ON public.xm_counts FOR EACH ROW EXECUTE FUNCTION xm_feature_guard()
 - `xm_counts`: `trg_xm_counts_place_due_guard` — BEFORE INSERT ON public.xm_counts FOR EACH ROW EXECUTE FUNCTION place_due_guard()
 - `xm_monthly_grades`: `trg_xm_monthly_grades_feature_guard` — BEFORE INSERT OR UPDATE ON public.xm_monthly_grades FOR EACH ROW EXECUTE FUNCTION xm_feature_guard()

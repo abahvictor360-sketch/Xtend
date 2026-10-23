@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Bell, KeyRound, MessageSquareText, Search, Sparkles, UserPlus } from 'lucide-react'
+import { Bell, FlaskConical, KeyRound, MessageSquareText, Search, Sparkles, UserPlus } from 'lucide-react'
 import { SignOutButton } from '@/components/sign-out-button'
 import { AdminNav, AdminSidebarNav } from '@/components/admin/admin-nav'
 import { XpelMark } from '@/components/brand/logo'
@@ -38,6 +38,7 @@ export function AdminFrame({
   openAlerts,
   assistant,
   xmEnabled = true,
+  testMode = false,
   children,
 }: {
   name: string
@@ -47,6 +48,8 @@ export function AdminFrame({
   assistant: boolean
   /** X Metrics switched on (0063). */
   xmEnabled?: boolean
+  /** Test mode is on (0066): admins see a banner across the top. */
+  testMode?: boolean
   children: React.ReactNode
 }) {
   const bell = (
@@ -119,6 +122,15 @@ export function AdminFrame({
         </aside>
 
         <div className="min-w-0 flex-1 bg-canvas">
+          {testMode && (
+            <Link
+              href="/admin/system"
+              className="flex items-center justify-center gap-2 bg-brand-deep px-4 py-2 text-center text-xs font-bold text-white hover:bg-[#52281a] sm:text-sm"
+            >
+              <FlaskConical className="h-4 w-4 shrink-0" />
+              Test mode: records can be reset
+            </Link>
+          )}
           {/* Phone and tablet: a top bar with the menu as a drop-down. */}
           <header className="safe-top sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur lg:hidden">
             <div className="flex items-center justify-between gap-3 px-4 py-3">

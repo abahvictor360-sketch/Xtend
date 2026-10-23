@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-23, after report documents that survive a bad connection (migration 0065) and the mobile document controls and office dashboard usability fixes._
+_Last updated: 2026-10-23, after test mode and resetting the test run (migration 0066), report documents that survive a bad connection (0065) and the mobile document controls._
 
 ---
 
@@ -167,7 +167,29 @@ In short:
   `JOBS_ON_VPS=true`, so the GitHub alerts job stands down.
 - `vercel.json` is ignored there.
 
-### 4.6 Phone apps
+### 4.6 Test run and reset
+
+Migration 0066 starts Xtend in **test mode** (a dark orange strip across the
+admin dashboard: "Test mode: records can be reset"). For the test run:
+
+1. Run 0066 in Supabase. Set up stores and staff and use Xtend in the places
+   you want to try, as for real.
+2. To start again, an admin opens **Setup → System**, ticks what to clear (or
+   **Select everything (start completely fresh)**), clicks **Review what will
+   be deleted**, types `RESET` and their own password, and clicks **Reset now**.
+   Choices bring their dependencies (Staff accounts → everything they
+   recorded; Stores → their visits, counts, X Metrics records, allocations).
+   If many photos were stored, click **Finish removing files** until none are left.
+3. When the test run is over, click **We are live — turn off test mode** and
+   type `WE ARE LIVE`. This is permanent: the database refuses turning test
+   mode back on, and the reset is gone.
+
+Always kept: admin accounts (with their sign-ins and profile photos), the
+product list and the set-up tables (see 0066 in section 6 and
+`docs/rebuild/30-rules.md` §16b for every table). The audit log gains one
+`system.reset` row per reset; clearing the audit log leaves only that row.
+
+### 4.7 Phone apps
 
 See [section 9](#9-the-phone-apps). The short version: set the Android
 signing secrets and `GOOGLE_SERVICES_JSON` in GitHub, and every push to
@@ -364,6 +386,23 @@ the code lives.
   hours that no report points at (`report_file_orphans`, service role only;
   Storage API; `purgeOrphanReportFiles`).
 
+- **Test mode and reset** (0066, admins only, **Setup → System**,
+  `/admin/system`): `system_settings` holds `test_mode` (on after the
+  migration; one-way off, enforced by a trigger). While it is on, an admin
+  resets chosen parts of the test run: 14 categories (clock-ins and
+  locations, store visits and places, daily reports, stock counts and count
+  sheets, X Metrics records, leave and schedules, support chats,
+  notifications, activity log, Ask Xtend chats, teams and allocations,
+  stores, staff accounts, audit log) or everything. Typed `RESET` plus the
+  admin's password (checked by a throwaway sign-in); `reset_test_data`
+  clears the choice and its dependencies in one transaction, deletes
+  non-admin sign-ins from `auth.users`, queues stored files in
+  `system_reset_files` and writes one `system.reset` audit row; the route
+  removes the files with the Storage API (`POST /api/admin/system/reset`,
+  `/reset/files`, `/go-live`; `src/lib/system-reset*.ts`,
+  `src/components/admin/system-reset.tsx`). The admin dashboard shows a
+  "Test mode: records can be reset" strip to admins until they go live.
+
 ## 6. The database: every migration
 
 Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
@@ -435,6 +474,7 @@ Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
 | 0063 | X Metrics feature switches on `xm_settings` (`enabled`, `expiry_enabled`, `supplies_enabled`, `grading_enabled`, `sales_enabled`, all on; `reconcile_from`), `xm_feature_on`, admin-only `xm_set_features`, guards refusing switched-off writes, and the sweep, reconciliation, expiry and grading skipping what is off |
 | 0064 | Count sheets sent any time (`store_count_sheets.count_was_due`, `submit_count_sheet` without a due count); documents on the daily report: private `report-files` bucket and its storage rules, `report_files` with `add_report_file` / `remove_report_file`, the five-file trigger, `report_file_detail` |
 | 0065 | Report documents offline: `add_report_file` returns the existing row for a document already on today's report and accepts uploads up to 24 hours old; `remove_report_file` refusals carry hints (`report_file_gone`, `report_locked`); `report_file_orphans()` (service role only) lists `report-files` objects over 24 hours old on no report |
+| 0066 | Test mode and reset: `system_settings` (one row, `test_mode` on, one-way off by trigger, admins read), `system_reset_files` (files a reset queued), `reset_category_keys/tables`, `reset_resolve_categories`, `reset_test_data(actor, categories)` (service role), `system_go_live(actor)`, `reset_files_next/done/pending`. WIPE: attendance, location_pings, location_alerts, integrity_flags, excuse_checks, phone_checks, photo_checks, device_beacons, clock_out_reminders, tracking_tokens, store_visits, known_places, place_naming_due, reports, report_photos, report_files, store_counts, count_requests, count_request_targets, store_count_sheets, all xm_ record tables (counts, count lines, sales, sale lines, supplies, supply imports, reconciliations, monthly grades, expiry alerts, targets, policy reads), leave_requests, schedule_overrides, work_patterns, support_threads, support_messages, notifications, notification_deliveries, scheduled_notifications, user_activity, assistant_conversations, staff_outlets, outlets, xm_stores, audit_log. Admins kept: profiles, push_subscriptions, app_installs, staff_temp_passwords. KEEP: products, staff_roles, role_store_counts, count_sheet_templates, notification_templates, support_quick_replies, xm_settings, xm_settings_history, xm_policy_versions, app_releases, job_runs, system_settings, system_reset_files. |
 
 ## 7. Environment variables
 
@@ -574,7 +614,7 @@ for s in check-allocate check-assistant-actions check-attendance check-audit \
          check-movement check-push-endpoints check-supply-import \
          check-support-notifications check-updates check-visits-alerts check-xm-exports \
          check-schedules-leave check-marketer-reports check-clock-out-reminder check-activity \
-         check-xm-features check-report-files; do
+         check-xm-features check-report-files check-system-reset; do
   npx tsx --tsconfig tsconfig.scripts.json scripts/$s.ts | tail -1
 done
 ```
@@ -659,6 +699,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-23 | **Test mode and reset**: Xtend starts in test mode (admins see "Test mode: records can be reset" across the dashboard). On the new admin-only **System** page (Setup) an admin ticks what to reset — 14 areas or everything — reviews what goes and what stays, types RESET and their password, and the database clears it in one transaction (dependencies included: staff accounts take their records, stores take their visits, counts and allocations), removes non-admin sign-ins and stored files, and keeps one audit row. **We are live** turns test mode off for good. New `POST /api/admin/system/reset`, `/reset/files`, `/go-live`; check script `check-system-reset` | 0066 |
 | 2026-10-23 | **Report documents survive a bad connection**: removing a saved document works offline (queued, shows "Removing…", sent on signal; one that arrives after midnight is dropped and the report page says why); a report sent again does not upload its documents again (an id per picked file, progress kept in the outbox, "already exists" counts as done, `add_report_file` answers a repeat with the same row and takes uploads up to 24 hours old); the nightly purge job deletes report files left on no report after 24 hours. New `src/lib/report-file-queue.ts`; `check-report-files` extended | 0065 |
 | 2026-10-23 | Mobile UI: full office attachment filenames, 44px activity/export controls, descriptive download labels; staff attachment controls stay disabled through removal and refresh with accessible status/errors. Verified sample layouts at 320px and 390px | — |
 | 2026-10-23 | **Stock count sheet on the You page**: download this month's Xpel sheet as Excel, fill it and upload it back (Excel, PDF or photo) on any day, with this month's sheets and what each was for; the database now keeps a sheet sent when no count is due (`count_was_due`), and Count sheets on Stock count says what each was for. **Documents on the daily report**: attach up to 5 PDF, Word, Excel, CSV or picture files (10 MB each) to the report, remove them until midnight; private `report-files` bucket; office downloads on Marketer reports (audited), names in the report PDF/Word/Excel and Ask Xtend. New `GET`/`DELETE /api/report-files/<id>`, `scripts/check-report-files.ts` | 0064 |
@@ -736,6 +777,17 @@ Newest first. Dates are when the work landed on the main branch.
 - **Report photos** (not documents) are still uploaded again under new
   names when a queued report is retried; the first copies stay in the
   `reports` bucket unused.
+- **Test mode** (0066): it is ON after the migration, including on a
+  project that is already in real use: go live (System → We are live) once
+  the test run is reset. The reset runs as one database transaction; on a
+  very large data set it could exceed a database statement timeout and roll
+  back with nothing changed (reset fewer areas at a time). Stored files are
+  removed after the database work: if the function times out first, they wait
+  in `system_reset_files` and **Finish removing files** clears them. Staff
+  removed while signed in keep a working token for up to an hour, but with no
+  profile every page treats them as signed out. If Supabase ever refuses SQL
+  deletes on `auth.users`, the route removes the sign-ins with the Auth admin
+  API instead (`auth_fallback`).
 - **Clock-out reminders** ignore schedules: they go to anyone clocked in and
   not out, which covers someone working on a day off.
 - **Android signing secrets**: until they are set, the published APK is a

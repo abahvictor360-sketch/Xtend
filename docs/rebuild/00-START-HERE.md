@@ -162,9 +162,12 @@ Build in this order. Finish each stage's checks before starting the next.
 
 - Integrity, Check an excuse, phone checks, Support (with the helper),
   Notifications (templates, scheduling, history), Ask Xtend (tools, reports,
-  allocation plans, action cards, saved chats), Audit log, Updates.
+  allocation plans, action cards, saved chats), Audit log, Updates, System
+  (test mode, choosing what to reset, going live for good; 0066,
+  `30-rules.md` §16b).
 - **Checks:** the acceptance checks for those pages; Ask Xtend's action cards
-  do nothing until their button is pressed.
+  do nothing until their button is pressed; a full reset leaves only admins,
+  products and settings, and test mode cannot be turned back on.
 
 ### Stage 8 — Phone apps and release
 
