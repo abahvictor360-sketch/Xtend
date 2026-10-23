@@ -118,7 +118,7 @@ export function ActivityView({
               key={p.label}
               href={p.href}
               className={cn(
-                'inline-flex min-h-9 items-center rounded-full border px-3 font-semibold',
+                'inline-flex min-h-11 items-center rounded-full border px-3 font-semibold',
                 p.active ? 'border-brand bg-brand text-white' : 'border-border bg-card hover:border-brand hover:bg-tint',
               )}
             >
@@ -126,7 +126,7 @@ export function ActivityView({
             </Link>
           ))}
           {(filter.person || filter.group || filter.from !== today || filter.to !== today) && (
-            <Link href="/admin/activity" className="inline-flex min-h-9 items-center px-2 font-semibold text-muted-foreground hover:text-foreground">
+            <Link href="/admin/activity" className="inline-flex min-h-11 items-center px-2 font-semibold text-muted-foreground hover:text-foreground">
               Clear
             </Link>
           )}
@@ -136,7 +136,7 @@ export function ActivityView({
               <a
                 key={f}
                 href={`/api/admin/export/activity/${f}?${query}`}
-                className="inline-flex min-h-9 items-center rounded-full border border-border bg-card px-3 font-semibold hover:border-brand hover:bg-tint"
+                className="inline-flex min-h-11 items-center rounded-full border border-border bg-card px-3 font-semibold hover:border-brand hover:bg-tint"
               >
                 {{ xlsx: 'Excel', pdf: 'PDF', docx: 'Word', csv: 'CSV' }[f]}
               </a>

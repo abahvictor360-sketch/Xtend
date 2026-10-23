@@ -29,19 +29,20 @@ export function ReportFileList({ files }: { files: OfficeReportFile[] }) {
   return (
     <ul className="divide-y divide-border">
       {files.map((f) => (
-        <li key={f.id} className="flex flex-wrap items-center gap-3 py-3">
+        <li key={f.id} className="flex items-start gap-3 py-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-tint text-brand">
             <FileText className="h-4 w-4" />
           </span>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold">{f.name}</p>
-            <p className="truncate text-xs text-muted-foreground">
+            <p className="break-words text-sm font-semibold [overflow-wrap:anywhere]">{f.name}</p>
+            <p className="break-words text-xs text-muted-foreground">
               {f.staff_name} · {shortDate(f.report_date)} · {reportFileLabel(f.mime)}, {fileSizeLabel(f.size_bytes)}
             </p>
           </div>
           <a
             href={`/api/report-files/${f.id}`}
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-input bg-card px-3 text-xs font-semibold transition-all hover:bg-tint hover:text-tint-foreground"
+            aria-label={`Download ${f.name}`}
+            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border border-input bg-card px-3 text-xs font-semibold transition-all hover:bg-tint hover:text-tint-foreground"
           >
             <Download className="h-3.5 w-3.5" />
             Download

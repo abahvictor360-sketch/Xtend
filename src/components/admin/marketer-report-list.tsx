@@ -55,8 +55,9 @@ export function MarketerReportList({ rows: shown, kind, periodKey: key }: { rows
                     key={f.format}
                     href={`/api/admin/export/marketer-report/${f.format}?${reportQuery(r.id, kind, key)}`}
                     download
+                    aria-label={`Download ${f.label} report for ${r.name}`}
                     className={cn(
-                      'inline-flex h-9 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold transition-all',
+                      'inline-flex min-h-11 items-center gap-1.5 rounded-xl px-3 text-xs font-semibold transition-all',
                       f.primary
                         ? 'bg-brand text-primary-foreground shadow-lift hover:bg-brand-deep'
                         : 'border border-input bg-card hover:bg-tint hover:text-tint-foreground',

@@ -277,7 +277,7 @@ export default async function SupervisorGuidePage() {
           <p>
             Marketers can attach up to five documents to a daily report (PDF, Word, Excel, CSV or
             pictures). Under <Ui>Documents attached</Ui> on the same page, tap <Ui>Download</Ui> to open
-            one; the PDF, Word and Excel reports list them by name.
+            one; long document names wrap on your phone. The PDF, Word and Excel reports list them by name.
           </p>
         </GuideSection>
 

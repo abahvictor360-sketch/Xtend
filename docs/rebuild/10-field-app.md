@@ -1892,3 +1892,5 @@ external, protocol-relative, backslash, control-character and malformed paths
 fall back to `/`. Photo-check 401 (expired login) and 429 (rate limit) responses
 are retryable rather than permanent photo rejections. Existing queue age and
 attempt limits remain in effect. Other rejected photos still require retaking.
+
+Document removal disables document picking and all removal buttons through the DELETE request and route refresh. Announce “Updating documents…” in a status region and validation/network errors as alerts.

@@ -2112,3 +2112,5 @@ menu). It closes on a chosen link, outside pointer press, route change or Escape
 Escape restores trigger focus. Supervisor links remain role-filtered. Mobile
 sign-out, menu links and Add staff have 44px minimum touch targets. Overview
 summary notes wrap rather than truncate; below 380px the three figures stack.
+
+Office document rows wrap full filenames and staff details on small screens. Document downloads, marketer export buttons and activity presets/exports have a minimum 44px height. Document and marketer export links have descriptive accessible names.

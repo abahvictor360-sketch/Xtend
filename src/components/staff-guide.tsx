@@ -220,7 +220,7 @@ export function StaffGuide() {
             </>,
             <>
               Tap <Ui>Submit report</Ui>. Your documents go with it. You can edit the report, and
-              add or remove documents, until midnight.
+              add or remove documents, until midnight. Wait for “Updating documents…” to finish before changing another document.
             </>,
           ]}
         />

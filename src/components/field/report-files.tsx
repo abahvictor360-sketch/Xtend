@@ -118,6 +118,7 @@ export function ReportFiles({
   const [waiting, setWaiting] = useState<string[]>([])
   // Taken off: hidden until the page reloads without them.
   const [gone, setGone] = useState<string[]>([])
+  const busy = sending.length > 0
 
   const shown = saved.filter((f) => !gone.includes(f.id))
   const { files: savedView, counted } = savedFileView(shown, [...sending, ...waiting])
@@ -155,6 +156,7 @@ export function ReportFiles({
   function pick(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? [])
     event.target.value = ''
+    if (busy || disabled) return
     const { ok, problems: why } = checkReportFiles(used, files)
     setProblems(why)
     if (ok.length) {
@@ -217,12 +219,16 @@ export function ReportFiles({
       )}
 
       {problems.length > 0 && (
-        <ul className="space-y-1 rounded-2xl bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <ul role="alert" className="space-y-1 rounded-2xl bg-destructive/10 px-3 py-2 text-xs text-destructive">
           {problems.map((p) => (
             <li key={p}>{p}</li>
           ))}
         </ul>
       )}
+
+      <p role="status" className="text-xs text-muted-foreground">
+        {busy ? 'Updating documents…' : ''}
+      </p>
 
       {savedView.length + pending.length > 0 && (
         <ul className="space-y-2">
@@ -245,6 +251,7 @@ export function ReportFiles({
               mime={f.mime}
               size={f.size}
               note="Sent when you save"
+              removing={busy}
               onRemove={disabled ? undefined : () => onPendingChange(pending.filter((p) => p.key !== f.key))}
             />
           ))}
@@ -261,8 +268,9 @@ export function ReportFiles({
         <>
           <button
             type="button"
+            disabled={busy}
             onClick={() => input.current?.click()}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-brand/35 bg-tint/50 text-sm font-semibold text-brand"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-brand/35 bg-tint/50 text-sm font-semibold text-brand disabled:opacity-50"
           >
             <Paperclip className="h-4 w-4" />
             Choose documents
