@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { FileSpreadsheet, FileText, Image as ImageIcon, Paperclip, X } from 'lucide-react'
 import { Label } from '@/components/ui/label'
@@ -107,6 +107,8 @@ export function ReportFiles({
   const input = useRef<HTMLInputElement>(null)
   const [problems, setProblems] = useState<string[]>([])
   const [removing, setRemoving] = useState<string | null>(null)
+  const [refreshing, startTransition] = useTransition()
+  const busy = removing !== null || refreshing
 
   const used = saved.length + pending.length
   const room = MAX_REPORT_FILES - used
@@ -114,6 +116,7 @@ export function ReportFiles({
   function pick(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? [])
     event.target.value = ''
+    if (busy || disabled) return
     const { ok, problems: why } = checkReportFiles(used, files)
     setProblems(why)
     if (ok.length) {
@@ -137,7 +140,7 @@ export function ReportFiles({
       const res = await fetch(`/api/report-files/${file.id}`, { method: 'DELETE' })
       const json = (await res.json().catch(() => ({}))) as { error?: string }
       if (!res.ok) throw new Error(json.error ?? 'That document could not be removed.')
-      router.refresh()
+      startTransition(() => router.refresh())
     } catch (e) {
       setProblems([
         e instanceof Error && e.message !== 'Failed to fetch'
@@ -160,12 +163,16 @@ export function ReportFiles({
       </p>
 
       {problems.length > 0 && (
-        <ul className="space-y-1 rounded-2xl bg-destructive/10 px-3 py-2 text-xs text-destructive">
+        <ul role="alert" className="space-y-1 rounded-2xl bg-destructive/10 px-3 py-2 text-xs text-destructive">
           {problems.map((p) => (
             <li key={p}>{p}</li>
           ))}
         </ul>
       )}
+
+      <p role="status" className="text-xs text-muted-foreground">
+        {busy ? 'Updating documents…' : ''}
+      </p>
 
       {used > 0 && (
         <ul className="space-y-2">
@@ -177,7 +184,7 @@ export function ReportFiles({
               size={f.size_bytes}
               note="Attached"
               href={`/api/report-files/${f.id}`}
-              removing={removing === f.id}
+              removing={busy}
               onRemove={disabled ? undefined : () => void removeSaved(f)}
             />
           ))}
@@ -188,6 +195,7 @@ export function ReportFiles({
               mime={f.mime}
               size={f.size}
               note="Sent when you save"
+              removing={busy}
               onRemove={disabled ? undefined : () => onPendingChange(pending.filter((p) => p.key !== f.key))}
             />
           ))}
@@ -198,8 +206,9 @@ export function ReportFiles({
         <>
           <button
             type="button"
+            disabled={busy}
             onClick={() => input.current?.click()}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-brand/35 bg-tint/50 text-sm font-semibold text-brand"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-brand/35 bg-tint/50 text-sm font-semibold text-brand disabled:opacity-50"
           >
             <Paperclip className="h-4 w-4" />
             Choose documents

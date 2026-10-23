@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-23, after the stock count sheet on the You page and documents on the daily report (migration 0064)._
+_Last updated: 2026-10-23, after the mobile document controls and office dashboard usability fixes (no new migration)._
 
 ---
 
@@ -483,6 +483,9 @@ Failed dashboard reads offer Try again. Place naming times out after 2.5 seconds
 and falls back to coordinates; required GPS and selfie checks remain unchanged.
 Home and Account sign the session profile photo directly; History fetches attendance
 and the business date together. Account skips outlet lookup when none is assigned.
+Document controls stay disabled during removal and refresh, with accessible
+status and errors. Office attachment names wrap fully on phones; activity
+filters and report downloads provide at least 44px touch targets.
 
 `mobile/` is a Capacitor 8 project. The apps load the live site, so a web
 deploy reaches phones at once; a new app build is needed only when something
@@ -638,6 +641,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-23 | Mobile UI: full office attachment filenames, 44px activity/export controls, descriptive download labels; staff attachment controls stay disabled through removal and refresh with accessible status/errors. Verified sample layouts at 320px and 390px | — |
 | 2026-10-23 | **Stock count sheet on the You page**: download this month's Xpel sheet as Excel, fill it and upload it back (Excel, PDF or photo) on any day, with this month's sheets and what each was for; the database now keeps a sheet sent when no count is due (`count_was_due`), and Count sheets on Stock count says what each was for. **Documents on the daily report**: attach up to 5 PDF, Word, Excel, CSV or picture files (10 MB each) to the report, remove them until midnight; private `report-files` bucket; office downloads on Marketer reports (audited), names in the report PDF/Word/Excel and Ask Xtend. New `GET`/`DELETE /api/report-files/<id>`, `scripts/check-report-files.ts` | 0064 |
 | 2026-10-23 | **X Metrics feature switches**: a Features card at the top of X Metrics → Settings turns the whole module, Expiry, Supplies, Grading and Sales off and back on without losing anything. Off hides the part from the dashboard (menu, sub-navigation, overview tiles, store and staff pages, downloads, Ask Xtend, marketer report sales) and the staff app (Metrics tab, sales form, expiry date box, score), and the database refuses or skips its work; reconciliation needs Supplies and Sales and restarts cleanly when they return. New `PUT /api/admin/metrics/features` (audited `xm.features.update`); check script `check-xm-features` | 0063 |
 | 2026-10-23 | Movement: the live map opens on the whole of Nigeria, and every Movement map is held to Nigeria (no panning or zooming out beyond it); a person's route still zooms to the route | — |
