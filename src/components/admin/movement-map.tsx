@@ -59,16 +59,46 @@ function photoPin(L: any, url: string | null | undefined, name: string, colour: 
   })
 }
 
+// Nigeria, south-west and north-east corners. The Movement maps open on the
+// whole country and cannot be panned or zoomed out beyond it.
+const NIGERIA: [[number, number], [number, number]] = [
+  [4.0, 2.6],
+  [13.95, 14.7],
+]
+const NIGERIA_EDGE: [[number, number], [number, number]] = [
+  [3.0, 1.6],
+  [14.9, 15.7],
+]
+
 function baseMap(L: any, el: HTMLElement) {
-  const map = L.map(el, { scrollWheelZoom: false })
+  const map = L.map(el, {
+    scrollWheelZoom: false,
+    maxBounds: NIGERIA_EDGE,
+    maxBoundsViscosity: 1,
+    worldCopyJump: false,
+  })
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
+    noWrap: true,
+    bounds: NIGERIA_EDGE,
     attribution: '© OpenStreetMap contributors',
   }).addTo(map)
   return map
 }
 
-function useMap(draw: (L: any, map: any) => [number, number][], deps: unknown[]) {
+/** Never let the map zoom out past the whole of Nigeria. */
+function holdToNigeria(map: any) {
+  const fit = () => map.setMinZoom(map.getBoundsZoom(NIGERIA, false))
+  fit()
+  map.on('resize', fit)
+}
+
+function useMap(
+  draw: (L: any, map: any) => [number, number][],
+  deps: unknown[],
+  /** Open on the whole of Nigeria instead of zooming to what is drawn. */
+  wholeCountry = false,
+) {
   const container = useRef<HTMLDivElement | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
@@ -79,9 +109,10 @@ function useMap(draw: (L: any, map: any) => [number, number][], deps: unknown[])
       .then((L) => {
         if (!container.current) return
         map = baseMap(L, container.current)
+        map.fitBounds(NIGERIA)
+        holdToNigeria(map)
         const bounds = draw(L, map)
-        if (bounds.length) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 })
-        else map.setView([9.082, 8.6753], 6) // Nigeria
+        if (!wholeCountry && bounds.length) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 })
         setReady(true)
       })
       .catch(() => setError('The map could not load. Check your connection.'))
@@ -163,6 +194,7 @@ export function LiveMap({ rows, date }: { rows: LiveLocation[]; date: string }) 
       return bounds
     },
     [rows],
+    true,
   )
   return <Frame map={map} />
 }
