@@ -64,7 +64,7 @@ export async function removeQueuedFiles(
     const byBucket = new Map<string, string[]>()
     for (const r of rows) byBucket.set(r.bucket, [...(byBucket.get(r.bucket) ?? []), r.name])
     for (const [bucket, names] of byBucket) {
-      // A file already gone (photos are purged after 24 hours) is not an error.
+      // A file already gone (photos are purged after 14 days) is not an error.
       const { error: rmError } = await admin.storage.from(bucket).remove(names)
       if (rmError) {
         console.error('reset files: remove failed', bucket, rmError.message)

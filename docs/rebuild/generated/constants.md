@@ -211,11 +211,15 @@ Every exported UPPER_CASE constant in `src/lib`, with the comment above it. Thes
 - `REPORT_FILE_TYPES` = `{ 'application/pdf': { label: 'PDF', ext: 'pdf', endings: ['pdf'] }, 'application/msword': { label: 'Word', ext: 'doc', endings: ['doc'] }, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': { label: 'Word', ext: 'docx', endings: ['docx'], }, 'application/vnd.ms-excel': { label: 'Excel', ext: 'xls', endings: ['xls'] }, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': { label: 'Excel', ext: 'xlsx', endings: ['xlsx'], }, 'text/csv': { label: 'CSV', ext: 'csv', endings: ['csv'] }, 'image/jpeg': { label: 'Picture', ext: 'jpg', endings: ['jpg', 'jpeg'] }, 'image/png': { label: 'Picture', ext: 'png', endings: ['png'] }, 'image/webp': { label: 'Picture', ext: 'webp', endings: ['webp'] }, 'image/heic': { label: 'Picture', ext: 'heic', endings: ['heic'] }, 'image/heif': { label: 'Picture', ext: 'heif', endings: ['heif'] }, }` — What staff see, e.g. "PDF". label: string File ending kept on the stored file. ext: string Endings that mean this type when the phone gives no type. endings: string[] } Every type the database accepts, by the type storage records.
 - `REPORT_FILE_ACCEPT` = `[ ...Object.keys(REPORT_FILE_TYPES), ...Object.values(REPORT_FILE_TYPES).flatMap((t) => t.endings.map((e) => '.${e}')), ]` — For the file picker's accept="…".
 
+## `src/lib/report-photo-queue.ts`
+
+- `REPORT_PHOTO_BUCKET` = `'reports'` — Report photos in the phone's offline outbox (0067), the same way report documents work (0065, report-file-queue.ts): each photo keeps one id from the moment it is taken or picked, so a retry finds the copy it already uploaded instead of sending it again under a new name. Pure on purpose (no Supabase, no browser APIs), so scripts/check-report-photos.ts can test it. / import { isAlreadyExists, newClientId } from '@/lib/report-file-queue' The bucket report photos share with count, store and place photos.
+
 ## `src/lib/retention.ts`
 
-- `SELFIE_RETENTION_HOURS` = `24` — How long a clock-in or clock-out photograph is kept. The selfie proves who was at the door at the time; once the day has been checked it is a face on file and nothing more, so it is deleted. Everything else about the event — time, place, distance, status — is kept permanently. /
-- `SELFIE_SWEEP_EVERY_MINUTES` = `10` — How often ordinary traffic is allowed to trigger the sweep.
-- `SELFIE_RETENTION_NOTE` = `'Clock photos are deleted 24 hours after they are taken. The time, place and distance are kept.'`
+- `RETENTION_DAYS` = `14` — How long files are kept before the nightly job deletes them (0067), and what admins and supervisors are told the day before. One rule: nothing is deleted automatically before it is 14 days old (the database's retention_days(), which refuses anything shorter), and nothing before the office was told the day before. What goes: clock-in and store-visit photos (the time, place and distance stay), and report photos and documents that are on no report. Reports, and the photos and documents on a report, are never deleted. Pure on purpose (no Supabase), so scripts/check-retention.ts can test it. /
+- `SELFIE_RETENTION_HOURS` = `RETENTION_DAYS * 24` — Kept for older callers: the same rule in hours.
+- `SELFIE_RETENTION_NOTE` = `'Clock photos are kept for ${RETENTION_DAYS} days, then deleted. The time, place and distance are kept.'`
 
 ## `src/lib/schedule.ts`
 

@@ -85,6 +85,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0064_count_sheets_any_time_report_files.sql  # count sheets sent from the profile any day; documents on the daily report (report-files bucket)
    supabase/migrations/0065_report_files_offline.sql  # report documents: no second upload on a retry, removals queued offline, nightly clean-up of unused files
    supabase/migrations/0066_test_mode_reset.sql             # test mode (one-way off) and resetting chosen parts of the test run; reset file queue
+   supabase/migrations/0067_report_photos_offline.sql       # report photos sent once on a retry; files kept 14 days, announced to admins/supervisors the day before
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
@@ -200,7 +201,7 @@ src/lib/assistant*     Ask Xtend: Claude answers attendance questions and
                        a pasted list or an attached file, as a plan the
                        person applies; it never writes on its own
 src/lib/export/…       One renderer, two datasets: attendance and store visits
-src/lib/retention*     The 24-hour rule for clock photos, and the sweep
+src/lib/retention*     The 14-day rule for clock photos and unused report files, the day-before notice, the nightly clean-up
 src/lib/platform.ts    Device detection, purely to pick the right help text
 src/lib/stockists*     The supplied customer list and how it is searched
 data/                  The customer list as CSV, as supplied
@@ -476,7 +477,7 @@ mattered:
 
 - `purge_old_selfies()` — anyone could have triggered the image deletion.
   Now service-role only (and since migration 0012 it is
-  `purge_expired_selfies()`, on a 24-hour rule).
+  `expired_selfie_paths()`, on a 14-day rule since 0067).
 - `write_audit(...)` — any signed-in user could have written an audit row
   naming themselves as the actor of anything. Now guarded by `is_admin()`.
 
@@ -499,7 +500,7 @@ you want passwords checked against HaveIBeenPwned.
 | Store rounds — check in anywhere with no allocation, the day as in/stores/out, reports in PDF/Word/Excel/CSV | Built |
 | Stores in bulk — load the supplied customer list or paste your own, geocoded server-side in chunks, reviewed before saving | Built |
 | Location help — per-device instructions for turning location back on, clearing itself when the permission changes | Built |
-| Photo retention — clock and store-visit selfies deleted 24 hours after capture | Built |
+| Photo retention — clock and store-visit selfies, and report files on no report, deleted 14 days after capture, announced to admins and supervisors the day before (reports are never deleted) | Built |
 | 4 — Expo wrapper, background tracking, mock-location detection | Not started; the backend is designed to be reused unchanged |
 
 ## Things worth knowing

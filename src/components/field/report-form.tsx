@@ -13,6 +13,7 @@ import { submitOrQueue, PermanentJobError, flushOutbox, queuedRemovals } from '@
 import { cn } from '@/lib/utils'
 import { writtenText } from '@/lib/fields'
 import { ReportFiles, type PendingReportFile, type SavedReportFile } from '@/components/field/report-files'
+import { newClientId } from '@/lib/report-file-queue'
 
 const MAX_PHOTOS = 5
 
@@ -105,7 +106,9 @@ export function ReportForm({
   const router = useRouter()
   const [fields, setFields] = useState<ReportFields>(existing ?? EMPTY)
   const [active, setActive] = useState<keyof ReportFields>('body')
-  const [photos, setPhotos] = useState<{ blob: Blob; url: string }[]>([])
+  // Each photo keeps one id from the moment it is taken or picked, so a
+  // report sent again finds the copy already uploaded (0067).
+  const [photos, setPhotos] = useState<{ id: string; blob: Blob; url: string }[]>([])
   const [camera, setCamera] = useState(false)
   const [docs, setDocs] = useState<PendingReportFile[]>([])
   const [busy, setBusy] = useState(false)
@@ -124,7 +127,7 @@ export function ReportForm({
     for (const file of files) {
       try {
         const blob = await processReportPhoto(file)
-        setPhotos((current) => [...current, { blob, url: URL.createObjectURL(blob) }])
+        setPhotos((current) => [...current, { id: newClientId(), blob, url: URL.createObjectURL(blob) }])
       } catch (err) {
         setError(err instanceof Error ? err.message : 'That photo could not be read.')
       }
@@ -136,7 +139,7 @@ export function ReportForm({
     setError(null)
     try {
       const blob = await processReportPhoto(photo)
-      setPhotos((current) => [...current, { blob, url: URL.createObjectURL(blob) }])
+      setPhotos((current) => [...current, { id: newClientId(), blob, url: URL.createObjectURL(blob) }])
     } catch (err) {
       setError(err instanceof Error ? err.message : 'That photo could not be read.')
     }
@@ -174,7 +177,7 @@ export function ReportForm({
       const result = await submitOrQueue({
         kind: 'report',
         ...fields,
-        photos: photos.map((p) => p.blob),
+        photos: photos.map((p) => ({ blob: p.blob, client_id: p.id })),
         files: docs.map((d) => ({ blob: d.blob, name: d.name, mime: d.mime, client_id: d.key })),
         client_captured_at: new Date().toISOString(),
       })
@@ -263,7 +266,7 @@ export function ReportForm({
         {photos.length > 0 && (
           <div className="grid grid-cols-3 gap-2">
             {photos.map((photo, index) => (
-              <div key={photo.url} className="relative">
+              <div key={photo.id} className="relative">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={photo.url} alt="" className="h-24 w-full rounded-2xl object-cover" />
                 <button

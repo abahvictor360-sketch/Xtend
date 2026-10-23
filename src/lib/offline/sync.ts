@@ -10,6 +10,7 @@ import {
   uploadQueuedFiles,
   type NoticeStore,
 } from '@/lib/report-file-queue'
+import { REPORT_PHOTO_BUCKET, queuedPhotos, uploadQueuedPhotos } from '@/lib/report-photo-queue'
 import {
   dropOutbox,
   enqueue,
@@ -183,17 +184,27 @@ async function runReport(record: OutboxRecord & { job: ReportJob }) {
   const job = record.job
   const userId = await currentUserId()
   const client = supabase()
-  const paths: string[] = []
+  const save = () => saveOutboxRecord(record).catch(() => undefined)
 
-  for (const photo of job.photos) {
-    const path = `${userId}/${uuid()}.jpg`
-    const { error } = await client.storage.from('reports').upload(path, photo, {
-      contentType: 'image/jpeg',
-      upsert: true,
-    })
-    if (error) throw new Error(error.message)
-    paths.push(path)
-  }
+  // Photos the same way (0067): each under the id it was given when taken
+  // or picked, never uploaded twice, "already there" counting as done. A
+  // job queued before then gets its ids now, kept on the phone at once.
+  const photos = queuedPhotos(job.photos)
+  const hadIds = job.photos.every((p) => !(p instanceof Blob))
+  job.photos = photos
+  if (!hadIds) await save()
+  const paths = await uploadQueuedPhotos(
+    userId,
+    photos,
+    async (path, photo) => {
+      const { error } = await client.storage.from(REPORT_PHOTO_BUCKET).upload(path, photo.blob, {
+        contentType: 'image/jpeg',
+        upsert: false,
+      })
+      return error
+    },
+    save,
+  )
 
   // Documents go to their own private bucket (0064), each under the id it
   // was given when picked (0065). One already sent is not sent again, and
@@ -209,7 +220,7 @@ async function runReport(record: OutboxRecord & { job: ReportJob }) {
       })
       return error
     },
-    () => saveOutboxRecord(record).catch(() => undefined),
+    save,
   )
 
   return postJson('/api/reports', {

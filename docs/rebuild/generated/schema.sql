@@ -449,6 +449,69 @@ $$;
 
 
 --
+-- Name: add_report_photo(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.add_report_photo(p_path text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'storage'
+    AS $$
+declare
+  rep record;
+  kind text;
+  new_id uuid;
+begin
+  if not public.can_file_report() then
+    raise exception 'Only marketers file the daily report';
+  end if;
+
+  -- Today's report, locked so two tries at once cannot both add the photo.
+  select r.id into rep
+  from public.reports r
+  where r.user_id = auth.uid() and r.report_date = public.business_date()
+  for update;
+  if not found then
+    raise exception 'Save today''s report first, then add photos';
+  end if;
+
+  -- Sent again after the first try got through: the same answer.
+  select p.id into new_id
+  from public.report_photos p
+  where p.report_id = rep.id and p.storage_path = p_path;
+  if found then
+    return new_id;
+  end if;
+
+  if p_path is null or split_part(p_path, '/', 1) <> auth.uid()::text then
+    raise exception 'That photo is not yours';
+  end if;
+
+  select o.metadata->>'mimetype' into kind
+  from storage.objects o
+  where o.bucket_id = 'reports'
+    and o.name = p_path
+    and o.created_at >= now() - interval '24 hours';
+  if not found then
+    raise exception 'Take the photo again, then save the report';
+  end if;
+  if kind is not null and lower(kind) not like 'image/%' then
+    raise exception 'That is not a photo';
+  end if;
+
+  if exists (select 1 from public.report_photos p where p.storage_path = p_path) then
+    raise exception 'That photo is already on a report';
+  end if;
+
+  -- The five-photo limit is the trigger's (report_photo_limit).
+  insert into public.report_photos (report_id, storage_path)
+  values (rep.id, p_path)
+  returning id into new_id;
+  return new_id;
+end;
+$$;
+
+
+--
 -- Name: admin_overview(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2114,11 +2177,11 @@ $$;
 -- Name: expired_selfie_paths(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.expired_selfie_paths(p_hours integer DEFAULT 24) RETURNS TABLE(path text)
+CREATE FUNCTION public.expired_selfie_paths(p_hours integer DEFAULT 336) RETURNS TABLE(path text)
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
-  with cutoff as (select now() - make_interval(hours => greatest(1, p_hours)) as at)
+  with cutoff as (select public.retention_cutoff(p_hours) as at)
   select unnest(array_remove(array[a.selfie_path, a.thumb_path], null))
   from public.attendance a, cutoff c
   where a.created_at < c.at and (a.selfie_path is not null or a.thumb_path is not null)
@@ -2269,12 +2332,12 @@ $$;
 -- Name: forget_expired_selfies(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.forget_expired_selfies(p_hours integer DEFAULT 24) RETURNS integer
+CREATE FUNCTION public.forget_expired_selfies(p_hours integer DEFAULT 336) RETURNS integer
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
 declare
-  cutoff timestamptz := now() - make_interval(hours => greatest(1, p_hours));
+  cutoff timestamptz := public.retention_cutoff(p_hours);
   a integer;
   v integer;
 begin
@@ -2287,7 +2350,34 @@ begin
   set selfie_path = null, thumb_path = null
   where created_at < cutoff and (selfie_path is not null or thumb_path is not null);
   get diagnostics v = row_count;
+  return a + v;
+end;
+$$;
 
+
+--
+-- Name: forget_selfie_paths(text[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.forget_selfie_paths(p_paths text[]) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  a integer;
+  v integer;
+begin
+  update public.attendance
+  set selfie_path = case when selfie_path = any(p_paths) then null else selfie_path end,
+      thumb_path  = case when thumb_path  = any(p_paths) then null else thumb_path end
+  where selfie_path = any(p_paths) or thumb_path = any(p_paths);
+  get diagnostics a = row_count;
+
+  update public.store_visits
+  set selfie_path = case when selfie_path = any(p_paths) then null else selfie_path end,
+      thumb_path  = case when thumb_path  = any(p_paths) then null else thumb_path end
+  where selfie_path = any(p_paths) or thumb_path = any(p_paths);
+  get diagnostics v = row_count;
   return a + v;
 end;
 $$;
@@ -4257,6 +4347,35 @@ $$;
 
 
 --
+-- Name: record_retention_purge(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.record_retention_purge(p_result jsonb) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  k text;
+  any_work boolean := false;
+begin
+  insert into public.job_runs (job, last_run_at, last_result)
+  values ('retention_purge', now(), coalesce(p_result, '{}'::jsonb))
+  on conflict (job) do update set last_run_at = now(), last_result = excluded.last_result;
+
+  for k in select jsonb_object_keys(coalesce(p_result, '{}'::jsonb)) loop
+    if jsonb_typeof(p_result->k) = 'number' and (p_result->>k)::numeric > 0 then
+      any_work := true;
+    end if;
+  end loop;
+  if any_work then
+    insert into public.audit_log (actor_id, action, target_table, target_id, meta)
+    values (null, 'retention.purge', null, null, p_result);
+  end if;
+end;
+$$;
+
+
+--
 -- Name: record_selfie_sweep(jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4497,17 +4616,30 @@ $$;
 -- Name: report_file_orphans(integer, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.report_file_orphans(p_hours integer DEFAULT 24, p_limit integer DEFAULT 1000) RETURNS TABLE(path text)
+CREATE FUNCTION public.report_file_orphans(p_hours integer DEFAULT 336, p_limit integer DEFAULT 1000) RETURNS TABLE(path text)
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public', 'storage'
     AS $$
-  select o.name
-  from storage.objects o
-  where o.bucket_id = 'report-files'
-    and o.created_at < now() - make_interval(hours => greatest(coalesce(p_hours, 24), 24))
-    and not exists (select 1 from public.report_files f where f.path = o.name)
+  select o.path
+  from public.report_file_orphans_before(public.retention_cutoff(p_hours)) o
   order by o.created_at
   limit greatest(least(coalesce(p_limit, 1000), 5000), 1);
+$$;
+
+
+--
+-- Name: report_file_orphans_before(timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.report_file_orphans_before(p_before timestamp with time zone) RETURNS TABLE(path text, created_at timestamp with time zone)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'storage'
+    AS $$
+  select o.name, o.created_at
+  from storage.objects o
+  where o.bucket_id = 'report-files'
+    and o.created_at < p_before
+    and not exists (select 1 from public.report_files f where f.path = o.name);
 $$;
 
 
@@ -4541,6 +4673,45 @@ begin
   return new;
 end;
 $$;
+
+
+--
+-- Name: report_photo_orphans(integer, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.report_photo_orphans(p_hours integer DEFAULT 336, p_limit integer DEFAULT 1000) RETURNS TABLE(path text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'storage'
+    AS $$
+  select o.path
+  from public.report_photo_orphans_before(public.retention_cutoff(p_hours)) o
+  order by o.created_at
+  limit greatest(least(coalesce(p_limit, 1000), 5000), 1);
+$$;
+
+
+--
+-- Name: report_photo_orphans_before(timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.report_photo_orphans_before(p_before timestamp with time zone) RETURNS TABLE(path text, created_at timestamp with time zone)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'storage'
+    AS $_$
+  select o.name, o.created_at
+  from storage.objects o
+  where o.bucket_id = 'reports'
+    and o.name ~ '^[0-9a-f-]{36}/(report-photo-[A-Za-z0-9-]{1,64}|[0-9a-f-]{36})\.jpg$'
+    and o.created_at < p_before
+    and not exists (select 1 from public.report_photos p where p.storage_path = o.name)
+    -- Belt and braces: nothing another record points at, whatever its name.
+    and not exists (select 1 from public.store_counts c where c.photo_path = o.name)
+    and not exists (select 1 from public.known_places k where o.name in (k.photo_path, k.selfie_path))
+    and not exists (select 1 from public.xm_counts x where x.photo_path = o.name)
+    and not exists (select 1 from public.xm_sales x where x.photo_path = o.name)
+    and not exists (select 1 from public.store_count_sheets s where s.path = o.name)
+    and not exists (select 1 from public.count_sheet_templates t where t.path = o.name);
+$_$;
 
 
 --
@@ -5096,6 +5267,130 @@ $$;
 
 
 --
+-- Name: retention_announce(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.retention_announce() RETURNS timestamp with time zone
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  cur jsonb;
+  through timestamptz := now() - make_interval(days => public.retention_days() - 1);
+begin
+  insert into public.job_runs (job, last_run_at, last_result)
+  values ('retention_notice', '-infinity', '{}'::jsonb)
+  on conflict (job) do nothing;
+
+  select last_result into cur from public.job_runs where job = 'retention_notice' for update;
+  if (cur->>'at')::timestamptz > now() - interval '20 hours' then
+    return (cur->>'through')::timestamptz;
+  end if;
+
+  update public.job_runs
+  set last_run_at = now(),
+      last_result = jsonb_build_object(
+        'at', now(), 'through', through,
+        'prev_at', cur->'at', 'prev_through', cur->'through')
+  where job = 'retention_notice';
+  return through;
+end;
+$$;
+
+
+--
+-- Name: retention_cutoff(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.retention_cutoff(p_hours integer) RETURNS timestamp with time zone
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  -- least() skips a null, so "nothing announced" is said outright.
+  select case when b is null then null
+              else least(now() - make_interval(hours => greatest(coalesce(p_hours, 0), public.retention_days() * 24)), b)
+         end
+  from (select public.retention_delete_before() as b) x;
+$$;
+
+
+--
+-- Name: retention_days(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.retention_days() RETURNS integer
+    LANGUAGE sql IMMUTABLE
+    AS $$ select 14 $$;
+
+
+--
+-- Name: retention_delete_before(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.retention_delete_before() RETURNS timestamp with time zone
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  -- least() skips a null, so "nothing announced" is said outright.
+  select case when a.through is null then null
+              else least(now() - make_interval(days => public.retention_days()), a.through) end
+  from (
+    select case
+      when (j.last_result->>'at')::timestamptz <= now() - interval '20 hours'
+        then (j.last_result->>'through')::timestamptz
+      when (j.last_result->>'prev_at')::timestamptz <= now() - interval '20 hours'
+        then (j.last_result->>'prev_through')::timestamptz
+    end as through
+    from public.job_runs j
+    where j.job = 'retention_notice'
+  ) a;
+$$;
+
+
+--
+-- Name: retention_notice_due(timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.retention_notice_due(p_through timestamp with time zone) RETURNS TABLE(user_id uuid, role text, selfies integer, report_photos integer, report_files integer)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  with items as (
+    select 'selfie'::text as kind, a.user_id as owner
+    from public.attendance a
+    where a.created_at < p_through and (a.selfie_path is not null or a.thumb_path is not null)
+    union all
+    select 'selfie', v.user_id
+    from public.store_visits v
+    where v.created_at < p_through and (v.selfie_path is not null or v.thumb_path is not null)
+    union all
+    select 'photo', public.safe_uuid(split_part(o.path, '/', 1))
+    from public.report_photo_orphans_before(p_through) o
+    union all
+    select 'file', public.safe_uuid(split_part(o.path, '/', 1))
+    from public.report_file_orphans_before(p_through) o
+  ),
+  people as (
+    select p.id, p.role::text as role
+    from public.profiles p
+    where p.is_active and p.role in ('admin', 'supervisor')
+      and not exists (
+        select 1 from public.notifications n
+        where n.audience_detail->>'kind' = 'retention_notice'
+          and n.audience_detail->'user_ids' ? p.id::text
+          and (n.created_at at time zone 'Africa/Lagos')::date = (now() at time zone 'Africa/Lagos')::date)
+  )
+  select pe.id, pe.role,
+         (count(*) filter (where i.kind = 'selfie'))::integer,
+         (count(*) filter (where i.kind = 'photo'))::integer,
+         (count(*) filter (where i.kind = 'file'))::integer
+  from people pe
+  join items i on pe.role = 'admin' or public.supervisor_covers(pe.id, i.owner)
+  group by pe.id, pe.role;
+$$;
+
+
+--
 -- Name: review_integrity_flag(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5307,17 +5602,20 @@ CREATE FUNCTION public.selfie_retention_status() RETURNS jsonb
     SET search_path TO 'public'
     AS $$
   select case when public.is_admin() then jsonb_build_object(
-    'last_run_at', (select last_run_at from public.job_runs where job = 'purge_selfies'),
-    'last_result', (select last_result from public.job_runs where job = 'purge_selfies'),
+    'retention_days', public.retention_days(),
+    'last_run_at', (select last_run_at from public.job_runs where job = 'retention_purge'),
+    'last_result', (select last_result from public.job_runs where job = 'retention_purge'),
     'photos_held', (
       (select count(*) from public.attendance where selfie_path is not null)
       + (select count(*) from public.store_visits where selfie_path is not null)
     ),
     'overdue', (
       (select count(*) from public.attendance
-        where selfie_path is not null and created_at < now() - interval '24 hours')
+        where selfie_path is not null
+          and created_at < now() - make_interval(days => public.retention_days() + 1))
       + (select count(*) from public.store_visits
-        where selfie_path is not null and created_at < now() - interval '24 hours')
+        where selfie_path is not null
+          and created_at < now() - make_interval(days => public.retention_days() + 1))
     )
   ) end;
 $$;
@@ -6068,6 +6366,33 @@ CREATE FUNCTION public.supervises_user(target uuid) RETURNS boolean
         -- Reports to them, whatever stores are or are not involved.
         them.supervisor_id = me.id
         -- Or shares their outlet, which is how merchandisers are grouped.
+        or (me.outlet_id is not null and them.outlet_id = me.outlet_id)
+        or (me.outlet_id is not null
+            and exists (select 1 from public.staff_outlets s
+                        where s.user_id = them.id and s.outlet_id = me.outlet_id))
+      )
+  );
+$$;
+
+
+--
+-- Name: supervisor_covers(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.supervisor_covers(p_supervisor uuid, p_user uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select exists (
+    select 1
+    from public.profiles me
+    join public.profiles them on them.id = p_user
+    where me.id = p_supervisor
+      and me.role = 'supervisor'
+      and them.id <> me.id
+      and public.is_field_role(them.role)
+      and (
+        them.supervisor_id = me.id
         or (me.outlet_id is not null and them.outlet_id = me.outlet_id)
         or (me.outlet_id is not null
             and exists (select 1 from public.staff_outlets s
@@ -10130,6 +10455,13 @@ CREATE INDEX report_files_by_user ON public.report_files USING btree (user_id, c
 
 
 --
+-- Name: report_photos_storage_path; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX report_photos_storage_path ON public.report_photos USING btree (storage_path);
+
+
+--
 -- Name: reports_one_per_day; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -12671,6 +13003,15 @@ GRANT ALL ON FUNCTION public.add_report_file(p_path text, p_name text) TO servic
 
 
 --
+-- Name: FUNCTION add_report_photo(p_path text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.add_report_photo(p_path text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.add_report_photo(p_path text) TO authenticated;
+GRANT ALL ON FUNCTION public.add_report_photo(p_path text) TO service_role;
+
+
+--
 -- Name: FUNCTION admin_overview(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -13090,6 +13431,14 @@ GRANT ALL ON FUNCTION public.flag_own_integrity(p_kind text, p_severity text, p_
 
 REVOKE ALL ON FUNCTION public.forget_expired_selfies(p_hours integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.forget_expired_selfies(p_hours integer) TO service_role;
+
+
+--
+-- Name: FUNCTION forget_selfie_paths(p_paths text[]); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.forget_selfie_paths(p_paths text[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.forget_selfie_paths(p_paths text[]) TO service_role;
 
 
 --
@@ -13528,6 +13877,14 @@ GRANT ALL ON FUNCTION public.record_offline_pings(p_points jsonb, p_sent_at time
 
 
 --
+-- Name: FUNCTION record_retention_purge(p_result jsonb); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.record_retention_purge(p_result jsonb) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.record_retention_purge(p_result jsonb) TO service_role;
+
+
+--
 -- Name: FUNCTION record_selfie_sweep(p_result jsonb); Type: ACL; Schema: public; Owner: -
 --
 
@@ -13616,6 +13973,14 @@ GRANT ALL ON FUNCTION public.report_file_orphans(p_hours integer, p_limit intege
 
 
 --
+-- Name: FUNCTION report_file_orphans_before(p_before timestamp with time zone); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.report_file_orphans_before(p_before timestamp with time zone) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.report_file_orphans_before(p_before timestamp with time zone) TO service_role;
+
+
+--
 -- Name: FUNCTION report_file_readable(p_name text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -13629,6 +13994,22 @@ GRANT ALL ON FUNCTION public.report_file_readable(p_name text) TO service_role;
 --
 
 REVOKE ALL ON FUNCTION public.report_photo_limit() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION report_photo_orphans(p_hours integer, p_limit integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.report_photo_orphans(p_hours integer, p_limit integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.report_photo_orphans(p_hours integer, p_limit integer) TO service_role;
+
+
+--
+-- Name: FUNCTION report_photo_orphans_before(p_before timestamp with time zone); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.report_photo_orphans_before(p_before timestamp with time zone) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.report_photo_orphans_before(p_before timestamp with time zone) TO service_role;
 
 
 --
@@ -13723,6 +14104,46 @@ GRANT ALL ON FUNCTION public.resolve_notification_targets(p_audience public.noti
 REVOKE ALL ON FUNCTION public.resolve_support_thread(p_thread uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.resolve_support_thread(p_thread uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.resolve_support_thread(p_thread uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION retention_announce(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.retention_announce() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.retention_announce() TO service_role;
+
+
+--
+-- Name: FUNCTION retention_cutoff(p_hours integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.retention_cutoff(p_hours integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.retention_cutoff(p_hours integer) TO service_role;
+
+
+--
+-- Name: FUNCTION retention_days(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.retention_days() TO authenticated;
+GRANT ALL ON FUNCTION public.retention_days() TO service_role;
+
+
+--
+-- Name: FUNCTION retention_delete_before(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.retention_delete_before() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.retention_delete_before() TO service_role;
+
+
+--
+-- Name: FUNCTION retention_notice_due(p_through timestamp with time zone); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.retention_notice_due(p_through timestamp with time zone) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.retention_notice_due(p_through timestamp with time zone) TO service_role;
 
 
 --
@@ -13918,6 +14339,14 @@ GRANT ALL ON FUNCTION public.submit_store_count(p_outlet_id uuid, p_lines jsonb,
 REVOKE ALL ON FUNCTION public.supervises_user(target uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.supervises_user(target uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.supervises_user(target uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION supervisor_covers(p_supervisor uuid, p_user uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.supervisor_covers(p_supervisor uuid, p_user uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.supervisor_covers(p_supervisor uuid, p_user uuid) TO service_role;
 
 
 --

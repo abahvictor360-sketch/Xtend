@@ -1123,6 +1123,8 @@ redirected to `/field`.
   **"From gallery"** (multiple). Each is compressed by `processReportPhoto`:
   width ≤ 900, JPEG from 0.78 stepping down 0.12 until ≤ **220 KB**.
   Thumbnails with remove buttons. Report photos are not photo-checked.
+  Each photo gets its id (`newClientId()`) the moment it is taken or picked
+  (0067); it is the name it is uploaded under.
 - **Attach documents** (migration 0064, `report-files.tsx`, rules in
   `src/lib/report-files.ts`), below the photos: label "Attach documents
   (<n>/5)", text "Price lists, display plans, invoices or anything else for
@@ -1159,17 +1161,20 @@ redirected to `/field`.
   gone." Refused while the person watches, the same words show in the red
   list. Sizes read "850 KB", "1.2 MB" (`fileSizeLabel`).
 - Submit **"Submit report"** / **"Update report"** ("Saving…") →
-  `submitOrQueue({ kind: 'report', …, files })`: uploads photos to
-  `reports/{uid}/{uuid}.jpg` and documents to the private bucket
+  `submitOrQueue({ kind: 'report', …, photos: [{ blob, client_id }], files })`: uploads photos to
+  `reports/{uid}/report-photo-{client_id}.jpg` (no upsert, 0067) and documents to the private bucket
   **`report-files`** at `{uid}/report-{client_id}.{ext}` (contentType = the
   stored type, no upsert), then `POST /api/reports { fields…, photo_paths,
   files[{ path, name }] }`. Documents are kept in the outbox with the
   report while offline (the job's `files` is optional for jobs queued
-  earlier). A retry (0065) skips documents already uploaded and treats
-  storage's "already exists" as uploaded, and the database answers a
-  document already on today's report with the same row, so nothing is
-  uploaded or attached twice. Saving with new documents while a removal is
-  still queued flushes the outbox first, so the removal frees its place. The route calls `add_report_file(path, name)` for each after
+  earlier). A retry (0065 for documents, 0067 for photos) skips files
+  already uploaded and treats storage's "already exists" as uploaded, and
+  the database answers a document or photo already on today's report with
+  the same row, so nothing is uploaded or attached twice; a report queued
+  before 0067 gives its photos ids on its first try. Saving with new documents while a removal is
+  still queued flushes the outbox first, so the removal frees its place. The route calls `add_report_photo(path)` for each photo (0067; a
+  refusal returns 400 "Your report is saved, but photo <n> was not added:
+  <reason>") and `add_report_file(path, name)` for each document after
   saving the report; a refusal returns 400 "Your report is saved, but
   <name> was not attached: <reason>".
 - Server: one report per person per business day; a second submission

@@ -83,11 +83,17 @@ export async function POST(request: Request) {
       reportId = data.id
     }
 
-    if (input.photo_paths.length) {
-      const { error } = await supabase.from('report_photos').insert(
-        input.photo_paths.map((storage_path) => ({ report_id: reportId, storage_path })),
-      )
-      if (error) return dbErrorResponse(error)
+    // Each photo is put on the report by the database (0067): one already
+    // on today's report (a retry whose first answer was lost) is answered
+    // with its row, never added twice; five at most; theirs, just uploaded.
+    for (const [index, path] of [...new Set(input.photo_paths)].entries()) {
+      const { error } = await supabase.rpc('add_report_photo', { p_path: path })
+      if (error) {
+        return Response.json(
+          { error: `Your report is saved, but photo ${index + 1} was not added: ${dbErrorMessage(error)}` },
+          { status: 400 },
+        )
+      }
     }
 
     for (const file of input.files) {
