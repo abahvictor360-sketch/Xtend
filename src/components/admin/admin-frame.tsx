@@ -69,9 +69,10 @@ export function AdminFrame({
 
   return (
     <div className="admin-shell min-h-dvh bg-canvas">
+      <a href="#dashboard-content" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-xl focus:bg-card focus:p-4">Skip to dashboard content</a>
       {/* Desktop: the menu down the left, edge to edge, beside a grey workspace. */}
       <div className="lg:flex lg:min-h-dvh">
-        <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-border bg-card lg:flex">
+        <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-border bg-card lg:flex">
           <div className="px-6 pb-6 pt-7">
             <Brand />
           </div>
@@ -176,7 +177,7 @@ export function AdminFrame({
             </div>
           </div>
 
-          <main className="w-full px-4 py-6 pb-24 lg:px-6 lg:pt-4">{children}</main>
+          <main id="dashboard-content" className="mx-auto w-full max-w-[1600px] px-4 py-6 pb-24 lg:px-8 lg:pt-8">{children}</main>
         </div>
       </div>
 

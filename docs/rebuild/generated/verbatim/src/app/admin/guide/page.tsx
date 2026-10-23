@@ -188,6 +188,7 @@ export default async function AdminGuidePage() {
         </GuideSection>
 
         <GuideSection topic={T.overview} intro="The top of the menu. On a phone, tap the page name at the top to open navigation. Tap outside it or press Escape to close it.">
+          <p>Start with <Ui>Start here</Ui> on Overview, then tap a summary card to open its page. Attendance follow-up lists missing clock-ins. Expand <Ui>Live locations &amp; coverage</Ui> for details. On Alerts, expand <Ui>Filters &amp; downloads</Ui> to narrow results; notification settings are at the bottom.</p>
           <p>
             <Ui>Overview</Ui> is the first page each day: the week&apos;s clock-ins (point at a day for its
             figures), today&apos;s clocked in, late and not-in-store counts, who has not clocked in yet,

@@ -80,7 +80,7 @@ check(same([...staffTables].sort(), [...ADMIN_KEPT_TABLES].sort()) && staffTable
 check(kept.every((t) => FIXTURE[t] === 'keep'), 'the kept tables are kept')
 check(RESET_CATEGORIES.every((c) => c.tables.length > 0), 'every category clears something')
 
-const sql = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '0066_test_mode_reset.sql'), 'utf8')
+const sql = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '0066_test_mode_reset.sql'), 'utf8').replace(/\r\n/g, '\n')
 const fromSql = new Map<string, string>()
 for (const m of sql.matchAll(/'([a-z_]+):([a-z_]+)'/g)) fromSql.set(m[2], m[1])
 check(fromSql.size === wipeTables.length, 'the database lists the same number of tables', fromSql.size)

@@ -37,10 +37,10 @@ export const metadata = { title: 'Alerts — Xtend' }
 /** The tabs look like the app's filter chips; they are links, so pages can be bookmarked. */
 const chip = (active: boolean) =>
   cn(
-    'inline-flex h-9 items-center rounded-full px-4 text-xs font-semibold transition-all',
+    'inline-flex min-h-11 items-center rounded-full px-4 text-xs font-semibold transition-all',
     active ? 'bg-brand text-primary-foreground shadow-lift' : 'bg-tint text-tint-foreground hover:brightness-95',
   )
-const pill = 'rounded-full border border-border bg-card px-3 py-1 font-semibold hover:border-brand hover:bg-tint'
+const pill = 'inline-flex min-h-11 items-center gap-2 rounded-xl border border-border bg-card px-3 py-1 font-semibold hover:border-brand hover:bg-tint'
 
 interface FlagRow {
   id: string
@@ -101,25 +101,11 @@ export default async function AlertsPage({
 
   return (
     <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold">Alerts</h1>
-        <p className="text-sm text-muted-foreground">
-          {session.profile.role === 'admin'
-            ? 'Everything about every member of staff, newest first.'
-            : 'Everything about your team, newest first.'}{' '}
-          Filter by what happened, who and when; see who keeps coming up; and open their movement for the day or
-          check their excuse from the alert itself.{' '}
-          {session.profile.role === 'admin'
-            ? 'Tick several alerts to resolve them together with one note.'
-            : 'Admins resolve alerts.'}{' '}
-          Every resolution is written to the audit log.
-        </p>
-      </div>
-
-      <PushToggle
-        title="Alerts on this device"
-        hint="Turn this on to be told the moment somebody clocks in late, leaves their store or does something suspicious. Do it on each computer or phone you use."
-      />
+      <header>
+        <p className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-brand">{session.profile.role === 'admin' ? 'Company review' : 'Team review'}</p>
+        <h1 className="text-3xl font-bold tracking-tight">Alerts</h1>
+        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Review what happened, check the context, then follow up.{session.profile.role === 'admin' ? ' Resolve one alert or select several together.' : ' Your team only. Admins resolve alerts.'}</p>
+      </header>
 
       <div className="flex flex-wrap gap-2">
         <Link href="/admin/alerts" aria-current={!activityTab ? 'page' : undefined} className={chip(!activityTab)}>
@@ -174,11 +160,13 @@ export default async function AlertsPage({
         )
       ) : (
         <>
-          <form method="get" className="space-y-3">
+          <details className="surface border border-border p-4 sm:p-5" open={Boolean(query)}>
+            <summary className="cursor-pointer py-2 text-sm font-semibold">Filters &amp; downloads {query ? "· filters applied" : "· all open alerts"}</summary>
+          <form method="get" className="mt-4 space-y-4">
             <div className="flex flex-wrap items-end gap-3">
               <div className="w-full space-y-1.5 sm:w-36">
                 <Label htmlFor="state">Show</Label>
-                <Select id="state" name="state" defaultValue={filter.state} className="h-10 text-sm">
+                <Select id="state" name="state" defaultValue={filter.state} className="h-11 text-sm">
                   <option value="open">Open</option>
                   <option value="resolved">Resolved</option>
                   <option value="all">Open and resolved</option>
@@ -186,7 +174,7 @@ export default async function AlertsPage({
               </div>
               <div className="w-full space-y-1.5 sm:w-64">
                 <Label htmlFor="type">What happened</Label>
-                <Select id="type" name="type" defaultValue={filter.type ?? 'all'} className="h-10 text-sm">
+                <Select id="type" name="type" defaultValue={filter.type ?? 'all'} className="h-11 text-sm">
                   <option value="all">Every kind</option>
                   {ALERT_TYPES.map((t) => (
                     <option key={t} value={t}>
@@ -197,7 +185,7 @@ export default async function AlertsPage({
               </div>
               <div className="w-full space-y-1.5 sm:w-52">
                 <Label htmlFor="person">Who</Label>
-                <Select id="person" name="person" defaultValue={filter.person ?? 'all'} className="h-10 text-sm">
+                <Select id="person" name="person" defaultValue={filter.person ?? 'all'} className="h-11 text-sm">
                   <option value="all">Everyone</option>
                   {(people ?? []).map((p) => (
                     <option key={p.id} value={p.id}>
@@ -208,7 +196,7 @@ export default async function AlertsPage({
               </div>
               <div className="w-full space-y-1.5 sm:w-52">
                 <Label htmlFor="store">Their store</Label>
-                <Select id="store" name="store" defaultValue={filter.store ?? 'all'} className="h-10 text-sm">
+                <Select id="store" name="store" defaultValue={filter.store ?? 'all'} className="h-11 text-sm">
                   <option value="all">Every store</option>
                   {(outlets ?? []).map((o) => (
                     <option key={o.id} value={o.id}>
@@ -219,11 +207,11 @@ export default async function AlertsPage({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="from">From</Label>
-                <Input id="from" name="from" type="date" defaultValue={filter.from ?? ''} max={today} className="h-10 w-40" />
+                <Input id="from" name="from" type="date" defaultValue={filter.from ?? ''} max={today} className="h-11 w-40" />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="to">To</Label>
-                <Input id="to" name="to" type="date" defaultValue={filter.to ?? ''} max={today} className="h-10 w-40" />
+                <Input id="to" name="to" type="date" defaultValue={filter.to ?? ''} max={today} className="h-11 w-40" />
               </div>
               <button type="submit" className={buttonVariants({ size: 'sm', className: 'h-10' })}>
                 Show
@@ -251,6 +239,7 @@ export default async function AlertsPage({
               </span>
             </div>
           </form>
+          </details>
 
           {failed && <Alert variant="destructive">Could not load the alerts: {failed}</Alert>}
 
@@ -365,6 +354,10 @@ export default async function AlertsPage({
           />
         </>
       )}
+      <details className="surface border border-border p-4">
+        <summary className="cursor-pointer py-2 text-sm font-semibold">Notification settings</summary>
+        <div className="mt-3"><PushToggle title="Alerts on this device" hint="Turn on notifications on each computer or phone where you want to receive alerts." /></div>
+      </details>
     </div>
   )
 }
