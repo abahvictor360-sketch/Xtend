@@ -81,6 +81,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0060_marketer_visits_reports.sql  # check in only at your own stores; visits kept with the daily report
    supabase/migrations/0061_clock_out_reminders.sql    # reminders to clock out at the end of the shift
    supabase/migrations/0062_user_activity.sql          # activity log: sign-ins, app opens and everyone's activity, admins only
+   supabase/migrations/0063_xm_feature_switches.sql    # X Metrics switches: the module, expiry, supplies, grading, sales
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

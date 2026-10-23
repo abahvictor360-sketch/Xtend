@@ -37,6 +37,7 @@ export function AdminFrame({
   readOnly,
   openAlerts,
   assistant,
+  xmEnabled = true,
   children,
 }: {
   name: string
@@ -44,6 +45,8 @@ export function AdminFrame({
   readOnly: boolean
   openAlerts: number | null
   assistant: boolean
+  /** X Metrics switched on (0063). */
+  xmEnabled?: boolean
   children: React.ReactNode
 }) {
   const bell = (
@@ -70,7 +73,7 @@ export function AdminFrame({
             <Brand />
           </div>
           <div className="flex-1 overflow-y-auto px-4 pb-4">
-            <AdminSidebarNav readOnly={readOnly} />
+            <AdminSidebarNav readOnly={readOnly} xmEnabled={xmEnabled} />
           </div>
 
           {/* Hidden on short screens, where the menu needs the room. */}
@@ -125,7 +128,7 @@ export function AdminFrame({
                 <SignOutButton className="h-11 px-3 text-xs" />
               </div>
             </div>
-            <AdminNav readOnly={readOnly} />
+            <AdminNav readOnly={readOnly} xmEnabled={xmEnabled} />
           </header>
 
           {/* Desktop: search on the left; alerts, who is signed in and a quick action on the right. */}

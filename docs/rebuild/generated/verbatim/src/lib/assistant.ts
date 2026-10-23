@@ -26,6 +26,8 @@ import { ActionBuilder } from '@/lib/assistant-actions'
 import { PAGES, type PageLink, type ProposedAction } from '@/lib/assistant-action-types'
 import { buildReportSheet } from '@/lib/assistant-report'
 import { REPORT_KINDS, reportSpecSchema, type ReportSpec } from '@/lib/assistant-report-spec'
+import { readXmFeatures } from '@/lib/metrics/features-server'
+import { xmAssistantNote, xmAssistantToolOn, type XmFeatures } from '@/lib/metrics/features'
 
 /**
  * "Ask Xtend": an admin or supervisor types a question ("who hasn't clocked
@@ -567,6 +569,8 @@ type Input = Record<string, unknown>
 
 interface Turn {
   supabase: SupabaseClient
+  /** Which parts of X Metrics are switched on (0063). */
+  xm: XmFeatures
   allocation: AllocationContext
   actions: ActionBuilder
   reports: ReportSpec[]
@@ -633,7 +637,7 @@ async function runTool(
         result = await notificationsSent(supabase, input.from, input.to)
         break
       case 'x_metrics':
-        result = await xMetricsMonth(supabase, input.month)
+        result = await xMetricsMonth(supabase, input.month, turn.xm)
         break
       case 'store_coverage':
         result = await visitCoverage(supabase, input.from, input.to)
@@ -717,8 +721,13 @@ export async function askAssistant(
   const client = new Anthropic()
   const today = lagosDateString()
   const allocation = new AllocationContext(supabase, asker.role === 'admin')
+  // X Metrics parts switched off (0063): their tools are not offered.
+  const xm = await readXmFeatures(supabase)
+  const offered = tools.filter((t) => xmAssistantToolOn(xm, t.name))
+  const xmNote = xmAssistantNote(xm)
   const turn: Turn = {
     supabase,
+    xm,
     allocation,
     actions: new ActionBuilder(supabase, allocation, asker.role === 'admin'),
     reports: [],
@@ -746,10 +755,10 @@ export async function askAssistant(
         { type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } },
         {
           type: 'text',
-          text: `Today is ${longDate(today)} (${today}). You are talking to ${asker.name} (${asker.role}).`,
+          text: `Today is ${longDate(today)} (${today}). You are talking to ${asker.name} (${asker.role}).${xmNote ? ` ${xmNote}` : ''}`,
         },
       ],
-      tools,
+      tools: offered,
       messages,
     })
 

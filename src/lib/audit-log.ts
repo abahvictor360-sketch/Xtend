@@ -109,6 +109,7 @@ const LABELS: Record<string, string> = {
   'xm.expiry.acknowledge': 'Acknowledged an expiry alert',
   'xm.target.set': 'Set a sales target',
   'xm.settings.update': 'Changed X Metrics settings',
+  'xm.features.update': 'Switched X Metrics features on or off',
   'xm.product.create': 'Added a product',
   'xm.product.update': 'Changed a product',
   'xm.supply.log': 'Logged a supply',

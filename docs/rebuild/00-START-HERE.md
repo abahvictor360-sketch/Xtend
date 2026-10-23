@@ -154,7 +154,8 @@ Build in this order. Finish each stage's checks before starting the next.
 ### Stage 6 — Stock
 
 - Stock counts and requests, count sheets, X Metrics (field forms, every
-  dashboard subpage, supplies import, grading).
+  dashboard subpage, supplies import, grading, and the feature switches that
+  turn the module, expiry, supplies, grading and sales off and on, 0063).
 - **Checks:** the acceptance checks for those sections.
 
 ### Stage 7 — Checks, support, notifications, AI

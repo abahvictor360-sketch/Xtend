@@ -1,5 +1,8 @@
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { readXmFeatures } from '@/lib/metrics/features-server'
+import { xmPageOn } from '@/lib/metrics/features'
+import { XmSwitchedOff } from '@/components/admin/xm/switched-off'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { XmHeader } from '@/components/admin/xm/widgets'
 import { ProductManager, StoreEnrolment } from '@/components/admin/xm/forms'
@@ -11,6 +14,8 @@ export const metadata = { title: 'Products & stores — X Metrics' }
 export default async function SetupPage() {
   await requireSession(['admin'])
   const supabase = await createServerSupabase()
+  const xmFeatures = await readXmFeatures(supabase)
+  if (!xmPageOn(xmFeatures, 'setup')) return <XmSwitchedOff title="Products & stores" readOnly={false} />
   const [{ data: products }, { data: outlets }, { data: enrolled }, { data: counted }] = await Promise.all([
     supabase.from('products').select('id, name, sku, category, unit, is_active').order('is_active', { ascending: false }).order('name').limit(2000),
     supabase.from('outlets').select('id, name').eq('is_active', true).order('name').limit(2000),

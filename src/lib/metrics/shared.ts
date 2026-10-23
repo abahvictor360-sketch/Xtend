@@ -41,6 +41,8 @@ export interface XmGrade {
   full_name?: string
   score: number | null
   band: 'Poor' | 'Average' | 'Strong' | null
+  /** Which factors were in play: a part switched off is left out (0063). Absent before 0063. */
+  parts?: { sales: boolean; accuracy: boolean; expiry: boolean }
   weights: { sales: number; accuracy: number; consistency: number; expiry: number }
   bands: { poor_below: number; strong_from: number }
   sales: XmFactor & {
@@ -50,7 +52,7 @@ export interface XmGrade {
     store_units_sold: number | null
   }
   accuracy: XmFactor & { reconciliations: number; within_tolerance: number; tolerance_pct: number }
-  consistency: XmFactor & { days_present: number; sales_on_time: number; counts_in_time: number }
+  consistency: XmFactor & { days_present: number; sales_on_time: number | null; counts_in_time: number }
   expiry: XmFactor & { lines_counted: number; expiry_recorded: number; expired_on_shelf: number }
 }
 

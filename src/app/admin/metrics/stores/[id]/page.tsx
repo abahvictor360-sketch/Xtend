@@ -9,6 +9,9 @@ import { ExportLinks, MonthPicker, VoidButton, XmHeader } from '@/components/adm
 import { DayBars } from '@/components/admin/xm/day-bars'
 import { lagosDateString, longDate } from '@/lib/utils'
 import { monthLabel, monthStart } from '@/lib/metrics/shared'
+import { readXmFeatures } from '@/lib/metrics/features-server'
+import { xmDashboardParts, xmPageOn } from '@/lib/metrics/features'
+import { XmSwitchedOff } from '@/components/admin/xm/switched-off'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Store — X Metrics' }
@@ -38,6 +41,9 @@ export default async function StoreMetricsPage({
   const end = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10)
   const today = lagosDateString()
   const supabase = await createServerSupabase()
+  const features = await readXmFeatures(supabase)
+  if (!xmPageOn(features, 'store')) return <XmSwitchedOff title="X Metrics" readOnly={readOnly} />
+  const parts = xmDashboardParts(features)
 
   const { data: store } = await supabase.from('outlets').select('id, name, address').eq('id', id).maybeSingle<{ id: string; name: string; address: string | null }>()
   if (!store) notFound()
@@ -81,20 +87,20 @@ export default async function StoreMetricsPage({
       <div className="flex flex-wrap items-center gap-3">
         <MonthPicker month={month} />
         <ExportLinks kind="stock" outlet={id} label="Stock" />
-        <ExportLinks kind="discrepancies" outlet={id} month={month} label="Reconciliation" />
+        {parts.reconcile && <ExportLinks kind="discrepancies" outlet={id} month={month} label="Reconciliation" />}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Card><CardContent className="p-4">
+      <div className={['grid gap-3', ['', 'sm:grid-cols-1', 'sm:grid-cols-2', 'sm:grid-cols-3'][1 + Number(parts.sales) + Number(parts.reconcile)]].join(' ')}>
+        {parts.sales && <Card><CardContent className="p-4">
           <p className="text-xs font-semibold uppercase text-muted-foreground">Sold in {monthLabel(month)}</p>
           <p className="mt-1 text-2xl font-bold">{sold}</p>
           <p className="text-xs text-muted-foreground">{target ? `Target ${target.target_units} (${Math.round((100 * sold) / target.target_units)}%)` : 'No store target'}</p>
-        </CardContent></Card>
-        <Card><CardContent className="p-4">
+        </CardContent></Card>}
+        {parts.reconcile && <Card><CardContent className="p-4">
           <p className="text-xs font-semibold uppercase text-muted-foreground">Stock accuracy</p>
           <p className="mt-1 text-2xl font-bold">{accuracy === null ? '—' : `${accuracy}%`}</p>
           <p className="text-xs text-muted-foreground">{recRows.length} product counts reconciled</p>
-        </CardContent></Card>
+        </CardContent></Card>}
         <Card><CardContent className="p-4">
           <p className="text-xs font-semibold uppercase text-muted-foreground">Units on hand</p>
           <p className="mt-1 text-2xl font-bold">{stock.reduce((a, s) => a + s.units, 0)}</p>
@@ -102,10 +108,12 @@ export default async function StoreMetricsPage({
         </CardContent></Card>
       </div>
 
-      <Card>
-        <CardHeader><CardTitle>Units sold per day</CardTitle></CardHeader>
-        <CardContent><DayBars month={month} byDay={byDay} /></CardContent>
-      </Card>
+      {parts.sales && (
+        <Card>
+          <CardHeader><CardTitle>Units sold per day</CardTitle></CardHeader>
+          <CardContent><DayBars month={month} byDay={byDay} /></CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader><CardTitle>Stock on hand</CardTitle></CardHeader>
@@ -113,9 +121,9 @@ export default async function StoreMetricsPage({
           {stock.length === 0 ? <p className="p-5 pt-0 text-sm text-muted-foreground">No count yet. The first count is the opening stock.</p> : (
             <Table>
               <TableHeader><TableRow>
-                <TableHead>Product</TableHead><TableHead>Batch</TableHead><TableHead>Expiry</TableHead>
+                <TableHead>Product</TableHead><TableHead>Batch</TableHead>{parts.expiry && <TableHead>Expiry</TableHead>}
                 <TableHead className="text-right">Shelf</TableHead><TableHead className="text-right">Backroom</TableHead>
-                <TableHead className="text-right">Sold this month</TableHead><TableHead>Counted</TableHead>
+                {parts.sales && <TableHead className="text-right">Sold this month</TableHead>}<TableHead>Counted</TableHead>
               </TableRow></TableHeader>
               <TableBody>
                 {stock.map((s, i) => {
@@ -124,15 +132,17 @@ export default async function StoreMetricsPage({
                     <TableRow key={`${s.product_id}-${s.batch}-${i}`}>
                       <TableCell className="font-semibold">{product.get(s.product_id)?.name}</TableCell>
                       <TableCell>{s.batch || '—'}</TableCell>
-                      <TableCell>
-                        {s.expiry_date ? longDate(s.expiry_date) : <span className="text-muted-foreground">Not recorded</span>}
-                        {left !== null && left <= 90 && (
-                          <Badge variant={left < 0 || left <= 30 ? 'destructive' : 'warning'} className="ml-2">{left < 0 ? 'Expired' : `${left} days`}</Badge>
-                        )}
-                      </TableCell>
+                      {parts.expiry && (
+                        <TableCell>
+                          {s.expiry_date ? longDate(s.expiry_date) : <span className="text-muted-foreground">Not recorded</span>}
+                          {left !== null && left <= 90 && (
+                            <Badge variant={left < 0 || left <= 30 ? 'destructive' : 'warning'} className="ml-2">{left < 0 ? 'Expired' : `${left} days`}</Badge>
+                          )}
+                        </TableCell>
+                      )}
                       <TableCell className="text-right">{s.on_shelf}</TableCell>
                       <TableCell className="text-right">{s.in_backroom}</TableCell>
-                      <TableCell className="text-right">{byProduct.get(s.product_id) ?? 0}</TableCell>
+                      {parts.sales && <TableCell className="text-right">{byProduct.get(s.product_id) ?? 0}</TableCell>}
                       <TableCell>{longDate(s.count_date)}</TableCell>
                     </TableRow>
                   )
@@ -143,6 +153,7 @@ export default async function StoreMetricsPage({
         </CardContent>
       </Card>
 
+      {parts.reconcile && (
       <Card>
         <CardHeader><CardTitle>Reconciliation</CardTitle></CardHeader>
         <CardContent className="p-0">
@@ -167,9 +178,10 @@ export default async function StoreMetricsPage({
           )}
         </CardContent>
       </Card>
+      )}
 
       <Card>
-        <CardHeader><CardTitle>Counts, sales and supplies</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{['Counts', parts.sales && 'sales', parts.supplies && 'supplies'].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' and $1')}</CardTitle></CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader><TableRow><TableHead>What</TableHead><TableHead>Day</TableHead><TableHead>By</TableHead><TableHead /></TableRow></TableHeader>
@@ -182,7 +194,7 @@ export default async function StoreMetricsPage({
                   <TableCell>{c.voided_at ? <span className="text-xs">Voided: {c.void_reason}</span> : !readOnly && <VoidButton kind="count" id={c.id} />}</TableCell>
                 </TableRow>
               ))}
-              {((sales ?? []) as { id: string; user_id: string; sale_date: string; superseded_by: string | null; voided_at: string | null; void_reason: string | null; profiles: unknown }[]).map((s) => (
+              {parts.sales && ((sales ?? []) as { id: string; user_id: string; sale_date: string; superseded_by: string | null; voided_at: string | null; void_reason: string | null; profiles: unknown }[]).map((s) => (
                 <TableRow key={s.id} className={s.voided_at || s.superseded_by ? 'opacity-60' : undefined}>
                   <TableCell>Daily sales {s.superseded_by && <Badge variant="outline">Replaced</Badge>}</TableCell>
                   <TableCell>{longDate(s.sale_date)}</TableCell>
@@ -190,7 +202,7 @@ export default async function StoreMetricsPage({
                   <TableCell>{s.voided_at ? <span className="text-xs">Voided: {s.void_reason}</span> : !readOnly && !s.superseded_by && <VoidButton kind="sales" id={s.id} />}</TableCell>
                 </TableRow>
               ))}
-              {((supplies ?? []) as { id: string; supplied_on: string; product_name: string; quantity: number; batch: string; voided_at: string | null }[]).map((s) => (
+              {parts.supplies && ((supplies ?? []) as { id: string; supplied_on: string; product_name: string; quantity: number; batch: string; voided_at: string | null }[]).map((s) => (
                 <TableRow key={s.id} className={s.voided_at ? 'opacity-60' : undefined}>
                   <TableCell>Supply: {s.quantity} × {s.product_name}{s.batch && ` (${s.batch})`}</TableCell>
                   <TableCell>{longDate(s.supplied_on)}</TableCell>

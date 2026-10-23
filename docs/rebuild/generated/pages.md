@@ -114,7 +114,7 @@ On screen: A report to download for each marketer, for one day or a whole month:
 
 - File: `src/app/admin/metrics/expiry/page.tsx`
 - Who: ['admin', 'supervisor']
-- Components: `ui/badge`, `ui/card`, `ui/table`, `admin/xm/widgets`
+- Components: `admin/xm/switched-off`, `ui/badge`, `ui/card`, `ui/table`, `admin/xm/widgets`
 
 On screen: Each batch is alerted as it enters a window (by default 2 years, 1 year, 6 months, 3 months and 1 month before expiry) and again once expired. Consider pulling means it will not sell before it expires at the current rate of sale.
 
@@ -122,7 +122,7 @@ On screen: Each batch is alerted as it enters a window (by default 2 years, 1 ye
 
 - File: `src/app/admin/metrics/grades/page.tsx`
 - Who: ['admin', 'supervisor']
-- Components: `ui/alert`, `ui/badge`, `ui/card`, `ui/table`, `admin/xm/widgets`
+- Components: `admin/xm/switched-off`, `ui/alert`, `ui/badge`, `ui/card`, `ui/table`, `admin/xm/widgets`
 
 On screen: Each merchandiser and marketer, graded on sales against target, stock accuracy, reporting consistency (against the days they clocked in) and expiry handling. Weights and bands are set in Settings.
 
@@ -130,15 +130,15 @@ On screen: Each merchandiser and marketer, graded on sales against target, stock
 
 - File: `src/app/admin/metrics/page.tsx`
 - Who: ['admin', 'supervisor']
-- Components: `ui/badge`, `ui/card`, `ui/table`, `admin/xm/widgets`, `admin/xm/dashboard`
+- Components: `ui/badge`, `ui/card`, `ui/table`, `admin/xm/widgets`, `admin/xm/dashboard`, `admin/xm/switched-off`
 
-On screen: Stock, sales and expiry for the stores in X Metrics: what merchandisers count and sell, what was supplied, and where the numbers do not add up.
+On screen: No store is in X Metrics yet.
 
 ## `/admin/metrics/policy` — Scoring policy — X Metrics
 
 - File: `src/app/admin/metrics/policy/page.tsx`
 - Who: ['admin', 'supervisor']
-- Components: `ui/alert`, `ui/badge`, `ui/card`, `admin/xm/widgets`, `admin/xm/policy-editor`, `metrics/policy`
+- Components: `admin/xm/switched-off`, `ui/alert`, `ui/badge`, `ui/card`, `admin/xm/widgets`, `admin/xm/policy-editor`, `metrics/policy`
 
 On screen: The policy and guidelines staff are scored by. Staff read it in the Metrics tab on their phone, next to their own score, and mark it read. Each publish is kept as a version.
 
@@ -146,15 +146,15 @@ On screen: The policy and guidelines staff are scored by. Staff read it in the M
 
 - File: `src/app/admin/metrics/settings/page.tsx`
 - Who: ['admin']
-- Components: `ui/alert`, `ui/card`, `admin/xm/widgets`, `admin/xm/forms`
+- Components: `ui/alert`, `ui/card`, `admin/xm/widgets`, `admin/xm/forms`, `admin/xm/features-form`
 
-On screen: The rules X Metrics applies. Every change is kept, with who made it.
+On screen: Which parts of X Metrics are in use, and the rules it applies. Every change is kept, with who made it.
 
 ## `/admin/metrics/setup` — Products & stores — X Metrics
 
 - File: `src/app/admin/metrics/setup/page.tsx`
 - Who: ['admin']
-- Components: `ui/card`, `admin/xm/widgets`, `admin/xm/forms`
+- Components: `admin/xm/switched-off`, `ui/card`, `admin/xm/widgets`, `admin/xm/forms`
 
 On screen: The products counted and sold, and which of your existing stores are in X Metrics. Stores and staff allocations are the ones already in Xtend.
 
@@ -162,13 +162,13 @@ On screen: The products counted and sold, and which of your existing stores are 
 
 - File: `src/app/admin/metrics/staff/[id]/page.tsx`
 - Who: ['admin', 'supervisor']
-- Components: `ui/badge`, `ui/card`, `ui/table`, `admin/xm/widgets`, `admin/xm/day-bars`, `admin/overview-charts`, `admin/score-bars`
+- Components: `ui/badge`, `ui/card`, `ui/table`, `admin/xm/widgets`, `admin/xm/day-bars`, `admin/overview-charts`, `admin/score-bars`, `admin/xm/switched-off`
 
 ## `/admin/metrics/stores/[id]` — Store — X Metrics
 
 - File: `src/app/admin/metrics/stores/[id]/page.tsx`
 - Who: ['admin', 'supervisor']
-- Components: `ui/badge`, `ui/card`, `ui/table`, `admin/xm/widgets`, `admin/xm/day-bars`
+- Components: `ui/badge`, `ui/card`, `ui/table`, `admin/xm/widgets`, `admin/xm/day-bars`, `admin/xm/switched-off`
 
 On screen: No count yet. The first count is the opening stock.
 
@@ -176,7 +176,7 @@ On screen: No count yet. The first count is the opening stock.
 
 - File: `src/app/admin/metrics/supplies/page.tsx`
 - Who: ['admin']
-- Components: `ui/badge`, `ui/card`, `ui/table`, `admin/xm/widgets`, `admin/xm/forms`, `admin/xm/supply-import`
+- Components: `admin/xm/switched-off`, `ui/badge`, `ui/card`, `ui/table`, `admin/xm/widgets`, `admin/xm/forms`, `admin/xm/supply-import`
 
 On screen: Every delivery to a store, by batch, in units or cartons. Log one by hand, or import an invoice or supply sheet. Reconciliation adds them to the last count. A mistake is voided with a reason, never edited or deleted.
 
@@ -184,7 +184,7 @@ On screen: Every delivery to a store, by batch, in units or cartons. Log one by 
 
 - File: `src/app/admin/metrics/targets/page.tsx`
 - Who: ['admin']
-- Components: `ui/card`, `ui/table`, `admin/xm/widgets`, `admin/xm/forms`
+- Components: `admin/xm/switched-off`, `ui/card`, `ui/table`, `admin/xm/widgets`, `admin/xm/forms`
 
 On screen: A monthly target in units, for a person or a store. A person's own target is used for their grade; without one, the targets of their stores are.
 

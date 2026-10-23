@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { ApiError } from '@/lib/auth'
 import type { Sheet } from '@/lib/export/render'
 import { fmtScore, monthLabel, windowLabel, type XmGrade } from '@/lib/metrics/shared'
+import { XM_ALL_ON, xmExportColumnsOff, type XmFeatures } from '@/lib/metrics/features'
 
 export const XM_EXPORTS = ['grades', 'stock', 'discrepancies', 'supplies'] as const
 export type XmExportKind = (typeof XM_EXPORTS)[number]
@@ -190,12 +191,20 @@ async function suppliesSheet(db: SupabaseClient, month: string, outlet: string |
   }
 }
 
-export async function xmSheet(
-  db: SupabaseClient,
-  kind: XmExportKind,
-  month: string,
-  outlet: string | null,
-): Promise<Sheet> {
+/** A sheet without the named columns (their values and widths go too). */
+export function dropColumns(sheet: Sheet, names: string[]): Sheet {
+  const keep = sheet.columns.map((c, i) => (names.includes(c) ? -1 : i)).filter((i) => i >= 0)
+  if (keep.length === sheet.columns.length) return sheet
+  const pick = <T,>(xs: readonly T[]) => keep.filter((i) => i < xs.length).map((i) => xs[i])
+  return {
+    ...sheet,
+    columns: pick(sheet.columns),
+    rows: sheet.rows.map((r) => ({ ...r, values: pick(r.values) })),
+    widths: { xlsx: pick(sheet.widths.xlsx), pdf: pick(sheet.widths.pdf) },
+  }
+}
+
+async function buildSheet(db: SupabaseClient, kind: XmExportKind, month: string, outlet: string | null): Promise<Sheet> {
   switch (kind) {
     case 'grades':
       return gradesSheet(db, month)
@@ -206,4 +215,15 @@ export async function xmSheet(
     case 'supplies':
       return suppliesSheet(db, month, outlet)
   }
+}
+
+/** A report, without the columns of parts switched off (0063). */
+export async function xmSheet(
+  db: SupabaseClient,
+  kind: XmExportKind,
+  month: string,
+  outlet: string | null,
+  features: XmFeatures = XM_ALL_ON,
+): Promise<Sheet> {
+  return dropColumns(await buildSheet(db, kind, month, outlet), xmExportColumnsOff(features, kind))
 }

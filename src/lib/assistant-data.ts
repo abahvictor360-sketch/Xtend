@@ -8,6 +8,7 @@ import { CLAIMS, judgeExcuse, lagosInstant, type Claim, type ExcuseEvidence } fr
 import { detailText, fetchIntegrity, parseIntegrityFilter, personRisk } from '@/lib/integrity-review'
 import { loadScheduleSafe } from '@/lib/schedule-server'
 import type { DayKind } from '@/lib/schedule'
+import { XM_ALL_ON, xmOn, type XmFeatures } from '@/lib/metrics/features'
 
 /**
  * The lookups behind Ask Xtend: what the assistant reads to answer a
@@ -749,12 +750,20 @@ export function nextMonthStart(month: string) {
   return m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`
 }
 
-/** X Metrics for a month: units sold per enrolled store against target, counts that did not add up, expiry alerts. */
-export async function xMetricsMonth(supabase: SupabaseClient, monthValue: unknown) {
+/**
+ * X Metrics for a month: units sold per enrolled store against target,
+ * counts that did not add up, expiry alerts. Parts switched off (0063)
+ * are left out.
+ */
+export async function xMetricsMonth(supabase: SupabaseClient, monthValue: unknown, features: XmFeatures = XM_ALL_ON) {
   const month =
     typeof monthValue === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(monthValue) ? monthValue : lagosDateString().slice(0, 7)
   const first = `${month}-01`
   const next = nextMonthStart(month)
+  if (!xmOn(features, 'xmetrics')) return { month, note: 'X Metrics is switched off.' }
+  const salesOn = xmOn(features, 'sales')
+  const gapsOn = xmOn(features, 'reconcile')
+  const expiryOn = xmOn(features, 'expiry')
   const [stores, sales, targets, gaps, expiry] = await Promise.all([
     supabase.from('xm_stores').select('outlet_id, outlets(name)').eq('is_active', true),
     supabase.from('xm_live_sale_lines').select('outlet_id, user_id, units').gte('sale_date', first).lt('sale_date', next).limit(50000),
@@ -800,7 +809,7 @@ export async function xMetricsMonth(supabase: SupabaseClient, monthValue: unknow
   const pct = (sold: number, target: number | undefined) => (target ? Math.round((sold / target) * 100) : null)
   const gapRows = gaps.data ?? []
 
-  return {
+  const out = {
     month,
     enrolled_stores: names.size,
     units_sold: [...soldByStore.values()].reduce((a, b) => a + b, 0),
@@ -840,6 +849,17 @@ export async function xMetricsMonth(supabase: SupabaseClient, monthValue: unknow
       units: e.units_on_hand,
       consider_pulling: e.consider_pulling,
     })),
+  }
+  const off = [!salesOn && 'sales and targets', !gapsOn && 'stock reconciliation', !expiryOn && 'expiry'].filter(Boolean)
+  return {
+    month: out.month,
+    enrolled_stores: out.enrolled_stores,
+    ...(salesOn
+      ? { units_sold: out.units_sold, stores: out.stores, people_with_targets: out.people_with_targets }
+      : { stores: out.stores.map((s) => ({ store: s.store })) }),
+    ...(gapsOn ? { counts_that_did_not_add_up: out.counts_that_did_not_add_up } : {}),
+    ...(expiryOn ? { expiry_alerts_open: out.expiry_alerts_open } : {}),
+    ...(off.length ? { switched_off: off } : {}),
   }
 }
 

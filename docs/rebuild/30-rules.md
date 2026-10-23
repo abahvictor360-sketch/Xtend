@@ -1488,6 +1488,44 @@ characters (≤ 300; "Say why it is being voided"); once only ("already
 voided"). The record stays, with who, when and why, and drops out of every
 calculation.
 
+### 12.12 Feature switches (0063)
+
+- `xm_settings` gains `enabled`, `expiry_enabled`, `supplies_enabled`,
+  `grading_enabled`, `sales_enabled` (all `true` by default, so nothing
+  changes on migrate) and `reconcile_from date`.
+- `xm_feature_on(part)`: `xmetrics` = enabled; `expiry`, `supplies`,
+  `grading`, `sales` = enabled and their own switch; `reconcile` = enabled
+  and supplies and sales; anything else false.
+- `xm_set_features(enabled, expiry, supplies, grading, sales)`: admin only
+  ("Only an admin can do that in X Metrics"); null refused ("Say whether
+  each part is on or off"); returns the switches and `reconcile_from`. The
+  existing `xm_settings_keep` keeps the earlier row in
+  `xm_settings_history`; the route audits `xm.features.update`.
+- `trg_xm_settings_resume`: when reconciliation goes from off to on,
+  `reconcile_from := business_date()`.
+- `xm_feature_guard` (before insert): `xm_counts` with X Metrics off →
+  "Stock counts are not being collected here at the moment"; `xm_sales`
+  with sales off → "Sales are not being collected at the moment";
+  `xm_supplies`, `xm_supply_imports` with supplies off → "Supplies are
+  switched off in X Metrics. An admin can turn them on in X Metrics →
+  Settings"; `xm_targets` with sales off → "Sales and targets are switched
+  off…"; `xm_monthly_grades` (insert or update) with grading off →
+  "Grading is switched off in X Metrics. An admin can turn it on in X
+  Metrics → Settings".
+- `xm_reconcile_pending` returns 0 and leaves counts unreconciled while
+  reconciliation is off; afterwards a count is only compared with a
+  previous count dated on or after `reconcile_from` (otherwise it is a new
+  baseline, marked reconciled, no row, no flag).
+- `xm_expiry_scan` returns 0 and `xm_claim_expiry_alerts` hands out nothing
+  while expiry is off. Expiry dates on count lines are kept as sent.
+- `xm_grade` raises "Grading is switched off in X Metrics" while grading is
+  off; otherwise leaves out sales (sales off), accuracy (reconciliation off)
+  and expiry (expiry off), and with sales off consistency counts only
+  counts (`sales_on_time` null); adds `parts {sales, accuracy, expiry}`.
+  `xm_month_grades` lists nobody and `xm_finalise_month` refuses while
+  grading is off.
+- Switching off deletes nothing; switching back on resumes.
+
 ---
 
 ## 13. Support
@@ -1847,6 +1885,7 @@ Testable statements, grouped by area. They mirror the assertions in
 - Policies: staff cannot publish; reads recorded once; new versions current, old kept.
 - Voids need a reason and happen once.
 - Cartons: a size is needed; 10 × 24 = 240 units with cartons kept; the product learns its size; units still allowed. Imports log all or nothing, report the failing line, tie supplies to the file, admin only.
+- Switches (0063): all on after migrate; only admins switch (staff and supervisors refused, directly or through the function); each change kept in history with who; supplies off refuses supplies and imports; sales off refuses staff sales (plain words) and targets; reconciliation skips with supplies or sales off and the counts wait; expiry off raises no alerts and keeps dates; grades leave out what is off; grading off refuses grades, lists nobody, refuses finalising and keeping grades; X Metrics off turns every part off, refuses counts in plain words and the sweep does nothing; nothing deleted; back on, waiting counts are settled as baselines with nobody flagged, sales, expiry alerts, full grades and supplies resume; other setting changes keep the restart date.
 
 ### Background tracking
 - Only field staff get a token; only its hash is kept; positions are stored as the person's (fresh live, older offline at their time); mock positions flagged; resends skipped; unknown tokens refused; nothing from before the token; a new token retires the old; clocking out stops the token; after clock-out the phone is told to stop and the token ends.

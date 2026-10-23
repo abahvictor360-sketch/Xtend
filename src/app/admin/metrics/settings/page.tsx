@@ -1,10 +1,12 @@
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { Alert } from '@/components/ui/alert'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { XmHeader } from '@/components/admin/xm/widgets'
 import { SettingsForm } from '@/components/admin/xm/forms'
+import { FeaturesForm } from '@/components/admin/xm/features-form'
 import type { XmSettings } from '@/lib/metrics/shared'
+import { XM_FEATURE_INFO, xmFeaturesFrom } from '@/lib/metrics/features'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Settings — X Metrics' }
@@ -19,12 +21,33 @@ export default async function SettingsPage() {
 
   return (
     <div className="space-y-5">
-      <XmHeader title="X Metrics settings" intro="The rules X Metrics applies. Every change is kept, with who made it." />
+      <XmHeader title="X Metrics settings" intro="Which parts of X Metrics are in use, and the rules it applies. Every change is kept, with who made it." />
+      {settings && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Features</CardTitle>
+            <CardDescription>
+              Switch X Metrics, or parts of it, off while you are not using them, and back on later. Off hides
+              the part from the dashboard and the staff app; all its records are kept.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {'enabled' in settings ? (
+              <FeaturesForm features={xmFeaturesFrom(settings as unknown as Record<string, unknown>)} />
+            ) : (
+              <Alert variant="warning">Run migration 0063 in Supabase to switch parts of X Metrics on and off.</Alert>
+            )}
+          </CardContent>
+        </Card>
+      )}
       {!settings ? (
         <Alert variant="destructive">The settings could not be read. Has migration 043 been run?</Alert>
       ) : (
         <Card>
-          <CardContent className="pt-5">
+          <CardHeader>
+            <CardTitle>Rules</CardTitle>
+          </CardHeader>
+          <CardContent>
             <SettingsForm settings={settings} />
           </CardContent>
         </Card>
@@ -41,6 +64,8 @@ export default async function SettingsPage() {
               {((history ?? []) as unknown as { id: number; settings: XmSettings; changed_at: string; profiles: { full_name: string } | { full_name: string }[] | null }[]).map((h) => {
                 const by = Array.isArray(h.profiles) ? h.profiles[0]?.full_name : h.profiles?.full_name
                 const s = h.settings
+                const sw = 'enabled' in (s as object) ? xmFeaturesFrom(s as unknown as Record<string, unknown>) : null
+                const off = sw ? XM_FEATURE_INFO.filter((i) => !sw[i.key]).map((i) => i.label) : []
                 return (
                   <li key={h.id} className="py-2">
                     <span className="font-semibold">
@@ -50,6 +75,7 @@ export default async function SettingsPage() {
                     <span className="block text-muted-foreground">
                       Was: tolerance {s.tolerance_pct}% · weights {s.weight_sales}/{s.weight_accuracy}/{s.weight_consistency}/{s.weight_expiry} ·
                       bands {s.band_poor_below}/{s.band_strong_from} · windows {s.alert_windows_days.join(', ')} days
+                      {sw && ` · ${off.length ? `off: ${off.join(', ')}` : 'all parts on'}`}
                     </span>
                   </li>
                 )

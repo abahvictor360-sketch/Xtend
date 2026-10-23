@@ -4,6 +4,8 @@ import { audit } from '@/lib/audit'
 import { renderExport } from '@/lib/export/render'
 import { XM_EXPORTS, xmSheet, type XmExportKind } from '@/lib/metrics/export'
 import { monthStart } from '@/lib/metrics/shared'
+import { readXmFeatures } from '@/lib/metrics/features-server'
+import { XM_OFF_MESSAGE, xmExportOn } from '@/lib/metrics/features'
 
 export const maxDuration = 60
 
@@ -20,7 +22,10 @@ export async function GET(request: Request, ctx: { params: Promise<{ kind: strin
     const outlet = outletParam && /^[0-9a-f-]{36}$/i.test(outletParam) ? outletParam : null
 
     const supabase = await createServerSupabase()
-    const sheet = await xmSheet(supabase, kind as XmExportKind, month, outlet)
+    // A report whose part is switched off (0063) is not offered.
+    const features = await readXmFeatures(supabase)
+    if (!xmExportOn(features, kind)) throw new ApiError(XM_OFF_MESSAGE, 404)
+    const sheet = await xmSheet(supabase, kind as XmExportKind, month, outlet, features)
     await audit(supabase, `export.xm_${kind}.${format}`, null, null, { month, outlet, row_count: sheet.rows.length })
     return await renderExport(format, sheet)
   } catch (error) {

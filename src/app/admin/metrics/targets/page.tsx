@@ -1,5 +1,8 @@
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { readXmFeatures } from '@/lib/metrics/features-server'
+import { xmPageOn } from '@/lib/metrics/features'
+import { XmSwitchedOff } from '@/components/admin/xm/switched-off'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { MonthPicker, XmHeader } from '@/components/admin/xm/widgets'
@@ -15,6 +18,8 @@ export default async function TargetsPage({ searchParams }: { searchParams: Prom
   const [y, m] = month.split('-').map(Number)
   const end = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10)
   const supabase = await createServerSupabase()
+  const xmFeatures = await readXmFeatures(supabase)
+  if (!xmPageOn(xmFeatures, 'targets')) return <XmSwitchedOff title="Targets" readOnly={false} />
 
   const [{ data: people }, { data: stores }, { data: targets }, { data: sales }] = await Promise.all([
     supabase.from('profiles').select('id, full_name, role').in('role', ['merchandiser', 'marketer']).eq('is_active', true).order('full_name'),

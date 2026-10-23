@@ -4047,6 +4047,217 @@ begin
         'activity: rows older than 180 days are purged, newer ones kept');
     end;
 
+    -- ---------------------------------------------------------------
+    -- X Metrics feature switches (063): parts switched off stop their
+    -- work and refuse new records; nothing is deleted; back on resumes.
+    -- ---------------------------------------------------------------
+    declare
+      dayo   uuid := gen_random_uuid();
+      shop   uuid;
+      lotion uuid;
+      c1     uuid;
+      c2     uuid;
+      f      jsonb;
+      g      jsonb;
+      hist   integer;
+      recs   integer;
+      d2     date := ((now() - interval '36 hours') at time zone 'Africa/Lagos')::date;
+    begin
+      perform act_as(boss);
+      perform assert((select enabled and expiry_enabled and supplies_enabled and grading_enabled and sales_enabled
+                             and reconcile_from is null from public.xm_settings),
+        'xm features: every part is on once 0063 has run, so nothing changes');
+      perform assert(public.xm_feature_on('xmetrics') and public.xm_feature_on('expiry')
+                     and public.xm_feature_on('supplies') and public.xm_feature_on('grading')
+                     and public.xm_feature_on('sales') and public.xm_feature_on('reconcile')
+                     and not public.xm_feature_on('nonsense'),
+        'xm features: each part reads as on, and an unknown part as off');
+
+      insert into auth.users (id, email) values (dayo, 'xmf-test@xpel.ng');
+      insert into public.outlets (name, lat, lng, geofence_radius_m)
+      values ('XMF Test Store', 6.6000, 3.4000, 100) returning id into shop;
+      insert into public.profiles (id, full_name, email, role, outlet_id)
+      values (dayo, 'Dayo Ogun', 'xmf-test@xpel.ng', 'merchandiser', shop);
+      insert into public.products (name, sku, category, unit) values ('XMF Lotion', 'XMF-LOT', 'Body', 'bottle')
+      returning id into lotion;
+      perform public.xm_set_store(shop, true);
+
+      -- Only admins switch parts, and every change is kept.
+      perform act_as(dayo);
+      begin
+        perform public.xm_set_features(false, true, true, true, true);
+        perform assert(false, 'xm features: staff cannot switch X Metrics off');
+      exception when others then
+        perform assert(sqlerrm like '%Only an admin%', 'xm features: staff cannot switch X Metrics off');
+      end;
+      perform act_as(tunde);
+      begin
+        perform public.xm_set_features(true, false, true, true, true);
+        perform assert(false, 'xm features: supervisors cannot switch parts off');
+      exception when others then
+        perform assert(sqlerrm like '%Only an admin%', 'xm features: supervisors cannot switch parts off');
+      end;
+      perform act_as(boss);
+      begin
+        perform public.xm_set_features(true, null, true, true, true);
+        perform assert(false, 'xm features: each switch must be on or off');
+      exception when others then
+        perform assert(sqlerrm like '%on or off%', 'xm features: each switch must be on or off');
+      end;
+
+      -- An opening count while everything is on.
+      perform act_as(dayo);
+      c1 := public.xm_submit_count(shop, jsonb_build_array(jsonb_build_object(
+        'product_id', lotion, 'batch', 'L1', 'expiry_date', public.business_date() + 20,
+        'on_shelf', 100, 'in_backroom', 0)), 6.6, 3.4, 10,
+        fresh_photo('reports', 'xmf-1.jpg'), now() - interval '60 hours');
+
+      -- Supplies and sales off.
+      perform act_as(boss);
+      hist := (select count(*) from public.xm_settings_history);
+      f := public.xm_set_features(true, true, false, true, false);
+      perform assert(f->>'supplies' = 'false' and f->>'sales' = 'false' and f->>'enabled' = 'true',
+        'xm features: an admin switches supplies and sales off');
+      perform assert((select count(*) from public.xm_settings_history) = hist + 1
+                     and (select (settings->>'sales_enabled')::boolean and changed_by = boss
+                          from public.xm_settings_history order by id desc limit 1),
+        'xm features: the earlier switches are kept in the history, with who changed them');
+      perform assert(not public.xm_feature_on('reconcile') and public.xm_feature_on('xmetrics'),
+        'xm features: reconciliation is off without supplies and sales; X Metrics stays on');
+      begin
+        perform public.xm_log_supply(shop, lotion, 50, 'L1', null, d2, null);
+        perform assert(false, 'xm features: no supplies are logged while supplies are off');
+      exception when others then
+        perform assert(sqlerrm like 'Supplies are switched off%', 'xm features: no supplies are logged while supplies are off');
+      end;
+      begin
+        perform public.xm_create_supply_import('invoice.csv', 'csv', 'table', null, null, null, 1);
+        perform assert(false, 'xm features: no supply imports while supplies are off');
+      exception when others then
+        perform assert(sqlerrm like 'Supplies are switched off%', 'xm features: no supply imports while supplies are off');
+      end;
+      begin
+        perform public.xm_set_target(d2, dayo, null, 100);
+        perform assert(false, 'xm features: no targets while sales are off');
+      exception when others then
+        perform assert(sqlerrm like '%switched off%', 'xm features: no targets while sales are off');
+      end;
+      perform act_as(dayo);
+      begin
+        perform public.xm_submit_sales(shop, d2, jsonb_build_array(jsonb_build_object('product_id', lotion, 'units', 5)),
+          fresh_photo('reports', 'xmf-s.jpg'), now() - interval '36 hours');
+        perform assert(false, 'xm features: staff sales are refused while sales are off');
+      exception when others then
+        perform assert(sqlerrm = 'Sales are not being collected at the moment',
+          'xm features: staff sales are refused, in plain words, while sales are off');
+      end;
+      -- Counts still come in, but are not reconciled.
+      c2 := public.xm_submit_count(shop, jsonb_build_array(jsonb_build_object(
+        'product_id', lotion, 'batch', 'L1', 'expiry_date', public.business_date() + 20,
+        'on_shelf', 40, 'in_backroom', 0)), 6.6, 3.4, 10,
+        fresh_photo('reports', 'xmf-2.jpg'), now() - interval '36 hours');
+      perform act_as(boss);
+      perform assert(public.xm_reconcile_pending() = 0
+                     and (select reconciled_at is null from public.xm_counts where id = c2),
+        'xm features: reconciliation skips while supplies or sales are off, and the counts wait');
+
+      -- Expiry off: no alerts raised or sent; the dates are kept.
+      f := public.xm_set_features(true, false, false, true, false);
+      perform assert(public.xm_expiry_scan() = 0
+                     and not exists (select 1 from public.xm_expiry_alerts where outlet_id = shop),
+        'xm features: no expiry alerts while expiry is off');
+      perform assert((select expiry_date is not null from public.xm_count_lines where count_id = c2),
+        'xm features: expiry dates already recorded are kept');
+      -- Grades leave the switched-off parts out.
+      g := public.xm_grade(dayo, d2);
+      perform assert(g->'parts' = '{"sales": false, "accuracy": false, "expiry": false}'::jsonb
+                     and g->'sales'->>'score' is null and g->'accuracy'->>'score' is null
+                     and g->'expiry'->>'score' is null and g->'consistency'->>'sales_on_time' is null,
+        'xm features: grades leave out sales, accuracy and expiry while they are off');
+
+      -- Grading off.
+      f := public.xm_set_features(true, false, false, false, false);
+      begin
+        perform public.xm_grade(dayo, d2);
+        perform assert(false, 'xm features: no grades while grading is off');
+      exception when others then
+        perform assert(sqlerrm like 'Grading is switched off%', 'xm features: no grades while grading is off');
+      end;
+      perform assert(not exists (select 1 from public.xm_month_grades(d2)),
+        'xm features: nobody is listed for grading while it is off');
+      begin
+        perform public.xm_finalise_month((date_trunc('month', public.business_date()) - interval '1 month')::date);
+        perform assert(false, 'xm features: a month is not finalised while grading is off');
+      exception when others then
+        perform assert(sqlerrm like 'Grading is switched off%', 'xm features: a month is not finalised while grading is off');
+      end;
+      begin
+        insert into public.xm_monthly_grades (month, user_id, grade)
+        values (date_trunc('month', public.business_date())::date, dayo, '{}'::jsonb);
+        perform assert(false, 'xm features: no grade is kept while grading is off');
+      exception when others then
+        perform assert(sqlerrm like 'Grading is switched off%', 'xm features: no grade is kept while grading is off');
+      end;
+
+      -- The whole module off.
+      f := public.xm_set_features(false, true, true, true, true);
+      perform assert(not public.xm_feature_on('sales') and not public.xm_feature_on('supplies')
+                     and not public.xm_feature_on('expiry') and not public.xm_feature_on('grading'),
+        'xm features: with X Metrics off, every part is off whatever its own switch says');
+      perform act_as(dayo);
+      begin
+        perform public.xm_submit_count(shop, jsonb_build_array(jsonb_build_object(
+          'product_id', lotion, 'batch', 'L1', 'on_shelf', 30, 'in_backroom', 0)), 6.6, 3.4, 10,
+          fresh_photo('reports', 'xmf-off.jpg'), now() - interval '1 hour');
+        perform assert(false, 'xm features: no counts while X Metrics is off');
+      exception when others then
+        perform assert(sqlerrm = 'Stock counts are not being collected here at the moment',
+          'xm features: counts are refused, in plain words, while X Metrics is off');
+      end;
+      perform act_as(boss);
+      perform assert(public.xm_reconcile_pending() = 0 and public.xm_expiry_scan() = 0
+                     and (select count(*) from public.xm_claim_expiry_alerts()) = 0,
+        'xm features: the hourly sweep does nothing while X Metrics is off');
+      perform assert((select count(*) from public.xm_counts where outlet_id = shop) = 2,
+        'xm features: switching off deletes nothing');
+
+      -- Back on: work resumes, and the counts taken while it was off are
+      -- not compared across the gap.
+      perform assert((select reconcile_from is null from public.xm_settings),
+        'xm features: reconciliation has no restart date before it comes back on');
+      f := public.xm_set_features(true, true, true, true, true);
+      perform assert((f->>'reconcile_from')::date = public.business_date(),
+        'xm features: reconciliation restarts from the day it comes back on');
+      recs := (select count(*) from public.xm_reconciliations r join public.xm_counts c on c.id = r.count_id
+               where c.outlet_id = shop);
+      perform assert(public.xm_reconcile_pending() >= 2, 'xm features: back on, the waiting counts are settled');
+      perform assert((select reconciled_at is not null from public.xm_counts where id = c2)
+                     and (select count(*) from public.xm_reconciliations r join public.xm_counts c on c.id = r.count_id
+                          where c.outlet_id = shop) = recs
+                     and not exists (select 1 from public.integrity_flags where kind = 'stock_discrepancy' and user_id = dayo),
+        'xm features: back on, the waiting counts are settled as baselines and nobody is flagged for the gap');
+      perform act_as(dayo);
+      perform public.xm_submit_sales(shop, public.business_date(),
+        jsonb_build_array(jsonb_build_object('product_id', lotion, 'units', 5)),
+        fresh_photo('reports', 'xmf-s2.jpg'), now());
+      perform assert(exists (select 1 from public.xm_sales where user_id = dayo),
+        'xm features: back on, staff sales are taken again');
+      perform act_as(boss);
+      perform assert(public.xm_expiry_scan() >= 1, 'xm features: back on, the expiry check runs again');
+      perform assert(exists (select 1 from public.xm_expiry_alerts where outlet_id = shop),
+        'xm features: back on, expiry alerts resume from the dates kept');
+      g := public.xm_grade(dayo, d2);
+      perform assert(g->'parts' = '{"sales": true, "accuracy": true, "expiry": true}'::jsonb,
+        'xm features: back on, grades weigh every part again');
+      perform public.xm_log_supply(shop, lotion, 10, 'L2', null, public.business_date(), null);
+      perform assert(exists (select 1 from public.xm_supplies where outlet_id = shop),
+        'xm features: back on, supplies are logged again');
+      -- Changing other settings keeps the restart date.
+      update public.xm_settings set tolerance_pct = tolerance_pct;
+      perform assert((select reconcile_from = public.business_date() from public.xm_settings),
+        'xm features: other setting changes leave the restart date alone');
+    end;
+
   end;
 
   raise notice 'ALL RULES PASSED';
