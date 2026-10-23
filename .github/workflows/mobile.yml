@@ -155,6 +155,17 @@ jobs:
         working-directory: mobile
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The whole history, to number TestFlight builds like the APK.
+          fetch-depth: 0
+
+      - name: Version
+        working-directory: .
+        run: |
+          native=$(git rev-list --count HEAD -- mobile .github/workflows/mobile.yml)
+          code=$((100 + native))
+          echo "XTEND_VERSION_CODE=$code" >> "$GITHUB_ENV"
+          echo "XTEND_VERSION_NAME=1.0.$code" >> "$GITHUB_ENV"
 
       - uses: actions/setup-node@v4
         with:
@@ -196,3 +207,71 @@ jobs:
           name: xtend-ios-simulator-${{ github.run_number }}
           path: ${{ runner.temp }}/xtend-ios-simulator.zip
           retention-days: 30
+
+      # TestFlight: on the production branch, when the App Store Connect API
+      # key is set (mobile/README.md, "iPhone app on TestFlight"), sign with
+      # Xcode's automatic (cloud) signing and upload the build. No Mac needed.
+      - name: Check the Apple secrets
+        id: apple
+        env:
+          APPSTORE_API_KEY_P8: ${{ secrets.APPSTORE_API_KEY_P8 }}
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ "${{ github.ref_name }}" != "${{ github.event.repository.default_branch }}" ]; then
+            echo "Not the production branch: no TestFlight upload."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          elif [ -z "$APPSTORE_API_KEY_P8" ] || [ -z "$APPSTORE_KEY_ID" ] || [ -z "$APPSTORE_ISSUER_ID" ] || [ -z "$APPLE_TEAM_ID" ]; then
+            echo "::notice::Apple secrets not set, so no TestFlight upload (mobile/README.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Archive and upload to TestFlight
+        if: steps.apple.outputs.ready == 'true'
+        working-directory: mobile/ios/App
+        env:
+          APPSTORE_API_KEY_P8: ${{ secrets.APPSTORE_API_KEY_P8 }}
+          APPSTORE_KEY_ID: ${{ secrets.APPSTORE_KEY_ID }}
+          APPSTORE_ISSUER_ID: ${{ secrets.APPSTORE_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          key="$RUNNER_TEMP/AuthKey_$APPSTORE_KEY_ID.p8"
+          printf '%s\n' "$APPSTORE_API_KEY_P8" > "$key"
+          auth=(-allowProvisioningUpdates
+                -authenticationKeyPath "$key"
+                -authenticationKeyID "$APPSTORE_KEY_ID"
+                -authenticationKeyIssuerID "$APPSTORE_ISSUER_ID")
+          xcodebuild \
+            -project App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Xtend.xcarchive" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            CURRENT_PROJECT_VERSION="$XTEND_VERSION_CODE" \
+            MARKETING_VERSION="$XTEND_VERSION_NAME" \
+            "${auth[@]}" \
+            archive
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Xtend.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/ios-export" \
+            "${auth[@]}"
+          rm -f "$key"
+          echo "::notice::Xtend for iPhone $XTEND_VERSION_NAME (build $XTEND_VERSION_CODE) uploaded to TestFlight. It appears in App Store Connect after Apple processes it (usually 5 to 30 minutes)."

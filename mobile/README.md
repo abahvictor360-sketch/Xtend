@@ -132,11 +132,29 @@ store.
 3. In Vercel, add `APNS_KEY` (the `.p8` file's contents), `APNS_KEY_ID`,
    `APNS_TEAM_ID`. (`APNS_BUNDLE_ID` defaults to `ng.xpelbeauty.xtend`; set
    `APNS_SANDBOX=true` only for builds run straight from Xcode.) Redeploy.
-4. On a Mac with Xcode: `cd mobile && npm install && npx cap sync ios &&
-   npx cap open ios`, choose your team under *Signing & Capabilities*, then
-   **Product → Archive** and upload to **TestFlight**. Staff install
-   TestFlight and the app from an invite; or publish it unlisted on the App
-   Store. (This can be automated on GitHub's Macs once the account exists.)
+4. **Build and upload from GitHub (no Mac needed).**
+   - In <https://appstoreconnect.apple.com>: **Apps → + → New App**,
+     platform iOS, name *Xtend*, bundle ID `ng.xpelbeauty.xtend` (register
+     it first under *Certificates, IDs & Profiles → Identifiers* with the
+     **Push Notifications** capability if it is not offered), SKU `xtend`.
+   - **Users and Access → Integrations → App Store Connect API → +**: name
+     it *GitHub*, access **App Manager**, download the `.p8` key (only
+     once), note its **Key ID** and the **Issuer ID** shown above the list.
+   - In GitHub, **Settings → Secrets and variables → Actions**, add four
+     repository secrets: `APPSTORE_API_KEY_P8` (the whole `.p8` file),
+     `APPSTORE_KEY_ID`, `APPSTORE_ISSUER_ID`, `APPLE_TEAM_ID`.
+   - From then on every build of the production branch archives the app
+     with Xcode's automatic signing and uploads it to **TestFlight**
+     (version `1.0.<code>`, build `<code>`, the same numbers as the APK).
+     It appears in App Store Connect after Apple processes it (5–30 minutes).
+     Run it any time with **Actions → Mobile apps → Run workflow**.
+   - In **TestFlight**, add an *External testing* group, add the build, turn
+     on the **public link**, and put that link in Vercel as `IOS_APP_URL`
+     (and the newest build number as `IOS_LATEST_BUILD`), then redeploy.
+     The first external build goes through a short Beta App Review.
+   - On a Mac you can still do it by hand: `cd mobile && npm install && npx
+     cap sync ios && npx cap open ios`, choose your team under *Signing &
+     Capabilities*, then **Product → Archive** and upload.
 
 Apple reviews background location closely; the permission text explains
 it is used during a shift to confirm the person is at their store.
