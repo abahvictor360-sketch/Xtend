@@ -1,28 +1,50 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { SELFIE_RETENTION_HOURS, SELFIE_SWEEP_EVERY_MINUTES } from '@/lib/retention'
+import { notifyUsers } from '@/lib/notify'
+import { SELFIE_RETENTION_HOURS, groupRetentionNotices, type RetentionDue } from '@/lib/retention'
+
+/**
+ * The nightly clean-up (0067). Nothing goes before it is 14 days old, and
+ * nothing the database did not announce at least a day before: every
+ * listing below stops at the previous night's announcement. Reports, and
+ * the photos and documents on a report, are never listed.
+ *
+ * The objects go through the Storage API rather than a SQL DELETE:
+ * Supabase guards storage.objects with a trigger that rejects direct
+ * deletes. Needs the service-role client; nothing here is callable by a
+ * user.
+ */
 
 export interface SweepResult {
-  /** False when the throttle said it was not due yet. */
-  ran: boolean
   photos_deleted: number
   records_cleared: number
   failed: number
 }
 
-const IDLE: SweepResult = { ran: false, photos_deleted: 0, records_cleared: 0, failed: 0 }
+async function removeInBatches(admin: SupabaseClient, bucket: string, paths: string[], what: string) {
+  let deleted = 0
+  let failed = 0
+  const done: string[] = []
+  // The Storage API takes a bounded list.
+  for (let i = 0; i < paths.length; i += 100) {
+    const batch = paths.slice(i, i + 100)
+    const { data: removed, error } = await admin.storage.from(bucket).remove(batch)
+    if (error) {
+      failed += batch.length
+      console.error(`${what} clean-up failed for a batch`, error.message)
+      continue
+    }
+    deleted += removed?.length ?? 0
+    done.push(...batch)
+  }
+  return { deleted, failed, done }
+}
 
 /**
- * Deletes every clock and store-visit photo older than the retention
- * window, then clears the paths that pointed at them.
- *
- * The objects go through the Storage API rather than a SQL DELETE: Supabase
- * guards storage.objects with a trigger that rejects direct deletes. The
- * order matters — remove the files first, forget the paths second, so a
- * failure leaves something to retry rather than a row that has forgotten
- * an image still sitting in the bucket.
- *
- * Needs the service-role client; nothing here is callable by a user.
+ * Deletes clock-in and store-visit photos past the rule, then forgets
+ * exactly the paths whose batch went through, so a failure leaves
+ * something to retry rather than a row that has forgotten an image still
+ * in the bucket. The time, place and distance are kept.
  */
 export async function purgeExpiredSelfies(
   admin: SupabaseClient,
@@ -32,62 +54,15 @@ export async function purgeExpiredSelfies(
   if (error) throw new Error(error.message)
 
   const paths = ((data ?? []) as { path: string }[]).map((row) => row.path).filter(Boolean)
+  const { deleted, failed, done } = await removeInBatches(admin, 'selfies', paths, 'selfie')
 
-  let deleted = 0
-  let failed = 0
-
-  // The Storage API takes a bounded list, and a whole day of a large team
-  // is more than one call should carry.
-  for (let i = 0; i < paths.length; i += 100) {
-    const batch = paths.slice(i, i + 100)
-    const { data: removed, error: removeError } = await admin.storage
-      .from('selfies')
-      .remove(batch)
-    if (removeError) {
-      failed += batch.length
-      console.error('selfie purge failed for a batch', removeError.message)
-      continue
-    }
-    deleted += removed?.length ?? 0
-  }
-
-  // Only forget the paths once nothing is left to delete. A partial failure
-  // keeps them, and the next sweep picks the same rows up again.
   let cleared = 0
-  if (failed === 0) {
-    const { data: rows, error: forgetError } = await admin.rpc('forget_expired_selfies', {
-      p_hours: hours,
-    })
+  if (done.length) {
+    const { data: rows, error: forgetError } = await admin.rpc('forget_selfie_paths', { p_paths: done })
     if (forgetError) throw new Error(forgetError.message)
     cleared = (rows as number) ?? 0
   }
-
-  return { ran: true, photos_deleted: deleted, records_cleared: cleared, failed }
-}
-
-/**
- * The same sweep, but only if it has not run recently. Safe to call from an
- * ordinary request: the database decides whether this caller does the work,
- * and every other caller returns immediately.
- */
-export async function sweepExpiredSelfies(
-  admin: SupabaseClient,
-  minutes = SELFIE_SWEEP_EVERY_MINUTES,
-): Promise<SweepResult> {
-  const { data: due, error } = await admin.rpc('claim_selfie_sweep', { p_min_minutes: minutes })
-  if (error) throw new Error(error.message)
-  if (due !== true) return IDLE
-
-  const result = await purgeExpiredSelfies(admin)
-  await admin.rpc('record_selfie_sweep', {
-    p_result: {
-      photos_deleted: result.photos_deleted,
-      records_cleared: result.records_cleared,
-      failed: result.failed,
-      at: new Date().toISOString(),
-    },
-  })
-  return result
+  return { photos_deleted: deleted, records_cleared: cleared, failed }
 }
 
 export interface OrphanSweepResult {
@@ -96,28 +71,66 @@ export interface OrphanSweepResult {
 }
 
 /**
- * Deletes report documents (0064) that are more than 24 hours old and on
- * no report: uploads whose report never arrived or was never saved, and
- * anything else left behind (0065). The database lists them
- * (report_file_orphans, service role only); the Storage API deletes them,
- * never a SQL DELETE. A file the job misses is picked up the next night.
+ * Deletes report documents (0064) on no report once the rule allows:
+ * uploads whose report never arrived or was never saved (0065, 0067).
+ * A file the job misses is picked up the next night.
  */
 export async function purgeOrphanReportFiles(admin: SupabaseClient): Promise<OrphanSweepResult> {
-  const { data, error } = await admin.rpc('report_file_orphans', { p_hours: 24, p_limit: 1000 })
+  const { data, error } = await admin.rpc('report_file_orphans', { p_hours: SELFIE_RETENTION_HOURS, p_limit: 1000 })
   if (error) throw new Error(error.message)
-
   const paths = ((data ?? []) as { path: string }[]).map((row) => row.path).filter(Boolean)
-  let deleted = 0
-  let failed = 0
-  for (let i = 0; i < paths.length; i += 100) {
-    const batch = paths.slice(i, i + 100)
-    const { data: removed, error: removeError } = await admin.storage.from('report-files').remove(batch)
-    if (removeError) {
-      failed += batch.length
-      console.error('report file clean-up failed for a batch', removeError.message)
-      continue
-    }
-    deleted += removed?.length ?? 0
-  }
+  const { deleted, failed } = await removeInBatches(admin, 'report-files', paths, 'report file')
   return { files_deleted: deleted, failed }
+}
+
+/**
+ * Deletes report photos on no report once the rule allows (0067): uploads
+ * whose report never arrived, and the copies older app versions uploaded
+ * again on every retry. Only report photo names are ever listed; the
+ * count, store and place photos sharing the bucket are not.
+ */
+export async function purgeOrphanReportPhotos(admin: SupabaseClient): Promise<OrphanSweepResult> {
+  const { data, error } = await admin.rpc('report_photo_orphans', { p_hours: SELFIE_RETENTION_HOURS, p_limit: 1000 })
+  if (error) throw new Error(error.message)
+  const paths = ((data ?? []) as { path: string }[]).map((row) => row.path).filter(Boolean)
+  const { deleted, failed } = await removeInBatches(admin, 'reports', paths, 'report photo')
+  return { files_deleted: deleted, failed }
+}
+
+export interface NoticeResult {
+  /** Admins and supervisors told tonight. */
+  notified: number
+  /** Everything older than this goes on the next night. */
+  through: string | null
+}
+
+/**
+ * Announces what goes on the next night and tells every admin all of it
+ * and each supervisor their own team's, at most once a day each. Staff
+ * are never told. Run after tonight's deletions, so it speaks of what is
+ * left.
+ */
+export async function sendRetentionNotices(admin: SupabaseClient): Promise<NoticeResult> {
+  const { data: through, error } = await admin.rpc('retention_announce')
+  if (error) throw new Error(error.message)
+  if (!through) return { notified: 0, through: null }
+
+  const { data: due, error: dueError } = await admin.rpc('retention_notice_due', { p_through: through })
+  if (dueError) throw new Error(dueError.message)
+
+  let notified = 0
+  for (const group of groupRetentionNotices((due ?? []) as RetentionDue[], through as string)) {
+    await notifyUsers(group.userIds, {
+      ...group.message,
+      detail: { kind: 'retention_notice', system: true, through },
+    })
+    notified += group.userIds.length
+  }
+  return { notified, through: through as string }
+}
+
+/** Keeps what was deleted, and audits it (retention.purge) when anything was. */
+export async function recordRetentionPurge(admin: SupabaseClient, result: Record<string, unknown>) {
+  const { error } = await admin.rpc('record_retention_purge', { p_result: result })
+  if (error) console.error('retention record failed', error.message)
 }

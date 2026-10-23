@@ -169,7 +169,7 @@ export function VisitLine({ visit, ranged, flags, selfie }: { visit: VisitRow; r
               <img src={selfie} alt={`Check-in photo of ${visit.staff_name}`} className="h-24 w-24 rounded-xl object-cover ring-1 ring-border" />
             </a>
           ) : (
-            <p className="text-muted-foreground">{visit.selfie_path ? 'Photo deleted after 24 hours' : 'No photo'}</p>
+            <p className="text-muted-foreground">{visit.selfie_path ? 'Photo deleted after 14 days' : 'No photo'}</p>
           )}
         </div>
         {flags.length > 0 && (

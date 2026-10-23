@@ -792,20 +792,47 @@ are the friendly first check on the phone.
 
 Exports: `REPORT_FILE_BUCKET`, `MAX_REPORT_FILES`, `MAX_REPORT_FILE_BYTES`, `REPORT_FILE_TYPES`, `REPORT_FILE_ACCEPT`, `reportFileType`, `reportFileLabel`, `reportFileExt`, `fileSizeLabel`, `reportFileLine`, `PickedFile`, `checkReportFiles`, `reportFilePath`, `downloadName`, `countSheetStatus`
 
+## `src/lib/report-photo-queue.ts`
+
+Report photos in the phone's offline outbox (0067), the same way report
+documents work (0065, report-file-queue.ts): each photo keeps one id from
+the moment it is taken or picked, so a retry finds the copy it already
+uploaded instead of sending it again under a new name.
+
+Pure on purpose (no Supabase, no browser APIs), so
+scripts/check-report-photos.ts can test it.
+
+Exports: `REPORT_PHOTO_BUCKET`, `QueuedReportPhoto`, `QueuedPhotoEntry`, `reportPhotoPath`, `isReportPhotoName`, `queuedPhotos`, `photoNeedsUpload`, `uploadQueuedPhotos`
+
 ## `src/lib/retention-server.ts`
 
-False when the throttle said it was not due yet.
+The nightly clean-up (0067). Nothing goes before it is 14 days old, and
+nothing the database did not announce at least a day before: every
+listing below stops at the previous night's announcement. Reports, and
+the photos and documents on a report, are never listed.
 
-Exports: `SweepResult`, `purgeExpiredSelfies`, `sweepExpiredSelfies`, `OrphanSweepResult`, `purgeOrphanReportFiles`
+The objects go through the Storage API rather than a SQL DELETE:
+Supabase guards storage.objects with a trigger that rejects direct
+deletes. Needs the service-role client; nothing here is callable by a
+user.
+
+Exports: `SweepResult`, `purgeExpiredSelfies`, `OrphanSweepResult`, `purgeOrphanReportFiles`, `purgeOrphanReportPhotos`, `NoticeResult`, `sendRetentionNotices`, `recordRetentionPurge`
 
 ## `src/lib/retention.ts`
 
-How long a clock-in or clock-out photograph is kept. The selfie proves
-who was at the door at the time; once the day has been checked it is a
-face on file and nothing more, so it is deleted. Everything else about
-the event — time, place, distance, status — is kept permanently.
+How long files are kept before the nightly job deletes them (0067), and
+what admins and supervisors are told the day before.
 
-Exports: `SELFIE_RETENTION_HOURS`, `SELFIE_SWEEP_EVERY_MINUTES`, `SELFIE_RETENTION_NOTE`
+One rule: nothing is deleted automatically before it is 14 days old
+(the database's retention_days(), which refuses anything shorter), and
+nothing before the office was told the day before. What goes:
+clock-in and store-visit photos (the time, place and distance stay),
+and report photos and documents that are on no report. Reports, and
+the photos and documents on a report, are never deleted.
+
+Pure on purpose (no Supabase), so scripts/check-retention.ts can test it.
+
+Exports: `RETENTION_DAYS`, `SELFIE_RETENTION_HOURS`, `SELFIE_RETENTION_NOTE`, `RetentionDue`, `RetentionMessage`, `retentionDateLabel`, `retentionMessage`, `groupRetentionNotices`
 
 ## `src/lib/schedule-server.ts`
 

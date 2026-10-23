@@ -5,7 +5,6 @@ import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/
 import { notifyWatchers } from '@/lib/notify'
 import { resolvePlace } from '@/lib/geocode'
 import { HEARTBEAT_GEOFENCE_M } from '@/lib/geo'
-import { sweepExpiredSelfies } from '@/lib/retention-server'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
 
 const schema = z.object({
@@ -69,18 +68,6 @@ export async function POST(request: Request) {
           detail: { kind: 'left_geofence', alert_id: raised[0].id, place: place.label },
         })
       }
-    }
-
-    // Photos expire 24 hours after capture, and a nightly cron alone would
-    // let some linger most of a second day. The heartbeat runs all through
-    // the working day, so it drives the sweep too. The database throttles
-    // it to once every few minutes and returns at once otherwise, so this
-    // is awaited rather than left dangling in a function about to end.
-    try {
-      await sweepExpiredSelfies(createAdminSupabase())
-    } catch (sweepError) {
-      // A ping is never worth failing over a housekeeping job.
-      console.error('selfie sweep failed', sweepError)
     }
 
     // Any flag this raised goes to the person's admins and supervisor now.

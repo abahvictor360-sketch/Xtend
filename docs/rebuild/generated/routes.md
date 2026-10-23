@@ -1282,11 +1282,13 @@ server that only calls that one still gets it; or run it on its own:
 - File: `src/app/api/cron/purge-selfies/route.ts`
 - Who: cron (Bearer CRON_SECRET)
 
-Nightly backstop for the 24-hour photo rule. Clock and store-visit
-selfies are normally swept by ordinary traffic within minutes of
-expiring; this catches the ones that expired overnight, when nobody was
-using the app. It also deletes report documents still on no report a
-day after they were uploaded (0065).
+The nightly clean-up (0067). Clock-in and store-visit photos, and report
+photos and documents on no report, are deleted 14 days after they were
+taken or uploaded, and only after admins and supervisors were told the
+night before: the database lists nothing that was not announced.
+Reports, and the photos and documents on a report, are never deleted.
+After deleting, the job announces what goes next night and notifies the
+office. Staff are never told.
 
 Vercel Cron sends `Authorization: Bearer $CRON_SECRET`.
 
@@ -1635,8 +1637,8 @@ const schema = z.object({
 })
 ```
 
-- Database functions: `business_date`, `add_report_file`
-- Tables and views: `reports`, `report_photos`
+- Database functions: `business_date`, `add_report_photo`, `add_report_file`
+- Tables and views: `reports`
 
 ## `POST /api/signed-url`
 

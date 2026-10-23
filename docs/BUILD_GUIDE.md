@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-23, after test mode and resetting the test run (migration 0066), report documents that survive a bad connection (0065) and the mobile document controls._
+_Last updated: 2026-10-23, after report photos that survive a bad connection and the 14-day rule for deleting files, announced the day before (migration 0067), test mode and resetting the test run (0066) and report documents that survive a bad connection (0065)._
 
 ---
 
@@ -219,7 +219,7 @@ the code lives.
 
 - Exact premises name from Google Places, with a free fallback (0008, 0015).
 - Live map of who is where (0009); store visits for marketers (0010, 0014,
-  0016); allocating stores (0011); clock photos deleted after 24 hours (0012).
+  0016); allocating stores (0011); clock photos deleted after 24 hours (0012; 14 days since 0067).
 - Supervisors and their teams; reporting lines kept consistent (0017, 0018).
 - Migrations 0009–0018.
 
@@ -384,7 +384,7 @@ the code lives.
   finds its copies (`src/lib/report-file-queue.ts`). The nightly
   `/api/cron/purge-selfies` deletes `report-files` objects older than 24
   hours that no report points at (`report_file_orphans`, service role only;
-  Storage API; `purgeOrphanReportFiles`).
+  Storage API; `purgeOrphanReportFiles`); 14 days and announced since 0067.
 
 - **Test mode and reset** (0066, admins only, **Setup → System**,
   `/admin/system`): `system_settings` holds `test_mode` (on after the
@@ -402,6 +402,36 @@ the code lives.
   `/reset/files`, `/go-live`; `src/lib/system-reset*.ts`,
   `src/components/admin/system-reset.tsx`). The admin dashboard shows a
   "Test mode: records can be reset" strip to admins until they go live.
+- **Report photos offline** (0067): the 0065 fix, for photos. Each photo
+  gets an id when it is taken or picked and is uploaded to
+  `reports/<uid>/report-photo-<id>.jpg` (same bucket and storage rules); the
+  queued report keeps its photos as `{ blob, client_id, uploaded_path }`, a
+  retry skips those already up and treats "already exists" as done, and a job
+  queued before 0067 (bare pictures) gets its ids on its first try
+  (`src/lib/report-photo-queue.ts`). `POST /api/reports` now puts each photo on
+  the report through `add_report_photo` (own folder, uploaded within 24 hours,
+  an image, on no other report, today's report only, five at most), which
+  answers a photo already on today's report with the same row, so a re-post
+  after a lost answer adds nothing and is never refused by the limit.
+- **Files kept 14 days, announced the day before** (0067): nothing is deleted
+  automatically before it is 14 days old (`retention_days()`, the floor in
+  every listing whatever is asked; `RETENTION_DAYS` in `src/lib/retention.ts`)
+  and nothing that was not announced the night before. Reports, and the
+  photos and documents on a report, are never deleted automatically. The
+  nightly `/api/cron/purge-selfies` deletes clock-in and store-visit photos
+  (was 24 hours; the ping-driven sweep is gone), report documents on no
+  report (`report_file_orphans`, was 24 hours) and report photos on no report
+  (`report_photo_orphans`: `report-photo-<id>.jpg` and the plain
+  `<uid>/<uuid>.jpg` names older versions used, never another photo in the
+  bucket); then it announces what goes next night (`retention_announce`:
+  older than 13 days; listings only reach back to an announcement at least
+  20 hours old) and notifies (`retention_notice_due`, `notifyUsers`, kind
+  `retention_notice`, `system: true`) every admin of all of it and each
+  supervisor of their own team's, linking to Attendance or Marketer reports;
+  one notice a person a day; staff are never told. What went is kept on
+  `job_runs` (`retention_purge`, the Overview footnote) and audited
+  `retention.purge` (`record_retention_purge`). Selfie rows forget only the
+  paths actually removed (`forget_selfie_paths`).
 
 ## 6. The database: every migration
 
@@ -420,7 +450,7 @@ Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
 | 0009 | Live locations |
 | 0010 | Store visits |
 | 0011 | Store allocation |
-| 0012 | Clock photos kept 24 hours |
+| 0012 | Clock photos kept 24 hours (14 days, announced, since 0067) |
 | 0013 | Trigger hardening |
 | 0014 | Check in without naming the store |
 | 0015 | The map names the store |
@@ -474,6 +504,7 @@ Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
 | 0063 | X Metrics feature switches on `xm_settings` (`enabled`, `expiry_enabled`, `supplies_enabled`, `grading_enabled`, `sales_enabled`, all on; `reconcile_from`), `xm_feature_on`, admin-only `xm_set_features`, guards refusing switched-off writes, and the sweep, reconciliation, expiry and grading skipping what is off |
 | 0064 | Count sheets sent any time (`store_count_sheets.count_was_due`, `submit_count_sheet` without a due count); documents on the daily report: private `report-files` bucket and its storage rules, `report_files` with `add_report_file` / `remove_report_file`, the five-file trigger, `report_file_detail` |
 | 0065 | Report documents offline: `add_report_file` returns the existing row for a document already on today's report and accepts uploads up to 24 hours old; `remove_report_file` refusals carry hints (`report_file_gone`, `report_locked`); `report_file_orphans()` (service role only) lists `report-files` objects over 24 hours old on no report |
+| 0067 | Report photos offline and the 14-day rule: `add_report_photo(path)` (idempotent by path on today's report, own folder, uploaded within 24 h, image, on no other report; the 5-photo trigger still applies) and an index on `report_photos.storage_path`; `retention_days()` (14), `retention_delete_before`, `retention_cutoff`, `retention_announce` (job_runs `retention_notice`), `report_photo_orphans(hours, limit)` / `report_photo_orphans_before`, `report_file_orphans` (now 14 days and announced) / `report_file_orphans_before`, `expired_selfie_paths` and `forget_expired_selfies` on the same rule, `forget_selfie_paths(paths)`, `supervisor_covers`, `retention_notice_due(through)`, `record_retention_purge(result)` (job_runs `retention_purge`, audit `retention.purge`), `selfie_retention_status` (14 days); all service role only except `add_report_photo` and `retention_days` |
 | 0066 | Test mode and reset: `system_settings` (one row, `test_mode` on, one-way off by trigger, admins read), `system_reset_files` (files a reset queued), `reset_category_keys/tables`, `reset_resolve_categories`, `reset_test_data(actor, categories)` (service role), `system_go_live(actor)`, `reset_files_next/done/pending`. WIPE: attendance, location_pings, location_alerts, integrity_flags, excuse_checks, phone_checks, photo_checks, device_beacons, clock_out_reminders, tracking_tokens, store_visits, known_places, place_naming_due, reports, report_photos, report_files, store_counts, count_requests, count_request_targets, store_count_sheets, all xm_ record tables (counts, count lines, sales, sale lines, supplies, supply imports, reconciliations, monthly grades, expiry alerts, targets, policy reads), leave_requests, schedule_overrides, work_patterns, support_threads, support_messages, notifications, notification_deliveries, scheduled_notifications, user_activity, assistant_conversations, staff_outlets, outlets, xm_stores, audit_log. Admins kept: profiles, push_subscriptions, app_installs, staff_temp_passwords. KEEP: products, staff_roles, role_store_counts, count_sheet_templates, notification_templates, support_quick_replies, xm_settings, xm_settings_history, xm_policy_versions, app_releases, job_runs, system_settings, system_reset_files. |
 
 ## 7. Environment variables
@@ -507,7 +538,7 @@ All need `Authorization: Bearer $CRON_SECRET`.
 
 | Path | When | Does |
 |---|---|---|
-| `/api/cron/purge-selfies` | 02:20 UTC daily | Deletes clock photos older than 24 hours; activity log rows older than 180 days (0062); report documents on no report more than 24 hours after upload, through the Storage API, logging how many (0065) |
+| `/api/cron/purge-selfies` | 02:20 UTC daily | The only place files are deleted automatically (0067). Deletes, through the Storage API in batches of 100, what was announced the night before and is at least 14 days old: clock-in and store-visit photos, report photos on no report, report documents on no report. Logs and returns the counts (`photos_deleted`, `report_photos_deleted` / `report_photos_failed`, `report_files_deleted` / `report_files_failed`, `failed`), keeps them on `job_runs` and audits `retention.purge`; then announces the next night's deletions and notifies admins (all) and supervisors (their team) once (`notices_sent`, `next_deletion_before`). Also: device reports and phone checks older than 60 days, activity log rows older than 180 days (0062), yesterday's open visits closed as abandoned. Reports and anything on a report are never deleted |
 | `/api/cron/absence-sweep` | 08:30 UTC daily | Tells the office who has not clocked in (skips anyone on a day off or on leave, 0059) |
 | `/api/cron/alerts` | Every 5 minutes | Sends unsent integrity flags, scheduled notifications, clock-out reminders (at shift end and an hour later, 0061), and hourly the X Metrics checks |
 | `/api/cron/metrics` | Optional, hourly | X Metrics checks on their own schedule |
@@ -614,7 +645,7 @@ for s in check-allocate check-assistant-actions check-attendance check-audit \
          check-movement check-push-endpoints check-supply-import \
          check-support-notifications check-updates check-visits-alerts check-xm-exports \
          check-schedules-leave check-marketer-reports check-clock-out-reminder check-activity \
-         check-xm-features check-report-files check-system-reset; do
+         check-xm-features check-report-files check-system-reset check-report-photos check-retention; do
   npx tsx --tsconfig tsconfig.scripts.json scripts/$s.ts | tail -1
 done
 ```
@@ -699,6 +730,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-23 | **Report photos survive a bad connection, and files are kept 14 days**: a report sent again does not upload its photos again (an id per photo when taken or picked, `<uid>/report-photo-<id>.jpg`, progress kept in the outbox, "already exists" counts as done, old queued jobs get ids on their first try) and `add_report_photo` answers a repeat with the same row (no duplicates, the five-photo limit still holds). Nothing is deleted automatically before 14 days (was 24 hours for clock photos and unused report documents) or without the day-before notice to admins (all) and supervisors (their team); reports and anything on them are never deleted; unused report photos are now cleaned up too; each night's deletions audited `retention.purge`. The ping-driven selfie sweep is removed. New `src/lib/report-photo-queue.ts`, `scripts/check-report-photos.ts`, `scripts/check-retention.ts`; admin and supervisor guides updated | 0067 |
 | 2026-10-23 | **Test mode and reset**: Xtend starts in test mode (admins see "Test mode: records can be reset" across the dashboard). On the new admin-only **System** page (Setup) an admin ticks what to reset — 14 areas or everything — reviews what goes and what stays, types RESET and their password, and the database clears it in one transaction (dependencies included: staff accounts take their records, stores take their visits, counts and allocations), removes non-admin sign-ins and stored files, and keeps one audit row. **We are live** turns test mode off for good. New `POST /api/admin/system/reset`, `/reset/files`, `/go-live`; check script `check-system-reset` | 0066 |
 | 2026-10-23 | **Report documents survive a bad connection**: removing a saved document works offline (queued, shows "Removing…", sent on signal; one that arrives after midnight is dropped and the report page says why); a report sent again does not upload its documents again (an id per picked file, progress kept in the outbox, "already exists" counts as done, `add_report_file` answers a repeat with the same row and takes uploads up to 24 hours old); the nightly purge job deletes report files left on no report after 24 hours. New `src/lib/report-file-queue.ts`; `check-report-files` extended | 0065 |
 | 2026-10-23 | Mobile UI: full office attachment filenames, 44px activity/export controls, descriptive download labels; staff attachment controls stay disabled through removal and refresh with accessible status/errors. Verified sample layouts at 320px and 390px | — |
@@ -774,9 +806,15 @@ Newest first. Dates are when the work landed on the main branch.
   message and stays unsent. Expiry dates already known for a batch are
   carried from count to count while Expiry is off (the box is hidden), so
   they are there when it comes back on.
-- **Report photos** (not documents) are still uploaded again under new
-  names when a queued report is retried; the first copies stay in the
-  `reports` bucket unused.
+- **Retention** (0067): the first night after the migration only announces;
+  nothing is deleted until the next night, and clock photos 24 hours to 14
+  days old that 0012 would have deleted are now kept until they are 14 days
+  old. Report photo copies left over from before 0067 are cleaned up only if
+  they have the plain `<uid>/<uuid>.jpg` name those versions used. If the
+  nightly job misses a night, nothing is deleted that night and the
+  following night only deletes what was announced at least 20 hours before.
+  Unused report photos and documents are on no report, so the notice's link
+  cannot open them; the notice gives only their count.
 - **Test mode** (0066): it is ON after the migration, including on a
   project that is already in real use: go live (System → We are live) once
   the test run is reset. The reset runs as one database transaction; on a

@@ -775,14 +775,15 @@ What each job does when run:
 |---|---|
 | `clock` | Upload `selfies/<uid>/<uuid>.jpg` and `<uuid>_thumb.jpg` (`contentType: image/jpeg`, `upsert: true`) → `checkPhoto('selfies', path, thumb)` → `POST /api/attendance` with all fields plus `device_info.sent_at = now` |
 | `ping` | `POST /api/pings/offline { sent_at, points: [{ lat, lng, accuracy_m, captured_at }] }` |
-| `report` | Upload each photo `reports/<uid>/<uuid>.jpg`, then each document not yet sent to `report-files/<uid>/report-<client_id>.<ext>` (`contentType` = its type, `upsert: false`; a job from before 0065 gets its `client_id` on the first try; storage's "already exists" counts as sent; `uploaded_path` is saved on the queued record after each; `uploadQueuedFiles` in `src/lib/report-file-queue.ts`) → `POST /api/reports { body, sales_summary, stock_status, competitor_activity, issues, photo_paths, files: [{ path, name }] }` |
+| `report` | Upload each photo not yet sent to `reports/<uid>/report-photo-<client_id>.jpg` (0067: `image/jpeg`, `upsert: false`; the job keeps photos as `{ blob, client_id, uploaded_path }`, a job from before 0067 holds bare pictures and gets ids on its first try, saved on the record at once; "already exists" counts as sent; `uploaded_path` saved after each; `queuedPhotos` / `uploadQueuedPhotos` in `src/lib/report-photo-queue.ts`), then each document not yet sent to `report-files/<uid>/report-<client_id>.<ext>` (`contentType` = its type, `upsert: false`; a job from before 0065 gets its `client_id` on the first try; storage's "already exists" counts as sent; `uploaded_path` is saved on the queued record after each; `uploadQueuedFiles` in `src/lib/report-file-queue.ts`) → `POST /api/reports { body, sales_summary, stock_status, competitor_activity, issues, photo_paths, files: [{ path, name }] }` |
 | `report_file_remove` | `DELETE /api/report-files/<file_id>`; `removalOutcome`: 2xx or 404 `gone` → done; 409 `locked` (or the old 400 text) → done, and when sent from the queue a notice is kept for the report page (`localStorage` `xtend.report-file-notices`, at most 10); 0/401/408/429/5xx → transient; other 4xx → done with a "could not be removed" notice. Run while the person watches, a refusal is thrown to the UI instead |
 | `xm_count` | Upload `reports/<uid>/xm-count-<uuid>.jpg` → `checkPhoto('reports', path)` → `POST /api/metrics/counts { outlet_id, lat, lng, accuracy_m, photo_path, captured_at, lines }` |
 | `xm_sales` | Optional photo `xm-sales-…` as above → `POST /api/metrics/sales { outlet_id, sale_date, photo_path, captured_at, lines }` |
 
 Storage buckets (all private, files reach the browser only as short-lived signed
-links): `selfies` (clock and visit selfies), `reports` (report photos, shelf and
-place photos, count sheets and the admin's blank sheet) and, since 0064,
+links): `selfies` (clock and visit selfies), `reports` (report photos at
+`<uid>/report-photo-<client_id>.jpg` since 0067, shelf and place photos, count
+sheets and the admin's blank sheet) and, since 0064,
 `report-files` (documents attached to the daily report, `<uid>/report-<client_id>.<ext>`;
 10 MB and the document allowlist set on the bucket as well; rules in
 `30-rules.md` §2.6). Uploads go straight from the phone to Supabase Storage, so
@@ -1406,7 +1407,7 @@ MIME `application/vnd.openxmlformats-officedocument.wordprocessingml.document`.
 
 | Export | `sheetName` | `fileBase` | Link column | Status col | Wrap | Widths xlsx / pdf |
 |---|---|---|---|---|---|---|
-| Attendance events (`export/data.ts`) | Attendance | `xtend-attendance` | last (selfie, signed URL 3600 s; text "deleted after 24h" when gone) | 8 | no | `[24,12,10,18,22,42,18,12,12,16]` / `[98,58,48,66,96,190,60,48,54,58]` |
+| Attendance events (`export/data.ts`) | Attendance | `xtend-attendance` | last (selfie, signed URL 3600 s; text "deleted after 14 days" when gone) | 8 | no | `[24,12,10,18,22,42,18,12,12,16]` / `[98,58,48,66,96,190,60,48,54,58]` |
 | Attendance days (`attendance-days.ts`) | Days | `xtend-attendance-days` | last, `linkText: 'Map'`, `noLinkText: ''` | — | yes | `[12,24,16,18,24,10,9,10,9,12,11,28,42,10]` / `[46,70,50,52,66,38,32,36,34,46,38,72,154,30]` |
 | Analytics | Analytics | `xtend-analytics-by-<person\|store\|team>` | — | — | — | `[28,13,10,10,11,8,10,14,10,13,13,16]` / `[150,60,54,54,58,44,54,72,54,62,62,70]` |
 | Store visits (`visits.ts`) | Store visits | `xtend-store-visits` | last | 8 | yes | `[20,11,26,14,22,12,16,12,12,14,12,16,34,34,26,15]` / `[62,42,78,38,62,36,44,30,34,40,34,40,80,80,54,40]` |
@@ -1420,7 +1421,7 @@ MIME `application/vnd.openxmlformats-officedocument.wordprocessingml.document`.
 | Ask Xtend reports (`assistant-report.ts`) | per kind | `xtend-<kind with _ → ->` | per kind | — | — | per kind |
 
 Integrity and audit exports exist too (`/api/admin/export/integrity`, `/audit`); they use the same renderer.
-Attendance subtitle text: `"<n> record(s). Times are Africa/Lagos. Clock photos are deleted 24 hours after capture; links to the ones still held expire an hour after this file was made."`
+Attendance subtitle text: `"<n> record(s). Times are Africa/Lagos. Clock photos are deleted 14 days after capture; links to the ones still held expire an hour after this file was made."`
 Attendance days filter line now ends "days off and leave are not absences" (no Sundays wording); its status words
 include "Day off" and "On leave".
 

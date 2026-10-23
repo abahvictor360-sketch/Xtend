@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { RETENTION_DAYS } from '@/lib/retention'
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { fetchCoverage, fetchVisits } from '@/lib/export/visits'
@@ -95,11 +96,15 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
   const inStore = to === today ? visits.filter((v) => !v.departed_at) : []
   const href = (over: Partial<VisitFilter>) => `?${visitQueryString({ ...filter, ...over })}`
 
-  // Clock photos are kept for 24 hours; only those can still be shown.
-  const recent = Date.now() - 26 * 3_600_000
+  // Clock photos are kept for 14 days (0067), and announced a night before
+  // they go; only those can still be shown.
+  const recent = Date.now() - (RETENTION_DAYS + 2) * 86_400_000
   const selfies =
     filter.view === 'visits'
-      ? await signSelfies(supabase, visits.filter((v) => Date.parse(v.arrived_at) > recent).map((v) => v.selfie_path))
+      ? await signSelfies(
+          supabase,
+          visits.filter((v) => v.selfie_path && Date.parse(v.arrived_at) > recent).map((v) => v.selfie_path),
+        )
       : new Map<string, string>()
 
   const byPerson = new Map<string, VisitRow[]>()

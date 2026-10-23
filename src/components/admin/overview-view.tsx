@@ -435,7 +435,7 @@ export function OverviewView({
 
       {photos && (
         <p className="text-xs text-muted-foreground">
-          Clock photos are deleted 24 hours after they are taken — {photos.photos_held} held
+          Clock photos are deleted 14 days after they are taken (admins and supervisors are told the day before) — {photos.photos_held} held
           right now
           {photos.overdue > 0 && `, ${photos.overdue} due to go on the next sweep`}
           {photos.last_run_at &&
