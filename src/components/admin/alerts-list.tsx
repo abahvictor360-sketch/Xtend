@@ -185,14 +185,14 @@ export function AlertsList({
                       </p>
                     )}
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold">
-                      <Link href={links.movement} className="text-brand hover:underline">
+                      <Link href={links.movement} className="inline-flex min-h-11 items-center text-brand hover:underline">
                         Movement that day
                       </Link>
-                      <Link href={links.excuse} className="text-brand hover:underline">
+                      <Link href={links.excuse} className="inline-flex min-h-11 items-center text-brand hover:underline">
                         Check an excuse
                       </Link>
                       {alert.staff_phone && (
-                        <a href={`tel:${alert.staff_phone}`} className="text-brand hover:underline">
+                        <a href={`tel:${alert.staff_phone}`} className="inline-flex min-h-11 items-center text-brand hover:underline">
                           Call {alert.staff_phone}
                         </a>
                       )}
@@ -216,6 +216,7 @@ export function AlertsList({
                     {selectable && (
                       <div className="flex w-full gap-2 pt-1 sm:max-w-md">
                         <Input
+                          aria-label={`Resolution note for ${alert.staff_name}`}
                           placeholder="Resolution note"
                           maxLength={1000}
                           value={notes[alert.id] ?? ''}
@@ -244,6 +245,7 @@ export function AlertsList({
           </p>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input
+              aria-label="Resolution note for selected alerts"
               placeholder="What was done, e.g. “Called them, they were at the bank for the store”"
               maxLength={1000}
               value={bulkNote}

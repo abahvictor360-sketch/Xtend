@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-23, after test mode and resetting the test run (migration 0066), report documents that survive a bad connection (0065) and the mobile document controls._
+_Last updated: 2026-10-23, after the priority-led dashboard redesign (no new migration)._
 
 ---
 
@@ -529,6 +529,12 @@ GitHub workflow stands down. The plain crontab equivalent:
 
 ## 9. The phone apps
 
+Home now leads with Your next step (clock in, open visit, report, on shift or complete).
+Clock controls remain above the detail tabs; My day groups progress and recent days.
+Office Overview leads with follow-up actions, four linked summary cards and attendance.
+Live locations and coverage expand below; alerts keep filters and notifications in disclosures.
+
+
 Admin and supervisor headers wrap at constrained desktop widths. Mobile dashboard
 navigation is a disclosure with normal links, closes on selection/outside press/Escape,
 and restores trigger focus on Escape. User account menus also dismiss outside and
@@ -699,6 +705,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-23 | Redesigned office overview around Start here, four linked metrics, attendance follow-up and expandable coverage; alerts use compact copy and expandable filters/notification settings; staff Home shows Your next step before clock controls, with progress/week under My day; normalise SQL line endings in the system reset check for Windows | — |
 | 2026-10-23 | **Test mode and reset**: Xtend starts in test mode (admins see "Test mode: records can be reset" across the dashboard). On the new admin-only **System** page (Setup) an admin ticks what to reset — 14 areas or everything — reviews what goes and what stays, types RESET and their password, and the database clears it in one transaction (dependencies included: staff accounts take their records, stores take their visits, counts and allocations), removes non-admin sign-ins and stored files, and keeps one audit row. **We are live** turns test mode off for good. New `POST /api/admin/system/reset`, `/reset/files`, `/go-live`; check script `check-system-reset` | 0066 |
 | 2026-10-23 | **Report documents survive a bad connection**: removing a saved document works offline (queued, shows "Removing…", sent on signal; one that arrives after midnight is dropped and the report page says why); a report sent again does not upload its documents again (an id per picked file, progress kept in the outbox, "already exists" counts as done, `add_report_file` answers a repeat with the same row and takes uploads up to 24 hours old); the nightly purge job deletes report files left on no report after 24 hours. New `src/lib/report-file-queue.ts`; `check-report-files` extended | 0065 |
 | 2026-10-23 | Mobile UI: full office attachment filenames, 44px activity/export controls, descriptive download labels; staff attachment controls stay disabled through removal and refresh with accessible status/errors. Verified sample layouts at 320px and 390px | — |

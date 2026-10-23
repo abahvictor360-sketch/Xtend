@@ -22,6 +22,11 @@ Conventions used below:
 
 ---
 
+
+### Dashboard layout revision — 23 October 2026
+
+This layout supersedes the previous overview arrangement described below. The frame has a 240px sidebar, max 1600px content area and keyboard skip link. Overview order: role label and greeting; Start here action (unavailable summary, open location alerts, missing clock-ins, or staff); four linked summary cards; weekly attendance beside open alerts; Attendance follow-up with 44px phone links; expandable Live locations & coverage; photo retention note. Missing summary values display a dash. No repeated gauges or decorative tip blocks. Alerts use a concise role-aware introduction, existing category links, expandable Filters & downloads (open when a filter is active), existing summaries and results, and collapsed Notification settings last. Filter/download controls have 44px targets; resolution inputs have accessible labels. All reads, resolution permissions and audit behaviour are unchanged.
+
 ## 1. The shell
 
 ### 1.1 Layout (`src/app/admin/layout.tsx`)

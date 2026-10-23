@@ -5,6 +5,7 @@ import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import { CalendarDays, CheckCircle2, ChevronRight, Clock3, FileText, LogIn, LogOut, MapPin, Palmtree, Store } from 'lucide-react'
+import { TodayFocus } from '@/components/field/today-focus'
 import { GreetingHeader } from '@/components/field/greeting-header'
 import { LocationGate } from '@/components/field/location-gate'
 import { useLocationGate } from '@/components/field/use-location-gate'
@@ -117,13 +118,7 @@ export function FieldHome({
 
       <ShiftTracker onShift={onShift} clockedOut={Boolean(day.closing)} />
 
-      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
-        {tabs.map((item) => (
-          <Chip key={item.id} active={tab === item.id} onClick={() => setTab(item.id)}>
-            {item.label}
-          </Chip>
-        ))}
-      </div>
+      <TodayFocus clockedIn={Boolean(day.opening)} clockedOut={Boolean(day.closing)} reportRequired={day.can_file_report} reportFiled={day.report_filed} offDay={todayKind !== 'working'} openVisit={Boolean(openVisit)} onVisit={() => { setTab('stores'); window.setTimeout(() => document.getElementById('stores')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50) }} />
 
       <ShiftPill
         state={day.closing ? 'done' : onShift ? 'on' : 'before'}
@@ -143,10 +138,6 @@ export function FieldHome({
       </div>
 
       {todayKind !== 'working' && !day.opening && <NotWorkingToday kind={todayKind} />}
-
-      <WeekRow today={day.date} calendar={calendar} />
-
-      <DayCard day={day} steps={steps} progress={progress} onShift={onShift} />
 
       {gate.status === 'ready' && (
         <div className="flex items-start gap-2 rounded-2xl bg-tint px-3 py-2.5 text-tint-foreground">
@@ -168,6 +159,14 @@ export function FieldHome({
         </div>
       )}
 
+      <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4">
+        {tabs.map((item) => (
+          <Chip key={item.id} active={tab === item.id} onClick={() => setTab(item.id)}>
+            {item.label}
+          </Chip>
+        ))}
+      </div>
+
       {tab === 'stores' && visitsStore && (
         <div id="stores" className="scroll-mt-4">
         <StoreVisits
@@ -181,10 +180,12 @@ export function FieldHome({
       {tab === 'day' && (
         <section className="space-y-3">
           <SectionHeader
-            title="Progress"
+            title="Today’s activity"
             action={<span className="text-xs font-semibold text-brand">{progress}% done</span>}
           />
 
+          <DayCard day={day} steps={steps} progress={progress} onShift={onShift} />
+          <WeekRow today={day.date} calendar={calendar} />
           <RingRow
             icon={<LogIn className="h-5 w-5" />}
             title={day.opening ? formatLagos(day.opening.at, false) : 'Clock in'}

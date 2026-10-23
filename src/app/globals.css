@@ -12,7 +12,7 @@
   :root {
     --background: 30 20% 97%;
     /* The dashboard's backdrop, behind its floating panels. */
-    --canvas: 30 12% 91%;
+    --canvas: 30 16% 96%;
     --foreground: 24 18% 14%;
 
     --card: 0 0% 100%;

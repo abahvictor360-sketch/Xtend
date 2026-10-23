@@ -331,6 +331,8 @@ to the avatar button. Links and sign-out have minimum 44px touch targets.
 
 ### 3.4 Home layout, top to bottom (`field-home.tsx`)
 
+**23 October layout revision:** Your next step (`today-focus.tsx`) follows the greeting/outbox/tracker. It explains off days, clock-in, open visits, pending reports, active shifts and completed days, with links to the existing task. Shift pill and clock controls follow. Detail tabs are below the clock/location block. DayCard and WeekRow now render inside My day before its activity rows, rather than above all tabs. The numbered component descriptions below still define behaviour, but this order supersedes their previous placement.
+
 0. (Layout) NamePlace card if due; (page) **CountDueBanner** if a count is
    open: orange card linking to `/field/count`, title "Stock count
    requested" or "Month-end stock count", sub "By <name> · due <long date>"

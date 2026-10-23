@@ -20,7 +20,7 @@ Everybody's activity in Xtend (migration 062). Admins only.
 
 The tabs look like the app's filter chips; they are links, so pages can be bookmarked.
 
-On screen: Nothing late or suspicious waiting to be reviewed.
+On screen: Review what happened, check the context, then follow up.
 
 ## `/admin/analytics` — Analytics — Xtend
 

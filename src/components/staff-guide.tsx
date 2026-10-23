@@ -108,6 +108,7 @@ export function StaffGuide() {
       </GuideSection>
 
       <GuideSection topic={T.clockIn} intro="Do this when you arrive at your store, once a day.">
+          <p>Home shows <Ui>Your next step</Ui> above the clock controls. Use <Ui>My day</Ui> below them to see your progress and recent days.</p>
         <Steps
           items={[
             <>Open Xtend while you are inside your store. If Home cannot load, check your connection and tap <Ui>Try again</Ui>.</>,

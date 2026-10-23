@@ -47,7 +47,7 @@ export function LiveAlertFeed({ initial }: { initial: AlertDetail[] }) {
         <CardTitle className="text-lg font-semibold">Open alerts</CardTitle>
         <Link
           href="/admin/alerts"
-          className="rounded-lg border border-border px-2.5 py-1 text-xs font-semibold hover:bg-tint"
+          className="inline-flex min-h-11 items-center rounded-lg border border-border px-2.5 py-1 text-xs font-semibold hover:bg-tint"
         >
           Review all
         </Link>
@@ -68,7 +68,7 @@ export function LiveAlertFeed({ initial }: { initial: AlertDetail[] }) {
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{alert.staff_name}</p>
-                  <p className="truncate text-[11px] text-muted-foreground">
+                  <p className="mt-1 text-xs text-muted-foreground">
                     {LABEL[alert.alert_type] ?? alert.alert_type}
                     {alert.distance_m !== null && ` · ${metres(alert.distance_m)}`}
                   </p>
