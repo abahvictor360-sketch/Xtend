@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-23, after test mode and resetting the test run (migration 0066), report documents that survive a bad connection (0065) and the mobile document controls._
+_Last updated: 2026-10-23, after automatic TestFlight uploads for the iPhone app._
 
 ---
 
@@ -94,7 +94,7 @@ These are deliberate. Breaking one is a bug, even if the code works.
 | Google Maps key (Places API (New), Geocoding API) | Naming the exact shop at clock-in (optional; falls back to OpenStreetMap) |
 | VAPID key pair | Web push notifications |
 | Firebase project | Android app notifications |
-| Apple Developer account (US$99/yr) and a Mac | iPhone app |
+| Apple Developer account (US$99/yr); a Mac only for building by hand | iPhone app |
 | Postgres 16 locally | Running the database tests |
 | Java 21 and Android SDK, or just GitHub Actions | Building the Android app |
 
@@ -566,8 +566,11 @@ in `mobile/` changes.
   same version, so the app's update prompt does not ask staff to reinstall.
 - **GitHub secrets:** `GOOGLE_SERVICES_JSON`, `ANDROID_KEYSTORE_BASE64`,
   `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
-- **iPhone:** needs the Apple steps in `mobile/README.md` (Xcode archive →
-  TestFlight), then `IOS_APP_URL` and `IOS_LATEST_BUILD` in Vercel.
+- **iPhone:** with the GitHub secrets `APPSTORE_API_KEY_P8`, `APPSTORE_KEY_ID`,
+  `APPSTORE_ISSUER_ID` and `APPLE_TEAM_ID` (an App Store Connect API key,
+  App Manager), every production build archives with automatic signing and
+  uploads to TestFlight, no Mac needed (steps in `mobile/README.md`). Then set
+  `IOS_APP_URL` (TestFlight public link) and `IOS_LATEST_BUILD` in Vercel.
 - Full details: `mobile/README.md`.
 
 ## 10. Testing and checks
@@ -699,6 +702,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-23 | iPhone app: every production build can sign itself and upload to **TestFlight** from GitHub (no Mac) once the App Store Connect API key secrets are set (`APPSTORE_API_KEY_P8`, `APPSTORE_KEY_ID`, `APPSTORE_ISSUER_ID`, `APPLE_TEAM_ID`); build numbers match the APK; `ITSAppUsesNonExemptEncryption` = false | — |
 | 2026-10-23 | **Test mode and reset**: Xtend starts in test mode (admins see "Test mode: records can be reset" across the dashboard). On the new admin-only **System** page (Setup) an admin ticks what to reset — 14 areas or everything — reviews what goes and what stays, types RESET and their password, and the database clears it in one transaction (dependencies included: staff accounts take their records, stores take their visits, counts and allocations), removes non-admin sign-ins and stored files, and keeps one audit row. **We are live** turns test mode off for good. New `POST /api/admin/system/reset`, `/reset/files`, `/go-live`; check script `check-system-reset` | 0066 |
 | 2026-10-23 | **Report documents survive a bad connection**: removing a saved document works offline (queued, shows "Removing…", sent on signal; one that arrives after midnight is dropped and the report page says why); a report sent again does not upload its documents again (an id per picked file, progress kept in the outbox, "already exists" counts as done, `add_report_file` answers a repeat with the same row and takes uploads up to 24 hours old); the nightly purge job deletes report files left on no report after 24 hours. New `src/lib/report-file-queue.ts`; `check-report-files` extended | 0065 |
 | 2026-10-23 | Mobile UI: full office attachment filenames, 44px activity/export controls, descriptive download labels; staff attachment controls stay disabled through removal and refresh with accessible status/errors. Verified sample layouts at 320px and 390px | — |
@@ -754,9 +758,10 @@ Newest first. Dates are when the work landed on the main branch.
 
 ## 15. Open items
 
-- **iPhone app** is not yet on TestFlight or the App Store (needs the Apple
-  account steps); until then iPhone staff use Chrome/Safari and get site
-  updates only.
+- **iPhone app** is not yet on TestFlight or the App Store: the upload is
+  automatic once the four Apple secrets are set (`mobile/README.md` §4);
+  until then iPhone staff use Chrome/Safari and get site updates only. The
+  TestFlight job has not yet run against a real Apple account.
 - **Moving to the VPS**: set `APP_URL` and ship an app update before turning
   the old address off, since installed apps open the address they were
   built with. On the VPS the IP-location fallback has no Vercel headers, so

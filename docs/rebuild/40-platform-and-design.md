@@ -1057,7 +1057,7 @@ version set by a "Version" step: `XTEND_VERSION_CODE = 100 + git rev-list --coun
 **Job `ios`** (macos-latest): checkout, node 22, select newest `/Applications/Xcode_*.app`,
 `npm ci`, `npx cap sync ios`, `xcodebuild -project App.xcodeproj -scheme App -configuration Debug -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO -derivedDataPath $RUNNER_TEMP/ios-build build`,
 then zip `App.app` and upload it as artifact `xtend-ios-simulator-<run>` (kept 30 days).
-No TestFlight upload (manual steps in `mobile/README.md`).
+Checkout uses `fetch-depth: 0` and a **Version** step sets `XTEND_VERSION_CODE`/`XTEND_VERSION_NAME` as in the Android job. On the default branch, when the secrets `APPSTORE_API_KEY_P8`, `APPSTORE_KEY_ID`, `APPSTORE_ISSUER_ID` and `APPLE_TEAM_ID` are all set (else a notice and nothing more), it writes the key to `$RUNNER_TEMP/AuthKey_<id>.p8`, runs `xcodebuild … -configuration Release -destination 'generic/platform=iOS' -archivePath $RUNNER_TEMP/Xtend.xcarchive DEVELOPMENT_TEAM=<team> CODE_SIGN_STYLE=Automatic CURRENT_PROJECT_VERSION=<code> MARKETING_VERSION=1.0.<code> -allowProvisioningUpdates -authenticationKeyPath/-ID/-IssuerID archive`, then `xcodebuild -exportArchive` with ExportOptions `method=app-store-connect`, `destination=upload`, `signingStyle=automatic`, `uploadSymbols=true`, `manageAppVersionAndBuildNumber=false`, which uploads to TestFlight. `Info.plist` has `ITSAppUsesNonExemptEncryption` = false.
 
 Versioning: Android `versionCode` = 100 + commits that changed `mobile/` or the workflow, `versionName` = `1.0.<code>`
 (website-only changes keep the same version, so the update prompt does not fire); the `/download` page
