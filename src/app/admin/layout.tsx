@@ -16,7 +16,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // suspicious activity still to review. RLS narrows both to a
   // supervisor's own team.
   const supabase = await createServerSupabase()
-  const [{ count: location }, { count: flags }, xmFeatures] = await Promise.all([
+  const [{ count: location }, { count: flags }, xmFeatures, testMode] = await Promise.all([
     supabase
       .from('location_alerts')
       .select('id', { count: 'exact', head: true })
@@ -28,6 +28,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       .in('severity', ['medium', 'high']),
     // Whether X Metrics is switched on (0063), for the menu.
     readXmFeatures(supabase),
+    // Test mode (0066): admins only see the banner (RLS hides the row from
+    // everyone else). Missing table (0066 not run): no banner.
+    readOnly
+      ? Promise.resolve(false)
+      : supabase
+          .from('system_settings')
+          .select('test_mode')
+          .maybeSingle<{ test_mode: boolean }>()
+          .then(({ data }) => data?.test_mode === true),
   ])
   const openAlerts = location === null && flags === null ? null : (location ?? 0) + (flags ?? 0)
 
@@ -39,6 +48,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       openAlerts={openAlerts}
       assistant={assistantConfigured()}
       xmEnabled={xmFeatures.enabled}
+      testMode={testMode}
     >
       <AdminLocation />
       <ActivityPing />

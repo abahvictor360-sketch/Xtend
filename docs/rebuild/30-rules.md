@@ -1781,6 +1781,49 @@ calculation.
   table and op, cover clock-ins and support replies. `rls_counts.sql`: a
   member reads their own topic and nothing on anyone else's.
 
+## 16b. Test mode and reset (0066, `src/lib/system-reset.ts`)
+
+**`system_settings`**: one row (`id boolean primary key default true check (id)`), `test_mode boolean not null default true`, `went_live_at`, `went_live_by`, `last_reset_at`, `last_reset_by`, `last_reset jsonb`, `updated_at`. RLS: SELECT for admins only (`is_admin()`); no write grants for `anon`/`authenticated`. Trigger `system_settings_guard` (BEFORE UPDATE OR DELETE, and BEFORE TRUNCATE): deleting or truncating raises "The system settings cannot be deleted"; `old.test_mode = false and new.test_mode = true` raises "Test mode cannot be turned back on once Xtend is live" (whoever runs it, even a superuser's direct UPDATE); once live, `went_live_at/by` cannot change. A second row is impossible (primary key).
+
+**`system_reset_files (bucket, name, queued_at)`**: files a reset queued for the server to delete through the Storage API (Supabase refuses SQL deletes on `storage.objects`). RLS on, no policies, no grants to `anon`/`authenticated`. Worked by `reset_files_next(limit)` (≤ 1,000, oldest first) and `reset_files_done(bucket, names[])` (service role); `reset_files_pending()` returns the count to admins, 0 to anyone else.
+
+**Categories** (`reset_category_keys()`, in this order) and the tables each empties (`reset_category_tables()`, which is also the delete order — the list below is grouped, the function's order is FK-safe: teams, xm, stock counts, reports, visits/places, clock-ins, leave, support, notifications, activity, ask, stores; staff and audit last):
+
+| Key | Label | Tables emptied | Stored files queued |
+|---|---|---|---|
+| `clock_ins` | Clock-ins and locations | attendance, location_pings, location_alerts, integrity_flags, excuse_checks, phone_checks, photo_checks, device_beacons, clock_out_reminders, tracking_tokens | attendance selfie/thumb |
+| `visits_places` | Store visits and places | store_visits, known_places, place_naming_due | visit selfie/thumb, place photo/selfie |
+| `reports` | Daily reports | reports, report_photos, report_files | report photos, report documents |
+| `stock_counts` | Stock counts and count sheets | store_counts, count_requests, count_request_targets, store_count_sheets | count photos, count sheets |
+| `xm` | X Metrics records | xm_counts, xm_count_lines, xm_sales, xm_sale_lines, xm_supplies, xm_supply_imports, xm_reconciliations, xm_monthly_grades, xm_expiry_alerts, xm_targets, xm_policy_reads | count and sales photos |
+| `leave_schedules` | Leave and schedules | leave_requests, schedule_overrides, work_patterns | — |
+| `support` | Support chats | support_threads, support_messages | — |
+| `notifications` | Notifications | notifications, notification_deliveries, scheduled_notifications | — |
+| `activity` | Activity log | user_activity | — |
+| `ask` | Ask Xtend chats | assistant_conversations | — |
+| `teams` | Teams and store allocations | staff_outlets; also sets every `profiles.supervisor_id` and `outlet_id` to null | — |
+| `stores` | Stores (outlets) | outlets, xm_stores | — |
+| `staff` | Staff accounts | every non-admin account: `auth.users` (cascading to `profiles`), so their rows in push_subscriptions, app_installs, staff_temp_passwords, and their own leave, support, notification deliveries, activity, chats and allocations go too; admins keep theirs | everything under `<uid>/` in every bucket, profile photos included |
+| `audit` | Audit log | audit_log (then the single reset row is written) | — |
+
+**KEEP** (never touched): products, staff_roles, role_store_counts, count_sheet_templates (and the template file), notification_templates, support_quick_replies, xm_settings, xm_settings_history, xm_policy_versions, app_releases, job_runs, system_settings, system_reset_files. **Admins kept**: profiles, push_subscriptions, app_installs, staff_temp_passwords (only the people removed lose rows).
+
+**Dependencies** (`reset_resolve_categories(text[])`, same in `resolveCategories`): unknown keys raise "Unknown thing to reset: …"; an empty list raises "Choose at least one thing to reset"; `everything` = all 14; `staff` adds clock_ins, visits_places, reports, stock_counts, xm (their records reference the accounts with ON DELETE RESTRICT); `stores` adds visits_places, stock_counts, xm, teams (store references). Returned in the canonical order.
+
+**`reset_test_data(p_actor uuid, p_categories text[]) returns jsonb`** (SECURITY DEFINER, service role only):
+
+1. `lock_timeout` 15 s for the transaction. Refuses ("Only an admin can reset Xtend") unless `p_actor` is an active admin and, when there is a signed-in user, it is `p_actor`. Locks the settings row; refuses "Xtend is live: test mode is off, so nothing can be reset" when test mode is off.
+2. Resolves the categories; counts every listed table.
+3. Queues files (`system_reset_files`, from `storage.objects` in the selfies, reports, report-files and avatars buckets, never a `count_sheet_templates.path`): paths held by the rows being cleared (not avatars); everything in the folders of the people being removed; for `everything`, every object in those buckets except admins' own avatar folders.
+4. Clears in order. When stores go and reports stay, the reports' guard triggers (`trg_report_enforce`, `trg_report_visits`, `trg_reports_touch`) are disabled for the one `delete from outlets` (reports lose their outlet by ON DELETE SET NULL) and re-enabled straight after; it is DDL inside the transaction, so a failure rolls it back with everything else. No table has a delete-blocking trigger (append-only is RLS and grants, which the owner bypasses).
+5. Staff: deletes their support messages and threads first (a cascade would update a reply after its thread had gone), then `delete from auth.users` for the non-admins. If that raises `insufficient_privilege` or `foreign_key_violation`, it deletes their profiles instead and returns `auth_fallback = true`; the route then deletes sign-ins with no profile through the Auth admin API.
+6. Audit: when chosen, deletes every audit row.
+7. Result: `{requested, categories, everything, by_category, also_removed, tables, accounts, auth_fallback, files_queued, at}` (`by_category` sums the rows gone from each chosen category's tables, staff counting profiles and the admin-kept tables; `also_removed` is what went with the accounts from categories not chosen). Saved to `system_settings.last_reset*` and written as one `audit_log` row `system.reset` (target `system_settings`, actor `p_actor`, meta = the result; place and device from the `x-xt-audit` header). With the audit log chosen, that row is all it holds.
+
+**`system_go_live(p_actor)`** (service role only): active admin, test mode on ("Xtend is already live" otherwise); sets test_mode false, `went_live_at/by`; audit row `system.go_live`.
+
+**Server** (`/api/admin/system/*`, admins only): RESET typed (case and spaces forgiven) and the admin's password, checked by signing in on a throwaway client with no stored session and a local sign-out; files removed in batches of 1,000 within the function's time (40 s of 60), the rest by **Finish removing files** (`system.reset.files` audited). Going live needs WE ARE LIVE typed.
+
 ## 17. Rule checklist
 
 Testable statements, grouped by area. They mirror the assertions in
@@ -1953,3 +1996,11 @@ Testable statements, grouped by area. They mirror the assertions in
 
 ### Updates
 - The minimum app build is the highest any live release set; withdrawing a release removes its minimum; each phone reports one row per platform; a new build is recorded at once.
+
+### Test mode and reset (0066)
+- One settings row, test mode on after migrate; admins read it, staff and supervisors see nothing; nobody writes it directly; it cannot be deleted, truncated or duplicated.
+- Every public table is in exactly one category, kept for admins, or kept; categories resolve with their dependencies (staff → its records; stores → visits, counts, X Metrics, allocations); unknown or empty choices are refused.
+- Staff, and anyone acting in an admin's name, cannot reset; each category alone empties exactly its tables and leaves every other category, products and set-up as they were, with one audit row naming who and what; the audit category leaves only that row; staff accounts leave only admins and their sign-ins.
+- Files are queued only for what was chosen (none for support; only selfies for clock-ins; report files for reports); a full reset queues every test file except admins' profile photos and the count sheet template.
+- Going live: admins only, audited, once; afterwards no reset, and test mode cannot be turned back on even by a direct update.
+- The browser cannot call the reset, going live or the file queue (service role only).

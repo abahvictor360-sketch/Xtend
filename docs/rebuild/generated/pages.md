@@ -2,7 +2,7 @@
 
 # Pages
 
-55 pages. "Who" is what `requireSession` admits (field pages are also guarded by their layout).
+56 pages. "Who" is what `requireSession` admits (field pages are also guarded by their layout).
 
 ## `/admin/activity` — Activity log — Xtend
 
@@ -269,6 +269,16 @@ On screen: What you can see and do.
 - Components: `ui/alert`, `ui/button`, `ui/input`, `ui/label`, `ui/select`, `admin/movement-map`, `admin/support-threads`, `admin/support-inbox`
 
 On screen: Showing the 500 most recent threads. Search or pick a person to go further back.
+
+## `/admin/system` — System — Xtend
+
+- File: `src/app/admin/system/page.tsx`
+- Who: ['admin']
+- Components: `ui/card`, `admin/system-reset`
+
+Test mode, resetting the test run and going live (0066). Admins only.
+
+On screen: Test mode lets you try Xtend out in different places, then clear the test records and start afresh. When you are ready for real work, turn test mode off.
 
 ## `/admin/teams` — Teams — Xtend
 

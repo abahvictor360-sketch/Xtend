@@ -39,7 +39,7 @@ const T = {
   stock: { id: 'stock', title: 'Stock count and X Metrics', icon: Gauge },
   checks: { id: 'checks', title: 'Integrity and Check an excuse', icon: ShieldAlert },
   people: { id: 'people', title: 'Staff, teams, roles and notifications', icon: Users },
-  setup: { id: 'setup', title: 'Outlets, places, audit and activity logs, updates', icon: Settings2 },
+  setup: { id: 'setup', title: 'Outlets, places, audit and activity logs, updates, test mode', icon: Settings2 },
   apps: { id: 'apps', title: 'Staff phones and the app', icon: Smartphone },
   analytics: { id: 'exports', title: 'Downloads and records', icon: BarChart3 },
   faq: { id: 'questions', title: 'Questions', icon: HelpCircle },
@@ -437,6 +437,51 @@ export default async function AdminGuidePage() {
             iPhone build to make people install a new phone app. The page shows who is on which version and
             reminds those on an older app.
           </p>
+          <p>
+            <Ui>System</Ui> (admins only): <strong>test mode</strong>, for a test run before real work. While
+            it is on, a dark orange strip across the top of the dashboard says <Ui>Test mode: records can be
+            reset</Ui>. Supervisors and staff see nothing of it, and staff are not told it is a test.
+          </p>
+          <Steps
+            items={[
+              <>
+                <strong>Test.</strong> Set up stores and staff and use Xtend in the places you want to try it,
+                exactly as you would for real.
+              </>,
+              <>
+                <strong>Reset.</strong> On <Ui>System</Ui>, tick what to clear: <Ui>Clock-ins and locations</Ui>,{' '}
+                <Ui>Store visits and places</Ui>, <Ui>Daily reports</Ui>, <Ui>Stock counts and count sheets</Ui>,{' '}
+                <Ui>X Metrics records</Ui>, <Ui>Leave and schedules</Ui>, <Ui>Support chats</Ui>,{' '}
+                <Ui>Notifications</Ui>, <Ui>Activity log</Ui>, <Ui>Ask Xtend chats</Ui>,{' '}
+                <Ui>Teams and store allocations</Ui>, <Ui>Stores (outlets)</Ui>, <Ui>Staff accounts</Ui> or{' '}
+                <Ui>Audit log</Ui> — or <Ui>Select everything (start completely fresh)</Ui>. Some bring others
+                with them, and the page shows which: <Ui>Staff accounts</Ui> also clears everything those people
+                recorded; <Ui>Stores</Ui> also clears the visits, counts, X Metrics records and allocations for
+                those stores (clock-ins and reports are kept without a store name).
+              </>,
+              <>
+                Click <Ui>Review what will be deleted</Ui>. Check the two lists — what goes and what stays — then
+                type <Ui>RESET</Ui> and your own password and click <Ui>Reset now</Ui>. It takes up to a minute.
+                The result shows how many records went from each area. Photos and documents are removed too; if
+                there were very many, click <Ui>Finish removing files</Ui> until none are left.
+              </>,
+              <>
+                <strong>Go live.</strong> When the test run is over and reset, click{' '}
+                <Ui>We are live — turn off test mode</Ui> and type <Ui>WE ARE LIVE</Ui>. The strip and the reset
+                disappear for good.
+              </>,
+            ]}
+          />
+          <Tip>
+            A reset cannot be undone, and test mode cannot be turned back on once it is off — not by any admin,
+            not even directly in the database. What always stays: admin accounts (with their sign-ins and
+            profile photos), the product list, X Metrics settings and switches, the scoring policy, roles and
+            which roles count stock, notification templates, support quick replies, the count sheet template and
+            Updates. Admins&apos; own activity (clock-ins, chats, notifications, audit rows) is cleared with the
+            rest when you tick it. The audit log keeps one row for every reset (who, when, where, what and how
+            many); when you clear the audit log, that row is all it holds. Staff whose accounts are removed are
+            signed out and must be added again.
+          </Tip>
         </GuideSection>
 
         <GuideSection topic={T.apps} intro="Getting staff set up, and what their phones need.">

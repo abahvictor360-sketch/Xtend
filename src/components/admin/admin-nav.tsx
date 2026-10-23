@@ -33,6 +33,7 @@ import {
   Gauge,
   type LucideIcon,
   RefreshCw,
+  Wrench,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { xmMenuItem, XM_ALL_ON } from '@/lib/metrics/features'
@@ -103,6 +104,7 @@ const GROUPS: { title: string | null; links: NavLink[] }[] = [
       { href: '/admin/audit', label: 'Audit log', icon: FileClock, adminOnly: true },
       { href: '/admin/activity', label: 'Activity log', icon: Activity, adminOnly: true },
       { href: '/admin/updates', label: 'Updates', icon: RefreshCw, adminOnly: true },
+      { href: '/admin/system', label: 'System', icon: Wrench, adminOnly: true },
     ],
   },
 ]
