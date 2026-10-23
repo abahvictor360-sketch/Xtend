@@ -61,6 +61,24 @@ language sql as $$
   from public.outlets o where o.id = p_outlet;
 $$;
 
+-- How many rows each table the reset knows about holds (066).
+create or replace function reset_counts() returns jsonb
+language plpgsql as $$
+declare t text; n bigint; out jsonb := '{}'::jsonb;
+begin
+  for t in select c.table_name from public.reset_category_tables() c
+           union all select unnest(public.reset_staff_tables())
+           union all select unnest(array['products', 'staff_roles', 'role_store_counts', 'count_sheet_templates',
+                                         'notification_templates', 'support_quick_replies', 'xm_settings',
+                                         'xm_settings_history', 'xm_policy_versions', 'app_releases', 'job_runs',
+                                         'system_settings']) loop
+    execute format('select count(*) from public.%I', t) into n;
+    out := out || jsonb_build_object(t, n);
+  end loop;
+  return out;
+end;
+$$;
+
 do $$
 declare
   mall_id    uuid;
@@ -4449,6 +4467,270 @@ begin
       'count sheets: a sheet sent from the profile with no count due is kept, against no request');
     perform assert(exists (select 1 from public.store_count_sheet_detail where id = s1 and outlet_name = 'Yemi Store'),
       'count sheets: and the office sees it with the store''s name');
+  end;
+
+  -- ---------------------------------------------------------------
+  -- Test mode and resetting the test run (066). Every case runs in its
+  -- own block that is rolled back, so the data stays for the RLS tests.
+  -- ---------------------------------------------------------------
+  declare
+    keep_tables text[] := array['products', 'staff_roles', 'role_store_counts', 'count_sheet_templates',
+                                'notification_templates', 'support_quick_replies', 'xm_settings',
+                                'xm_settings_history', 'xm_policy_versions', 'app_releases', 'job_runs',
+                                'system_settings'];
+    all_keys text[] := public.reset_category_keys();
+    k text;
+    cats text[];
+    before jsonb;
+    after jsonb;
+    res jsonb;
+    audits_before bigint;
+    template_path text;
+    boss_avatar text := boss || '/me.jpg';
+    ada_avatar text := ada || '/me.jpg';
+  begin
+    perform set_config('request.jwt.claim.sub', '', false);
+    -- Rows for the two tables the earlier tests leave empty.
+    insert into public.assistant_conversations (user_id, title) values (boss, 'Test run questions');
+    alter table public.xm_monthly_grades disable trigger trg_xm_monthly_grades_feature_guard;
+    insert into public.xm_monthly_grades (month, user_id, grade, score, band)
+    values (date_trunc('month', now())::date, ada, '{}', 70, 'Strong');
+    alter table public.xm_monthly_grades enable trigger trg_xm_monthly_grades_feature_guard;
+    insert into storage.objects (bucket_id, name) values ('avatars', boss_avatar), ('avatars', ada_avatar);
+    select path into template_path from public.count_sheet_templates limit 1;
+
+    perform assert((select test_mode from public.system_settings), 'reset: test mode starts on');
+    perform assert((select count(*) from public.system_settings) = 1, 'reset: there is one system settings row');
+
+    -- Every table with test data belongs to exactly one category.
+    perform assert((select count(*) = count(distinct table_name) from public.reset_category_tables()),
+      'reset: no table is in two categories');
+    -- (Staff accounts clear the people themselves, from the tables admins keep rows in.)
+    perform assert((select count(distinct category) from public.reset_category_tables()) + 1 = cardinality(all_keys)
+                     and not exists (select 1 from public.reset_category_tables() where category = 'staff')
+                     and not exists (select 1 from public.reset_category_tables() where not (category = any(all_keys))),
+      'reset: every category clears something, and only known categories exist');
+    perform assert(not exists (
+        select 1 from information_schema.tables it
+        where it.table_schema = 'public' and it.table_type = 'BASE TABLE'
+          and it.table_name not in (select table_name from public.reset_category_tables())
+          and not (it.table_name = any(public.reset_staff_tables()))
+          and not (it.table_name = any(keep_tables))
+          and it.table_name <> 'system_reset_files'),
+      'reset: every table is either cleared, kept for admins, or kept');
+
+    -- Choosing.
+    perform assert(public.reset_resolve_categories(array['support']) = array['support'],
+      'reset: a category on its own clears just that');
+    perform assert(public.reset_resolve_categories(array['staff'])
+                     = array['clock_ins', 'visits_places', 'reports', 'stock_counts', 'xm', 'staff'],
+      'reset: staff accounts bring everything they recorded');
+    perform assert(public.reset_resolve_categories(array['stores'])
+                     = array['visits_places', 'stock_counts', 'xm', 'teams', 'stores'],
+      'reset: stores bring their visits, counts, X Metrics records and allocations');
+    perform assert(public.reset_resolve_categories(array['everything']) = all_keys,
+      'reset: everything is every category');
+    begin
+      perform public.reset_resolve_categories(array['support', 'products']);
+      perform assert(false, 'reset: unknown categories are refused');
+    exception when others then
+      perform assert(sqlerrm like 'Unknown thing to reset%', 'reset: an unknown category (products) is refused');
+    end;
+    begin
+      perform public.reset_resolve_categories('{}');
+      perform assert(false, 'reset: nothing chosen is refused');
+    exception when others then
+      perform assert(sqlerrm like 'Choose at least one%', 'reset: choosing nothing is refused');
+    end;
+
+    -- Who may.
+    begin
+      perform public.reset_test_data(ada, array['support']);
+      perform assert(false, 'reset: staff cannot reset');
+    exception when others then
+      perform assert(sqlerrm like 'Only an admin%', 'reset: a merchandiser cannot reset');
+    end;
+    perform act_as(ada);
+    begin
+      perform public.reset_test_data(boss, array['support']);
+      perform assert(false, 'reset: nobody resets in an admin''s name');
+    exception when others then
+      perform assert(sqlerrm like 'Only an admin%', 'reset: a signed-in person cannot reset in an admin''s name');
+    end;
+    perform set_config('request.jwt.claim.sub', '', false);
+
+    -- Each category on its own clears its tables (and what it brings) and nothing else.
+    foreach k in array all_keys loop
+      begin
+        before := reset_counts();
+        audits_before := (select count(*) from public.audit_log);
+        cats := public.reset_resolve_categories(array[k]);
+        res := public.reset_test_data(boss, array[k]);
+        after := reset_counts();
+        perform assert(not exists (select 1 from public.reset_category_tables() c
+                                   where c.category = any(cats) and c.table_name <> 'audit_log'
+                                     and (after->>c.table_name)::bigint <> 0),
+          format('reset %s: its tables are empty', k));
+        perform assert(not exists (select 1 from public.reset_category_tables() c
+                                   where c.category = any(cats) and c.table_name <> 'audit_log'
+                                     and (before->>c.table_name)::bigint = 0),
+          format('reset %s: (each of them had rows before)', k));
+        if not ('staff' = any(cats)) then
+          perform assert(not exists (select 1 from public.reset_category_tables() c
+                                     where not (c.category = any(cats)) and c.table_name <> 'audit_log'
+                                       and after->c.table_name <> before->c.table_name),
+            format('reset %s: every other category is untouched', k));
+          perform assert((select count(*) from public.profiles) = (before->>'profiles')::bigint,
+            format('reset %s: nobody''s account goes', k));
+        else
+          perform assert(not exists (select 1 from public.profiles where role <> 'admin')
+                           and (select count(*) from public.profiles where role = 'admin') > 0,
+            format('reset %s: every account but the admins'' goes', k));
+        end if;
+        perform assert(not exists (select 1 from unnest(keep_tables) kt
+                                   where kt <> 'system_settings' and after->kt <> before->kt),
+          format('reset %s: products and set-up are kept', k));
+        if k = 'audit' then
+          perform assert((select count(*) from public.audit_log) = 1, 'reset audit: the log holds just the reset');
+        else
+          perform assert((select count(*) from public.audit_log) = audits_before + 1,
+            format('reset %s: one audit row is added', k));
+        end if;
+        perform assert((select meta->'categories' from public.audit_log where action = 'system.reset') = to_jsonb(cats)
+                         and (select actor_id from public.audit_log where action = 'system.reset') = boss,
+          format('reset %s: the audit row says who and what', k));
+        perform assert(res->'categories' = to_jsonb(cats) and (res->'by_category') ? cats[1],
+          format('reset %s: the result counts each category', k));
+        raise exception 'reset-case-done';
+      exception when others then
+        if sqlerrm <> 'reset-case-done' then raise; end if;
+      end;
+    end loop;
+
+    -- Files go only for what was chosen.
+    begin
+      perform public.reset_test_data(boss, array['support']);
+      perform assert((select count(*) from public.system_reset_files) = 0,
+        'reset files: support chats queue no files');
+      raise exception 'reset-case-done';
+    exception when others then
+      if sqlerrm <> 'reset-case-done' then raise; end if;
+    end;
+    begin
+      perform public.reset_test_data(boss, array['clock_ins']);
+      perform assert((select count(*) from public.system_reset_files) > 0
+                       and not exists (select 1 from public.system_reset_files where bucket <> 'selfies'),
+        'reset files: clock-ins queue only clock-in selfies');
+      raise exception 'reset-case-done';
+    exception when others then
+      if sqlerrm <> 'reset-case-done' then raise; end if;
+    end;
+    begin
+      perform public.reset_test_data(boss, array['reports']);
+      perform assert(exists (select 1 from public.system_reset_files where bucket = 'report-files')
+                       and not exists (select 1 from public.system_reset_files where bucket in ('selfies', 'avatars')),
+        'reset files: daily reports queue their photos and documents, not selfies or profile photos');
+      raise exception 'reset-case-done';
+    exception when others then
+      if sqlerrm <> 'reset-case-done' then raise; end if;
+    end;
+
+    -- Starting completely fresh.
+    begin
+      before := reset_counts();
+      res := public.reset_test_data(boss, array['everything']);
+      after := reset_counts();
+      perform assert(not exists (select 1 from public.reset_category_tables() c
+                                 where c.table_name <> 'audit_log' and (after->>c.table_name)::bigint <> 0),
+        'reset everything: every test data table is empty');
+      perform assert(not exists (select 1 from public.profiles where role <> 'admin')
+                       and exists (select 1 from public.profiles where id = boss),
+        'reset everything: only admins'' accounts are left');
+      perform assert(not exists (select 1 from auth.users u
+                                 where not exists (select 1 from public.profiles p where p.id = u.id)),
+        'reset everything: and only their sign-ins');
+      perform assert(not exists (select 1 from public.push_subscriptions s join public.profiles p on p.id = s.user_id
+                                 where p.role <> 'admin')
+                       and not exists (select 1 from public.app_installs s left join public.profiles p on p.id = s.user_id
+                                       where p.id is null),
+        'reset everything: only admins'' phones stay registered');
+      perform assert(not exists (select 1 from unnest(keep_tables) kt
+                                 where kt <> 'system_settings' and after->kt <> before->kt),
+        'reset everything: products and set-up are kept');
+      perform assert((select count(*) from public.audit_log) = 1
+                       and (select action from public.audit_log) = 'system.reset'
+                       and (select (meta->>'everything')::boolean from public.audit_log)
+                       and (select (meta->>'accounts')::int from public.audit_log) > 0,
+        'reset everything: the audit log holds one reset row with what went');
+      perform assert(exists (select 1 from public.system_reset_files where bucket = 'selfies')
+                       and exists (select 1 from public.system_reset_files where bucket = 'avatars' and name = ada_avatar)
+                       and not exists (select 1 from public.system_reset_files where name = boss_avatar)
+                       and not exists (select 1 from public.system_reset_files where name = template_path),
+        'reset everything: stored files are queued, except admins'' photos and the count sheet template');
+      perform assert((select last_reset_by = boss and last_reset_at is not null and test_mode
+                      from public.system_settings),
+        'reset everything: the last reset is noted and test mode stays on');
+      raise exception 'reset-case-done';
+    exception when others then
+      if sqlerrm <> 'reset-case-done' then raise; end if;
+    end;
+
+    -- Going live is for good.
+    begin
+      begin
+        perform public.system_go_live(ada);
+        perform assert(false, 'go live: staff cannot');
+      exception when others then
+        perform assert(sqlerrm like 'Only an admin%', 'go live: only an admin turns test mode off');
+      end;
+      res := public.system_go_live(boss);
+      perform assert(not (select test_mode from public.system_settings)
+                       and (select went_live_by from public.system_settings) = boss,
+        'go live: test mode is off, with who and when');
+      perform assert(exists (select 1 from public.audit_log where action = 'system.go_live' and actor_id = boss),
+        'go live: it is audited');
+      begin
+        perform public.reset_test_data(boss, array['support']);
+        perform assert(false, 'go live: no reset after');
+      exception when others then
+        perform assert(sqlerrm like 'Xtend is live%', 'go live: nothing can be reset once live');
+      end;
+      begin
+        update public.system_settings set test_mode = true;
+        perform assert(false, 'go live: no turning back');
+      exception when others then
+        perform assert(sqlerrm like 'Test mode cannot be turned back on%',
+          'go live: test mode cannot be turned back on, even by a direct update');
+      end;
+      begin
+        delete from public.system_settings;
+        perform assert(false, 'go live: the row stays');
+      exception when others then
+        perform assert(sqlerrm like '%cannot be deleted%', 'go live: the settings row cannot be deleted to start over');
+      end;
+      begin
+        truncate public.system_settings;
+        perform assert(false, 'go live: no truncate');
+      exception when others then
+        perform assert(sqlerrm like '%cannot be deleted%', 'go live: nor truncated');
+      end;
+      begin
+        insert into public.system_settings (id, test_mode) values (true, true);
+        perform assert(false, 'go live: no second row');
+      exception when unique_violation then
+        perform assert(true, 'go live: no second settings row');
+      end;
+      begin
+        perform public.system_go_live(boss);
+        perform assert(false, 'go live: only once');
+      exception when others then
+        perform assert(sqlerrm like 'Xtend is already live%', 'go live: going live twice is refused');
+      end;
+      raise exception 'reset-case-done';
+    exception when others then
+      if sqlerrm <> 'reset-case-done' then raise; end if;
+    end;
+    perform assert((select test_mode from public.system_settings), 'reset: (the tests above rolled back)');
   end;
 
   raise notice 'ALL RULES PASSED';

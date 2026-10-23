@@ -902,6 +902,24 @@ page, the panel and scripts/check-support-notifications.ts share it.
 
 Exports: `SupportStatus`, `SupportSender`, `InboxThread`, `ThreadMessage`, `VIEWS`, `View`, `VIEW_LABEL`, `SORTS`, `Sort`, `SORT_LABEL`, `LONG_WAIT_MIN`, `LATE_WAIT_MIN`, `needsReply`, `inView`, `viewCounts`, `BadgeVariant`, `statusLabel`, `minutesWaiting`, `durationText`, `waitText`, `waitTone`, `sortThreads`, `matchesSearch`, `replyMinutes`, `median`, `answeredOn`, `fillReply`, `SupportFilter`, `parseSupportFilter`, `supportQuery`
 
+## `src/lib/system-reset-server.ts`
+
+Server side of test mode and the reset (0066). Admin checks happen in
+the routes and again in the database functions.
+
+Exports: `passwordIsRight`, `serviceClientWithContext`, `removeQueuedFiles`, `removeOrphanSignIns`
+
+## `src/lib/system-reset.ts`
+
+Test mode and resetting the test run (migration 0066). Pure: shared by
+the System page, the routes and scripts/check-system-reset.ts.
+
+The database decides (reset_resolve_categories, reset_test_data); this
+file mirrors its categories so the page can say exactly what goes and
+what stays before anyone types RESET.
+
+Exports: `ResetCategoryKey`, `ResetCategory`, `RESET_CATEGORIES`, `RESET_KEYS`, `ADMIN_KEPT_TABLES`, `KEPT_TABLES`, `ALWAYS_KEPT`, `isResetKey`, `resolveCategories`, `addedBy`, `isEverything`, `categoryLabel`, `RESET_WORD`, `LIVE_WORDS`, `confirmMatches`, `ResetResult`, `ResetSummary`, `resetSummary`
+
 ## `src/lib/teams.ts`
 
 Puts field staff on a supervisor's team, or takes them off it
@@ -1223,6 +1241,12 @@ Exports: `ROLE`, `SENDER`, `Figure`, `ThreadRow`, `PanelInfo`, `PersonContext`
 One support thread: the conversation, who has it, and the reply box.
 
 Exports: `PanelMessage`, `QuickReply`, `Assignee`, `SupportThreadPanel`
+
+## `src/components/admin/system-reset.tsx`
+
+Pick what to clear, review it, then type RESET and your password.
+
+Exports: `ResetPanel`, `FinishFiles`, `GoLivePanel`
 
 ## `src/components/admin/team-manager.tsx`
 

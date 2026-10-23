@@ -83,6 +83,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0062_user_activity.sql          # activity log: sign-ins, app opens and everyone's activity, admins only
    supabase/migrations/0063_xm_feature_switches.sql    # X Metrics switches: the module, expiry, supplies, grading, sales
    supabase/migrations/0064_count_sheets_any_time_report_files.sql  # count sheets sent from the profile any day; documents on the daily report (report-files bucket)
+   supabase/migrations/0066_test_mode_reset.sql             # test mode (one-way off) and resetting chosen parts of the test run; reset file queue
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

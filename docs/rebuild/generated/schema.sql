@@ -4625,6 +4625,314 @@ $$;
 
 
 --
+-- Name: reset_category_keys(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.reset_category_keys() RETURNS text[]
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  select array['clock_ins', 'visits_places', 'reports', 'stock_counts', 'xm', 'leave_schedules',
+               'support', 'notifications', 'activity', 'ask', 'teams', 'stores', 'staff', 'audit'];
+$$;
+
+
+--
+-- Name: reset_category_tables(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.reset_category_tables() RETURNS TABLE(category text, table_name text, step integer)
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  select split_part(v.x, ':', 1), split_part(v.x, ':', 2), v.n::integer
+  from unnest(array[
+    'teams:staff_outlets', 'xm:xm_reconciliations', 'xm:xm_expiry_alerts', 'xm:xm_count_lines',
+    'xm:xm_counts', 'xm:xm_sale_lines', 'xm:xm_sales', 'xm:xm_policy_reads',
+    'xm:xm_monthly_grades', 'xm:xm_targets', 'xm:xm_supplies', 'xm:xm_supply_imports',
+    'stock_counts:store_count_sheets', 'stock_counts:store_counts',
+    'stock_counts:count_request_targets', 'stock_counts:count_requests', 'reports:report_files',
+    'reports:report_photos', 'reports:reports', 'visits_places:place_naming_due',
+    'visits_places:store_visits', 'visits_places:known_places', 'clock_ins:location_alerts',
+    'clock_ins:location_pings', 'clock_ins:excuse_checks', 'clock_ins:phone_checks',
+    'clock_ins:photo_checks', 'clock_ins:device_beacons', 'clock_ins:clock_out_reminders',
+    'clock_ins:tracking_tokens', 'clock_ins:integrity_flags', 'clock_ins:attendance',
+    'leave_schedules:leave_requests', 'leave_schedules:schedule_overrides',
+    'leave_schedules:work_patterns', 'support:support_messages', 'support:support_threads',
+    'notifications:notification_deliveries', 'notifications:scheduled_notifications',
+    'notifications:notifications', 'activity:user_activity', 'ask:assistant_conversations',
+    'stores:xm_stores', 'stores:outlets', 'audit:audit_log'
+  ]) with ordinality as v(x, n);
+$$;
+
+
+--
+-- Name: reset_files_done(text, text[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.reset_files_done(p_bucket text, p_names text[]) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare n integer;
+begin
+  delete from public.system_reset_files where bucket = p_bucket and name = any(p_names);
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+
+
+--
+-- Name: reset_files_next(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.reset_files_next(p_limit integer) RETURNS TABLE(bucket text, name text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select f.bucket, f.name from public.system_reset_files f
+  order by f.queued_at, f.bucket, f.name
+  limit greatest(1, least(coalesce(p_limit, 500), 1000));
+$$;
+
+
+--
+-- Name: reset_files_pending(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.reset_files_pending() RETURNS integer
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select case when public.is_admin() then (select count(*)::integer from public.system_reset_files) else 0 end;
+$$;
+
+
+--
+-- Name: reset_resolve_categories(text[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.reset_resolve_categories(p_categories text[]) RETURNS text[]
+    LANGUAGE plpgsql IMMUTABLE
+    AS $$
+declare
+  keys text[] := public.reset_category_keys();
+  picked text[] := '{}';
+  k text;
+begin
+  if p_categories is null or cardinality(p_categories) = 0 then
+    raise exception 'Choose at least one thing to reset';
+  end if;
+  foreach k in array p_categories loop
+    if k = 'everything' then
+      picked := keys;
+    elsif k = any(keys) then
+      picked := picked || k;
+    else
+      raise exception 'Unknown thing to reset: %', left(k, 40);
+    end if;
+  end loop;
+  if 'staff' = any(picked) then
+    picked := picked || array['clock_ins', 'visits_places', 'reports', 'stock_counts', 'xm'];
+  end if;
+  if 'stores' = any(picked) then
+    picked := picked || array['visits_places', 'stock_counts', 'xm', 'teams'];
+  end if;
+  return array(select x from unnest(keys) with ordinality u(x, n) where x = any(picked) order by n);
+end;
+$$;
+
+
+--
+-- Name: reset_staff_tables(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.reset_staff_tables() RETURNS text[]
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  select array['profiles', 'push_subscriptions', 'app_installs', 'staff_temp_passwords'];
+$$;
+
+
+--
+-- Name: reset_test_data(uuid, text[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.reset_test_data(p_actor uuid, p_categories text[]) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  cats text[];
+  everything boolean;
+  r record;
+  n bigint;
+  before jsonb := '{}'::jsonb;
+  removed jsonb := '{}'::jsonb;
+  by_cat jsonb := '{}'::jsonb;
+  with_staff bigint := 0;
+  paths text[] := '{}';
+  staff_ids uuid[];
+  files_queued integer := 0;
+  accounts integer := 0;
+  auth_fallback boolean := false;
+  result jsonb;
+  t text;
+begin
+  perform set_config('lock_timeout', '15s', true);
+
+  if not exists (select 1 from public.profiles
+                 where id = p_actor and role = 'admin' and is_active) then
+    raise exception 'Only an admin can reset Xtend';
+  end if;
+  if auth.uid() is not null and auth.uid() <> p_actor then
+    raise exception 'Only an admin can reset Xtend';
+  end if;
+  if not coalesce((select test_mode from public.system_settings where id for update), false) then
+    raise exception 'Xtend is live: test mode is off, so nothing can be reset';
+  end if;
+
+  cats := public.reset_resolve_categories(p_categories);
+  everything := cats @> public.reset_category_keys();
+
+  -- How many rows each table holds now.
+  for t in select c.table_name from public.reset_category_tables() c
+           union all select unnest(public.reset_staff_tables()) loop
+    execute format('select count(*) from public.%I', t) into n;
+    before := before || jsonb_build_object(t, n);
+  end loop;
+
+  select coalesce(array_agg(id), '{}') into staff_ids
+  from public.profiles where role <> 'admin' and 'staff' = any(cats);
+
+  -- Files that belong to what is being cleared.
+  if 'clock_ins' = any(cats) then
+    paths := paths || array(select unnest(array[selfie_path, thumb_path]) from public.attendance);
+  end if;
+  if 'visits_places' = any(cats) then
+    paths := paths || array(select unnest(array[selfie_path, thumb_path]) from public.store_visits)
+                   || array(select unnest(array[photo_path, selfie_path]) from public.known_places);
+  end if;
+  if 'reports' = any(cats) then
+    paths := paths || array(select storage_path from public.report_photos)
+                   || array(select path from public.report_files);
+  end if;
+  if 'stock_counts' = any(cats) then
+    paths := paths || array(select photo_path from public.store_counts)
+                   || array(select path from public.store_count_sheets);
+  end if;
+  if 'xm' = any(cats) then
+    paths := paths || array(select photo_path from public.xm_counts)
+                   || array(select photo_path from public.xm_sales);
+  end if;
+
+  insert into public.system_reset_files (bucket, name)
+  select o.bucket_id, o.name
+  from storage.objects o
+  where o.bucket_id in ('selfies', 'reports', 'report-files', 'avatars')
+    and not exists (select 1 from public.count_sheet_templates ct where ct.path = o.name)
+    and (
+      (o.bucket_id <> 'avatars' and o.name = any(paths))
+      -- Everything in the folders of the people removed.
+      or split_part(o.name, '/', 1) = any(array(select x::text from unnest(staff_ids) x))
+      -- Starting completely fresh: every stored test file, except the
+      -- admins' own profile photos.
+      or (everything and (o.bucket_id <> 'avatars'
+                          or split_part(o.name, '/', 1) not in
+                             (select p.id::text from public.profiles p where p.role = 'admin')))
+    )
+  on conflict (bucket, name) do nothing;
+  get diagnostics files_queued = row_count;
+
+  -- Clear, in order.
+  if 'teams' = any(cats) then
+    update public.profiles set supervisor_id = null, outlet_id = null
+    where supervisor_id is not null or outlet_id is not null;
+  end if;
+  for r in select c.category, c.table_name from public.reset_category_tables() c
+           where c.category = any(cats) and c.category not in ('audit') order by c.step loop
+    if r.table_name = 'outlets' and not ('reports' = any(cats)) then
+      -- Reports kept from a store being removed lose the store (ON DELETE
+      -- SET NULL). Their guards would refuse that edit to a past report,
+      -- and re-reading the day's visits would empty what the report kept,
+      -- so they stand aside for this one statement. ALTER TABLE is part of
+      -- this transaction: if anything fails, they are back on.
+      alter table public.reports disable trigger trg_report_enforce;
+      alter table public.reports disable trigger trg_report_visits;
+      alter table public.reports disable trigger trg_reports_touch;
+      delete from public.outlets;
+      alter table public.reports enable trigger trg_report_enforce;
+      alter table public.reports enable trigger trg_report_visits;
+      alter table public.reports enable trigger trg_reports_touch;
+    else
+      execute format('delete from public.%I', r.table_name);
+    end if;
+  end loop;
+
+  if 'staff' = any(cats) and cardinality(staff_ids) > 0 then
+    -- Their support chats go first, messages before threads: left to the
+    -- cascade, a reply in their thread from someone else being removed
+    -- too would be updated after its thread had gone.
+    delete from public.support_messages
+    where thread_id in (select id from public.support_threads where user_id = any(staff_ids));
+    delete from public.support_threads where user_id = any(staff_ids);
+    begin
+      delete from auth.users where id = any(staff_ids);
+    exception when insufficient_privilege or foreign_key_violation then
+      -- The server removes the sign-ins with the Auth admin API instead.
+      auth_fallback := true;
+      delete from public.profiles where id = any(staff_ids);
+    end;
+    accounts := cardinality(staff_ids);
+  end if;
+
+  if 'audit' = any(cats) then
+    delete from public.audit_log;
+  end if;
+
+  -- What went.
+  for t in select c.table_name from public.reset_category_tables() c
+           union all select unnest(public.reset_staff_tables()) loop
+    execute format('select count(*) from public.%I', t) into n;
+    if (before->>t)::bigint - n > 0 then
+      removed := removed || jsonb_build_object(t, (before->>t)::bigint - n);
+    end if;
+  end loop;
+  for r in select c.category, c.table_name from public.reset_category_tables() c
+           union all select 'staff', unnest(public.reset_staff_tables()) loop
+    n := coalesce((removed->>r.table_name)::bigint, 0);
+    if r.category = any(cats) then
+      by_cat := by_cat || jsonb_build_object(r.category, coalesce((by_cat->>r.category)::bigint, 0) + n);
+    else
+      with_staff := with_staff + n;
+    end if;
+  end loop;
+
+  result := jsonb_build_object(
+    'requested', to_jsonb(p_categories),
+    'categories', to_jsonb(cats),
+    'everything', everything,
+    'by_category', by_cat,
+    'also_removed', with_staff,
+    'tables', removed,
+    'accounts', accounts,
+    'auth_fallback', auth_fallback,
+    'files_queued', files_queued,
+    'at', now());
+
+  update public.system_settings
+  set last_reset_at = now(), last_reset_by = p_actor, last_reset = result
+  where id;
+
+  -- The one record of it (all the audit log holds when it was cleared).
+  insert into public.audit_log (actor_id, action, target_table, target_id, meta)
+  values (p_actor, 'system.reset', 'system_settings', null, result);
+
+  return result;
+end;
+$$;
+
+
+--
 -- Name: resolve_alert(uuid, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5762,6 +6070,63 @@ begin
     select w.user_id, w.full_name, w.role
     from public.alert_watchers(owner) w
     order by (w.user_id = auth.uid()) desc, w.full_name;
+end;
+$$;
+
+
+--
+-- Name: system_go_live(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.system_go_live(p_actor uuid) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  s public.system_settings;
+begin
+  if not exists (select 1 from public.profiles
+                 where id = p_actor and role = 'admin' and is_active) then
+    raise exception 'Only an admin can turn test mode off';
+  end if;
+  if auth.uid() is not null and auth.uid() <> p_actor then
+    raise exception 'Only an admin can turn test mode off';
+  end if;
+  select * into s from public.system_settings where id for update;
+  if not s.test_mode then
+    raise exception 'Xtend is already live';
+  end if;
+  update public.system_settings
+  set test_mode = false, went_live_at = now(), went_live_by = p_actor
+  where id returning * into s;
+  insert into public.audit_log (actor_id, action, target_table, target_id, meta)
+  values (p_actor, 'system.go_live', 'system_settings', null, jsonb_build_object('went_live_at', s.went_live_at));
+  return jsonb_build_object('test_mode', s.test_mode, 'went_live_at', s.went_live_at);
+end;
+$$;
+
+
+--
+-- Name: system_settings_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.system_settings_guard() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+begin
+  if tg_op = 'DELETE' or tg_op = 'TRUNCATE' then
+    raise exception 'The system settings cannot be deleted';
+  end if;
+  if old.test_mode = false and new.test_mode = true then
+    raise exception 'Test mode cannot be turned back on once Xtend is live';
+  end if;
+  if old.test_mode = false then
+    -- Once live, when and by whom stay as they were.
+    new.went_live_at := old.went_live_at;
+    new.went_live_by := old.went_live_by;
+  end if;
+  new.updated_at := now();
+  return new;
 end;
 $$;
 
@@ -8197,6 +8562,34 @@ CREATE VIEW public.support_thread_detail WITH (security_invoker='true') AS
 
 
 --
+-- Name: system_reset_files; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.system_reset_files (
+    bucket text NOT NULL,
+    name text NOT NULL,
+    queued_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: system_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.system_settings (
+    id boolean DEFAULT true NOT NULL,
+    test_mode boolean DEFAULT true NOT NULL,
+    went_live_at timestamp with time zone,
+    went_live_by uuid,
+    last_reset_at timestamp with time zone,
+    last_reset_by uuid,
+    last_reset jsonb,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT system_settings_id_check CHECK (id)
+);
+
+
+--
 -- Name: tracking_tokens; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -9220,6 +9613,22 @@ ALTER TABLE ONLY public.support_threads
 
 
 --
+-- Name: system_reset_files system_reset_files_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.system_reset_files
+    ADD CONSTRAINT system_reset_files_pkey PRIMARY KEY (bucket, name);
+
+
+--
+-- Name: system_settings system_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.system_settings
+    ADD CONSTRAINT system_settings_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: tracking_tokens tracking_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -10177,6 +10586,20 @@ CREATE TRIGGER trg_store_visits_zz_place_due AFTER INSERT ON public.store_visits
 
 
 --
+-- Name: system_settings trg_system_settings_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_system_settings_guard BEFORE DELETE OR UPDATE ON public.system_settings FOR EACH ROW EXECUTE FUNCTION public.system_settings_guard();
+
+
+--
+-- Name: system_settings trg_system_settings_no_truncate; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_system_settings_no_truncate BEFORE TRUNCATE ON public.system_settings FOR EACH STATEMENT EXECUTE FUNCTION public.system_settings_guard();
+
+
+--
 -- Name: xm_counts trg_xm_counts_feature_guard; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -10804,6 +11227,22 @@ ALTER TABLE ONLY public.support_threads
 
 ALTER TABLE ONLY public.support_threads
     ADD CONSTRAINT support_threads_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: system_settings system_settings_last_reset_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.system_settings
+    ADD CONSTRAINT system_settings_last_reset_by_fkey FOREIGN KEY (last_reset_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: system_settings system_settings_went_live_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.system_settings
+    ADD CONSTRAINT system_settings_went_live_by_fkey FOREIGN KEY (went_live_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
 
 
 --
@@ -11908,6 +12347,25 @@ ALTER TABLE public.support_threads ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY support_threads_select ON public.support_threads FOR SELECT USING (((user_id = auth.uid()) OR public.is_admin() OR public.supervises_user(user_id)));
+
+
+--
+-- Name: system_reset_files; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.system_reset_files ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: system_settings; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: system_settings system_settings_admin_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY system_settings_admin_read ON public.system_settings FOR SELECT TO authenticated USING (public.is_admin());
 
 
 --
@@ -13164,6 +13622,39 @@ GRANT ALL ON FUNCTION public.request_store_count(p_user_ids uuid[], p_due_date d
 
 
 --
+-- Name: FUNCTION reset_files_done(p_bucket text, p_names text[]); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.reset_files_done(p_bucket text, p_names text[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.reset_files_done(p_bucket text, p_names text[]) TO service_role;
+
+
+--
+-- Name: FUNCTION reset_files_next(p_limit integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.reset_files_next(p_limit integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.reset_files_next(p_limit integer) TO service_role;
+
+
+--
+-- Name: FUNCTION reset_files_pending(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.reset_files_pending() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.reset_files_pending() TO authenticated;
+GRANT ALL ON FUNCTION public.reset_files_pending() TO service_role;
+
+
+--
+-- Name: FUNCTION reset_test_data(p_actor uuid, p_categories text[]); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.reset_test_data(p_actor uuid, p_categories text[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.reset_test_data(p_actor uuid, p_categories text[]) TO service_role;
+
+
+--
 -- Name: FUNCTION resolve_alert(p_alert_id uuid, p_note text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -13401,6 +13892,14 @@ GRANT ALL ON FUNCTION public.supervises_user(target uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.support_assignees(p_thread uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.support_assignees(p_thread uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.support_assignees(p_thread uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION system_go_live(p_actor uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.system_go_live(p_actor uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.system_go_live(p_actor uuid) TO service_role;
 
 
 --

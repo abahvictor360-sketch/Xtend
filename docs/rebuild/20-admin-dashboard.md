@@ -33,7 +33,8 @@ Server component. Steps:
    - `location_alerts` with `is_resolved = false` (count only, `head: true`).
    - `integrity_flags` with `reviewed_at IS NULL` and `severity IN ('medium','high')`.
    - `openAlerts = null` when both counts came back null (query failed); otherwise the sum (nulls as 0).
-3. Renders `<AdminFrame name role readOnly openAlerts assistant>` where `role` is the word `"Supervisor"` or `"Admin"` and `assistant = assistantConfigured()` (true when `ANTHROPIC_API_KEY` is set). Inside it, `<AdminLocation />` then the page.
+3. For admins only, reads `system_settings.test_mode` (0066; error or no row means false). For supervisors it is not read.
+4. Renders `<AdminFrame name role readOnly openAlerts assistant xmEnabled testMode>` where `role` is the word `"Supervisor"` or `"Admin"` and `assistant = assistantConfigured()` (true when `ANTHROPIC_API_KEY` is set). Inside it, `<AdminLocation />` then the page.
 
 `src/app/admin/loading.tsx` re-exports `PageLoading`: a `role="status"` block reading **"Loading page…"** above three pulsing grey shapes (a 32×160 px bar and two 112 px tall rounded cards; the pulse only with `motion-safe`).
 
@@ -52,7 +53,7 @@ Whole page has class `admin-shell`, `min-h-dvh`, canvas background.
     - When the assistant is configured: a black round icon with a sparkle, **"Ask Xtend"**, the line **"Who clocked in late? Who is off site? Ask in plain words."**, and a black full-width button **"Ask a question"** linking to `/admin/ask`.
     - Otherwise: a key icon, **"Your account"**, **"Keep your password private. Change it any time."**, button **"Change password"** to `/change-password`.
   - Bottom: **"Sign out"** outline button (full width, left aligned). Sign out calls `supabase.auth.signOut()`, then `router.replace('/login')` and `router.refresh()`.
-- Right: the workspace on the grey canvas.
+- Right: the workspace on the grey canvas. When `testMode` is set, a full-width dark orange link to `/admin/system` reading **"Test mode: records can be reset"** (flask icon) sits at the very top, above the top bar on desktop and the sticky header on phones (see §28a).
   - Top bar (desktop only), padding 24 px sides, 20 px top:
     - Left: a search form, max width `sm` (384 px), that GETs `/admin/users` with field `q`. Search icon inside on the left; placeholder **"Find staff by name, email or phone"**; aria-label "Find staff"; 44 px tall; focus ring brand.
     - Right, 10 px apart: the bell; an identity pill (circle with up to two initials of the name, name truncated at 11 rem, role word underneath); and **"Add staff"** button (user-plus icon) linking to `/admin/users?new=1`.
@@ -100,8 +101,9 @@ Groups and items, exactly in this order (label, path, icon, flags):
 | | Audit log | `/admin/audit` | FileClock | adminOnly |
 | | Activity log | `/admin/activity` | Activity | adminOnly |
 | | Updates | `/admin/updates` | RefreshCw | adminOnly |
+| | System | `/admin/system` | Wrench | adminOnly |
 
-Filtering: an item shows when `(!adminOnly || !readOnly) && (!supervisorOnly || readOnly)`. A group with no items left is dropped. So an admin sees "Admin guide" and not "Guide"; a supervisor sees "Guide" (the supervisor guide) and none of Teams, Roles, Places, Audit log, Activity log, Updates.
+Filtering: an item shows when `(!adminOnly || !readOnly) && (!supervisorOnly || readOnly)`. A group with no items left is dropped. So an admin sees "Admin guide" and not "Guide"; a supervisor sees "Guide" (the supervisor guide) and none of Teams, Roles, Places, Audit log, Activity log, Updates, System.
 
 Active item: `/admin` is active only on an exact match; every other item is active when the path starts with its href (so `/admin/metrics/grades` lights "X Metrics").
 
@@ -173,12 +175,13 @@ Invisible. On mount, and then every 15 minutes (`REFRESH_MS = 15 * 60_000`), it 
 | Audit log | full | hidden | everything |
 | Activity log | full | hidden | everything (the `activity_feed` RPC refuses them too) |
 | Updates | full | hidden | everything |
+| System (test mode, reset, go live) | full | hidden | everything (the reset and go-live functions are service-role only and check the admin again) |
 
 Underlying API permissions worth knowing (from `generated/routes.md`): alert resolve routes, X Metrics admin routes (`xmAdminAction`), X Metrics exports, `/api/admin/metrics/run`, `/api/admin/teams`, `/api/admin/staff-roles`, `/api/admin/staff-logins`, `/api/admin/count-template`, `/api/admin/export/audit/*`, `/api/admin/export/activity/*` are `['admin']`; everything else under `/api/admin` admits both and relies on RLS/RPC checks.
 
 ### Acceptance checks
 
-- Signed in as a supervisor, typing each hidden URL (`/admin/guide`, `/admin/teams`, `/admin/roles`, `/admin/places`, `/admin/audit`, `/admin/activity`, `/admin/updates`, `/admin/users/import`, `/admin/outlets/import`, `/admin/metrics/supplies`, `/admin/metrics/targets`, `/admin/metrics/setup`, `/admin/metrics/settings`) lands on `/`.
+- Signed in as a supervisor, typing each hidden URL (`/admin/guide`, `/admin/teams`, `/admin/roles`, `/admin/places`, `/admin/audit`, `/admin/activity`, `/admin/updates`, `/admin/system`, `/admin/users/import`, `/admin/outlets/import`, `/admin/metrics/supplies`, `/admin/metrics/targets`, `/admin/metrics/setup`, `/admin/metrics/settings`) lands on `/`.
 - A field worker typing any `/admin` URL lands on `/`; a signed-out visitor on `/login`.
 - A supervisor never sees a person outside their team on any page or in any download.
 
@@ -360,7 +363,7 @@ Sections (id, title, intro) and what each must say:
 | stock | Stock count and X Metrics | What is in each store, and how staff are scored. | Count requests; back store + shop floor, expiry, sold, shelf photo; Count sheets as Excel/PDF/photo. X Metrics sub-pages listed. |
 | checks | Integrity and Check an excuse | When something does not look right. Staff never see these. | Integrity up to 120 days; Check an excuse up to 3 days; Keep on record. |
 | people | Staff, teams, roles and notifications | The People part of the menu. | Staff tabs, Add staff, Login details (Word); screenshots `/guide/admin-add-staff.png` (1932×504) and `/guide/admin-teams.png` (2000×1216); Teams "Select all shown", "Assign to supervisor"; Roles; Store allocation (once someone has any store allocated, a check-in at a store not theirs is refused); Schedules (Mon–Sat unless changed; one-off changes 60 days back to a year ahead; leave, then one-off change, then weekly pattern) and Leave (Annual/Sick/Casual/Other, 7 days back, a year ahead, 60 days, no overlaps; nobody decides their own; pending leave does not excuse a day; audited `schedule.pattern`, `schedule.override`, `leave.approve`, `leave.reject`); Notifications "See who", "Later", "Send again". Tip on what supervisors can and cannot do. |
-| setup | Outlets, places, audit and activity logs, updates | The Setup part of the menu. | Steps to add a store ("Add outlet", "I am standing here", "Create outlet"); "No location yet" tip; Places ("Save and verify", "Make it a store", "Dismiss"); Audit log; Activity log (what it records, quick ranges, By person with Movement/Attendance links, downloads, admins only, 180 days for sign-ins and app opens, migration 062); Updates ("What's new", "Required", lowest Android/iPhone build). |
+| setup | Outlets, places, audit and activity logs, updates, test mode | The Setup part of the menu. | Steps to add a store ("Add outlet", "I am standing here", "Create outlet"); "No location yet" tip; Places ("Save and verify", "Make it a store", "Dismiss"); Audit log; Activity log (what it records, quick ranges, By person with Movement/Attendance links, downloads, admins only, 180 days for sign-ins and app opens, migration 062); Updates ("What's new", "Required", lowest Android/iPhone build); System: test mode, the four steps Test / Reset (tick categories, dependencies, Review, RESET + password, Finish removing files) / Go live ("We are live — turn off test mode", WE ARE LIVE), and a tip on what always stays, the one audit row, and that both are permanent. |
 | apps | Staff phones and the app | Getting staff set up, and what their phones need. | Download page with QR; sign in, password, profile photo, allow location/camera/notifications; clocking in blocked until notifications on. |
 | exports | Downloads and records | Getting the numbers out. | Excel, PDF, Word, CSV exactly as filtered; downloads audited. Marketer reports (eight tiles, clock-in/out, visits with the time between stores, daily report, counts, sales; month adds day-by-day, per-store and each day) and the daily report's database-written copy of the day's visits. Clock-out reminders (shift end, then an hour later). |
 | questions | Questions | — | 7 Q&As: cannot clock in; clocked in but nothing shows; long silences; forgot password; left the company; store location wrong; a supervisor wants this guide (link to `/admin/supervisor-guide`). |
@@ -2050,6 +2053,43 @@ Empty: "Nobody is on an older app." / "Nobody has opened Xtend since this was se
 - With the lowest Android build set to 20, a phone on build 18 shows "Must update" and counts in "On an older app".
 - Typing a lowest build shows the warning box before publishing.
 - Withdrawing asks for confirmation and fades the row with a "Withdrawn" badge.
+
+---
+
+## 28a. System — `/admin/system` (admins only, migration 0066)
+
+Test mode, resetting the test run, and going live. Code: `src/app/admin/system/page.tsx`, `src/components/admin/system-reset.tsx` (`ResetPanel`, `FinishFiles`, `GoLivePanel`), `src/lib/system-reset.ts` (categories, dependencies, confirmation words, summary; pure), `src/lib/system-reset-server.ts` (password check, service client with audit context, file removal, left-over sign-ins). Rules and the WIPE/KEEP list: `30-rules.md` "Test mode and reset".
+
+**Banner**: while `system_settings.test_mode` is true, the admin layout (admins only; skipped for supervisors, and RLS hides the row from everyone but admins) passes `testMode` to `AdminFrame`, which renders a full-width link to `/admin/system` above the workspace: dark orange (`bg-brand-deep`), white bold xs/sm text, flask icon, **"Test mode: records can be reset"**. No table (0066 not run): no banner.
+
+**Page** (heading **"System"**, intro "Test mode lets you try Xtend out in different places, then clear the test records and start afresh. When you are ready for real work, turn test mode off."). Reads `system_settings` (maybeSingle) and `reset_files_pending()` through the user's session; names for `went_live_by`/`last_reset_by` from `profiles`. Missing row or error: "The system settings could not be loaded. Has migration 0066 been run in Supabase?"
+
+1. Status card: flask icon + **"Test mode is on"** ("Records can be reset. Everyone uses Xtend as normal; staff are not told it is a test.") or shield icon + **"Xtend is live"** ("Test mode was turned off <Lagos time> by <name>. It cannot be turned back on, and nothing can be reset."). Under it, when there was one: "Last reset <time> by <name>: everything" or the category labels.
+2. When files are still queued (`reset_files_pending() > 0`): card **"Stored files from the last reset"** with `FinishFiles` (warning "N stored files are still to be removed." + outline **"Finish removing files"** → `POST /api/admin/system/reset/files`, repeat until 0, then success "All stored files from the reset are removed.").
+3. Test mode on only: card **"Reset test records"** with `ResetPanel`, and card **"Go live"** with `GoLivePanel`. When live, neither is rendered (the reset disappears for good).
+
+**ResetPanel — choose**: a bordered checkbox row **"Select everything (start completely fresh)"** ("Only admin accounts, the product list and settings are left.") that ticks or clears all; then the 14 categories as checkbox cards (two columns from `md`), each with label and one-line description (`RESET_CATEGORIES`). A category brought in by another is shown ticked, disabled, with **"Included because you chose <label(s)>."**; a chosen category with dependencies shows its note ("Staff accounts also clears everything they recorded…", "Stores also clears the visits, counts, X Metrics records and allocations for those stores…"). Button **"Review what will be deleted"** (disabled with nothing chosen) and "N of 14 areas chosen."
+
+**ResetPanel — confirm**: red-tinted box "This will be deleted for good" (or "Everything below will be deleted. Xtend starts completely fresh.") listing each resolved category with its description and "Stored files: …"; a box **"This stays"** listing `ALWAYS_KEPT` and every category not chosen (the audit log "(with one new row recording this reset)"; with staff chosen, each kept category adds "(except what belonged to the staff removed)"); inputs **"Type RESET to confirm"** and **"Your password"** (current-password); red **"Reset now"** (enabled only when the word matches, case and spaces forgiven, and a password is typed) and **"Back"**. While running: "Resetting…" and "This can take up to a minute. Keep this page open." Errors appear in a red alert ("That password is not right.", "Type RESET to confirm.", the database's message).
+
+**ResetPanel — done**: success alert with the headline (`resetSummary`: "Xtend is empty again: N records removed, including M staff accounts. Only admins, products and settings are left." or "N records removed from K areas…"), one row per category with its count, the files line ("N stored files removed." / "… N still to remove." with `FinishFiles`), and **"Reset something else"**.
+
+**GoLivePanel**: deep-orange **"We are live — turn off test mode"** opens a warning ("This cannot be undone. Once test mode is off, the Reset card disappears for good and nobody can reset Xtend again, not even an admin. Reset the test run first if you have not."), input **"Type WE ARE LIVE to confirm"**, **"Turn off test mode for good"** and **"Cancel"**; success refreshes the page.
+
+**Routes** (all `requireApiSession(['admin'])`):
+
+- `POST /api/admin/system/reset` (`maxDuration = 60`): zod `{confirm, password, categories: (key | 'everything')[] (1–20)}`; `confirm` must match RESET; the password is checked by signing in on a throwaway anon client (no stored session, then a local sign-out), 403 "That password is not right." if not; then `reset_test_data(p_actor, p_categories)` through a service-role client carrying the `x-xt-audit` header (so the database's audit row has place and device). If the result says `auth_fallback`, left-over sign-ins with no profile are deleted with `auth.admin.deleteUser`. Then queued files are removed with the Storage API in batches of 1,000 for up to 40 s from the start. Returns `{result, files: {removed, left, failed}, signInsRemoved, summary}`.
+- `POST /api/admin/system/reset/files` (`maxDuration = 60`): removes queued files for up to 45 s; audited `system.reset.files` with `{removed, left}` when it removed any.
+- `POST /api/admin/system/go-live`: zod `{confirm}` must match WE ARE LIVE; `system_go_live(p_actor)` (writes the `system.go_live` audit row).
+
+### Acceptance checks
+
+- A supervisor opening `/admin/system` lands on `/`; supervisors and staff never see the banner.
+- Ticking Staff accounts shows Clock-ins, Store visits, Daily reports, Stock counts and X Metrics ticked and disabled with "Included because you chose Staff accounts."
+- Typing "reset" and the wrong password gives "That password is not right." and nothing changes.
+- After a full reset only admins, products and settings remain and the Audit log shows one "system.reset" row.
+- After going live the banner, the Reset card and the Go live card are gone and cannot come back.
+- The page works at 390 px with no sideways scroll.
 
 ---
 

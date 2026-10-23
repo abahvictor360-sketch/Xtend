@@ -482,5 +482,60 @@ select assert((select count(*) from public.report_files) = :rf_total,
 reset role;
 alter table storage.objects disable row level security;
 
+-- ---------------------------------------------------------------
+-- Test mode (066): admins read it; nobody writes it or resets directly.
+-- On Supabase, new tables get the API roles' default grants and 066's
+-- revokes come after: replay that order.
+-- ---------------------------------------------------------------
+grant insert, update, delete on public.system_settings, public.system_reset_files to authenticated;
+revoke insert, update, delete, truncate on public.system_settings from anon, authenticated;
+revoke all on public.system_reset_files from anon, authenticated;
+insert into public.system_reset_files (bucket, name) values ('selfies', 'rls-check/x.jpg');
+set role authenticated;
+
+select set_config('request.jwt.claim.sub', :'boss', false);
+select assert((select count(*) from public.system_settings) = 1 and (select test_mode from public.system_settings),
+  'rls: an admin sees test mode');
+select assert(public.reset_files_pending() = 1, 'rls: and how many files a reset still has to remove');
+do $$
+begin
+  update public.system_settings set test_mode = false;
+  perform assert(false, 'rls: no direct writes to test mode');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: not even an admin changes test mode directly');
+end $$;
+do $$
+begin
+  perform public.reset_test_data(auth.uid(), array['support']);
+  perform assert(false, 'rls: no reset from the browser');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: an admin cannot call the reset from the browser (the server does, after the password)');
+end $$;
+do $$
+begin
+  perform public.system_go_live(auth.uid());
+  perform assert(false, 'rls: no going live from the browser');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: nor go live from the browser');
+end $$;
+do $$
+begin
+  perform count(*) from public.system_reset_files;
+  perform assert(false, 'rls: the file queue is closed');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: nobody reads the file queue directly');
+end $$;
+
+select set_config('request.jwt.claim.sub', :'ada', false);
+select assert((select count(*) from public.system_settings) = 0,
+  'rls: staff see nothing of test mode');
+select assert(public.reset_files_pending() = 0, 'rls: nor of a reset');
+select set_config('request.jwt.claim.sub', :'rlead', false);
+select assert((select count(*) from public.system_settings) = 0 and public.reset_files_pending() = 0,
+  'rls: supervisors see nothing of test mode either');
+
+reset role;
+delete from public.system_reset_files where name = 'rls-check/x.jpg';
+
 reset role;
 select 'ALL RLS CHECKS PASSED';

@@ -2,7 +2,7 @@
 
 # API routes
 
-112 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+115 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
 
 ## `POST /api/activity`
 
@@ -963,6 +963,52 @@ const schema = z.object({
 })
 ```
 - Tables and views: `support_quick_replies`
+
+## `POST /api/admin/system/go-live`
+
+- File: `src/app/api/admin/system/go-live/route.ts`
+- Who: ['admin']
+
+Turns test mode off for good (0066). The database refuses ever turning it
+back on, and writes the audit row (system.go_live).
+
+```ts
+const schema = z.object({ confirm: z.string().max(40) })
+```
+
+- Database functions: `system_go_live`
+
+## `POST /api/admin/system/reset/files`
+
+- File: `src/app/api/admin/system/reset/files/route.ts`
+- Who: ['admin']
+
+Finishes removing the stored files a reset queued (0066), when there
+were too many to remove in one go. Only files a reset queued are ever
+touched, so this is safe after going live too.
+
+## `POST /api/admin/system/reset`
+
+- File: `src/app/api/admin/system/reset/route.ts`
+- Who: ['admin']
+
+Clears the test run (0066). Admins only, only while test mode is on,
+with RESET typed and the admin's own password. The database decides what
+the choice really clears, clears it in one transaction and writes the one
+audit row; this route then removes the stored files.
+
+```ts
+const schema = z.object({
+  confirm: z.string().max(20),
+  password: z.string().min(1, 'Enter your password').max(200),
+  categories: z
+    .array(z.enum([...(RESET_KEYS as [string, ...string[]]), 'everything']))
+    .min(1, 'Choose at least one thing to reset')
+    .max(20),
+})
+```
+
+- Database functions: `reset_test_data`
 
 ## `PUT /api/admin/teams`
 
