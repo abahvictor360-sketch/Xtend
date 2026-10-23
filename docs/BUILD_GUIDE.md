@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-23, after report photos that survive a bad connection and the 14-day rule for deleting files, announced the day before (migration 0067), test mode and resetting the test run (0066) and report documents that survive a bad connection (0065), and automatic TestFlight uploads for the iPhone app._
+_Last updated: 2026-10-23, after the admin guide’s What’s new section._
 
 ---
 
@@ -733,6 +733,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-23 | Admin guide: new “What’s new (October 2026)” section (migrations 0059–0067 to run in order and where each new feature lives), X Metrics on/off step by step, the Movement map held to Nigeria, and the iPhone app through TestFlight | — |
 | 2026-10-23 | **Report photos survive a bad connection, and files are kept 14 days**: a report sent again does not upload its photos again (an id per photo when taken or picked, `<uid>/report-photo-<id>.jpg`, progress kept in the outbox, "already exists" counts as done, old queued jobs get ids on their first try) and `add_report_photo` answers a repeat with the same row (no duplicates, the five-photo limit still holds). Nothing is deleted automatically before 14 days (was 24 hours for clock photos and unused report documents) or without the day-before notice to admins (all) and supervisors (their team); reports and anything on them are never deleted; unused report photos are now cleaned up too; each night's deletions audited `retention.purge`. The ping-driven selfie sweep is removed. New `src/lib/report-photo-queue.ts`, `scripts/check-report-photos.ts`, `scripts/check-retention.ts`; admin and supervisor guides updated | 0067 |
 | 2026-10-23 | iPhone app: every production build can sign itself and upload to **TestFlight** from GitHub (no Mac) once the App Store Connect API key secrets are set (`APPSTORE_API_KEY_P8`, `APPSTORE_KEY_ID`, `APPSTORE_ISSUER_ID`, `APPLE_TEAM_ID`); build numbers match the APK; `ITSAppUsesNonExemptEncryption` = false | — |
 | 2026-10-23 | **Test mode and reset**: Xtend starts in test mode (admins see "Test mode: records can be reset" across the dashboard). On the new admin-only **System** page (Setup) an admin ticks what to reset — 14 areas or everything — reviews what goes and what stays, types RESET and their password, and the database clears it in one transaction (dependencies included: staff accounts take their records, stores take their visits, counts and allocations), removes non-admin sign-ins and stored files, and keeps one audit row. **We are live** turns test mode off for good. New `POST /api/admin/system/reset`, `/reset/files`, `/go-live`; check script `check-system-reset` | 0066 |
