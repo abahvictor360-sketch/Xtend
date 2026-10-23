@@ -398,9 +398,10 @@ Stored in `attendance.time_verdict` and `time_detail` (`offset_s`,
   the stored file. `DELETE /api/report-files/<id>` answers 404
   `{ code: 'gone' }` and 409 `{ code: 'locked' }` for those two (a queued
   removal reads "gone" as done and "locked" as final). **Clean-up (0065)**:
-  `report_file_orphans(p_hours = 24, p_limit = 1000)` (SECURITY DEFINER,
-  service role only) returns `path` for every `report-files` object older
-  than `greatest(p_hours, 24)` hours that no `report_files` row points at
+  `report_file_orphans(p_hours = 336, p_limit = 1000)` (SECURITY DEFINER,
+  service role only; 24 hours in 0065, **14 days and announced** since 0067,
+  see §6.3) returns `path` for every `report-files` object older
+  than the retention cutoff that no `report_files` row points at
   (a report never saved or never arrived, a file removed whose delete
   failed), oldest first, at most `p_limit` (1-5000); the nightly
   `/api/cron/purge-selfies` deletes them through the Storage API in batches
@@ -413,6 +414,26 @@ Stored in `attendance.time_verdict` and `time_detail` (`offset_s`,
   `report_file_readable(name)` (own folder, admin, or supervisor of the
   owner of a file that is on a report); delete your own only when
   `report_file_attached(name)` is false (off the report); no update.
+- **Report photos (0067)**: rows in `report_photos (report_id, storage_path)`
+  are added by `add_report_photo(path)` (SECURITY DEFINER; the route no
+  longer inserts): `can_file_report()` else "Only marketers file the daily
+  report"; today's report must exist ("Save today's report first, then add
+  photos"; locked `for update`); a path already on that report returns its
+  row's id (a retry: no second row, never refused by the limit); the path's
+  first folder must be the caller's ("That photo is not yours"); the object
+  must be in bucket `reports`, uploaded within **24 hours** ("Take the photo
+  again, then save the report") and, when storage gives a type, an image
+  ("That is not a photo"); a path on any other report is "That photo is
+  already on a report"; then the 0002 trigger `report_photo_limit` keeps
+  **5** at most ("A report carries at most 5 photos"). Index on
+  `storage_path`. The phone names each photo `<uid>/report-photo-<id>.jpg`
+  (id given when taken or picked). **Clean-up**: `report_photo_orphans(p_hours
+  = 336, p_limit = 1000)` (service role only) lists `reports` objects named
+  `<uuid>/report-photo-<id>.jpg` or `<uuid>/<uuid>.jpg` (the name before
+  0067) that no `report_photos` row (nor any count, place, X Metrics or count
+  sheet row) points at, older than the retention cutoff (§6.3), oldest first,
+  at most `p_limit` (1-5000); count, place and X Metrics photos carry their own
+  prefix and are never listed.
 
 ### 2.7 Work schedules and leave (0059)
 
@@ -948,21 +969,56 @@ Images are resized in the app to **640 px** wide, at most **150 KB**, with a
   `selfie_at_home` (medium).
 - A rejected photo is answered with HTTP 422 and the message.
 
-### 6.3 Retention: clock photos live 24 hours (0012)
+### 6.3 Retention: files kept 14 days, announced the day before (0012, 0067)
 
-- Both images (full and thumbnail) of every attendance row and store visit
-  are deleted **24 hours** after the row's `created_at`
-  (`SELFIE_RETENTION_HOURS`). The row itself, with time, place, distance and
-  status, is kept forever.
+- **Never deleted automatically**: reports, and the photos and documents on
+  a report (only the test-mode reset, 0066, and the owner removing a
+  document on the day touch them).
+- **Deleted 14 days after `created_at`** (`retention_days()` = 14,
+  `RETENTION_DAYS` in `src/lib/retention.ts`; 24 hours before 0067): both
+  images (full and thumbnail) of every attendance row and store visit (the
+  row, with time, place, distance and status, is kept forever); report
+  photos on no report (`report_photo_orphans`); report documents on no
+  report (`report_file_orphans`). Every listing uses
+  `retention_cutoff(p_hours)` = the older of now − `greatest(p_hours, 14 × 24)`
+  hours and `retention_delete_before()`, so nothing younger than 14 days is
+  ever listed, whatever is asked.
+- **Announced the day before**: `retention_announce()` (service role) records
+  in `job_runs` row `retention_notice` `{at, through = now − 13 days,
+  prev_at, prev_through}`; run again within 20 hours it changes nothing.
+  `retention_delete_before()` is the newest announcement at least **20 hours**
+  old (current, else previous); with none, nothing is listed at all.
+- **Who is told**: `retention_notice_due(through)` (service role) returns,
+  for every active admin (all of it) and every active supervisor (items
+  owned by people they supervise, `supervisor_covers(supervisor, user)` = the
+  `supervises_user` rule for a named supervisor), `selfies` (attendance and
+  visit rows with a photo), `report_photos` and `report_files` (on no report,
+  owner = first folder) created before `through`; only rows with something
+  due; nobody who already had a `retention_notice` notification today
+  (Lagos). Staff are never told.
 - Storage objects can only be removed through the Storage API, so the
-  server: lists `expired_selfie_paths(24)`, deletes the objects, then calls
-  `forget_expired_selfies(24)` to null both paths (`src/lib/retention-server.ts`).
-- Throttle: `claim_selfie_sweep(10)` lets one caller sweep at most every
-  **10 minutes** (`job_runs` row `purge_selfies`). Every heartbeat ping
-  tries it; the nightly cron (`/api/cron/purge-selfies`, **02:20 UTC**)
-  sweeps outright.
-- `selfie_retention_status()` (admins only): last run, result, photos
-  held, photos overdue.
+  nightly cron (`/api/cron/purge-selfies`, **02:20 UTC**,
+  `src/lib/retention-server.ts`): lists `expired_selfie_paths(336)`, deletes
+  them in batches of 100, then `forget_selfie_paths(paths)` nulls exactly the
+  paths whose batch went through; then `report_file_orphans` and
+  `report_photo_orphans` likewise; `record_retention_purge(result)` keeps the
+  counts on `job_runs` row `retention_purge` and writes one audit row
+  `retention.purge` (actor null, meta = the counts) when any count is above
+  0; then `retention_announce()` and `retention_notice_due`, and each group
+  of people with the same words gets one `notifyUsers` notification
+  (`detail: { kind: 'retention_notice', system: true, through }`). The words
+  (`retentionMessage`): title "Files deleted tomorrow"; body "Tomorrow Xtend
+  will delete <n clock-in photo(s)>, <n unused report photo(s)> and <n unused
+  report document(s)>[ from your team] older than 14 days (from before
+  <d Mon yyyy>). Download anything you need from <Attendance | Marketer
+  reports> today. Reports and the files on them are kept."; link
+  `/admin/attendance` when clock-in photos are due, else
+  `/admin/marketer-reports`. The ping-driven sweep (`claim_selfie_sweep`)
+  is no longer called (0067).
+- `forget_expired_selfies(p_hours)` remains (same cutoff) for older callers.
+- `selfie_retention_status()` (admins only): `retention_days`, last run and
+  result (`retention_purge`), photos held, photos overdue (held and older
+  than 15 days).
 
 ---
 
@@ -1274,11 +1330,15 @@ sets (created_by null): 4 templates, 5 quick replies (quick replies use a
 ### 10.7 Scheduled jobs
 
 All need `Authorization: Bearer $CRON_SECRET` (`vercel.json`):
-- `/api/cron/purge-selfies` — 02:20 UTC daily: photo sweep, abandoned
-  visits, beacons older than 60 days deleted, activity log rows older than
-  180 days (`purge_user_activity()`, 0062), report documents on no report
-  for over 24 hours (`report_file_orphans()`, deleted through the Storage
-  API, 0065; JSON `report_files_deleted`, `report_files_failed`).
+- `/api/cron/purge-selfies` — 02:20 UTC daily (§6.3): clock and visit
+  photos, report photos and report documents on no report, 14 days old and
+  announced the night before, deleted through the Storage API; abandoned
+  visits; beacons and phone checks older than 60 days deleted; activity log
+  rows older than 180 days (`purge_user_activity()`, 0062); then the
+  announcement and the day-before notices. JSON: `photos_deleted`,
+  `records_cleared`, `failed`, `report_files_deleted`, `report_files_failed`,
+  `report_photos_deleted`, `report_photos_failed`, `notices_sent`,
+  `next_deletion_before`, `activity_cleared`, `visits_abandoned`, `ran_at`.
 - `/api/cron/absence-sweep` — 08:30 UTC daily (`"30 8 * * *"`): no-shows
   (only people expected that day, 0059), then flag alerts.
 - `/api/cron/alerts` — every 5 minutes, run by
@@ -1919,8 +1979,11 @@ Testable statements, grouped by area. They mirror the assertions in
 - Demoting a supervisor releases their reports; supervisors are not offered the supervisor list.
 
 ### Retention
-- Both images of an expired clock event are listed; a photo taken today is not; forgetting nulls both paths and keeps the row; nothing is listed twice; visit photos follow the same rule.
+- Both images of an expired clock event are listed; a photo a day old is not (14 days, 0067); forgetting nulls both paths and keeps the row; nothing is listed twice; visit photos follow the same rule.
 - The sweep throttle allows one run per period; admins alone see retention status; SQL deletes on storage are refused.
+- 0067: with no announcement at least 20 hours old nothing is listed; tonight's announcement covers what is older than 13 days and a second run the same night changes nothing; nothing younger than 14 days is listed however few hours are asked; a report photo on a report is never listed, nor count, place, selfie-bucket or report-files objects; the listing takes a batch size; only the service role lists, announces, records and forgets.
+- 0067 notices: a supervisor is told their own team's clock-in photos, unused report photos and documents (not what is on a report); a supervisor with nothing due and staff are not told; admins are told everything; one notice a person a day. `forget_selfie_paths` clears only the rows of the paths given; reports and their photos stay; a night with nothing deleted writes no audit row, one with deletions writes `retention.purge`.
+- Report photos (0067): need today's report; the same path again returns the same row once; another person's, a stale (> 24 h), a missing or a non-image upload is refused; a retry with five on is answered, a sixth refused; a photo on one report cannot go on another.
 
 ### Stock counts
 - The same product name twice (any case or spacing) is refused.
@@ -1932,7 +1995,7 @@ Testable statements, grouped by area. They mirror the assertions in
 - Units missing beyond the threshold are flagged for that product only; a same-day correction clears the flag; identical and round-number counts are flagged; more units is a delivery.
 - Sheet lines keep back store, shop floor and expiry with in_store as their total; blank figures are not counted; off-sheet products still count; half units, empty lines and bad dates are refused.
 - Count sheets: any time for someone who takes stock counts (0064; `count_was_due` false when none was open), own store, own folder, Excel/PDF/JPG/PNG, ≤ 10 MB, once; sending one while a count is open counts as counted. The template is an admin's PDF.
-- Report documents (0064): five at most, the allowlist only, 1 byte to 10 MB, own folder and uploaded within 24 hours (0065), only on today's report, removed only by the owner on the day; owner, admin and the owner's supervisor read them, nobody else; the table is never written directly. Attaching the same path again to today's report returns the same row (0065). Files on no report for over 24 hours are deleted nightly (0065).
+- Report documents (0064): five at most, the allowlist only, 1 byte to 10 MB, own folder and uploaded within 24 hours (0065), only on today's report, removed only by the owner on the day; owner, admin and the owner's supervisor read them, nobody else; the table is never written directly. Attaching the same path again to today's report returns the same row (0065). Files on no report are deleted nightly once 14 days old and announced (0065, 0067).
 - A role set not to count cannot count or be asked; it can still send X Metrics; built-in roles can be turned off and on; admins always count.
 
 ### Photos and integrity

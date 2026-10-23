@@ -119,7 +119,7 @@ export async function toVisitRows(
         v.arrived_label ?? '—',
         v.departed_label ?? '—',
         visitFlags(v, findings).map((k) => FLAG_WORDS[k]).join(', ') || '—',
-        url ?? 'deleted after 24h',
+        url ?? 'deleted after 14 days',
       ],
     }
   })
@@ -140,7 +140,7 @@ export function visitSheet(visits: VisitExportRow[], rows: ExportRow[], shortMin
       `${visits.length} visit(s) · ${f.people} staff · ${f.stores} store(s) · ` +
       `${f.minutes} minutes in store${f.averageMinutes != null ? ` (about ${f.averageMinutes} a visit)` : ''} · ` +
       `${f.short} shorter than ${shortMinutes} min · ${f.offSite} arrived away from the store · ${flagged} worth a look. ` +
-      'Times are Africa/Lagos. Clock photos are deleted 24 hours after capture; links to ' +
+      'Times are Africa/Lagos. Clock photos are deleted 14 days after capture; links to ' +
       'the ones still held expire an hour after this file was made.',
     sheetName: 'Store visits',
     columns: VISIT_COLUMNS,

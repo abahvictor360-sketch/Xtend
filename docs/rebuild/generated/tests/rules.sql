@@ -36,6 +36,17 @@ begin
 end;
 $$;
 
+-- The nightly job announced yesterday what goes tonight (0067): nothing
+-- is deleted that was not announced at least 20 hours before.
+create or replace function announced_yesterday() returns void
+language sql as $$
+  insert into public.job_runs (job, last_run_at, last_result)
+  values ('retention_notice', now() - interval '1 day',
+          jsonb_build_object('at', now() - interval '1 day',
+                             'through', now() - interval '1 day' - make_interval(days => public.retention_days() - 1)))
+  on conflict (job) do update set last_run_at = excluded.last_run_at, last_result = excluded.last_result;
+$$;
+
 -- Notifications switched on for someone, on a real push service (027).
 create or replace function notifications_on(p uuid) returns void
 language sql as $$
@@ -604,7 +615,8 @@ begin
     'a merchandiser resolves no targets at all');
 
   -- ---------------------------------------------------------------
-  -- Retention: both images go 24 hours after the photo was taken.
+  -- Retention: both images go 14 days after the photo was taken (0067;
+  -- 24 hours before it), and only once the deletion was announced.
   --
   -- The objects themselves are removed by the server through the Storage
   -- API, because Supabase refuses a direct DELETE. What is tested here is
@@ -616,6 +628,12 @@ begin
   values ('closing', 9.0765, 7.3986, 10, fresh_photo('selfies', 'old-full.jpg'), fresh_photo('selfies', 'old-thumb.jpg'), now())
   returning id into attendance_id;
   update public.attendance set created_at = now() - interval '25 hours'
+   where id = attendance_id;
+  perform announced_yesterday();
+  perform assert(
+    (select count(*) from public.expired_selfie_paths(24)) = 0,
+    'retention 0067: a clock photo a day old is kept, whatever is asked');
+  update public.attendance set created_at = now() - interval '15 days'
    where id = attendance_id;
 
   perform act_as(grace);
@@ -652,7 +670,7 @@ begin
     'and nothing is listed for deletion twice');
 
   -- A store visit photo expires on exactly the same rule.
-  update public.store_visits set created_at = now() - interval '30 hours' where id = visit_id;
+  update public.store_visits set created_at = now() - interval '15 days' where id = visit_id;
   perform assert(
     (select count(*) from public.expired_selfie_paths(24)) = 2,
     'a store visit photo expires on the same rule');
@@ -4576,14 +4594,21 @@ begin
     perform assert(exists (select 1 from public.report_files rf where rf.id = f3),
       'report files 0065: and the document stays on the report');
 
-    -- Clean-up: only files on no report, only older than 24 hours.
+    -- Clean-up: only files on no report, only older than 14 days (0067;
+    -- 24 hours before it), and only once announced the day before.
     perform act_as(boss);
     insert into storage.objects (bucket_id, name, metadata, created_at) values
       -- uploaded for a report that never arrived
       ('report-files', ghost || '/report-never.pdf', '{"mimetype":"application/pdf","size":10}', now() - interval '30 hours'),
       -- another bucket is not this job's business
-      ('reports', ada || '/report-old-photo.jpg', '{"mimetype":"image/jpeg","size":10}', now() - interval '30 hours');
-    update storage.objects set created_at = now() - interval '48 hours'
+      ('reports', ada || '/report-old-photo.jpg', '{"mimetype":"image/jpeg","size":10}', now() - interval '30 days');
+    perform announced_yesterday();
+    perform assert(not exists (select 1 from public.report_file_orphans(24) o
+                               where o.path in (ghost || '/report-never.pdf', ada || '/report-stale.pdf')),
+      'retention 0067: a document on no report for a day or two is kept, whatever is asked');
+    update storage.objects set created_at = now() - interval '15 days'
+      where bucket_id = 'report-files' and name in (ghost || '/report-never.pdf', ada || '/report-stale.pdf');
+    update storage.objects set created_at = now() - interval '20 days'
       where bucket_id = 'report-files' and name = ada || '/report-c2.pdf';
     select array_agg(o.path order by o.path) into found_paths
     from public.report_file_orphans() o
@@ -4602,6 +4627,210 @@ begin
                    and not has_function_privilege('anon', 'public.report_file_orphans(integer, integer)', 'execute'),
       'report files 0065: only the service role may list them');
     end;
+
+  -- ---------------------------------------------------------------
+  -- Report photos: retries, clean-up; 14 days, announced (0067).
+  -- ---------------------------------------------------------------
+  declare
+    pho    uuid := gen_random_uuid();
+    other  uuid := gen_random_uuid();
+    sup1   uuid := gen_random_uuid();
+    sup2   uuid := gen_random_uuid();
+    shop   uuid;
+    rep    uuid;
+    p1     uuid;
+    k      integer;
+    legacy text;
+    through timestamptz;
+    found_paths text[];
+    r      record;
+    audits bigint;
+  begin
+    perform act_as(boss);
+    insert into auth.users (id, email) values
+      (pho, 'pho.rp@xpel.ng'), (other, 'other.rp@xpel.ng'), (sup1, 'sup1.rp@xpel.ng'), (sup2, 'sup2.rp@xpel.ng');
+    insert into public.outlets (name, lat, lng) values ('RP Store', 6.47, 3.42) returning id into shop;
+    insert into public.profiles (id, full_name, email, role) values
+      (sup1, 'Sade Bello', 'sup1.rp@xpel.ng', 'supervisor'),
+      (sup2, 'Musa Garba', 'sup2.rp@xpel.ng', 'supervisor');
+    insert into public.profiles (id, full_name, email, role, outlet_id, supervisor_id) values
+      (pho, 'Funke Ade', 'pho.rp@xpel.ng', 'marketer', shop, sup1),
+      (other, 'Kunle Eze', 'other.rp@xpel.ng', 'marketer', shop, sup2);
+    legacy := pho || '/' || gen_random_uuid() || '.jpg';
+
+    perform act_as(pho);
+    insert into storage.objects (bucket_id, name, metadata, created_at) values
+      ('reports', pho || '/report-photo-c1.jpg', '{"mimetype":"image/jpeg","size":1000}', now()),
+      ('reports', pho || '/report-photo-stale.jpg', '{"mimetype":"image/jpeg","size":1000}', now() - interval '25 hours'),
+      ('reports', pho || '/report-photo-text.jpg', '{"mimetype":"text/plain","size":1000}', now()),
+      ('reports', other || '/report-photo-theirs.jpg', '{"mimetype":"image/jpeg","size":1000}', now());
+    begin
+      perform public.add_report_photo(pho || '/report-photo-c1.jpg');
+      perform assert(false, 'report photos 0067: a photo needs today''s report first');
+    exception when others then
+      perform assert(sqlerrm like 'Save today''s report first%', 'report photos 0067: a photo needs today''s report first');
+    end;
+    insert into public.reports (body, sales_summary, stock_status)
+    values ('A long day at the store', 'Sold twenty units', 'Low on the small tubs') returning id into rep;
+
+    p1 := public.add_report_photo(pho || '/report-photo-c1.jpg');
+    perform assert(public.add_report_photo(pho || '/report-photo-c1.jpg') = p1
+                   and (select count(*) from public.report_photos rp where rp.report_id = rep) = 1,
+      'report photos 0067: sending the same photo again returns the row already there, once');
+    begin
+      perform public.add_report_photo(other || '/report-photo-theirs.jpg');
+      perform assert(false, 'report photos 0067: nobody adds another person''s photo');
+    exception when others then
+      perform assert(sqlerrm like 'That photo is not yours%', 'report photos 0067: nobody adds another person''s photo');
+    end;
+    begin
+      perform public.add_report_photo(pho || '/report-photo-stale.jpg');
+      perform assert(false, 'report photos 0067: a photo uploaded more than 24 hours ago is refused');
+    exception when others then
+      perform assert(sqlerrm like 'Take the photo again%', 'report photos 0067: a photo uploaded more than 24 hours ago is refused');
+    end;
+    begin
+      perform public.add_report_photo(pho || '/report-photo-missing.jpg');
+      perform assert(false, 'report photos 0067: a photo that was never uploaded is refused');
+    exception when others then
+      perform assert(sqlerrm like 'Take the photo again%', 'report photos 0067: a photo that was never uploaded is refused');
+    end;
+    begin
+      perform public.add_report_photo(pho || '/report-photo-text.jpg');
+      perform assert(false, 'report photos 0067: only pictures');
+    exception when others then
+      perform assert(sqlerrm like 'That is not a photo%', 'report photos 0067: only pictures');
+    end;
+
+    -- Five still means five, and a retry of one already on is not a sixth.
+    for k in 2..5 loop
+      insert into storage.objects (bucket_id, name, metadata)
+      values ('reports', pho || '/report-photo-c' || k || '.jpg', '{"mimetype":"image/jpeg","size":10}');
+      perform public.add_report_photo(pho || '/report-photo-c' || k || '.jpg');
+    end loop;
+    perform assert(public.add_report_photo(pho || '/report-photo-c1.jpg') = p1
+                   and (select count(*) from public.report_photos rp where rp.report_id = rep) = 5,
+      'report photos 0067: a retry with five on is answered, not refused by the limit');
+    insert into storage.objects (bucket_id, name, metadata)
+    values ('reports', pho || '/report-photo-c6.jpg', '{"mimetype":"image/jpeg","size":10}');
+    begin
+      perform public.add_report_photo(pho || '/report-photo-c6.jpg');
+      perform assert(false, 'report photos 0067: still five at most');
+    exception when others then
+      perform assert(sqlerrm like '%at most 5 photos%', 'report photos 0067: still five at most');
+    end;
+
+    -- A photo on someone's report is not put on another.
+    perform act_as(other);
+    insert into public.reports (body, sales_summary, stock_status)
+    values ('Quiet day at the store', 'Sold two units', 'Shelves are full');
+    perform public.add_report_photo(other || '/report-photo-theirs.jpg');
+    begin
+      perform public.add_report_photo(pho || '/report-photo-c1.jpg');
+      perform assert(false, 'report photos 0067: a photo on a report is on one report only');
+    exception when others then
+      perform assert(sqlerrm like 'That photo is not yours%', 'report photos 0067: a photo on a report is on one report only');
+    end;
+    perform assert(not has_function_privilege('anon', 'public.add_report_photo(text)', 'execute')
+                   and has_function_privilege('authenticated', 'public.add_report_photo(text)', 'execute'),
+      'report photos 0067: signed-in people only');
+
+    -- Clean-up: report photos on no report, older than 14 days, announced.
+    perform act_as(boss);
+    insert into storage.objects (bucket_id, name, metadata, created_at) values
+      ('reports', pho || '/report-photo-orphan.jpg', '{"mimetype":"image/jpeg"}', now() - interval '20 days'),
+      ('reports', legacy, '{"mimetype":"image/jpeg"}', now() - interval '20 days'),
+      ('reports', pho || '/report-photo-young.jpg', '{"mimetype":"image/jpeg"}', now() - interval '2 days'),
+      ('reports', pho || '/report-photo-13d.jpg', '{"mimetype":"image/jpeg"}', now() - interval '13 days'),
+      ('reports', pho || '/count-' || gen_random_uuid() || '.jpg', '{"mimetype":"image/jpeg"}', now() - interval '20 days'),
+      ('reports', pho || '/place-sign-' || gen_random_uuid() || '.jpg', '{"mimetype":"image/jpeg"}', now() - interval '20 days'),
+      ('selfies', pho || '/report-photo-elsewhere.jpg', '{"mimetype":"image/jpeg"}', now() - interval '20 days'),
+      ('report-files', pho || '/report-photo-doc.jpg', '{"mimetype":"image/jpeg"}', now() - interval '20 days');
+    update storage.objects set created_at = now() - interval '20 days'
+      where bucket_id = 'reports' and name = pho || '/report-photo-c1.jpg';
+
+    -- With no announcement a day old, nothing at all.
+    delete from public.job_runs where job = 'retention_notice';
+    perform assert(not exists (select 1 from public.report_photo_orphans() o where o.path like pho || '/%')
+                   and not exists (select 1 from public.report_file_orphans())
+                   and not exists (select 1 from public.expired_selfie_paths()),
+      'retention 0067: nothing is deleted before it was announced');
+    through := public.retention_announce();
+    perform assert(abs(extract(epoch from (through - (now() - interval '13 days')))) < 1,
+      'retention 0067: tonight''s notice covers what is older than 13 days');
+    perform assert(public.retention_announce() = through,
+      'retention 0067: a second run the same night announces nothing new');
+    perform assert(not exists (select 1 from public.report_photo_orphans() o where o.path like pho || '/%'),
+      'retention 0067: what was announced tonight does not go tonight');
+    perform announced_yesterday();
+
+    select array_agg(o.path order by o.path) into found_paths
+    from public.report_photo_orphans() o where o.path like pho || '/%';
+    perform assert(found_paths = (select array_agg(x order by x) from unnest(array[pho || '/report-photo-orphan.jpg', legacy]) x),
+      'report photos 0067: the clean-up lists old report photos on no report, the old names too, and nothing else');
+    perform assert(not exists (select 1 from public.report_photo_orphans(1) o
+                               where o.path in (pho || '/report-photo-young.jpg', pho || '/report-photo-13d.jpg')),
+      'retention 0067: never younger than 14 days, however few hours are asked');
+    perform assert(not exists (select 1 from public.report_photo_orphans() o where o.path = pho || '/report-photo-c1.jpg'),
+      'report photos 0067: a photo on a report is never listed');
+    perform assert((select count(*) from public.report_photo_orphans(336, 1)) = 1,
+      'report photos 0067: the clean-up takes a batch size');
+    perform assert(has_function_privilege('service_role', 'public.report_photo_orphans(integer, integer)', 'execute')
+                   and not has_function_privilege('authenticated', 'public.report_photo_orphans(integer, integer)', 'execute')
+                   and not has_function_privilege('anon', 'public.report_photo_orphans(integer, integer)', 'execute'),
+      'report photos 0067: only the service role may list them');
+
+    -- The day before: who is told, and how much.
+    alter table public.attendance disable trigger user;
+    insert into public.attendance (user_id, type, lat, lng, accuracy_m, selfie_path, thumb_path, client_captured_at, created_at)
+    values (pho, 'opening', 6.47, 3.42, 10, pho || '/rp-old.jpg', pho || '/rp-old_thumb.jpg', now() - interval '13 days 12 hours', now() - interval '13 days 12 hours'),
+           (pho, 'opening', 6.47, 3.42, 10, pho || '/rp-new.jpg', pho || '/rp-new_thumb.jpg', now() - interval '3 days', now() - interval '3 days');
+    alter table public.attendance enable trigger user;
+    through := now() - interval '13 days';
+    select * into r from public.retention_notice_due(through) d where d.user_id = sup1;
+    -- One clock-in (13.5 days old; the 3-day one is not due), the two
+    -- report photos on no report, the document on no report; not the five
+    -- photos on her report.
+    perform assert(r.selfies = 1 and r.report_photos = 2 and r.report_files = 1 and r.role = 'supervisor',
+      'retention 0067: a supervisor is told what of their own team goes tomorrow, and nothing on a report');
+    perform assert(not exists (select 1 from public.retention_notice_due(through) d where d.user_id = sup2),
+      'retention 0067: a supervisor with nothing of theirs due is not told');
+    perform assert(exists (select 1 from public.retention_notice_due(through) d
+                           where d.user_id = boss and d.role = 'admin' and d.selfies >= 1 and d.report_photos >= 2),
+      'retention 0067: every admin is told all of it');
+    perform assert(not exists (select 1 from public.retention_notice_due(through) d where d.user_id in (pho, other)),
+      'retention 0067: staff are never told');
+    insert into public.notifications (title, body, url, audience, audience_detail, recipients)
+    values ('Files go tomorrow', 'Test', '/admin', 'users',
+            jsonb_build_object('kind', 'retention_notice', 'system', true, 'user_ids', jsonb_build_array(sup1)), 1);
+    perform assert(not exists (select 1 from public.retention_notice_due(through) d where d.user_id = sup1),
+      'retention 0067: one notice a person a day');
+    perform assert(has_function_privilege('service_role', 'public.retention_notice_due(timestamptz)', 'execute')
+                   and not has_function_privilege('authenticated', 'public.retention_notice_due(timestamptz)', 'execute')
+                   and not has_function_privilege('authenticated', 'public.retention_announce()', 'execute')
+                   and not has_function_privilege('authenticated', 'public.forget_selfie_paths(text[])', 'execute')
+                   and not has_function_privilege('authenticated', 'public.record_retention_purge(jsonb)', 'execute'),
+      'retention 0067: only the service role announces, lists and records');
+
+    -- Forgetting exactly what was removed; reports themselves never go.
+    perform assert(public.forget_selfie_paths(array[pho || '/rp-old.jpg', pho || '/rp-old_thumb.jpg']) = 1
+                   and exists (select 1 from public.attendance where selfie_path = pho || '/rp-new.jpg'),
+      'retention 0067: only the rows of the photos removed forget them');
+    perform assert(exists (select 1 from public.reports where id = rep)
+                   and (select count(*) from public.report_photos rp where rp.report_id = rep) = 5,
+      'retention 0067: the report and its photos stay');
+
+    -- What was deleted is kept, with one audit row when anything was.
+    select count(*) into audits from public.audit_log where action = 'retention.purge';
+    perform public.record_retention_purge('{"photos_deleted":0,"report_photos_deleted":0}');
+    perform assert((select count(*) from public.audit_log where action = 'retention.purge') = audits,
+      'retention 0067: a night with nothing deleted leaves no audit row');
+    perform public.record_retention_purge('{"photos_deleted":4,"report_photos_deleted":2}');
+    perform assert((select count(*) from public.audit_log where action = 'retention.purge') = audits + 1
+                   and (select (last_result->>'photos_deleted')::int from public.job_runs where job = 'retention_purge') = 4,
+      'retention 0067: a night with deletions is audited as retention.purge and kept for the footnote');
+    perform assert(public.retention_days() = 14, 'retention 0067: the rule is 14 days');
+  end;
 
   -- Test mode and resetting the test run (066). Every case runs in its
   -- own block that is rolled back, so the data stays for the RLS tests.

@@ -108,7 +108,7 @@ export async function toExportRows(
         metres(r.distance_m),
         `${Math.round(r.accuracy_m)} m`,
         r.status ?? '—',
-        url ?? 'deleted after 24h',
+        url ?? 'deleted after 14 days',
       ],
     }
   })
@@ -118,7 +118,7 @@ export function attendanceSheet(rows: ExportRow[]): Sheet {
   return {
     title: 'Xtend attendance export',
     subtitle:
-      `${rows.length} record(s). Times are Africa/Lagos. Clock photos are deleted 24 hours ` +
+      `${rows.length} record(s). Times are Africa/Lagos. Clock photos are deleted 14 days ` +
       'after capture; links to the ones still held expire an hour after this file was made.',
     sheetName: 'Attendance',
     columns: EXPORT_COLUMNS,

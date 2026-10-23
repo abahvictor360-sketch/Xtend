@@ -538,8 +538,21 @@ export default async function AdminGuidePage() {
             can open them. <Ui>Documents attached</Ui> on Marketer reports lists them for the period with a{' '}
             <Ui>Download</Ui> link (each office download is recorded in the audit log as{' '}
             <Ui>report_file.download</Ui>); the PDF, Word and Excel reports and Ask Xtend&apos;s field
-            reports list them by name. Long document names wrap so you can read them on your phone. A document uploaded from a phone but never attached (its report
-            never arrived) is deleted by the nightly clean-up a day later.
+            reports list them by name. Long document names wrap so you can read them on your phone. A document or photo uploaded from a phone but never put on a report
+            (its report never arrived) is deleted by the nightly clean-up 14 days later.
+          </p>
+          <p>
+            <Ui>What Xtend deletes, and when</Ui>: reports, and the photos and documents on a report, are
+            never deleted. The nightly clean-up deletes only clock-in and store-visit photos (the time,
+            place and distance stay) and report photos and documents that are on no report, each{' '}
+            <strong>14 days</strong> after it was taken or uploaded, never sooner. The evening before, you
+            get a notification (push and Notifications history) saying how many go tomorrow and from which
+            date, with a link to Attendance or Marketer reports: open or download anything you need that
+            day. You get everything; each supervisor gets their own team&apos;s; at most one notice a day,
+            and only when something is due. Staff are not told. Each night&apos;s deletions are recorded in
+            the audit log as <Ui>retention.purge</Ui> with how many went, and the Overview shows how many
+            clock photos are held. Device reports and phone checks are kept 60 days and the activity log
+            180 days.
           </p>
           <p>
             <Ui>Clock-out reminders</Ui>: anyone still clocked in when their store&apos;s shift ends

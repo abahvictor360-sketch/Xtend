@@ -1191,6 +1191,7 @@ Policies:
 - `activity_feed(p_from date, p_to date, p_user uuid, p_kinds text[], p_limit integer)` → TABLE(at timestamp with time zone, user_id uuid, full_name text, role text, kind text, label text, detail jsonb, ip text, platform text, device text, user_agent text) · definer · 0062_user_activity.sql
 - `activity_platform(p_ua text)` → text · 0062_user_activity.sql
 - `add_report_file(p_path text, p_name text)` → uuid · definer · 0065_report_files_offline.sql
+- `add_report_photo(p_path text)` → uuid · definer · 0067_report_photos_offline.sql
 - `admin_overview()` → jsonb · definer · 0059_schedules_leave.sql
 - `alert_watchers(p_user uuid)` → TABLE(user_id uuid, full_name text, role user_role) · definer · 0036_supervisor_alerts.sql
 - `apply_leave(p_kind text, p_from date, p_to date, p_reason text)` → uuid · definer · 0059_schedules_leave.sql
@@ -1251,12 +1252,13 @@ Policies:
 - `encrypt(bytea, bytea, text)` → bytea
 - `encrypt_iv(bytea, bytea, bytea, text)` → bytea
 - `end_store_visit(p_visit_id uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_place_name text, p_address text)` → jsonb · definer · 0016_visits_without_allocation.sql
-- `expired_selfie_paths(p_hours integer)` → TABLE(path text) · definer · 0012_selfie_retention_24h.sql
+- `expired_selfie_paths(p_hours integer)` → TABLE(path text) · definer · 0067_report_photos_offline.sql
 - `field_topic(uid uuid)` → text · 0058_realtime_broadcast.sql
 - `finish_onboarding()` → void · definer · 0037_profile_photos.sql
 - `flag_location(p_user uuid, p_lat double precision, p_lng double precision, p_accuracy double precision, p_at timestamp with time zone, p_source text, p_check_repeat boolean, p_outlet uuid)` → void · definer · 0022_integrity_checks.sql
 - `flag_own_integrity(p_kind text, p_severity text, p_summary text, p_detail jsonb, p_outlet uuid)` → void · definer · 0032_native_integrity.sql
-- `forget_expired_selfies(p_hours integer)` → integer · definer · 0012_selfie_retention_24h.sql
+- `forget_expired_selfies(p_hours integer)` → integer · definer · 0067_report_photos_offline.sql
+- `forget_selfie_paths(p_paths text[])` → integer · definer · 0067_report_photos_offline.sql
 - `gen_random_bytes(integer)` → bytea
 - `gen_random_uuid()` → uuid
 - `gen_salt(text)` → text
@@ -1347,6 +1349,7 @@ Policies:
 - `record_beacon(p jsonb)` → jsonb · definer · 0026_phone_evidence.sql
 - `record_excuse_check(p_user uuid, p_claim text, p_from timestamp with time zone, p_to timestamp with time zone, p_verdict text, p_headline text, p_note text)` → uuid · definer · 0048_excuse_check_advanced.sql
 - `record_offline_pings(p_points jsonb, p_sent_at timestamp with time zone)` → integer · definer · 0029_offline_positions.sql
+- `record_retention_purge(p_result jsonb)` → void · definer · 0067_report_photos_offline.sql
 - `record_selfie_sweep(p_result jsonb)` → void · definer · 0012_selfie_retention_24h.sql
 - `release_reports_on_demotion()` → trigger · definer · 0018_reporting_line_upkeep.sql
 - `remove_report_file(p_id uuid)` → text · definer · 0065_report_files_offline.sql
@@ -1358,9 +1361,12 @@ Policies:
 - `report_file_attached(p_name text)` → boolean · definer · 0064_count_sheets_any_time_report_files.sql
 - `report_file_limit()` → trigger · definer · 0064_count_sheets_any_time_report_files.sql
 - `report_file_mime_ok(p_mime text)` → boolean · 0064_count_sheets_any_time_report_files.sql
-- `report_file_orphans(p_hours integer, p_limit integer)` → TABLE(path text) · definer · 0065_report_files_offline.sql
+- `report_file_orphans(p_hours integer, p_limit integer)` → TABLE(path text) · definer · 0067_report_photos_offline.sql
+- `report_file_orphans_before(p_before timestamp with time zone)` → TABLE(path text, created_at timestamp with time zone) · definer · 0067_report_photos_offline.sql
 - `report_file_readable(p_name text)` → boolean · definer · 0064_count_sheets_any_time_report_files.sql
 - `report_photo_limit()` → trigger · definer · 0002_logic.sql
+- `report_photo_orphans(p_hours integer, p_limit integer)` → TABLE(path text) · definer · 0067_report_photos_offline.sql
+- `report_photo_orphans_before(p_before timestamp with time zone)` → TABLE(path text, created_at timestamp with time zone) · definer · 0067_report_photos_offline.sql
 - `report_visits_snapshot(p_user uuid, p_date date)` → jsonb · definer · 0060_marketer_visits_reports.sql
 - `request_phone_check(p_user uuid)` → uuid · definer · 0026_phone_evidence.sql
 - `request_store_count(p_user_ids uuid[], p_due_date date, p_note text)` → uuid · definer · 0046_role_store_counts.sql
@@ -1376,6 +1382,11 @@ Policies:
 - `resolve_alerts(p_alert_ids uuid[], p_note text)` → integer · definer · 0052_visits_alerts.sql
 - `resolve_notification_targets(p_audience notification_audience, p_detail jsonb)` → TABLE(user_id uuid, full_name text, role user_role, outlet_name text, devices integer) · definer · 0006_push_notifications.sql
 - `resolve_support_thread(p_thread uuid)` → void · definer · 0031_support_messages.sql
+- `retention_announce()` → timestamp with time zone · definer · 0067_report_photos_offline.sql
+- `retention_cutoff(p_hours integer)` → timestamp with time zone · definer · 0067_report_photos_offline.sql
+- `retention_days()` → integer · 0067_report_photos_offline.sql
+- `retention_delete_before()` → timestamp with time zone · definer · 0067_report_photos_offline.sql
+- `retention_notice_due(p_through timestamp with time zone)` → TABLE(user_id uuid, role text, selfies integer, report_photos integer, report_files integer) · definer · 0067_report_photos_offline.sql
 - `review_integrity_flag(p_id uuid, p_note text)` → void · definer · 0022_integrity_checks.sql
 - `review_integrity_flags(p_ids uuid[], p_note text)` → integer · definer · 0054_integrity_ask.sql
 - `revoke_tracking_tokens()` → void · definer · 0050_background_tracking.sql
@@ -1384,7 +1395,7 @@ Policies:
 - `schedule_guard(p_user uuid)` → void · definer · 0059_schedules_leave.sql
 - `schedule_notification(p_title text, p_body text, p_url text, p_audience notification_audience, p_detail jsonb, p_send_at timestamp with time zone)` → uuid · definer · 0053_support_notifications.sql
 - `selfie_check()` → trigger · definer · 0023_photo_checks.sql
-- `selfie_retention_status()` → jsonb · definer · 0012_selfie_retention_24h.sql
+- `selfie_retention_status()` → jsonb · definer · 0067_report_photos_offline.sql
 - `set_count_sheet_template(p_path text, p_file_name text)` → uuid · definer · 0035_store_count_sheets.sql
 - `set_my_avatar(p_path text)` → void · definer · 0062_user_activity.sql
 - `set_schedule_override(p_user uuid, p_day date, p_working boolean, p_note text)` → uuid · definer · 0059_schedules_leave.sql
@@ -1401,6 +1412,7 @@ Policies:
 - `submit_count_sheet(p_outlet_id uuid, p_path text, p_file_name text)` → uuid · definer · 0064_count_sheets_any_time_report_files.sql
 - `submit_store_count(p_outlet_id uuid, p_lines jsonb, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_photo_path text)` → integer · definer · 0040_xpel_count_sheet.sql
 - `supervises_user(target uuid)` → boolean · definer · 0017_supervisor_manages_staff.sql
+- `supervisor_covers(p_supervisor uuid, p_user uuid)` → boolean · definer · 0067_report_photos_offline.sql
 - `support_assignees(p_thread uuid)` → TABLE(user_id uuid, full_name text, role user_role) · definer · 0053_support_notifications.sql
 - `system_go_live(p_actor uuid)` → jsonb · definer · 0066_test_mode_reset.sql
 - `system_settings_guard()` → trigger · 0066_test_mode_reset.sql
