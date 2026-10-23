@@ -1,6 +1,9 @@
 import Link from 'next/link'
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { readXmFeatures } from '@/lib/metrics/features-server'
+import { xmPageOn } from '@/lib/metrics/features'
+import { XmSwitchedOff } from '@/components/admin/xm/switched-off'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
@@ -19,6 +22,8 @@ export default async function GradesPage({ searchParams }: { searchParams: Promi
   const readOnly = session.profile.role !== 'admin'
   const month = monthStart((await searchParams).month)
   const supabase = await createServerSupabase()
+  const xmFeatures = await readXmFeatures(supabase)
+  if (!xmPageOn(xmFeatures, 'grades')) return <XmSwitchedOff title="Grades" readOnly={readOnly} />
   const ended = month < monthStart(lagosDateString())
 
   const { data: kept } = await supabase

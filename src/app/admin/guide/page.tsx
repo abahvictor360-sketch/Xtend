@@ -280,6 +280,38 @@ export default async function AdminGuidePage() {
               <Ui>Settings</Ui> holds the weights and bands.
             </li>
           </ul>
+          <p>
+            <Ui>Switching parts off</Ui>: not using part of X Metrics yet? Open <Ui>X Metrics → Settings</Ui>{' '}
+            and use the <Ui>Features</Ui> switches at the top. Each one saves at once and is kept in the
+            history and the audit log. Turning a part off hides it and stops its work; nothing it recorded
+            is deleted, and turning it back on carries on from there.
+          </p>
+          <ul className="list-disc space-y-1.5 pl-5">
+            <li>
+              <Ui>X Metrics</Ui>: the whole module. Off, it leaves the menu for supervisors and the staff
+              app; you still see it in the menu marked “off”, opening Settings.
+            </li>
+            <li>
+              <Ui>Expiry</Ui>: the expiry date box on staff counts, expiry alerts and their pushes, the
+              Expiry page and expiry in grades. Dates already known for a batch are kept.
+            </li>
+            <li>
+              <Ui>Supplies</Ui>: the Supplies page and invoice imports.
+            </li>
+            <li>
+              <Ui>Grading</Ui>: the Grades and Scoring policy pages, finalising, and the score staff see.
+            </li>
+            <li>
+              <Ui>Sales</Ui>: the daily sales form for staff, sales figures, targets and the Targets page.
+            </li>
+          </ul>
+          <p>
+            Checking counts against what was expected (last count + supplied − sold) needs both Supplies and
+            Sales on; with either off, counts still come in but nobody is flagged for a gap. When both are
+            back on, counts are only compared with counts taken since, so the weeks nobody logged supplies or
+            sales are never held against anyone. Grades leave out what is off and weigh the rest. Staff are
+            not told: the part simply is not there. A switched-off page reached by a link says so.
+          </p>
         </GuideSection>
 
         <GuideSection topic={T.checks} intro="When something does not look right. Staff never see these.">

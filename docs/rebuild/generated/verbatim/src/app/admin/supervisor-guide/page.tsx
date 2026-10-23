@@ -202,7 +202,8 @@ export default async function SupervisorGuidePage() {
           <p>
             Everyone also counts at the end of each month without being asked. <Ui>X Metrics</Ui> shows
             your stores&apos; stock, sales against target, expiry alerts and your team&apos;s grades; an
-            admin sets it up and changes it.
+            admin sets it up and changes it. An admin can switch parts of it off for a while: they leave
+            your menu until they are back on, and nothing is lost.
           </p>
         </GuideSection>
 

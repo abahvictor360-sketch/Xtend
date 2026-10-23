@@ -5823,6 +5823,7 @@ CREATE FUNCTION public.xm_claim_expiry_alerts() RETURNS TABLE(id uuid, outlet_na
   with told as (
     update public.xm_expiry_alerts a set notified_at = now()
     where a.notified_at is null and a.acknowledged_at is null
+      and public.xm_feature_on('expiry')
     returning a.*
   )
   select t.id, o.name, p.name, t.batch, t.expiry_date, t.days_left, t.units_on_hand, t.consider_pulling
@@ -5889,6 +5890,9 @@ begin
   if auth.uid() is not null and not public.is_admin() then
     raise exception 'Only an admin can run the expiry check';
   end if;
+  if not public.xm_feature_on('expiry') then
+    return 0;
+  end if;
   select * into settings from public.xm_settings;
 
   for b in select * from public.xm_stock_on_hand where expiry_date is not null and units > 0 loop
@@ -5918,6 +5922,52 @@ $$;
 
 
 --
+-- Name: xm_feature_guard(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.xm_feature_guard() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if tg_table_name = 'xm_counts' and not public.xm_feature_on('xmetrics') then
+    raise exception 'Stock counts are not being collected here at the moment';
+  elsif tg_table_name = 'xm_sales' and not public.xm_feature_on('sales') then
+    raise exception 'Sales are not being collected at the moment';
+  elsif tg_table_name in ('xm_supplies', 'xm_supply_imports') and not public.xm_feature_on('supplies') then
+    raise exception 'Supplies are switched off in X Metrics. An admin can turn them on in X Metrics → Settings';
+  elsif tg_table_name = 'xm_targets' and not public.xm_feature_on('sales') then
+    raise exception 'Sales and targets are switched off in X Metrics. An admin can turn them on in X Metrics → Settings';
+  elsif tg_table_name = 'xm_monthly_grades' and not public.xm_feature_on('grading') then
+    raise exception 'Grading is switched off in X Metrics. An admin can turn it on in X Metrics → Settings';
+  end if;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: xm_feature_on(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.xm_feature_on(p_feature text) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select coalesce((
+    select s.enabled and case p_feature
+      when 'xmetrics'  then true
+      when 'expiry'    then s.expiry_enabled
+      when 'supplies'  then s.supplies_enabled
+      when 'grading'   then s.grading_enabled
+      when 'sales'     then s.sales_enabled
+      when 'reconcile' then s.supplies_enabled and s.sales_enabled
+      else false end
+    from public.xm_settings s), false);
+$$;
+
+
+--
 -- Name: xm_finalise_month(date); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5928,6 +5978,9 @@ CREATE FUNCTION public.xm_finalise_month(p_month date) RETURNS integer
 declare kept integer;
 begin
   perform public.xm_require_admin();
+  if not public.xm_feature_on('grading') then
+    raise exception 'Grading is switched off in X Metrics. An admin can turn it on in X Metrics → Settings';
+  end if;
   if (date_trunc('month', p_month) + interval '1 month')::date > public.business_date() then
     raise exception 'A month can be finalised once it has ended';
   end if;
@@ -5955,6 +6008,9 @@ declare
   m_start date := date_trunc('month', p_month)::date;
   m_end date := (date_trunc('month', p_month) + interval '1 month')::date - 1;
   last_day date;
+  sales_on boolean := public.xm_feature_on('sales');
+  recon_on boolean := public.xm_feature_on('reconcile');
+  expiry_on boolean := public.xm_feature_on('expiry');
   sold integer; target integer; target_kind text;
   store_sold integer;
   recs integer; recs_ok integer;
@@ -5967,38 +6023,46 @@ begin
      and not (public.is_admin() or public.supervises_user(p_user)) then
     raise exception 'You can only see grades for your own team';
   end if;
+  if not public.xm_feature_on('grading') then
+    raise exception 'Grading is switched off in X Metrics';
+  end if;
   select * into settings from public.xm_settings;
   last_day := least(m_end, public.business_date() - 1);
 
   -- Sales against target.
-  select coalesce(sum(units), 0)::integer into sold from public.xm_live_sale_lines
-  where user_id = p_user and sale_date between m_start and m_end;
-  select target_units into target from public.xm_current_targets
-  where month = m_start and user_id = p_user;
-  if target is not null then
-    target_kind := 'person';
-    c_sales := least(100, round(100.0 * sold / target, 1));
-  else
-    select sum(t.target_units)::integer into target from public.xm_current_targets t
-    where t.month = m_start and t.outlet_id in (select outlet_id from public.outlets_for_user(p_user));
+  if sales_on then
+    select coalesce(sum(units), 0)::integer into sold from public.xm_live_sale_lines
+    where user_id = p_user and sale_date between m_start and m_end;
+    select target_units into target from public.xm_current_targets
+    where month = m_start and user_id = p_user;
     if target is not null then
-      target_kind := 'store';
-      select coalesce(sum(units), 0)::integer into store_sold from public.xm_live_sale_lines
-      where sale_date between m_start and m_end
-        and outlet_id in (select t.outlet_id from public.xm_current_targets t
-                          where t.month = m_start
-                            and t.outlet_id in (select outlet_id from public.outlets_for_user(p_user)));
-      c_sales := least(100, round(100.0 * store_sold / target, 1));
+      target_kind := 'person';
+      c_sales := least(100, round(100.0 * sold / target, 1));
+    else
+      select sum(t.target_units)::integer into target from public.xm_current_targets t
+      where t.month = m_start and t.outlet_id in (select outlet_id from public.outlets_for_user(p_user));
+      if target is not null then
+        target_kind := 'store';
+        select coalesce(sum(units), 0)::integer into store_sold from public.xm_live_sale_lines
+        where sale_date between m_start and m_end
+          and outlet_id in (select t.outlet_id from public.xm_current_targets t
+                            where t.month = m_start
+                              and t.outlet_id in (select outlet_id from public.outlets_for_user(p_user)));
+        c_sales := least(100, round(100.0 * store_sold / target, 1));
+      end if;
     end if;
   end if;
 
   -- Stock accuracy.
-  select count(*), count(*) filter (where not r.flagged) into recs, recs_ok
-  from public.xm_reconciliations r join public.xm_counts c on c.id = r.count_id
-  where c.user_id = p_user and c.voided_at is null and c.count_date between m_start and m_end;
-  if recs > 0 then c_acc := round(100.0 * recs_ok / recs, 1); end if;
+  if recon_on then
+    select count(*), count(*) filter (where not r.flagged) into recs, recs_ok
+    from public.xm_reconciliations r join public.xm_counts c on c.id = r.count_id
+    where c.user_id = p_user and c.voided_at is null and c.count_date between m_start and m_end;
+    if recs > 0 then c_acc := round(100.0 * recs_ok / recs, 1); end if;
+  end if;
 
-  -- Reporting consistency, against the days they clocked in.
+  -- Reporting consistency, against the days they clocked in. Without
+  -- sales, only the counts.
   with days as (
     select distinct a.attendance_date as d from public.attendance a
     where a.user_id = p_user and a.type = 'opening'
@@ -6016,16 +6080,22 @@ begin
              and c.count_date between days.d - (settings.count_interval_days - 1) and days.d))
     into present, sales_ok, counts_ok
   from days;
-  if present > 0 then c_cons := round(100.0 * (sales_ok + counts_ok) / (2 * present), 1); end if;
+  if present > 0 then
+    c_cons := case when sales_on then round(100.0 * (sales_ok + counts_ok) / (2 * present), 1)
+                   else round(100.0 * counts_ok / present, 1) end;
+  end if;
+  if not sales_on then sales_ok := null; end if;
 
   -- Expiry handling.
-  select count(*), count(l.expiry_date),
-         count(*) filter (where l.expiry_date is not null and l.expiry_date < c.count_date and l.on_shelf > 0)
-    into lines, dated, expired_on_shelf
-  from public.xm_count_lines l join public.xm_counts c on c.id = l.count_id
-  where c.user_id = p_user and c.voided_at is null and c.count_date between m_start and m_end;
-  if lines > 0 then
-    c_exp := round(50.0 * dated / lines + 50.0 * (1 - expired_on_shelf::numeric / lines), 1);
+  if expiry_on then
+    select count(*), count(l.expiry_date),
+           count(*) filter (where l.expiry_date is not null and l.expiry_date < c.count_date and l.on_shelf > 0)
+      into lines, dated, expired_on_shelf
+    from public.xm_count_lines l join public.xm_counts c on c.id = l.count_id
+    where c.user_id = p_user and c.voided_at is null and c.count_date between m_start and m_end;
+    if lines > 0 then
+      c_exp := round(50.0 * dated / lines + 50.0 * (1 - expired_on_shelf::numeric / lines), 1);
+    end if;
   end if;
 
   weight_sum := (case when c_sales is not null then settings.weight_sales else 0 end)
@@ -6044,17 +6114,18 @@ begin
 
   return jsonb_build_object(
     'month', m_start, 'user_id', p_user, 'score', score, 'band', band,
+    'parts', jsonb_build_object('sales', sales_on, 'accuracy', recon_on, 'expiry', expiry_on),
     'weights', jsonb_build_object('sales', settings.weight_sales, 'accuracy', settings.weight_accuracy,
                                   'consistency', settings.weight_consistency, 'expiry', settings.weight_expiry),
     'bands', jsonb_build_object('poor_below', settings.band_poor_below, 'strong_from', settings.band_strong_from),
-    'sales', jsonb_build_object('score', c_sales, 'units_sold', sold, 'target', target,
+    'sales', jsonb_build_object('score', c_sales, 'units_sold', coalesce(sold, 0), 'target', target,
                                 'target_kind', target_kind, 'store_units_sold', store_sold),
-    'accuracy', jsonb_build_object('score', c_acc, 'reconciliations', recs, 'within_tolerance', recs_ok,
-                                   'tolerance_pct', settings.tolerance_pct),
+    'accuracy', jsonb_build_object('score', c_acc, 'reconciliations', coalesce(recs, 0),
+                                   'within_tolerance', coalesce(recs_ok, 0), 'tolerance_pct', settings.tolerance_pct),
     'consistency', jsonb_build_object('score', c_cons, 'days_present', present,
                                       'sales_on_time', sales_ok, 'counts_in_time', counts_ok),
-    'expiry', jsonb_build_object('score', c_exp, 'lines_counted', lines, 'expiry_recorded', dated,
-                                 'expired_on_shelf', expired_on_shelf));
+    'expiry', jsonb_build_object('score', c_exp, 'lines_counted', coalesce(lines, 0),
+                                 'expiry_recorded', coalesce(dated, 0), 'expired_on_shelf', coalesce(expired_on_shelf, 0)));
 end;
 $$;
 
@@ -6191,7 +6262,8 @@ CREATE FUNCTION public.xm_month_grades(p_month date) RETURNS SETOF jsonb
     AS $$
   select public.xm_grade(p.id, p_month) || jsonb_build_object('full_name', p.full_name)
   from public.profiles p
-  where public.is_field_role(p.role)
+  where public.xm_feature_on('grading')
+    and public.is_field_role(p.role)
     and (public.is_admin() or public.supervises_user(p.id))
     and (exists (select 1 from public.attendance a where a.user_id = p.id
                  and a.attendance_date between date_trunc('month', p_month)::date
@@ -6279,6 +6351,10 @@ begin
   if auth.uid() is not null and not public.is_admin() then
     raise exception 'Only an admin can run reconciliation';
   end if;
+  -- Off: counts wait, untouched.
+  if not public.xm_feature_on('reconcile') then
+    return 0;
+  end if;
   select * into settings from public.xm_settings;
 
   for c in
@@ -6301,8 +6377,11 @@ begin
       order by pc.count_date desc, pc.created_at desc
       limit 1;
 
-      -- No earlier count of this product: this one is its baseline.
-      continue when prev.id is null;
+      -- No earlier count of this product: this one is its baseline. Nor
+      -- one since reconciliation came back on: supplies or sales were not
+      -- being logged in between, so this one is the new baseline.
+      continue when prev.id is null
+                 or (settings.reconcile_from is not null and prev.count_date < settings.reconcile_from);
 
       select coalesce(sum(s.quantity), 0)::integer into supplied
       from public.xm_supplies s
@@ -6388,6 +6467,32 @@ $$;
 
 
 --
+-- Name: xm_set_features(boolean, boolean, boolean, boolean, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.xm_set_features(p_enabled boolean, p_expiry boolean, p_supplies boolean, p_grading boolean, p_sales boolean) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare s public.xm_settings;
+begin
+  perform public.xm_require_admin();
+  if p_enabled is null or p_expiry is null or p_supplies is null or p_grading is null or p_sales is null then
+    raise exception 'Say whether each part is on or off';
+  end if;
+  update public.xm_settings
+  set enabled = p_enabled, expiry_enabled = p_expiry, supplies_enabled = p_supplies,
+      grading_enabled = p_grading, sales_enabled = p_sales
+  where id
+  returning * into s;
+  return jsonb_build_object('enabled', s.enabled, 'expiry', s.expiry_enabled, 'supplies', s.supplies_enabled,
+                            'grading', s.grading_enabled, 'sales', s.sales_enabled,
+                            'reconcile_from', s.reconcile_from);
+end;
+$$;
+
+
+--
 -- Name: xm_set_store(uuid, boolean); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -6442,6 +6547,24 @@ begin
   new.updated_by := auth.uid();
   new.updated_at := now();
   insert into public.xm_settings_history (settings, changed_by) values (to_jsonb(old), auth.uid());
+  return new;
+end;
+$$;
+
+
+--
+-- Name: xm_settings_resume(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.xm_settings_resume() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if not (old.enabled and old.supplies_enabled and old.sales_enabled)
+     and (new.enabled and new.supplies_enabled and new.sales_enabled) then
+    new.reconcile_from := public.business_date();
+  end if;
   return new;
 end;
 $$;
@@ -8271,6 +8394,12 @@ CREATE TABLE public.xm_settings (
     sales_photo_required boolean DEFAULT true NOT NULL,
     updated_by uuid,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
+    expiry_enabled boolean DEFAULT true NOT NULL,
+    supplies_enabled boolean DEFAULT true NOT NULL,
+    grading_enabled boolean DEFAULT true NOT NULL,
+    sales_enabled boolean DEFAULT true NOT NULL,
+    reconcile_from date,
     CONSTRAINT xm_settings_band_poor_below_check CHECK (((band_poor_below >= 1) AND (band_poor_below <= 99))),
     CONSTRAINT xm_settings_band_strong_from_check CHECK (((band_strong_from >= 2) AND (band_strong_from <= 100))),
     CONSTRAINT xm_settings_bands CHECK ((band_poor_below < band_strong_from)),
@@ -9815,10 +9944,31 @@ CREATE TRIGGER trg_store_visits_zz_place_due AFTER INSERT ON public.store_visits
 
 
 --
+-- Name: xm_counts trg_xm_counts_feature_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_xm_counts_feature_guard BEFORE INSERT ON public.xm_counts FOR EACH ROW EXECUTE FUNCTION public.xm_feature_guard();
+
+
+--
 -- Name: xm_counts trg_xm_counts_place_due_guard; Type: TRIGGER; Schema: public; Owner: -
 --
 
 CREATE TRIGGER trg_xm_counts_place_due_guard BEFORE INSERT ON public.xm_counts FOR EACH ROW EXECUTE FUNCTION public.place_due_guard();
+
+
+--
+-- Name: xm_monthly_grades trg_xm_monthly_grades_feature_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_xm_monthly_grades_feature_guard BEFORE INSERT OR UPDATE ON public.xm_monthly_grades FOR EACH ROW EXECUTE FUNCTION public.xm_feature_guard();
+
+
+--
+-- Name: xm_sales trg_xm_sales_feature_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_xm_sales_feature_guard BEFORE INSERT ON public.xm_sales FOR EACH ROW EXECUTE FUNCTION public.xm_feature_guard();
 
 
 --
@@ -9833,6 +9983,34 @@ CREATE TRIGGER trg_xm_sales_place_due_guard BEFORE INSERT ON public.xm_sales FOR
 --
 
 CREATE TRIGGER trg_xm_settings_keep BEFORE UPDATE ON public.xm_settings FOR EACH ROW EXECUTE FUNCTION public.xm_settings_keep();
+
+
+--
+-- Name: xm_settings trg_xm_settings_resume; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_xm_settings_resume BEFORE UPDATE ON public.xm_settings FOR EACH ROW EXECUTE FUNCTION public.xm_settings_resume();
+
+
+--
+-- Name: xm_supplies trg_xm_supplies_feature_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_xm_supplies_feature_guard BEFORE INSERT ON public.xm_supplies FOR EACH ROW EXECUTE FUNCTION public.xm_feature_guard();
+
+
+--
+-- Name: xm_supply_imports trg_xm_supply_imports_feature_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_xm_supply_imports_feature_guard BEFORE INSERT ON public.xm_supply_imports FOR EACH ROW EXECUTE FUNCTION public.xm_feature_guard();
+
+
+--
+-- Name: xm_targets trg_xm_targets_feature_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_xm_targets_feature_guard BEFORE INSERT ON public.xm_targets FOR EACH ROW EXECUTE FUNCTION public.xm_feature_guard();
 
 
 --
@@ -12998,6 +13176,22 @@ GRANT ALL ON FUNCTION public.xm_expiry_scan() TO service_role;
 
 
 --
+-- Name: FUNCTION xm_feature_guard(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.xm_feature_guard() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION xm_feature_on(p_feature text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.xm_feature_on(p_feature text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.xm_feature_on(p_feature text) TO authenticated;
+GRANT ALL ON FUNCTION public.xm_feature_on(p_feature text) TO service_role;
+
+
+--
 -- Name: FUNCTION xm_finalise_month(p_month date); Type: ACL; Schema: public; Owner: -
 --
 
@@ -13104,6 +13298,15 @@ GRANT ALL ON FUNCTION public.xm_review_grade(p_grade uuid, p_note text) TO servi
 
 
 --
+-- Name: FUNCTION xm_set_features(p_enabled boolean, p_expiry boolean, p_supplies boolean, p_grading boolean, p_sales boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.xm_set_features(p_enabled boolean, p_expiry boolean, p_supplies boolean, p_grading boolean, p_sales boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.xm_set_features(p_enabled boolean, p_expiry boolean, p_supplies boolean, p_grading boolean, p_sales boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.xm_set_features(p_enabled boolean, p_expiry boolean, p_supplies boolean, p_grading boolean, p_sales boolean) TO service_role;
+
+
+--
 -- Name: FUNCTION xm_set_store(p_outlet uuid, p_active boolean); Type: ACL; Schema: public; Owner: -
 --
 
@@ -13126,6 +13329,13 @@ GRANT ALL ON FUNCTION public.xm_set_target(p_month date, p_user uuid, p_outlet u
 --
 
 REVOKE ALL ON FUNCTION public.xm_settings_keep() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION xm_settings_resume(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.xm_settings_resume() FROM PUBLIC;
 
 
 --

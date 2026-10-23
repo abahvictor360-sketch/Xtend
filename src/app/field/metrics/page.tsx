@@ -6,6 +6,8 @@ import { Alert } from '@/components/ui/alert'
 import { XmFieldForms, type XmBatch, type XmRecent } from '@/components/field/xm-forms'
 import { monthStart, type XmGrade, type XmProduct, type XmSettings } from '@/lib/metrics/shared'
 import type { XmPolicy } from '@/components/metrics/policy'
+import { readXmFeatures } from '@/lib/metrics/features-server'
+import { xmFieldTab, xmFieldView } from '@/lib/metrics/features'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'X Metrics — Xtend' }
@@ -24,6 +26,10 @@ export default async function FieldMetricsPage({
   if (!['merchandiser', 'marketer', 'admin'].includes(session.profile.role)) redirect('/field')
   const { tab } = await searchParams
   const supabase = await createServerSupabase()
+  // Parts switched off (0063) are simply not there; staff are not told why.
+  const features = await readXmFeatures(supabase)
+  const view = xmFieldView(features)
+  if (!view.show) redirect('/field')
 
   const [{ data: mine }, { data: enrolled }, { data: products }, { data: today }, { data: settings }] =
     await Promise.all([
@@ -47,10 +53,12 @@ export default async function FieldMetricsPage({
   const businessDate = (today as string) ?? new Date().toISOString().slice(0, 10)
 
   // Their own score this month, and the scoring policy (044).
-  const [{ data: grade }, { data: policy }] = await Promise.all([
-    supabase.rpc('xm_grade', { p_user: session.userId, p_month: monthStart(businessDate) }),
-    supabase.from('xm_current_policy').select('id, title, body, change_note, published_at').maybeSingle<XmPolicy>(),
-  ])
+  const [{ data: grade }, { data: policy }] = view.score
+    ? await Promise.all([
+        supabase.rpc('xm_grade', { p_user: session.userId, p_month: monthStart(businessDate) }),
+        supabase.from('xm_current_policy').select('id, title, body, change_note, published_at').maybeSingle<XmPolicy>(),
+      ])
+    : [{ data: null }, { data: null }]
   const { data: readRow } = policy
     ? await supabase.from('xm_policy_reads').select('policy_id').eq('policy_id', policy.id).eq('user_id', session.userId).maybeSingle()
     : { data: null }
@@ -68,14 +76,16 @@ export default async function FieldMetricsPage({
           .gte('count_date', weekAgo)
           .order('captured_at', { ascending: false })
           .limit(30),
-        supabase
-          .from('xm_sales')
-          .select('id, outlet_id, sale_date, captured_at, voided_at, superseded_by')
-          .eq('user_id', session.userId)
-          .gte('sale_date', weekAgo)
-          .is('superseded_by', null)
-          .order('sale_date', { ascending: false })
-          .limit(30),
+        view.salesForm
+          ? supabase
+              .from('xm_sales')
+              .select('id, outlet_id, sale_date, captured_at, voided_at, superseded_by')
+              .eq('user_id', session.userId)
+              .gte('sale_date', weekAgo)
+              .is('superseded_by', null)
+              .order('sale_date', { ascending: false })
+              .limit(30)
+          : Promise.resolve({ data: [] }),
       ])
     : [{ data: [] }, { data: [] }, { data: [] }]
 
@@ -94,11 +104,12 @@ export default async function FieldMetricsPage({
       {stores.length === 0 ? (
         <Alert variant="info">
           None of your stores is in X Metrics yet. When the office adds your store, its stock count
-          and daily sales appear here.
+          {view.salesForm ? ' and daily sales appear' : ' appears'} here.
         </Alert>
       ) : (
         <XmFieldForms
-          initialTab={tab === 'sales' ? 'sales' : tab === 'score' ? 'score' : 'count'}
+          initialTab={xmFieldTab(features, tab)}
+          view={view}
           stores={stores}
           products={(products ?? []) as XmProduct[]}
           batches={(onHand ?? []) as XmBatch[]}

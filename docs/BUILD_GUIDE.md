@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-22, after the admin Activity log (migration 0062)._
+_Last updated: 2026-10-23, after the X Metrics feature switches (migration 0063)._
 
 ---
 
@@ -305,6 +305,23 @@ the code lives.
   Recorded silently: staff are never told. Downloads in four formats, audited
   as `export.activity.<fmt>` (`src/lib/activity-*.ts`,
   `src/components/admin/activity-view.tsx`).
+- **X Metrics feature switches** (0063, admins, the **Features** card at the
+  top of `/admin/metrics/settings`): the whole module and four parts, each on
+  or off, saved through `xm_set_features` (history kept, audited
+  `xm.features.update`). **Expiry** (expiry date box, alerts and pushes,
+  Expiry page, expiry in grades), **Supplies** (Supplies page, imports),
+  **Grading** (Grades and Scoring policy pages, finalising, staff score),
+  **Sales** (staff sales form, sales figures, targets, Targets page).
+  Reconciliation needs Supplies and Sales; when both come back on it restarts
+  from that day (`xm_settings.reconcile_from`) so nobody is flagged for the gap.
+  Off hides the part (sub-navigation, overview tiles, staff tabs, downloads,
+  Ask Xtend tools, marketer report sales) and the database refuses or skips
+  its work (`xm_feature_on`, `xm_feature_guard` triggers); nothing is
+  deleted. With the module off, X Metrics leaves supervisors' menus and the
+  staff app; admins keep a menu item marked "off" that opens Settings. A
+  switched-off page reached by a link says so (`src/lib/metrics/features.ts`,
+  `features-server.ts`, `src/components/admin/xm/features-form.tsx`,
+  `switched-off.tsx`, `src/app/admin/metrics/layout.tsx`).
 
 ## 6. The database: every migration
 
@@ -374,6 +391,7 @@ Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
 | 0060 | Marketers check in only at their own stores; visits kept with the daily report |
 | 0061 | Clock-out reminders at the end of the shift |
 | 0062 | Activity log: sign-ins, sign-outs, app opens, password and photo changes (`user_activity`), the admin-only `activity_feed`, 180-day purge |
+| 0063 | X Metrics feature switches on `xm_settings` (`enabled`, `expiry_enabled`, `supplies_enabled`, `grading_enabled`, `sales_enabled`, all on; `reconcile_from`), `xm_feature_on`, admin-only `xm_set_features`, guards refusing switched-off writes, and the sweep, reconciliation, expiry and grading skipping what is off |
 
 ## 7. Environment variables
 
@@ -509,7 +527,8 @@ for s in check-allocate check-assistant-actions check-attendance check-audit \
          check-excuses check-exports check-fields check-geo check-integrity-ask \
          check-movement check-push-endpoints check-supply-import \
          check-support-notifications check-updates check-visits-alerts check-xm-exports \
-         check-schedules-leave check-marketer-reports check-clock-out-reminder check-activity; do
+         check-schedules-leave check-marketer-reports check-clock-out-reminder check-activity \
+         check-xm-features; do
   npx tsx --tsconfig tsconfig.scripts.json scripts/$s.ts | tail -1
 done
 ```
@@ -594,6 +613,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-23 | **X Metrics feature switches**: a Features card at the top of X Metrics → Settings turns the whole module, Expiry, Supplies, Grading and Sales off and back on without losing anything. Off hides the part from the dashboard (menu, sub-navigation, overview tiles, store and staff pages, downloads, Ask Xtend, marketer report sales) and the staff app (Metrics tab, sales form, expiry date box, score), and the database refuses or skips its work; reconciliation needs Supplies and Sales and restarts cleanly when they return. New `PUT /api/admin/metrics/features` (audited `xm.features.update`); check script `check-xm-features` | 0063 |
 | 2026-10-22 | Admin **Activity log** (`/admin/activity`, menu after Audit log): everyone's sign-ins, sign-outs, app opens, clock-ins, visits, reports, counts, leave, support messages, password and photo changes with time, device, platform and IP; filters, summary cards, per-person table with Movement/Attendance links, day-by-day timeline, Excel/PDF/Word/CSV downloads. New `POST /api/activity` and `POST /api/auth/password` (the change-password form now saves through the server); nightly purge after 180 days; check script `check-activity` | 0062 |
 | 2026-10-21 | Restrict post-login destinations to local pages; retain photos on temporary 401/429 check failures; roll back failed PM2 reloads and verify rollback health. Added three regression scripts | — |
 | 2026-10-21 | UI/UX pass: the "Clock in" quick-action on the shift pill meets the 44 px touch target; white-on-orange small text (DayCard outlet line, HeaderField label, X Metrics deep-tile note) raised to pass 4.5:1 contrast; calendar day-labels enlarged from 8.5–9 px to 10 px for readability | — |
@@ -658,6 +678,11 @@ Newest first. Dates are when the work landed on the main branch.
   support messages carry no IP address (those tables never stored one); only
   sign-ins, sign-outs, app opens and password/photo changes do. A sign-in
   made before 0062 ran is not recorded (the route logs and carries on).
+- **X Metrics switches** (0063): a sales report or count saved offline on a
+  phone and sent after its part was switched off is refused with a plain
+  message and stays unsent. Expiry dates already known for a batch are
+  carried from count to count while Expiry is off (the box is hidden), so
+  they are there when it comes back on.
 - **Clock-out reminders** ignore schedules: they go to anyone clocked in and
   not out, which covers someone working on a day off.
 - **Android signing secrets**: until they are set, the published APK is a

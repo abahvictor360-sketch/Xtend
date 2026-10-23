@@ -360,5 +360,34 @@ exception when others then
   perform assert(sqlerrm = 'Only admins can see the activity log', 'rls: staff cannot read the activity feed');
 end $$;
 
+-- X Metrics switches (063): everyone signed in reads them (the app hides
+-- what is off); only an admin changes them, through xm_set_features.
+reset role;
+grant update on public.xm_settings to authenticated;
+select id as dayo from auth.users where email = 'xmf-test@xpel.ng' \gset
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'dayo', false);
+select assert((select enabled and sales_enabled from public.xm_settings),
+  'rls: staff read the X Metrics switches');
+update public.xm_settings set enabled = false, sales_enabled = false;
+select set_config('request.jwt.claim.sub', :'tunde', false);
+update public.xm_settings set grading_enabled = false;
+select assert((select enabled and sales_enabled and grading_enabled from public.xm_settings),
+  'rls: staff and supervisors cannot switch X Metrics parts off directly');
+do $$
+begin
+  perform public.xm_set_features(true, true, true, false, true);
+  perform assert(false, 'rls: supervisors cannot switch parts through the function either');
+exception when others then
+  perform assert(sqlerrm like '%Only an admin%', 'rls: supervisors cannot switch parts through the function either');
+end $$;
+select set_config('request.jwt.claim.sub', :'boss', false);
+select assert((public.xm_set_features(true, true, true, false, true)->>'grading')::boolean = false,
+  'rls: an admin switches a part off');
+select assert(not public.xm_feature_on('grading'), 'rls: and it reads as off');
+select assert((public.xm_set_features(true, true, true, true, true)->>'grading')::boolean,
+  'rls: and back on');
+select assert(public.xm_feature_on('grading'), 'rls: and it reads as on again');
+
 reset role;
 select 'ALL RLS CHECKS PASSED';

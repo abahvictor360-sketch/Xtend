@@ -1,5 +1,6 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { XM_ALL_ON, xmKpiOn, xmOn, type XmFeatures } from '@/lib/metrics/features'
 
 export interface MonthBar {
   month: string // YYYY-MM-01
@@ -72,9 +73,13 @@ const one = <T,>(v: T | T[] | null | undefined): T | null => (Array.isArray(v) ?
 /**
  * Everything the X Metrics overview shows, worked out from the tables the
  * caller may read (RLS narrows a supervisor to their team). `today` is the
- * Lagos business date.
+ * Lagos business date. Parts switched off (0063) are left out.
  */
-export async function loadXmDashboard(db: SupabaseClient, today: string): Promise<XmDashboard> {
+export async function loadXmDashboard(
+  db: SupabaseClient,
+  today: string,
+  features: XmFeatures = XM_ALL_ON,
+): Promise<XmDashboard> {
   const thisMonth = monthKey(today)
   const lastMonth = shiftMonth(thisMonth, -1)
   const firstMonth = shiftMonth(thisMonth, -11)
@@ -145,7 +150,7 @@ export async function loadXmDashboard(db: SupabaseClient, today: string): Promis
   const pull = alerts.filter((a) => a.consider_pulling).length
 
   const fmt = (n: number) => n.toLocaleString('en-GB')
-  const kpis: Kpi[] = [
+  const allKpis: Kpi[] = [
     { label: 'Units sold this month', value: fmt(soldNow), ...change(soldNow, soldBefore), note: 'vs last month to date' },
     { label: 'Units supplied', value: fmt(suppliedNow), ...change(suppliedNow, suppliedBefore), note: 'vs last month to date' },
     {
@@ -164,6 +169,7 @@ export async function loadXmDashboard(db: SupabaseClient, today: string): Promis
       note: 'batches near expiry',
     },
   ]
+  const kpis = allKpis.filter((k) => xmKpiOn(features, k.label))
 
   // Store targets this month, against what those stores sold.
   const targetRows = (targets ?? []) as { outlet_id: string | null; user_id: string | null; target_units: number }[]
@@ -237,6 +243,7 @@ export async function loadXmDashboard(db: SupabaseClient, today: string): Promis
       }),
     ),
   ]
+    .filter((a) => (a.kind === 'sales' ? xmOn(features, 'sales') : a.kind === 'supply' ? xmOn(features, 'supplies') : true))
     .sort((a, b) => b.at.localeCompare(a.at))
     .slice(0, 8)
 

@@ -553,7 +553,33 @@ Exports: `MonthBar`, `Kpi`, `CategoryShare`, `Activity`, `StoreBar`, `XmDashboar
 
 Grades for a month: kept ones if the month is finalised, else live.
 
-Exports: `XM_EXPORTS`, `XmExportKind`, `xmSheet`
+Exports: `XM_EXPORTS`, `XmExportKind`, `dropColumns`, `xmSheet`
+
+## `src/lib/metrics/features-server.ts`
+
+The X Metrics switches (0063), read through the caller's client (every
+signed-in person may read xm_settings). Before 0063 runs, or if the row
+cannot be read, everything counts as on: X Metrics as it always was.
+
+Exports: `readXmFeatures`
+
+## `src/lib/metrics/features.ts`
+
+X Metrics feature switches (migration 0063): which parts of X Metrics
+are on. Pure, so the browser, the server and the check script share it.
+The database enforces the same rules (xm_feature_on); this decides what
+is shown.
+
+  enabled   the whole module: stores, products, stock counts
+  expiry    expiry dates on counts, expiry alerts, the Expiry page
+  supplies  stock supplied: the Supplies page and its imports
+  grading   monthly grades, the Grades and Scoring policy pages, staff scores
+  sales     units sold: the staff sales form, targets, sales figures
+
+Reconciliation (last count + supplied − sold) needs supplies and sales.
+With the module off, every part is off whatever its own switch says.
+
+Exports: `XmFeatureKey`, `XmFeatures`, `XmPart`, `XM_ALL_ON`, `XM_OFF_MESSAGE`, `XM_FEATURE_INFO`, `xmFeaturesFrom`, `xmOn`, `XmPage`, `xmPageOn`, `xmPageForPath`, `XmTab`, `XM_TABS`, `xmTabs`, `xmMenuItem`, `xmDashboardParts`, `xmKpiOn`, `XmFieldTab`, `xmFieldView`, `xmFieldTab`, `xmExportOn`, `xmExportColumnsOff`, `xmAssistantToolOn`, `xmAssistantNote`, `xmFeatureChanges`
 
 ## `src/lib/metrics/schemas.ts`
 
@@ -1217,6 +1243,19 @@ Units sold per day across a month, as plain bars.
 
 Exports: `DayBars`
 
+## `src/components/admin/xm/features-context.tsx`
+
+Hands the X Metrics switches (0063) to the sub-navigation.
+
+Exports: `XmFeaturesProvider`, `useXmFeatures`
+
+## `src/components/admin/xm/features-form.tsx`
+
+The X Metrics switches (0063): the whole module and four parts. Each
+switch saves at once; nothing is deleted when a part is turned off.
+
+Exports: `FeaturesForm`
+
 ## `src/components/admin/xm/forms.tsx`
 
 What the products route takes: the carton size as a number, or none.
@@ -1234,6 +1273,12 @@ Exports: `PolicyEditor`
 A line as edited in the table. Numbers stay text until sent.
 
 Exports: `SupplyImport`
+
+## `src/components/admin/xm/switched-off.tsx`
+
+What a switched-off X Metrics page shows instead (0063).
+
+Exports: `XmSwitchedOff`
 
 ## `src/components/admin/xm/widgets.tsx`
 

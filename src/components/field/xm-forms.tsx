@@ -18,6 +18,7 @@ import { cn, longDate } from '@/lib/utils'
 import type { XmGrade, XmProduct, XmSettings } from '@/lib/metrics/shared'
 import type { XmPolicy } from '@/components/metrics/policy'
 import { XmMyScore } from '@/components/field/xm-score'
+import type { XmFieldTab } from '@/lib/metrics/features'
 
 export interface XmBatch {
   outlet_id: string
@@ -68,6 +69,7 @@ function matches(p: XmProduct, query: string) {
  */
 export function XmFieldForms({
   initialTab,
+  view = { tabs: ['count', 'sales', 'score'], expiryInput: true },
   stores,
   products,
   batches,
@@ -79,7 +81,9 @@ export function XmFieldForms({
   policy,
   policyRead,
 }: {
-  initialTab: 'count' | 'sales' | 'score'
+  initialTab: XmFieldTab
+  /** What is switched on (0063): the tabs shown, and the expiry date box. */
+  view?: { tabs: XmFieldTab[]; expiryInput: boolean }
   stores: Store[]
   products: XmProduct[]
   batches: XmBatch[]
@@ -97,19 +101,25 @@ export function XmFieldForms({
   return (
     <div className="space-y-4">
       <OutboxBanner onFlushed={() => router.refresh()} />
-      <div className="flex gap-2">
-        <Chip active={tab === 'count'} onClick={() => setTab('count')}>
-          Stock count
-        </Chip>
-        <Chip active={tab === 'sales'} onClick={() => setTab('sales')}>
-          Daily sales
-        </Chip>
-        <Chip active={tab === 'score'} onClick={() => setTab('score')}>
-          My score{policy && !policyRead ? ' •' : ''}
-        </Chip>
-      </div>
+      {view.tabs.length > 1 && (
+        <div className="flex gap-2">
+          <Chip active={tab === 'count'} onClick={() => setTab('count')}>
+            Stock count
+          </Chip>
+          {view.tabs.includes('sales') && (
+            <Chip active={tab === 'sales'} onClick={() => setTab('sales')}>
+              Daily sales
+            </Chip>
+          )}
+          {view.tabs.includes('score') && (
+            <Chip active={tab === 'score'} onClick={() => setTab('score')}>
+              My score{policy && !policyRead ? ' •' : ''}
+            </Chip>
+          )}
+        </div>
+      )}
 
-      {policy && !policyRead && tab !== 'score' && (
+      {view.tabs.includes('score') && policy && !policyRead && tab !== 'score' && (
         <Alert variant="info">
           The scoring policy has been updated.{' '}
           <button type="button" className="font-semibold underline" onClick={() => setTab('score')}>
@@ -118,12 +128,12 @@ export function XmFieldForms({
         </Alert>
       )}
 
-      {tab === 'score' ? (
+      {tab === 'score' && view.tabs.includes('score') ? (
         <XmMyScore grade={grade} settings={settings} policy={policy} read={policyRead} />
       ) : products.length === 0 ? (
         <Alert variant="info">There are no products in X Metrics yet. The office adds them.</Alert>
-      ) : tab === 'count' ? (
-        <CountForm stores={stores} products={products} batches={batches} />
+      ) : tab === 'count' || !view.tabs.includes('sales') ? (
+        <CountForm stores={stores} products={products} batches={batches} showExpiry={view.expiryInput} />
       ) : (
         <SalesForm
           stores={stores}
@@ -192,7 +202,18 @@ function Status({ s }: { s: ReturnType<typeof useSubmitState> }) {
 /* Stock count                                                         */
 /* ------------------------------------------------------------------ */
 
-function CountForm({ stores, products, batches }: { stores: Store[]; products: XmProduct[]; batches: XmBatch[] }) {
+function CountForm({
+  stores,
+  products,
+  batches,
+  showExpiry = true,
+}: {
+  stores: Store[]
+  products: XmProduct[]
+  batches: XmBatch[]
+  /** The expiry date box. Off, a batch's date already known still goes with it. */
+  showExpiry?: boolean
+}) {
   const router = useRouter()
   const [storeId, setStoreId] = useState(stores[0].id)
   const [rows, setRows] = useState<Row[]>(() => rowsFor(stores[0].id, batches))
@@ -317,8 +338,8 @@ function CountForm({ stores, products, batches }: { stores: Store[]; products: X
     <form onSubmit={onSubmit} className="space-y-4">
       <StorePicker id="xm-count-store" stores={stores} value={storeId} onChange={changeStore} />
       <p className="text-sm text-muted-foreground">
-        For each product, count what is on the shelf and in the backroom, batch by batch, with the
-        expiry date printed on it. Leave out products you do not have.
+        For each product, count what is on the shelf and in the backroom, batch by batch
+        {showExpiry ? ', with the expiry date printed on it' : ''}. Leave out products you do not have.
       </p>
       <p className="flex items-start gap-2 rounded-xl bg-tint/60 p-2.5 text-xs text-tint-foreground">
         <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -390,13 +411,15 @@ function CountForm({ stores, products, batches }: { stores: Store[]; products: X
                           maxLength={60}
                           className="h-10 px-3 text-sm"
                         />
-                        <Input
-                          type="date"
-                          value={r.expiry}
-                          onChange={(e) => update(r.key, 'expiry', e.target.value)}
-                          aria-label={`${p.name} batch ${i + 1} expiry date`}
-                          className="h-10 px-2 text-sm"
-                        />
+                        {showExpiry && (
+                          <Input
+                            type="date"
+                            value={r.expiry}
+                            onChange={(e) => update(r.key, 'expiry', e.target.value)}
+                            aria-label={`${p.name} batch ${i + 1} expiry date`}
+                            className="h-10 px-2 text-sm"
+                          />
+                        )}
                         <button
                           type="button"
                           onClick={() => removeRow(r.key)}

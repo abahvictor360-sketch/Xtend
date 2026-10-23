@@ -7,6 +7,8 @@ import { Check, Download, Loader2, RefreshCw, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { xmTabs } from '@/lib/metrics/features'
+import { useXmFeatures } from '@/components/admin/xm/features-context'
 
 /** Calls an X Metrics admin route; throws the message it sends back. */
 export async function xmCall(url: string, method: 'POST' | 'PATCH' | 'PUT', body: unknown = {}) {
@@ -20,23 +22,13 @@ export async function xmCall(url: string, method: 'POST' | 'PATCH' | 'PUT', body
   return data
 }
 
-const TABS = [
-  { href: '/admin/metrics', label: 'Overview' },
-  { href: '/admin/metrics/expiry', label: 'Expiry' },
-  { href: '/admin/metrics/grades', label: 'Grades' },
-  { href: '/admin/metrics/policy', label: 'Scoring policy' },
-  { href: '/admin/metrics/supplies', label: 'Supplies', adminOnly: true },
-  { href: '/admin/metrics/targets', label: 'Targets', adminOnly: true },
-  { href: '/admin/metrics/setup', label: 'Products & stores', adminOnly: true },
-  { href: '/admin/metrics/settings', label: 'Settings', adminOnly: true },
-]
-
-/** The X Metrics sub-navigation, under the page title. */
+/** The X Metrics sub-navigation, under the page title: only the parts switched on (0063). */
 export function XmTabs({ readOnly = false }: { readOnly?: boolean }) {
   const pathname = usePathname()
+  const features = useXmFeatures()
   return (
     <nav className="-mx-1 flex gap-1 overflow-x-auto pb-1">
-      {TABS.filter((t) => !readOnly || !t.adminOnly).map((t) => {
+      {xmTabs(features, readOnly).map((t) => {
         const active = t.href === '/admin/metrics' ? pathname === t.href : pathname.startsWith(t.href)
         return (
           <Link

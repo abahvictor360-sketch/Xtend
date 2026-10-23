@@ -7,6 +7,7 @@ import { NativeBridge } from '@/components/native-bridge'
 import { ActivityPing } from '@/components/activity-ping'
 import { NamePlace, type PlaceDue } from '@/components/field/name-place'
 import { getCountStatus } from '@/lib/store-count-status'
+import { readXmFeatures } from '@/lib/metrics/features-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,7 +28,7 @@ export default async function FieldLayout({ children }: { children: React.ReactN
   // insert policy and trigger still enforce it in the database.
   const canFileReport = session.profile.role === 'marketer' || session.profile.role === 'admin'
   // The Count tab only appears while a count is due: asked for, or month end.
-  const [countStatus, { data: myStores }, { data: xmStores }, { data: placeDue }] = await Promise.all([
+  const [countStatus, { data: myStores }, { data: xmStores }, { data: placeDue }, xmFeatures] = await Promise.all([
     getCountStatus(supabase),
     supabase.rpc('my_outlets'),
     // X Metrics (043): the tab shows once one of their stores is in it.
@@ -35,10 +36,12 @@ export default async function FieldLayout({ children }: { children: React.ReactN
     // A place they must name before going on (045). Undefined before the
     // migration runs, so nothing is asked until it exists.
     supabase.rpc('my_place_due'),
+    // X Metrics switched off (0063): no tab at all.
+    readXmFeatures(supabase),
   ])
   const due = ((placeDue ?? []) as PlaceDue[])[0] ?? null
   const inXm = new Set(((xmStores ?? []) as { outlet_id: string }[]).map((s) => s.outlet_id))
-  const hasMetrics = ((myStores ?? []) as { id: string }[]).some((o) => inXm.has(o.id))
+  const hasMetrics = xmFeatures.enabled && ((myStores ?? []) as { id: string }[]).some((o) => inXm.has(o.id))
 
   return (
     <div className="field-shell min-h-dvh bg-background">

@@ -57,6 +57,8 @@ export function XmMyScore({
   policy: XmPolicy | null
   read: boolean
 }) {
+  // Parts switched off (0063) are left out of the grade, so not listed.
+  const has = { sales: grade?.parts?.sales !== false, accuracy: grade?.parts?.accuracy !== false, expiry: grade?.parts?.expiry !== false }
   const factors = grade
     ? ([
         ['Sales against target', grade.sales.score, grade.weights.sales,
@@ -66,10 +68,17 @@ export function XmMyScore({
         ['Stock accuracy', grade.accuracy.score, grade.weights.accuracy,
           `${grade.accuracy.within_tolerance} of ${grade.accuracy.reconciliations} counts matched`],
         ['Reporting consistency', grade.consistency.score, grade.weights.consistency,
-          `${grade.consistency.days_present} days worked: sales on time ${grade.consistency.sales_on_time}, counts up to date ${grade.consistency.counts_in_time}`],
+          has.sales
+            ? `${grade.consistency.days_present} days worked: sales on time ${grade.consistency.sales_on_time}, counts up to date ${grade.consistency.counts_in_time}`
+            : `${grade.consistency.days_present} days worked: counts up to date ${grade.consistency.counts_in_time}`],
         ['Expiry handling', grade.expiry.score, grade.weights.expiry,
           `${grade.expiry.expiry_recorded} of ${grade.expiry.lines_counted} batches dated, ${grade.expiry.expired_on_shelf} expired on shelf`],
-      ] as const)
+      ] as const).filter(
+        ([label]) =>
+          (label !== 'Sales against target' || has.sales) &&
+          (label !== 'Stock accuracy' || has.accuracy) &&
+          (label !== 'Expiry handling' || has.expiry),
+      )
     : []
 
   return (
@@ -99,7 +108,7 @@ export function XmMyScore({
             ))}
           </ul>
           <p className="text-xs text-muted-foreground">
-            It changes as you send counts and sales. Up to yesterday; the office finalises it after the month ends.
+            It changes as you send {has.sales ? 'counts and sales' : 'counts'}. Up to yesterday; the office finalises it after the month ends.
           </p>
         </section>
       )}
