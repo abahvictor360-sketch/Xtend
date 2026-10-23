@@ -10,6 +10,7 @@ import {
   Rocket,
   Route,
   Settings2,
+  Sparkles,
   ShieldAlert,
   Smartphone,
   Users,
@@ -30,6 +31,7 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Admin guide — Xtend' }
 
 const T = {
+  news: { id: 'whats-new', title: 'What’s new (October 2026)', icon: Sparkles },
   start: { id: 'first-week', title: 'Your first week', icon: Rocket },
   daily: { id: 'every-day', title: 'Every day', icon: CalendarCheck },
   overview: { id: 'overview', title: 'Overview, Ask Xtend and the guide', icon: LayoutDashboard },
@@ -71,6 +73,59 @@ export default async function AdminGuidePage() {
       <GuideContents topics={Object.values(T)} />
 
       <div className="grid gap-5 xl:grid-cols-2">
+        <GuideSection topic={T.news} intro="The latest changes, where to find them, and the one-off steps they need.">
+          <p>
+            <Ui>First, run the new database updates</Ui> in Supabase (SQL editor), in this order, if they
+            have not been run yet: 0059, 0060, 0061, 0062, 0063, 0064, 0065, 0066, 0067. A page that needs
+            one it does not have says which number to run.
+          </p>
+          <ul className="list-disc space-y-1.5 pl-5">
+            <li>
+              <Ui>Schedules and Leave</Ui> (People menu): weekly days on and off per person, one-off
+              changes, and leave requests from the app to approve or reject. Days off and leave never count
+              as absent.
+            </li>
+            <li>
+              <Ui>Marketer reports</Ui> (Attendance menu): each person&apos;s day or month as PDF, Word or
+              Excel, with every store visit and the time spent there. Marketers can only check in at the
+              stores allocated to them.
+            </li>
+            <li>
+              <Ui>Clock-out reminders</Ui>: staff still clocked in at the end of their shift get a reminder,
+              and another an hour later.
+            </li>
+            <li>
+              <Ui>Activity log</Ui> (Setup menu): everyone&apos;s sign-ins, app opens and actions, with
+              device and address. Admins only.
+            </li>
+            <li>
+              <Ui>X Metrics switches</Ui>: X Metrics → Settings → Features turns the whole module, Expiry,
+              Supplies, Grading and Sales off and on. Nothing is deleted.
+            </li>
+            <li>
+              <Ui>Count sheets and report documents</Ui>: staff download and upload the month&apos;s count
+              sheet from their You page at any time, and attach PDF, Word, Excel or pictures to the daily
+              report. You download them from Marketer reports and Stock count.
+            </li>
+            <li>
+              <Ui>Movement map</Ui>: opens on the whole of Nigeria with everyone on shift as their photo;
+              click a photo to follow that person.
+            </li>
+            <li>
+              <Ui>Files kept 14 days</Ui>: clock-in photos and unused files are deleted after 14 days, never
+              sooner, and you are told the day before. Reports and the files on them are kept.
+            </li>
+            <li>
+              <Ui>Test mode and reset</Ui> (Setup → System): during the test run, reset the parts you pick;
+              press <Ui>We are live</Ui> when you start for real.
+            </li>
+            <li>
+              <Ui>iPhone app</Ui>: builds and uploads to TestFlight by itself once the Apple account is
+              connected (see Staff phones and the app).
+            </li>
+          </ul>
+        </GuideSection>
+
         <GuideSection topic={T.start} intro="Do these once, in this order, before staff start clocking in.">
           <Steps
             items={[
@@ -187,9 +242,10 @@ export default async function AdminGuidePage() {
 
         <GuideSection topic={T.movement} intro="Where staff are during their shift.">
           <p>
-            <Ui>Movement</Ui> opens on a live map of everyone on shift, shown as their profile photo, with
-            how many are in a store, away from it, or not heard from in 15 minutes. Click a photo to follow
-            that person&apos;s movement. Pick a person and up to 7 days to see their journey:
+            <Ui>Movement</Ui> opens on a live map of the whole of Nigeria with everyone on shift shown as
+            their profile photo, and how many are in a store, away from it, or not heard from in 15 minutes.
+            The map cannot be dragged or zoomed out beyond Nigeria; zoom in with + to look at a city or a
+            store. Click a photo to follow that person&apos;s movement. Pick a person and up to 7 days to see their journey:
             the stops they made (at their store or elsewhere, by name), the travel between them and the
             times nothing was heard, with a strip per day and totals. <Ui>Worth a look</Ui> points out
             impossible jumps (faster than 150 km/h, which a fake-location app makes), long silences
@@ -291,6 +347,21 @@ export default async function AdminGuidePage() {
             history and the audit log. Turning a part off hides it and stops its work; nothing it recorded
             is deleted, and turning it back on carries on from there.
           </p>
+          <Steps
+            items={[
+              <>
+                In the menu, open <Ui>X Metrics</Ui>, then the <Ui>Settings</Ui> tab.
+              </>,
+              <>
+                In the <Ui>Features</Ui> card at the top, tap the switch next to the part you want off (or
+                back on). A green message confirms it.
+              </>,
+              <>
+                Using stock counts only for now? Turn off <Ui>Expiry</Ui>, <Ui>Supplies</Ui>,{' '}
+                <Ui>Grading</Ui> and <Ui>Sales</Ui>, and leave <Ui>X Metrics</Ui> on.
+              </>,
+            ]}
+          />
           <ul className="list-disc space-y-1.5 pl-5">
             <li>
               <Ui>X Metrics</Ui>: the whole module. Off, it leaves the menu for supervisors and the staff
@@ -505,8 +576,11 @@ export default async function AdminGuidePage() {
                 has them.
               </>,
               <>
-                The Android app installs from the download page. The iPhone app needs the Apple steps in the
-                project&apos;s mobile README before it can be offered.
+                The Android app installs from the download page. The iPhone app goes through Apple&apos;s
+                TestFlight: once the Apple Developer account is connected (four secrets in GitHub, steps in
+                the project&apos;s mobile README), every update uploads itself to TestFlight. Turn on the
+                TestFlight public link, put it in the site settings as <Ui>IOS_APP_URL</Ui>, and the download
+                page&apos;s iPhone button works. iPhone staff install TestFlight first, then Xtend.
               </>,
             ]}
           />
@@ -539,8 +613,21 @@ export default async function AdminGuidePage() {
             can open them. <Ui>Documents attached</Ui> on Marketer reports lists them for the period with a{' '}
             <Ui>Download</Ui> link (each office download is recorded in the audit log as{' '}
             <Ui>report_file.download</Ui>); the PDF, Word and Excel reports and Ask Xtend&apos;s field
-            reports list them by name. Long document names wrap so you can read them on your phone. A document uploaded from a phone but never attached (its report
-            never arrived) is deleted by the nightly clean-up a day later.
+            reports list them by name. Long document names wrap so you can read them on your phone. A document or photo uploaded from a phone but never put on a report
+            (its report never arrived) is deleted by the nightly clean-up 14 days later.
+          </p>
+          <p>
+            <Ui>What Xtend deletes, and when</Ui>: reports, and the photos and documents on a report, are
+            never deleted. The nightly clean-up deletes only clock-in and store-visit photos (the time,
+            place and distance stay) and report photos and documents that are on no report, each{' '}
+            <strong>14 days</strong> after it was taken or uploaded, never sooner. The evening before, you
+            get a notification (push and Notifications history) saying how many go tomorrow and from which
+            date, with a link to Attendance or Marketer reports: open or download anything you need that
+            day. You get everything; each supervisor gets their own team&apos;s; at most one notice a day,
+            and only when something is due. Staff are not told. Each night&apos;s deletions are recorded in
+            the audit log as <Ui>retention.purge</Ui> with how many went, and the Overview shows how many
+            clock photos are held. Device reports and phone checks are kept 60 days and the activity log
+            180 days.
           </p>
           <p>
             <Ui>Clock-out reminders</Ui>: anyone still clocked in when their store&apos;s shift ends

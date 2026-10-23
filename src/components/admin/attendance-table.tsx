@@ -372,7 +372,7 @@ function EventDetail({
           // eslint-disable-next-line @next/next/no-img-element
           <img src={photo} alt={`${title} photo`} className="w-full rounded-lg border border-border" />
         ) : (
-          <p className="text-[11px] leading-snug text-muted-foreground">Photo deleted. Clock photos are kept for 24 hours.</p>
+          <p className="text-[11px] leading-snug text-muted-foreground">Photo deleted. Clock photos are kept for 14 days.</p>
         )}
       </div>
       <dl className="grid min-w-0 flex-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-2">

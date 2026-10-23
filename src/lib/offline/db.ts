@@ -3,6 +3,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import type { AttendanceType } from '@/lib/types'
 import type { QueuedReportFile } from '@/lib/report-file-queue'
+import type { QueuedPhotoEntry } from '@/lib/report-photo-queue'
 
 export type OutboxKind = 'clock' | 'ping' | 'report' | 'report_file_remove' | 'xm_count' | 'xm_sales'
 
@@ -37,7 +38,12 @@ export interface ReportJob {
   stock_status: string
   competitor_activity: string
   issues: string
-  photos: Blob[]
+  /**
+   * Photos to add. Since 0067 each keeps its id and, once sent, where it
+   * went, so a retry does not upload it again; jobs queued before hold
+   * bare pictures, which get their id on their first try.
+   */
+  photos: QueuedPhotoEntry[]
   /**
    * Documents to attach (0064). Missing on jobs queued before it. Each
    * keeps its id and, once sent, where it went, so a retry does not upload
@@ -144,7 +150,7 @@ export async function dropOutbox(id: number) {
   await database.delete('outbox', id)
 }
 
-/** Saves progress on a queued job (which documents are already uploaded). */
+/** Saves progress on a queued job (which photos and documents are already uploaded). */
 export async function saveOutboxRecord(record: OutboxRecord) {
   if (record.id === undefined) return
   const database = await db()

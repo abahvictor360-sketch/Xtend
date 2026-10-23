@@ -280,6 +280,11 @@ export default async function SupervisorGuidePage() {
             pictures). Under <Ui>Documents attached</Ui> on the same page, tap <Ui>Download</Ui> to open
             one; long document names wrap on your phone. The PDF, Word and Excel reports list them by name.
           </p>
+          <p>
+            Reports are never deleted. Clock-in photos, and report photos or documents that never made it
+            onto a report, are deleted after 14 days; the evening before, you get a notification saying how
+            many from your team go tomorrow, so you can download anything you need that day.
+          </p>
         </GuideSection>
 
         <GuideSection topic={T.faq}>

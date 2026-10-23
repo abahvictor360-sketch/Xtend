@@ -149,7 +149,19 @@ export function OverviewView({ name, isAdmin, today, week, stats, away, tracked,
           {lowest.length ? <ul className="grid gap-3 sm:grid-cols-2">{lowest.map(row => <li key={row.user_id}><Link href={'/admin/tracking?person=' + row.user_id} className="flex min-h-11 items-center justify-between gap-3 rounded-xl bg-muted p-3 text-sm"><span className="min-w-0 break-words">{row.full_name}</span><strong>{row.coverage_pct ?? 0}%</strong></Link></li>)}</ul> : <p className="text-sm text-muted-foreground">No coverage records yet today.</p>}
         </div>
       </details>
-      {photos && <p className="text-xs text-muted-foreground">Clock photos are deleted after 24 hours · {photos.photos_held} currently held{photos.overdue > 0 && ' · ' + photos.overdue + ' awaiting the next sweep'}{photos.last_run_at && ' · last swept ' + formatLagos(photos.last_run_at, false)}</p>}
+
+      {photos && (
+        <p className="text-xs text-muted-foreground">
+          Clock photos are deleted 14 days after they are taken (admins and supervisors are told the day before) — {photos.photos_held} held
+          right now
+          {photos.overdue > 0 && `, ${photos.overdue} due to go on the next sweep`}
+          {photos.last_run_at &&
+            ` · last swept ${formatLagos(photos.last_run_at, false)}, ${
+              photos.last_result?.photos_deleted ?? 0
+            } removed`}
+          .
+        </p>
+      )}
     </div>
   )
 }
