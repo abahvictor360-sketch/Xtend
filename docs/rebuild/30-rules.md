@@ -371,6 +371,34 @@ Stored in `attendance.time_verdict` and `time_detail` (`offset_s`,
   overwritten; saving again refreshes it, and it cannot be cleared.
   `report_visits_snapshot` is callable by nobody but the trigger (it would
   read another person's day).
+- **Documents on the report** (0064, `report_files`): `id, report_id →
+  reports (cascade), user_id, path unique, name (1–200), mime (CHECK
+  report_file_mime_ok), size_bytes (1–10 485 760), created_at`. Allowed
+  types: PDF, `application/msword`, Word .docx, `application/vnd.ms-excel`,
+  Excel .xlsx, `text/csv`, JPEG, PNG, WebP, HEIC, HEIF. At most **5** per
+  report (trigger `report_file_limit`, locks the report row: "A report can
+  have up to 5 documents. Remove one to add another"). Nobody writes the
+  table directly; `add_report_file(path, name)` (SECURITY DEFINER):
+  `can_file_report()` else "Only marketers file the daily report"; the
+  caller's report for today must exist ("Save today's report first, then
+  attach documents"; so nothing is added to a past day); the object in
+  bucket `report-files`, own folder, uploaded within **30 minutes** ("Upload
+  the document again, then save the report"); not already attached ("That
+  document is already attached"); type and size read from storage: "Attach
+  a PDF, Word, Excel or CSV file, or a picture (JPG, PNG)", "That document
+  is empty", "Each document must be 10 MB or smaller"; name cleaned of line
+  breaks, tabs and slashes ("Document" when empty).
+  `remove_report_file(id)` returns the path: owner only ("That document is
+  not on your report"), only while `report_date = business_date()`
+  ("Documents can only be removed on the day the report was filed"); the
+  app then deletes the stored file. RLS: owner, admins and the owner's
+  supervisor read (`report_file_detail` view adds staff_name, report_date
+  and `editable`). Storage bucket `report-files` (private; on Supabase
+  `file_size_limit` 10 MB and the same `allowed_mime_types`): insert into
+  your own folder only if you file reports; read when
+  `report_file_readable(name)` (own folder, admin, or supervisor of the
+  owner of a file that is on a report); delete your own only when
+  `report_file_attached(name)` is false (off the report); no update.
 
 ### 2.7 Work schedules and leave (0059)
 
@@ -1309,8 +1337,13 @@ than before is a delivery, not a problem.
 
 - Products with a `sheet_order` (233 seeded, with 8–14 digit barcodes) are
   the list the phone shows.
-- Paper / file sheets (`submit_count_sheet(outlet, path, file_name)`): a
-  count must be open; the store must be theirs; the file in the reports
+- Paper / file sheets (`submit_count_sheet(outlet, path, file_name)`):
+  the person must take stock counts (`can_count_stock()`); since **0064**
+  no count needs to be open: a sheet sent while one is open is kept against
+  it (`request_id` when asked for) with `count_was_due = true`; one sent at
+  any other time (from the You page) has no request and
+  `count_was_due = false`, and counts towards nothing. The store must be
+  theirs; the file in the reports
   bucket, own folder, uploaded within **30 minutes**; type read from
   storage: Excel (`.xlsx`), PDF, JPG or PNG; size above 0 and at most **10
   MB**; the same file only once. Its figures are not read into Xtend.
@@ -1839,7 +1872,8 @@ Testable statements, grouped by area. They mirror the assertions in
 - A count must be in the store (radius + 25 m) with accuracy ≤ 100 m and a fresh, checked, unused shelf photo.
 - Units missing beyond the threshold are flagged for that product only; a same-day correction clears the flag; identical and round-number counts are flagged; more units is a delivery.
 - Sheet lines keep back store, shop floor and expiry with in_store as their total; blank figures are not counted; off-sheet products still count; half units, empty lines and bad dates are refused.
-- Count sheets: only when a count is open, own store, own folder, Excel/PDF/JPG/PNG, ≤ 10 MB, once; sending one counts as counted. The template is an admin's PDF.
+- Count sheets: any time for someone who takes stock counts (0064; `count_was_due` false when none was open), own store, own folder, Excel/PDF/JPG/PNG, ≤ 10 MB, once; sending one while a count is open counts as counted. The template is an admin's PDF.
+- Report documents (0064): five at most, the allowlist only, 1 byte to 10 MB, own folder and fresh, only on today's report, removed only by the owner on the day; owner, admin and the owner's supervisor read them, nobody else; the table is never written directly.
 - A role set not to count cannot count or be asked; it can still send X Metrics; built-in roles can be turned off and on; admins always count.
 
 ### Photos and integrity

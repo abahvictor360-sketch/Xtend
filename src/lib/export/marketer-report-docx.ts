@@ -3,7 +3,7 @@
  * and order as the PDF, in the brand colours, A4 portrait, with the logo,
  * a running header, and page numbers in the footer.
  */
-import { minutesText as mins, type DayDetail, type MarketerReport } from '@/lib/marketer-report'
+import { minutesText as mins, reportFieldsWithDocuments, type DayDetail, type MarketerReport } from '@/lib/marketer-report'
 import { XPEL_LOGO_PNG, XPEL_LOGO_RATIO } from '@/lib/export/brand-logo'
 
 const BRAND = 'D1511A'
@@ -370,7 +370,7 @@ export async function marketerReportDocx(report: MarketerReport): Promise<Uint8A
     if (d.visits.length) visitsTable(d, false)
     else note('No store visits recorded on this day.')
     heading('Daily report', d.report ? `Filed at ${d.report.filedAt}` : undefined)
-    if (d.report) fields(d.report.fields)
+    if (d.report) fields(reportFieldsWithDocuments(d.report))
     else note('No daily report was filed for this day.')
     extras(d, false)
   } else {
@@ -444,7 +444,7 @@ export async function marketerReportDocx(report: MarketerReport): Promise<Uint8A
       )
       body.push(new Paragraph({ keepNext: true, spacing: { after: 80 }, children: [run(d.summary, { color: MUTED, size: 16 })] }))
       if (d.visits.length) visitsTable(d, true)
-      if (d.report) fields(d.report.fields, 16)
+      if (d.report) fields(reportFieldsWithDocuments(d.report), 16)
       extras(d, true)
     }
   }

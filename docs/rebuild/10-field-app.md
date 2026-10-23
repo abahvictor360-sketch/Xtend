@@ -18,7 +18,9 @@ Build in the order of the sections below: sign-in, onboarding, shell and
 home, gates, clock-in/out, place naming, store visits, report, stock count,
 X Metrics, history/account/support/guide/leave, background behaviours, copy
 rules. Schedules and leave come from migration 0059, allocated-store visits
-and visits in the report from 0060, the clock-out reminder from 0061.
+and visits in the report from 0060, the clock-out reminder from 0061, the
+stock count sheet on the You page and documents on the daily report from
+0064.
 
 ---
 
@@ -1115,10 +1117,36 @@ redirected to `/field`.
   **"From gallery"** (multiple). Each is compressed by `processReportPhoto`:
   width ≤ 900, JPEG from 0.78 stepping down 0.12 until ≤ **220 KB**.
   Thumbnails with remove buttons. Report photos are not photo-checked.
+- **Attach documents** (migration 0064, `report-files.tsx`, rules in
+  `src/lib/report-files.ts`), below the photos: label "Attach documents
+  (<n>/5)", text "Price lists, display plans, invoices or anything else for
+  the office: PDF, Word, Excel or CSV files, or pictures. Up to 5, each 10 MB
+  or smaller." Button **"Choose documents"** (dashed brand, multiple, accept
+  = the allowlist and its endings) while fewer than 5 are attached or
+  waiting. Accepted types: PDF, Word (.doc, .docx), Excel (.xls, .xlsx), CSV,
+  JPEG, PNG, WebP, HEIC/HEIF; the ending decides when the phone gives no
+  type, and a `.csv` Windows calls `application/vnd.ms-excel` is stored as
+  `text/csv` (`reportFileType`). Each refused file says why, in a red list:
+  "<name>: attach a PDF, Word, Excel or CSV file, or a picture." / "<name>:
+  the file is empty." / "<name>: each document must be 10 MB or smaller." /
+  "<name>: a report can have up to 5 documents." (`checkReportFiles`). Rows:
+  type icon, name, "<PDF|Word|Excel|CSV|Picture> · <size> · Attached" (a
+  saved one, the name links to `/api/report-files/<id>`) or "… · Sent when
+  you save" (picked, not yet sent), and a 44 px **×** to remove. Removing a
+  picked one only drops it from the list; removing a saved one calls
+  `DELETE /api/report-files/<id>` and refreshes (online only: "No
+  connection. Try again when you have data."). Sizes read "850 KB",
+  "1.2 MB" (`fileSizeLabel`).
 - Submit **"Submit report"** / **"Update report"** ("Saving…") →
-  `submitOrQueue({ kind: 'report', … })`: uploads photos to
-  `reports/{uid}/{uuid}.jpg`, then `POST /api/reports { fields…,
-  photo_paths }`.
+  `submitOrQueue({ kind: 'report', …, files })`: uploads photos to
+  `reports/{uid}/{uuid}.jpg` and documents to the private bucket
+  **`report-files`** at `{uid}/report-{uuid}.{ext}` (contentType = the
+  stored type, no upsert), then `POST /api/reports { fields…, photo_paths,
+  files[{ path, name }] }`. Documents are kept in the outbox with the
+  report while offline (the job's `files` is optional for jobs queued
+  earlier). The route calls `add_report_file(path, name)` for each after
+  saving the report; a refusal returns 400 "Your report is saved, but
+  <name> was not attached: <reason>".
 - Server: one report per person per business day; a second submission
   updates today's row; the database refuses edits on any other day
   ("editable until midnight"). Report photo limit enforced by trigger.
@@ -1134,7 +1162,11 @@ redirected to `/field`.
   "Write a little more for "The day"".
 - After 3 photos saved, only 2 more can be added.
 - Re-submitting the same day updates rather than creating a second report.
-- Offline submit queues and later sends with photos.
+- Offline submit queues and later sends with photos and documents.
+- Picking a 12 MB PDF and a `.exe` lists two reasons and attaches neither;
+  after 3 saved documents only 2 more can be picked.
+- A saved document can be removed the same day; the next day the report and
+  its documents are locked (the database refuses).
 - After two visits today (50 min and 40 min, one still open), the top of
   the report lists both in arrival order, the open one "still checked in",
   and the bar reads "2 visits · 2 stores" / "Total time in stores: 1 h 30
@@ -1158,7 +1190,8 @@ redirected to `/field`.
 - `{ open: false, reason: 'not_allowed' }` — person does not count stock
   (also returned if the function is missing).
 
-The Count tab and home banner exist only while open. `/field/count` with
+The Count tab and home banner exist only while open (the paper sheet is
+also on the You page at any time, §11.2). `/field/count` with
 `not_allowed` redirects to `/field`; with `none` shows "No stock count is
 due. You count when your supervisor asks for one, and at the end of every
 month. The next month-end count opens on <long date>."
@@ -1189,6 +1222,13 @@ upload it here: the Excel file, a PDF or a photo."
   sheets { outlet_id, path, file_name }` → `submit_count_sheet`. Steps
   "Uploading the sheet", "Sending it". Success "Sent the count sheet for
   <store>." List "Sent today: <store>, <file>".
+- Props `title` (default "Count on paper") and `sentHeading`; with a
+  heading the sent sheets show as rows (file name, store, status)
+  under it, or "Nothing sent yet this month.".
+- Since 0064 `submit_count_sheet` no longer needs a count to be due: only
+  `can_count_stock()`, the store, the fresh upload, type and size. While a
+  count is due the sheet still counts towards it (`request_id`); otherwise
+  it is kept with `count_was_due = false` and counts towards nothing.
 
 ### 9.4 Count form (`store-count-form.tsx`)
 
@@ -1432,15 +1472,28 @@ role name or the base label). Sections:
 2. **Your posting**: outlet name, "<address or No address> · N m geofence ·
    HH:MM–HH:MM", or "No outlet assigned" / "Ask your admin to assign your
    outlet."
-3. **Days off and leave**: "Ask for leave" ("Annual, sick or casual leave.
+3. **Stock count sheet** (0064), only when `store_count_status()` is not
+   `not_allowed` and `my_outlets()` returns a store (merchandisers, and
+   marketers whose role takes stock counts): a `CountSheetPanel` card
+   titled **"Stock count sheet"** (no separate section header), always
+   available whether or not a count is due: Download this month's sheet as
+   Excel (`/api/store-counts/template?store=<id>`), **Upload filled sheet**
+   (Excel, PDF or photo, as §9.3), and **"Sent this month"**: each sheet
+   sent since the 1st: file name (up to two lines), store, then "Sent
+   <date time> · <status>", status from
+   `countSheetStatus()`: "For the count your supervisor asked for" (has a
+   request), "For the month-end count" (due, no request), "Received by the
+   office" (sent with no count due). Offline: as §9.3, "No connection. Try
+   again when you have data."
+4. **Days off and leave**: "Ask for leave" ("Annual, sick or casual leave.
    See your requests and the answers.", trailing brand "Open") →
    `/field/leave`; "Your calendar" ("Days you clocked in, days off, leave
    and missed days.") → `/field/history`.
-4. **Need help?**: "Message support" ("Report a problem. The Xtend helper
+5. **Need help?**: "Message support" ("Report a problem. The Xtend helper
    replies, and the office steps in when needed.") → `/field/support`; "How
    to use Xtend" ("Step-by-step help, from clocking in to the end of the
    day.") → `/field/guide`.
-5. **Messages from the office**: `PushToggle` then the last **10**
+6. **Messages from the office**: `PushToggle` then the last **10**
    notifications (`my_notifications`), title, body, "<sender or Office> ·
    time", read ones muted.
    - PushToggle labels: "On for this device", "Blocked in your browser
@@ -1448,13 +1501,13 @@ role name or the base label). Sections:
      Notifications to Allow."), "Not supported by this browser", "Not
      switched on by your admin yet", "Checking…", "Off"; button "Turn on" /
      "Turn off".
-6. **Security**: "Change your password" ("Pick something only you know.") →
+7. **Security**: "Change your password" ("Pick something only you know.") →
    `/change-password`.
-7. **Tips**: "Keep location and notifications on" ("Xtend needs them to
+8. **Tips**: "Keep location and notifications on" ("Xtend needs them to
    clock you in and out and to reach you."); "Install Xtend to your home
    screen" ("Chrome menu → Add to Home screen. It opens full screen and
    loads faster on a weak network.").
-8. Sign out button; Xpel lockup; "Xtend · field attendance".
+9. Sign out button; Xpel lockup; "Xtend · field attendance".
 
 ### 11.3 Profile photo (`profile-photo.tsx`)
 

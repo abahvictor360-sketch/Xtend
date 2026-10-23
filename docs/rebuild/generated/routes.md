@@ -2,7 +2,7 @@
 
 # API routes
 
-111 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+112 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
 
 ## `POST /api/activity`
 
@@ -1548,6 +1548,19 @@ const schema = z.object({
 ```
 - Tables and views: `push_subscriptions`
 
+## `GET, DELETE /api/report-files/[id]`
+
+- File: `src/app/api/report-files/[id]/route.ts`
+- Who: REPORTING_ROLES
+
+Opens a document attached to a daily report (0064) through a link that
+lasts five minutes. Read as the caller, so RLS decides who may: the
+owner, an admin, or the owner's supervisor; anyone else gets "not found".
+Office downloads are audited.
+
+- Database functions: `remove_report_file`
+- Tables and views: `report_file_detail`
+
 ## `POST /api/reports`
 
 - File: `src/app/api/reports/route.ts`
@@ -1566,10 +1579,16 @@ const schema = z.object({
   competitor_activity: writtenText(2000, 0, '"Competitors"'),
   issues: writtenText(2000, 0, '"Issues"'),
   photo_paths: z.array(z.string().min(1)).max(5).default([]),
+  // Documents already uploaded to report-files (0064); the database checks
+  // each one: theirs, just uploaded, an allowed type, small enough, room left.
+  files: z
+    .array(z.object({ path: z.string().min(1).max(300), name: fileName }))
+    .max(MAX_REPORT_FILES)
+    .default([]),
 })
 ```
 
-- Database functions: `business_date`
+- Database functions: `business_date`, `add_report_file`
 - Tables and views: `reports`, `report_photos`
 
 ## `POST /api/signed-url`

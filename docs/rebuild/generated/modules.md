@@ -527,7 +527,7 @@ Pure on purpose (no Supabase, no server-only), so
 scripts/check-marketer-reports.ts can build one from made-up rows.
 Every date and time is Africa/Lagos.
 
-Exports: `ReportKind`, `ReportPerson`, `SourceClock`, `SourceVisit`, `SourceReport`, `SourceCount`, `SourceSale`, `ReportSource`, `VisitLine`, `ClockLine`, `ReportField`, `DayDetail`, `StoreLine`, `Tile`, `MarketerReport`, `ARRIVAL_LABEL`, `arrivalText`, `REPORT_FIELDS`, `minutesText`, `shortDate`, `monthName`, `isMonth`, `lastDayOfMonth`, `ReportRequest`, `parseReportRequest`, `reportQuery`, `visitLines`, `visitTotals`, `buildDay`, `storeLines`, `buildMarketerReport`, `SnapshotVisit`, `snapshotText`
+Exports: `ReportKind`, `ReportPerson`, `SourceClock`, `SourceVisit`, `SourceReport`, `SourceReportFile`, `SourceCount`, `SourceSale`, `ReportSource`, `VisitLine`, `ClockLine`, `ReportField`, `DayDetail`, `StoreLine`, `Tile`, `MarketerReport`, `ARRIVAL_LABEL`, `arrivalText`, `REPORT_FIELDS`, `minutesText`, `shortDate`, `monthName`, `isMonth`, `lastDayOfMonth`, `ReportRequest`, `parseReportRequest`, `reportQuery`, `visitLines`, `reportFieldsWithDocuments`, `visitTotals`, `buildDay`, `storeLines`, `buildMarketerReport`, `SnapshotVisit`, `snapshotText`
 
 ## `src/lib/metrics/admin-route.ts`
 
@@ -766,6 +766,18 @@ Node process on a VPS, so one process sees every attempt. Behind several
 processes each keeps its own count, which still slows a guesser down.
 
 Exports: `allowAttempt`, `clientAddress`
+
+## `src/lib/report-files.ts`
+
+Documents attached to the daily report (migration 0064): which files
+are taken, how big, and the words people see about them.
+
+Pure on purpose (no Supabase, no browser APIs), so
+scripts/check-report-files.ts can test it. The database applies the same
+limits (report_file_mime_ok, add_report_file, report_file_limit); these
+are the friendly first check on the phone.
+
+Exports: `REPORT_FILE_BUCKET`, `MAX_REPORT_FILES`, `MAX_REPORT_FILE_BYTES`, `REPORT_FILE_TYPES`, `REPORT_FILE_ACCEPT`, `reportFileType`, `reportFileLabel`, `reportFileExt`, `fileSizeLabel`, `reportFileLine`, `PickedFile`, `checkReportFiles`, `reportFilePath`, `downloadName`, `countSheetStatus`
 
 ## `src/lib/retention-server.ts`
 
@@ -1153,6 +1165,12 @@ From migration 025; absent before it.
 
 Exports: `KnownPlace`, `WaitingStore`, `PlaceManager`
 
+## `src/components/admin/report-file-list.tsx`
+
+A document attached to a daily report, as report_file_detail gives it (0064).
+
+Exports: `OfficeReportFile`, `ReportFileList`
+
 ## `src/components/admin/role-manager.tsx`
 
 Which roles take the month-end stock count and counts a supervisor asks for.
@@ -1331,7 +1349,7 @@ Exports: `CountDueBanner`
 
 ## `src/components/field/count-sheet-panel.tsx`
 
-A count sheet already sent today.
+A count sheet already sent.
 
 Exports: `SentSheet`, `CountSheetPanel`
 
@@ -1455,6 +1473,12 @@ and on the dashboard's Alerts page, where it is what lets an admin or
 supervisor be told about their staff at all.
 
 Exports: `PushToggle`
+
+## `src/components/field/report-files.tsx`
+
+A document already on today's report.
+
+Exports: `SavedReportFile`, `PendingReportFile`, `ReportFiles`
 
 ## `src/components/field/report-form.tsx`
 

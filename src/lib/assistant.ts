@@ -174,7 +174,7 @@ const tools: Anthropic.Beta.BetaTool[] = [
   {
     name: 'field_reports',
     description:
-      'The daily reports marketers file from the field over a date range: sales, stock status, competitor activity, issues and notes, with who filed each and for which store. Long text is shortened.',
+      'The daily reports marketers file from the field over a date range: sales, stock status, competitor activity, issues and notes, with who filed each and for which store, and the names of any documents attached. Long text is shortened.',
     strict: true,
     input_schema: {
       type: 'object',

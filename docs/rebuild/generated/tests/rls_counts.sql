@@ -389,5 +389,98 @@ select assert((public.xm_set_features(true, true, true, true, true)->>'grading')
   'rls: and back on');
 select assert(public.xm_feature_on('grading'), 'rls: and it reads as on again');
 
+-- Documents on the daily report (0064): the owner, their supervisor and
+-- admins read the list; nobody writes it directly. The report-files bucket
+-- follows the same lines, with RLS switched on for storage here as it is on
+-- Supabase.
+reset role;
+select id as tobi  from auth.users where email = 'tobi.rf@xpel.ng'  \gset
+select id as rlead from auth.users where email = 'lead.rf@xpel.ng'  \gset
+select id as merch from auth.users where email = 'merch.rf@xpel.ng' \gset
+select count(*) as rf_total from public.report_files \gset
+grant usage on schema storage to authenticated;
+grant select, insert, delete on storage.objects to authenticated;
+alter table storage.objects enable row level security;
+set role authenticated;
+
+select set_config('request.jwt.claim.sub', :'tobi', false);
+select assert((select count(*) from public.report_files) = 5
+                and not exists (select 1 from public.report_files where user_id <> :'tobi'),
+  'rls: a marketer sees the documents on their own reports');
+select assert((select count(*) from public.report_file_detail where staff_name = 'Tobi Adeyemi') = 5,
+  'rls: with their name and the day, through the read model');
+do $$
+begin
+  insert into public.report_files (report_id, user_id, path, name, mime, size_bytes)
+  select report_id, user_id, path || '-copy', name, mime, size_bytes from public.report_files limit 1;
+  perform assert(false, 'rls: documents cannot be listed directly');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: documents cannot be added to the list directly');
+end $$;
+do $$
+begin
+  update public.report_files set name = 'Renamed';
+  perform assert(false, 'rls: documents cannot be renamed directly');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: documents cannot be renamed directly');
+end $$;
+do $$
+begin
+  delete from public.report_files;
+  perform assert(false, 'rls: documents cannot be taken off directly');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: documents cannot be taken off the list directly');
+end $$;
+select assert((select count(*) from storage.objects where bucket_id = 'report-files') >= 5,
+  'rls: the owner reads their own stored documents');
+do $$
+begin
+  insert into storage.objects (bucket_id, name, metadata)
+  values ('report-files', auth.uid() || '/new.pdf', '{"mimetype":"application/pdf","size":10}');
+  perform assert(true, 'rls: a marketer uploads into their own folder');
+end $$;
+select set_config('rf.lead', :'rlead', false);
+do $$
+declare lead_id uuid := current_setting('rf.lead')::uuid;
+begin
+  insert into storage.objects (bucket_id, name) values ('report-files', lead_id || '/sneaky.pdf');
+  perform assert(false, 'rls: no uploading into someone else''s folder');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: nobody uploads into someone else''s folder');
+end $$;
+select set_config('storage.api', 'on', false);
+delete from storage.objects where bucket_id = 'report-files' and name like '%/a.pdf';
+delete from storage.objects where bucket_id = 'report-files' and name like '%/new.pdf';
+select assert(exists (select 1 from storage.objects where bucket_id = 'report-files' and name like '%/a.pdf')
+                and not exists (select 1 from storage.objects where bucket_id = 'report-files' and name like '%/new.pdf'),
+  'rls: the owner deletes a loose upload, never a document still on a report');
+select set_config('storage.api', 'off', false);
+
+select set_config('request.jwt.claim.sub', :'rlead', false);
+select assert((select count(*) from public.report_files where user_id = :'tobi') = 5,
+  'rls: a supervisor sees the documents on their team''s reports');
+select assert((select count(*) from storage.objects
+               where bucket_id = 'report-files' and name like :'tobi' || '/%') = 5,
+  'rls: and can open those stored files, but no loose uploads');
+
+select set_config('request.jwt.claim.sub', :'merch', false);
+select assert((select count(*) from public.report_files) = 0
+                and (select count(*) from storage.objects where bucket_id = 'report-files') = 0,
+  'rls: other staff see no one''s documents');
+do $$
+begin
+  insert into storage.objects (bucket_id, name) values ('report-files', auth.uid() || '/mine.pdf');
+  perform assert(false, 'rls: someone who files no report cannot upload documents');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: someone who files no report cannot upload report documents');
+end $$;
+
+select set_config('request.jwt.claim.sub', :'boss', false);
+select assert((select count(*) from public.report_files) = :rf_total,
+  'rls: an admin sees every document');
+
+reset role;
+alter table storage.objects disable row level security;
+
 reset role;
 select 'ALL RLS CHECKS PASSED';

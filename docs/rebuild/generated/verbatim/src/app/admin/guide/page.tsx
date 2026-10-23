@@ -249,7 +249,11 @@ export default async function AdminGuidePage() {
             every month and whenever you ask. Request a count for named people, a whole role or a team, with
             a due date; they are told on their phones. For each product they enter back store and shop
             floor (Xtend adds the total), the expiry date and how many sold, with a shelf photo. Paper
-            sheets come back as Excel, PDF or a photo under <Ui>Count sheets</Ui>.
+            sheets come back as Excel, PDF or a photo under <Ui>Count sheets</Ui>. Staff whose role takes
+            stock counts can also download the month&apos;s sheet from their profile (the <Ui>You</Ui> tab)
+            and send it back on any day, even when no count is due; the <Ui>For</Ui> column says whether a
+            sheet was for a requested count, the month-end count or <Ui>Sent any time</Ui>. A sheet sent
+            any time counts towards nothing; its figures are never in the totals.
           </p>
           <p>
             <Ui>X Metrics</Ui> scores stock, sales and expiry for the stores you enrol:
@@ -481,6 +485,15 @@ export default async function AdminGuidePage() {
             stores, the daily report, stock counts and X Metrics sales; the month adds a day-by-day table,
             a per-store table and each day&apos;s details. The daily report keeps a copy of that day&apos;s
             visits written by the database each time it is saved, so the phone cannot change it.
+          </p>
+          <p>
+            <Ui>Report documents</Ui>: whoever files the daily report can attach up to five documents
+            (PDF, Word, Excel, CSV or pictures, 10 MB each) and remove them until midnight, when the
+            report locks. They are kept privately; only you, the person&apos;s supervisor and the person
+            can open them. <Ui>Documents attached</Ui> on Marketer reports lists them for the period with a{' '}
+            <Ui>Download</Ui> link (each office download is recorded in the audit log as{' '}
+            <Ui>report_file.download</Ui>); the PDF, Word and Excel reports and Ask Xtend&apos;s field
+            reports list them by name.
           </p>
           <p>
             <Ui>Clock-out reminders</Ui>: anyone still clocked in when their store&apos;s shift ends

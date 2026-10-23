@@ -11,6 +11,10 @@ import { PushToggle } from '@/components/field/push-toggle'
 import { formatLagos } from '@/lib/utils'
 import { profileAvatarUrl } from '@/lib/avatars'
 import { ProfilePhoto } from '@/components/field/profile-photo'
+import { CountSheetPanel, type SentSheet } from '@/components/field/count-sheet-panel'
+import { getCountStatus } from '@/lib/store-count-status'
+import { countMonth } from '@/lib/count-sheet'
+import { countSheetStatus } from '@/lib/report-files'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Your account — Xtend' }
@@ -19,7 +23,7 @@ export default async function AccountPage() {
   const session = await requireSession(FIELD_ROLES)
   const supabase = await createServerSupabase()
 
-  const [{ data: inbox }, { data: addedRole }, { data: outlet }, photo] = await Promise.all([
+  const [{ data: inbox }, { data: addedRole }, { data: outlet }, photo, countStatus, { data: today }] = await Promise.all([
     supabase.rpc('my_notifications', { p_limit: 10 }),
     // A role an admin added (042) shows by its own name.
     session.profile.staff_role_id
@@ -43,7 +47,46 @@ export default async function AccountPage() {
           }>()
       : Promise.resolve({ data: null }),
     profileAvatarUrl(supabase, session.profile.avatar_path),
+    // Whether their role takes stock counts (046); a due count is not needed.
+    getCountStatus(supabase),
+    supabase.rpc('business_date'),
   ])
+  const businessDate = (today as string | null) ?? ''
+
+  // The stock count sheet, any time (0064): their stores, this month's
+  // sheets, and whether there is a sheet to download.
+  const sheet =
+    countStatus.reason !== 'not_allowed' && businessDate
+      ? await Promise.all([
+          supabase.rpc('my_outlets'),
+          supabase
+            .from('store_count_sheet_detail')
+            .select('id, outlet_name, file_name, created_at, request_id, count_was_due')
+            .eq('user_id', session.userId)
+            .gte('count_date', `${businessDate.slice(0, 7)}-01`)
+            .order('created_at', { ascending: false })
+            .limit(20),
+          supabase
+            .from('products')
+            .select('id', { count: 'exact', head: true })
+            .not('sheet_order', 'is', null)
+            .eq('is_active', true),
+          supabase.from('count_sheet_templates').select('id', { count: 'exact', head: true }),
+        ])
+      : null
+  const sheetStores = ((sheet?.[0].data ?? []) as { id: string; name: string }[]).map((o) => ({
+    id: o.id,
+    name: o.name,
+  }))
+  const sentSheets: SentSheet[] = (
+    (sheet?.[1].data ?? []) as (SentSheet & { request_id: string | null; count_was_due?: boolean | null })[]
+  ).map((s) => ({
+    id: s.id,
+    outlet_name: s.outlet_name,
+    file_name: s.file_name,
+    created_at: s.created_at,
+    status: `Sent ${formatLagos(s.created_at)} · ${countSheetStatus(s)}`,
+  }))
   const messages = (inbox ?? []) as {
     id: string
     title: string
@@ -89,6 +132,19 @@ export default async function AccountPage() {
             muted={!outlet}
           />
         </section>
+
+        {sheet && sheetStores.length > 0 && (
+          <section>
+            <CountSheetPanel
+              title="Stock count sheet"
+              stores={sheetStores}
+              sent={sentSheets}
+              sentHeading="Sent this month"
+              hasTemplate={(sheet[2].count ?? 0) > 0 || (sheet[3].count ?? 0) > 0}
+              month={countMonth(businessDate)}
+            />
+          </section>
+        )}
 
         <section className="space-y-3">
           <SectionHeader title="Days off and leave" />

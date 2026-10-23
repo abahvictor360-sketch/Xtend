@@ -11,6 +11,7 @@
 import { addDays, formatLagos, longDate } from '@/lib/utils'
 import { duration } from '@/lib/movement'
 import { dayList, isDate, minutesOf, weekday } from '@/lib/attendance-report'
+import { reportFileLine } from '@/lib/report-files'
 
 export type ReportKind = 'day' | 'month'
 
@@ -69,6 +70,14 @@ export interface SourceReport {
   issues: string | null
 }
 
+/** A document attached to a daily report (0064). */
+export interface SourceReportFile {
+  report_date: string
+  name: string
+  mime: string | null
+  size_bytes: number | null
+}
+
 export interface SourceCount {
   count_date: string
   outlet_name: string | null
@@ -98,6 +107,8 @@ export interface ReportSource {
   reports: SourceReport[]
   counts: SourceCount[]
   sales: SourceSale[]
+  /** Documents attached to the reports (0064); none when left out. */
+  files?: SourceReportFile[]
 }
 
 /* ------------------------------------------------------------------ */
@@ -152,7 +163,8 @@ export interface DayDetail {
   visits: VisitLine[]
   stores: number
   minutesInStores: number
-  report: { filedAt: string; fields: ReportField[] } | null
+  /** documents: "Price survey.pdf (PDF, 1.2 MB)" for each attached (0064). */
+  report: { filedAt: string; fields: ReportField[]; documents: string[] } | null
   counts: { store: string; product: string; inStore: string; sold: string }[]
   sales: { store: string; product: string; units: number }[]
   /** One plain sentence about the day. */
@@ -362,6 +374,15 @@ export function visitLines(visits: SourceVisit[], today: string): VisitLine[] {
   })
 }
 
+/**
+ * The report's fields as the PDF and Word files print them: the five
+ * sections, then "Documents attached" when there are any.
+ */
+export function reportFieldsWithDocuments(report: { fields: ReportField[]; documents: string[] }): ReportField[] {
+  if (!report.documents.length) return report.fields
+  return [...report.fields, { label: 'Documents attached', text: report.documents.join('; '), empty: false }]
+}
+
 /** Store visit totals for a set of visits: what the daily report shows. */
 export function visitTotals(visits: SourceVisit[]) {
   return {
@@ -410,7 +431,7 @@ function daySummary(d: Omit<DayDetail, 'summary' | 'active'>, date: string, toda
 
 export function buildDay(
   date: string,
-  src: Pick<ReportSource, 'events' | 'visits' | 'reports' | 'counts' | 'sales' | 'today'>,
+  src: Pick<ReportSource, 'events' | 'visits' | 'reports' | 'counts' | 'sales' | 'today' | 'files'>,
 ): DayDetail {
   const events = src.events.filter((e) => e.attendance_date === date)
   const ins = events.filter((e) => e.type === 'opening').sort((a, b) => a.created_at.localeCompare(b.created_at))
@@ -447,6 +468,7 @@ export function buildDay(
             const text = String(report[f.key] ?? '').trim()
             return { label: f.label, text: text || 'Nothing reported.', empty: !text }
           }),
+          documents: (src.files ?? []).filter((f) => f.report_date === date).map(reportFileLine),
         }
       : null,
     counts: src.counts

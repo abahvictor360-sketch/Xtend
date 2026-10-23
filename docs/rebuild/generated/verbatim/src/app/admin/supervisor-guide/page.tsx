@@ -200,6 +200,12 @@ export default async function SupervisorGuidePage() {
             ]}
           />
           <p>
+            Some count on paper: they download the month&apos;s Xpel sheet, fill it and send it back as
+            Excel, PDF or a photo. Those sheets are under <Ui>Count sheets</Ui> on Stock count, with what
+            each was for: a requested count, the month-end count, or <Ui>Sent any time</Ui> (staff can
+            send one from their profile on any day).
+          </p>
+          <p>
             Everyone also counts at the end of each month without being asked. <Ui>X Metrics</Ui> shows
             your stores&apos; stock, sales against target, expiry alerts and your team&apos;s grades; an
             admin sets it up and changes it. An admin can switch parts of it off for a while: they leave
@@ -267,6 +273,11 @@ export default async function SupervisorGuidePage() {
             clock-out, every store visit with the time spent there, their daily report, stock counts and
             sales. From <Ui>Store visits</Ui> → <Ui>By person</Ui>, <Ui>Day report</Ui> or{' '}
             <Ui>Month report</Ui> opens the same thing.
+          </p>
+          <p>
+            Marketers can attach up to five documents to a daily report (PDF, Word, Excel, CSV or
+            pictures). Under <Ui>Documents attached</Ui> on the same page, tap <Ui>Download</Ui> to open
+            one; the PDF, Word and Excel reports list them by name.
           </p>
         </GuideSection>
 

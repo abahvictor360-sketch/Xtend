@@ -106,7 +106,7 @@ On screen: Things that look wrong: signs of a fake-location app, phone clocks ch
 
 - File: `src/app/admin/marketer-reports/page.tsx`
 - Who: ['admin', 'supervisor']
-- Components: `admin/marketer-report-list`, `admin/visit-views`, `ui/alert`, `ui/button`, `ui/card`, `ui/input`, `ui/label`
+- Components: `admin/marketer-report-list`, `admin/report-file-list`, `admin/visit-views`, `ui/alert`, `ui/button`, `ui/card`, `ui/input`, `ui/label`
 
 On screen: A report to download for each marketer, for one day or a whole month: when they clocked in and out, every store they checked in to and how long they spent there, the time between stores, and the daily report they filed. PDF is the one to share; Word and Excel hold the same.
 
@@ -352,7 +352,7 @@ On screen: Point your phone&apos;s camera at the code to open this page on your 
 
 - File: `src/app/field/account/page.tsx`
 - Who: FIELD_ROLES
-- Components: `field/screen`, `field/task-row`, `sign-out-button`, `brand/logo`, `field/push-toggle`, `field/profile-photo`
+- Components: `field/screen`, `field/task-row`, `sign-out-button`, `brand/logo`, `field/push-toggle`, `field/profile-photo`, `field/count-sheet-panel`
 
 On screen: Your photo helps your team recognise you. Take it facing the camera in good light.
 
@@ -404,7 +404,7 @@ Metrics. Both work offline and are sent when there is signal.
 
 - File: `src/app/field/report/page.tsx`
 - Who: public / own check
-- Components: `field/report-form`, `field/report-visits`, `field/screen`
+- Components: `field/report-form`, `field/report-visits`, `field/report-files`, `field/screen`
 
 ## `/field/support` — Message support — Xtend
 

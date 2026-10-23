@@ -37,6 +37,8 @@ export interface ReportJob {
   competitor_activity: string
   issues: string
   photos: Blob[]
+  /** Documents to attach (0064). Missing on jobs queued before it. */
+  files?: { blob: Blob; name: string; mime: string }[]
   client_captured_at: string
 }
 

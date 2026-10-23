@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-23, after the X Metrics feature switches (migration 0063) and holding the Movement maps to Nigeria._
+_Last updated: 2026-10-23, after the stock count sheet on the You page and documents on the daily report (migration 0064)._
 
 ---
 
@@ -322,6 +322,30 @@ the code lives.
   switched-off page reached by a link says so (`src/lib/metrics/features.ts`,
   `features-server.ts`, `src/components/admin/xm/features-form.tsx`,
   `switched-off.tsx`, `src/app/admin/metrics/layout.tsx`).
+- **Stock count sheet on the You page** (0064): anyone whose role takes stock
+  counts and who has a store (merchandisers, and marketers whose role counts)
+  sees a **Stock count sheet** section on `/field/account` at any time: download
+  this month's Xpel sheet for their store as Excel, fill it, upload it back as
+  the Excel file, a PDF or a photo, and see what they sent this month with what
+  it was for. It reuses `CountSheetPanel` and the same routes
+  (`/api/store-counts/template`, `/api/store-counts/sheets`). `submit_count_sheet`
+  no longer needs a count to be due: a sheet sent while one is open still counts
+  towards it; one sent at another time is kept with `count_was_due = false` and
+  counts towards nothing. Not tied to the X Metrics switches (store counts are
+  not X Metrics). Office: Stock count → Count sheets has a **For** column
+  (Requested count, Month-end count, Sent any time).
+- **Documents on the daily report** (0064): an **Attach documents** area on
+  `/field/report` (`src/components/field/report-files.tsx`, rules in
+  `src/lib/report-files.ts`): PDF, Word, Excel, CSV or pictures, up to 5, 10 MB
+  each, listed with name and size, removable before saving and afterwards until
+  the report locks at midnight Lagos. They travel with the report through the
+  offline outbox into the private `report-files` bucket and are registered by
+  `add_report_file` (limits, type allowlist, own folder, today's report only);
+  `remove_report_file` takes one off on the day (`DELETE /api/report-files/<id>`).
+  Office: Marketer reports has a **Documents attached** card with Download links
+  (`GET /api/report-files/<id>`: RLS-checked, 5-minute signed link, audited
+  `report_file.download`); the day/month PDF, Word and Excel and Ask Xtend's
+  field reports list them by name.
 
 ## 6. The database: every migration
 
@@ -392,6 +416,7 @@ Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
 | 0061 | Clock-out reminders at the end of the shift |
 | 0062 | Activity log: sign-ins, sign-outs, app opens, password and photo changes (`user_activity`), the admin-only `activity_feed`, 180-day purge |
 | 0063 | X Metrics feature switches on `xm_settings` (`enabled`, `expiry_enabled`, `supplies_enabled`, `grading_enabled`, `sales_enabled`, all on; `reconcile_from`), `xm_feature_on`, admin-only `xm_set_features`, guards refusing switched-off writes, and the sweep, reconciliation, expiry and grading skipping what is off |
+| 0064 | Count sheets sent any time (`store_count_sheets.count_was_due`, `submit_count_sheet` without a due count); documents on the daily report: private `report-files` bucket and its storage rules, `report_files` with `add_report_file` / `remove_report_file`, the five-file trigger, `report_file_detail` |
 
 ## 7. Environment variables
 
@@ -528,7 +553,7 @@ for s in check-allocate check-assistant-actions check-attendance check-audit \
          check-movement check-push-endpoints check-supply-import \
          check-support-notifications check-updates check-visits-alerts check-xm-exports \
          check-schedules-leave check-marketer-reports check-clock-out-reminder check-activity \
-         check-xm-features; do
+         check-xm-features check-report-files; do
   npx tsx --tsconfig tsconfig.scripts.json scripts/$s.ts | tail -1
 done
 ```
@@ -613,6 +638,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-23 | **Stock count sheet on the You page**: download this month's Xpel sheet as Excel, fill it and upload it back (Excel, PDF or photo) on any day, with this month's sheets and what each was for; the database now keeps a sheet sent when no count is due (`count_was_due`), and Count sheets on Stock count says what each was for. **Documents on the daily report**: attach up to 5 PDF, Word, Excel, CSV or picture files (10 MB each) to the report, remove them until midnight; private `report-files` bucket; office downloads on Marketer reports (audited), names in the report PDF/Word/Excel and Ask Xtend. New `GET`/`DELETE /api/report-files/<id>`, `scripts/check-report-files.ts` | 0064 |
 | 2026-10-23 | **X Metrics feature switches**: a Features card at the top of X Metrics → Settings turns the whole module, Expiry, Supplies, Grading and Sales off and back on without losing anything. Off hides the part from the dashboard (menu, sub-navigation, overview tiles, store and staff pages, downloads, Ask Xtend, marketer report sales) and the staff app (Metrics tab, sales form, expiry date box, score), and the database refuses or skips its work; reconciliation needs Supplies and Sales and restarts cleanly when they return. New `PUT /api/admin/metrics/features` (audited `xm.features.update`); check script `check-xm-features` | 0063 |
 | 2026-10-23 | Movement: the live map opens on the whole of Nigeria, and every Movement map is held to Nigeria (no panning or zooming out beyond it); a person's route still zooms to the route | — |
 | 2026-10-22 | Admin **Activity log** (`/admin/activity`, menu after Audit log): everyone's sign-ins, sign-outs, app opens, clock-ins, visits, reports, counts, leave, support messages, password and photo changes with time, device, platform and IP; filters, summary cards, per-person table with Movement/Attendance links, day-by-day timeline, Excel/PDF/Word/CSV downloads. New `POST /api/activity` and `POST /api/auth/password` (the change-password form now saves through the server); nightly purge after 180 days; check script `check-activity` | 0062 |
@@ -684,6 +710,11 @@ Newest first. Dates are when the work landed on the main branch.
   message and stays unsent. Expiry dates already known for a batch are
   carried from count to count while Expiry is off (the box is hidden), so
   they are there when it comes back on.
+- **Report documents** (0064): a document uploaded but never registered
+  (the report post failed after the upload, and the outbox retried with a
+  new copy) stays in the owner's `report-files` folder unreferenced; the
+  owner may delete it, nobody else sees it. A sweep could clear these later.
+  Removing a saved document needs a connection (no offline queue).
 - **Clock-out reminders** ignore schedules: they go to anyone clocked in and
   not out, which covers someone working on a day off.
 - **Android signing secrets**: until they are set, the published APK is a

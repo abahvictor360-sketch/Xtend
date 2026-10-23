@@ -755,7 +755,7 @@ Record: `{ id?: number, kind, job, attempts: number, last_error: string | null, 
 |---|---|
 | `clock` | `type` (AttendanceType), `lat`, `lng`, `accuracy_m`, `address`, `place_name`, `place_source`, `device_info`, `client_captured_at`, `selfie: Blob`, `thumb: Blob` |
 | `ping` | `lat`, `lng`, `accuracy_m`, `client_captured_at` |
-| `report` | `body`, `sales_summary`, `stock_status`, `competitor_activity`, `issues`, `photos: Blob[]`, `client_captured_at` |
+| `report` | `body`, `sales_summary`, `stock_status`, `competitor_activity`, `issues`, `photos: Blob[]`, `files?: { blob: Blob, name, mime }[]` (0064; absent on older jobs), `client_captured_at` |
 | `xm_count` | `outlet_id`, `outlet_name`, `lat`, `lng`, `accuracy_m`, `lines[] { product_id, batch, expiry_date, on_shelf, in_backroom }`, `photo: Blob`, `client_captured_at` |
 | `xm_sales` | `outlet_id`, `outlet_name`, `sale_date`, `lines[] { product_id, units }`, `photo: Blob \| null`, `client_captured_at` |
 
@@ -773,9 +773,18 @@ What each job does when run:
 |---|---|
 | `clock` | Upload `selfies/<uid>/<uuid>.jpg` and `<uuid>_thumb.jpg` (`contentType: image/jpeg`, `upsert: true`) → `checkPhoto('selfies', path, thumb)` → `POST /api/attendance` with all fields plus `device_info.sent_at = now` |
 | `ping` | `POST /api/pings/offline { sent_at, points: [{ lat, lng, accuracy_m, captured_at }] }` |
-| `report` | Upload each photo `reports/<uid>/<uuid>.jpg` → `POST /api/reports { body, sales_summary, stock_status, competitor_activity, issues, photo_paths }` |
+| `report` | Upload each photo `reports/<uid>/<uuid>.jpg`, then each document `report-files/<uid>/report-<uuid>.<ext>` (`contentType` = its type, `upsert: false`) → `POST /api/reports { body, sales_summary, stock_status, competitor_activity, issues, photo_paths, files: [{ path, name }] }` |
 | `xm_count` | Upload `reports/<uid>/xm-count-<uuid>.jpg` → `checkPhoto('reports', path)` → `POST /api/metrics/counts { outlet_id, lat, lng, accuracy_m, photo_path, captured_at, lines }` |
 | `xm_sales` | Optional photo `xm-sales-…` as above → `POST /api/metrics/sales { outlet_id, sale_date, photo_path, captured_at, lines }` |
+
+Storage buckets (all private, files reach the browser only as short-lived signed
+links): `selfies` (clock and visit selfies), `reports` (report photos, shelf and
+place photos, count sheets and the admin's blank sheet) and, since 0064,
+`report-files` (documents attached to the daily report, `<uid>/report-<uuid>.<ext>`;
+10 MB and the document allowlist set on the bucket as well; rules in
+`30-rules.md` §2.6). Uploads go straight from the phone to Supabase Storage, so
+the VPS's Nginx `client_max_body_size 25m` never sees them; the 10 MB limit is the
+app's, the bucket's and the database's.
 
 Error classification in `postJson` and `checkPhoto`:
 
