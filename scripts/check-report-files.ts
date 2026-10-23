@@ -1,7 +1,10 @@
 /**
  * Checks the daily report documents (src/lib/report-files.ts, migration
  * 0064): which files are taken, the five-file and 10 MB limits, the words
- * staff and the office see, and how the marketer report lists them.
+ * staff and the office see, and how the marketer report lists them; and
+ * the offline outbox (0065): one path per picked document, no second
+ * upload on a retry, removals that wait for signal, and what staff are
+ * told when one arrives after midnight.
  *
  *   npx tsx --tsconfig tsconfig.scripts.json scripts/check-report-files.ts
  */
@@ -21,6 +24,24 @@ import {
   reportFileType,
 } from '@/lib/report-files'
 import { buildDay, reportFieldsWithDocuments } from '@/lib/marketer-report'
+import {
+  REMOVAL_FAILED_NOTICE,
+  REMOVAL_LOCKED_NOTICE,
+  REMOVAL_NOTICES_KEY,
+  abandonedRemovalReason,
+  addRemovalNotice,
+  isAlreadyExists,
+  needsUpload,
+  newClientId,
+  queuedFilePath,
+  removalNotice,
+  removalOutcome,
+  savedFileView,
+  takeRemovalNotices,
+  uploadQueuedFiles,
+  type NoticeStore,
+  type QueuedReportFile,
+} from '@/lib/report-file-queue'
 
 let failed = 0
 function check(ok: boolean, label: string, got?: unknown) {
@@ -154,8 +175,163 @@ const plain = buildDay('2026-10-15', { events: [], visits: [], counts: [], sales
 check(plain.report?.documents.length === 0 && reportFieldsWithDocuments(plain.report!).length === 5,
   'a report without documents prints as before')
 
-if (failed) {
-  console.log(`\n${failed} check(s) FAILED`)
-  process.exit(1)
+// ---------------------------------------------------------------------
+// The offline outbox (0065): uploads that never repeat, removals that wait.
+// ---------------------------------------------------------------------
+async function outboxChecks() {
+  const cid = newClientId()
+  check(/^[\w-]+$/.test(cid) && cid !== newClientId(), 'each picked document gets its own path-safe id', cid)
+  const pdf = { client_id: 'c-1', mime: 'application/pdf' }
+  check(queuedFilePath(uid, pdf) === `${uid}/report-c-1.pdf` && queuedFilePath(uid, pdf) === queuedFilePath(uid, { ...pdf }),
+    'a document always has the same path in the person’s own folder (as add_report_file wants)', queuedFilePath(uid, pdf))
+  let threw = false
+  try {
+    queuedFilePath(uid, { mime: 'application/pdf' })
+  } catch {
+    threw = true
+  }
+  check(threw, 'no path without the document’s id')
+  check(needsUpload(uid, pdf), 'a document not sent yet is uploaded')
+  check(!needsUpload(uid, { ...pdf, uploaded_path: `${uid}/report-c-1.pdf` }), 'a document already sent is not uploaded again')
+  check(needsUpload(uid, { ...pdf, uploaded_path: `other/report-c-1.pdf` }), 'one sent under another account on this phone goes up again under this one')
+
+  check(isAlreadyExists({ message: 'The resource already exists', statusCode: '409' }), 'storage’s "already exists" is recognised')
+  check(isAlreadyExists({ message: 'x', status: 409 }) && isAlreadyExists({ message: 'Duplicate', statusCode: 'Duplicate' }),
+    'by status or by code')
+  check(!isAlreadyExists({ message: 'new row violates row-level security policy', statusCode: '403' }) && !isAlreadyExists(null),
+    'other storage errors are not taken for success')
+
+  // A report sent three times: fails part-way, then the post fails, then it goes.
+  const blob = new Blob(['x'])
+  const job = {
+    files: [
+      { blob, name: 'One.pdf', mime: 'application/pdf', client_id: 'a1' },
+      { blob, name: 'Two.xlsx', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', client_id: 'a2' },
+      // queued before 0065: no id yet
+      { blob, name: 'Old.csv', mime: 'text/csv' } as QueuedReportFile,
+    ] as QueuedReportFile[],
+  }
+  const stored = new Set<string>()
+  const uploads: string[] = []
+  let saves = 0
+  let failNext: string | null = 'Two.xlsx'
+  const upload = async (path: string, file: QueuedReportFile) => {
+    uploads.push(path)
+    if (failNext === file.name) {
+      failNext = null
+      return { message: 'Failed to fetch' }
+    }
+    if (stored.has(path)) return { message: 'The resource already exists', statusCode: '409' }
+    stored.add(path)
+    return null
+  }
+  const save = () => {
+    saves += 1
+  }
+  let firstFailed = false
+  try {
+    await uploadQueuedFiles(uid, job.files, upload, save)
+  } catch {
+    firstFailed = true
+  }
+  check(firstFailed && uploads.length === 2 && saves === 1 && job.files[0].uploaded_path === `${uid}/report-a1.pdf`
+    && !job.files[1].uploaded_path,
+    'a failure part-way stops there, with what went saved on the phone', { uploads, saves })
+  const second = await uploadQueuedFiles(uid, job.files, upload, save)
+  check(uploads.length === 4 && !uploads.slice(2).includes(`${uid}/report-a1.pdf`),
+    'the retry skips the document already uploaded', uploads)
+  check(!!job.files[2].client_id && second[2].path === `${uid}/report-${job.files[2].client_id}.csv`,
+    'a document queued before 0065 gets its id on the first try and keeps it', second[2])
+  check(second.map((f) => f.name).join() === 'One.pdf,Two.xlsx,Old.csv' && second.every((f) => f.path.startsWith(`${uid}/`)),
+    'every document is listed for the report, in order')
+  // The report post then fails; the third try uploads nothing at all.
+  const before = uploads.length
+  const third = await uploadQueuedFiles(uid, job.files, upload, save)
+  check(uploads.length === before && JSON.stringify(third) === JSON.stringify(second),
+    'once all are up, a retry uploads nothing and sends the same paths', uploads.length - before)
+  // The phone lost what it had saved after an upload: storage says it is there.
+  const lost: QueuedReportFile[] = [{ blob, name: 'One.pdf', mime: 'application/pdf', client_id: 'a1' }]
+  const again = await uploadQueuedFiles(uid, lost, upload, save)
+  check(again[0].path === `${uid}/report-a1.pdf` && lost[0].uploaded_path === again[0].path,
+    '"already there" from storage counts as uploaded, not as a failure')
+  let refused = ''
+  try {
+    await uploadQueuedFiles(uid, [{ blob, name: 'Big.pdf', mime: 'application/pdf', client_id: 'b' }],
+      async () => ({ message: 'The object exceeded the maximum allowed size', statusCode: '413' }), save)
+  } catch (e) {
+    refused = e instanceof Error ? e.message : ''
+  }
+  check(refused.includes('maximum allowed size'), 'any other storage refusal stops the send', refused)
 }
-console.log('\nALL REPORT FILE CHECKS PASSED')
+
+function removalChecks() {
+  check(removalOutcome(200, { }) === 'removed', 'a removal that goes through is done')
+  check(removalOutcome(404, { code: 'gone', error: 'That document is not on your report' }) === 'gone',
+    'one already gone (an earlier try got through) is done too')
+  check(removalOutcome(409, { code: 'locked' }) === 'locked', 'one after midnight is refused as locked')
+  check(removalOutcome(400, { error: 'Documents can only be removed on the day the report was filed' }) === 'locked',
+    'the same, from a server without 0065 yet')
+  check(removalOutcome(400, { error: 'That document is not on your report' }) === 'gone', 'and gone, from one without 0065')
+  for (const s of [0, 401, 408, 429, 500, 502, 503]) {
+    check(removalOutcome(s, { error: 'x' }) === 'retry', `no answer worth keeping (${s}) is tried again`)
+  }
+  check(removalOutcome(403, { error: 'Only marketers' }) === 'refused', 'any other refusal is final')
+
+  check(REMOVAL_LOCKED_NOTICE === 'This document could not be removed because the report closed at midnight.',
+    'the words staff see when it arrived too late')
+  check(removalNotice('Price list.pdf', 'locked') === `“Price list.pdf”: ${REMOVAL_LOCKED_NOTICE}`, 'with the document’s name')
+  check(!/locat|monitor|track|alert|integrity/i.test(REMOVAL_LOCKED_NOTICE + REMOVAL_FAILED_NOTICE),
+    'nothing about how staff are monitored')
+  const now = Date.parse('2026-10-24T09:00:00Z')
+  check(abandonedRemovalReason('2026-10-23T08:00:00Z', now) === 'locked', 'a removal given up after a day is told as locked')
+  check(abandonedRemovalReason('2026-10-24T07:00:00Z', now) === 'failed', 'one given up sooner is told it did not happen')
+
+  // Notices wait for the report page, once each.
+  const mem = new Map<string, string>()
+  const store: NoticeStore = {
+    getItem: (k) => mem.get(k) ?? null,
+    setItem: (k, v) => void mem.set(k, v),
+    removeItem: (k) => void mem.delete(k),
+  }
+  addRemovalNotice(store, removalNotice('A.pdf', 'locked'))
+  addRemovalNotice(store, removalNotice('A.pdf', 'locked'))
+  addRemovalNotice(store, removalNotice('B.pdf', 'failed'))
+  const taken = takeRemovalNotices(store)
+  check(taken.length === 2 && taken[0].includes('A.pdf') && taken[1].includes('B.pdf'), 'each notice once, in order', taken)
+  check(takeRemovalNotices(store).length === 0, 'and gone once shown')
+  for (let i = 0; i < 15; i++) addRemovalNotice(store, `n${i}`)
+  check(takeRemovalNotices(store).length === 10, 'no more than ten are kept')
+  const broken: NoticeStore = {
+    getItem: () => {
+      throw new Error('blocked')
+    },
+    setItem: () => {
+      throw new Error('blocked')
+    },
+    removeItem: () => {
+      throw new Error('blocked')
+    },
+  }
+  addRemovalNotice(broken, 'x')
+  check(takeRemovalNotices(broken).length === 0 && takeRemovalNotices(null).length === 0,
+    'a phone without storage never breaks the report')
+  mem.set(REMOVAL_NOTICES_KEY, '{not json')
+  check(takeRemovalNotices(store).length === 0, 'damaged notices are ignored')
+
+  // On the page: waiting removals read "Removing…" and free their place.
+  const view = savedFileView([{ id: 'a' }, { id: 'b' }, { id: 'c' }], ['b'])
+  check(view.files[1].removing && !view.files[0].removing && view.counted === 2,
+    'a document waiting to be removed reads "Removing…" and no longer counts towards the five', view)
+}
+
+async function main() {
+  await outboxChecks()
+  removalChecks()
+  if (failed) {
+    console.log(`\n${failed} check(s) FAILED`)
+    process.exit(1)
+  }
+  console.log('\nALL REPORT FILE CHECKS PASSED')
+}
+
+void main()

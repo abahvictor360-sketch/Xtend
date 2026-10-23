@@ -755,11 +755,13 @@ Record: `{ id?: number, kind, job, attempts: number, last_error: string | null, 
 |---|---|
 | `clock` | `type` (AttendanceType), `lat`, `lng`, `accuracy_m`, `address`, `place_name`, `place_source`, `device_info`, `client_captured_at`, `selfie: Blob`, `thumb: Blob` |
 | `ping` | `lat`, `lng`, `accuracy_m`, `client_captured_at` |
-| `report` | `body`, `sales_summary`, `stock_status`, `competitor_activity`, `issues`, `photos: Blob[]`, `files?: { blob: Blob, name, mime }[]` (0064; absent on older jobs), `client_captured_at` |
+| `report` | `body`, `sales_summary`, `stock_status`, `competitor_activity`, `issues`, `photos: Blob[]`, `files?: { blob: Blob, name, mime, client_id?, uploaded_path? }[]` (0064; absent on older jobs; `client_id` given when picked and `uploaded_path` set once sent, 0065), `client_captured_at` |
+| `report_file_remove` | `file_id`, `name`, `client_captured_at` (0065) |
 | `xm_count` | `outlet_id`, `outlet_name`, `lat`, `lng`, `accuracy_m`, `lines[] { product_id, batch, expiry_date, on_shelf, in_backroom }`, `photo: Blob`, `client_captured_at` |
 | `xm_sales` | `outlet_id`, `outlet_name`, `sale_date`, `lines[] { product_id, units }`, `photo: Blob \| null`, `client_captured_at` |
 
 Helpers: `enqueue(job)`, `listOutbox()` (by `queued_at`), `countOutbox()`, `dropOutbox(id)`,
+`saveOutboxRecord(record)` (put, for progress on a queued job; no-op without an `id`),
 `markAttempt(record, error)` (attempts + 1, `last_error`).
 
 ### 4.4 Outbox sync (`src/lib/offline/sync.ts`)
@@ -773,14 +775,15 @@ What each job does when run:
 |---|---|
 | `clock` | Upload `selfies/<uid>/<uuid>.jpg` and `<uuid>_thumb.jpg` (`contentType: image/jpeg`, `upsert: true`) → `checkPhoto('selfies', path, thumb)` → `POST /api/attendance` with all fields plus `device_info.sent_at = now` |
 | `ping` | `POST /api/pings/offline { sent_at, points: [{ lat, lng, accuracy_m, captured_at }] }` |
-| `report` | Upload each photo `reports/<uid>/<uuid>.jpg`, then each document `report-files/<uid>/report-<uuid>.<ext>` (`contentType` = its type, `upsert: false`) → `POST /api/reports { body, sales_summary, stock_status, competitor_activity, issues, photo_paths, files: [{ path, name }] }` |
+| `report` | Upload each photo `reports/<uid>/<uuid>.jpg`, then each document not yet sent to `report-files/<uid>/report-<client_id>.<ext>` (`contentType` = its type, `upsert: false`; a job from before 0065 gets its `client_id` on the first try; storage's "already exists" counts as sent; `uploaded_path` is saved on the queued record after each; `uploadQueuedFiles` in `src/lib/report-file-queue.ts`) → `POST /api/reports { body, sales_summary, stock_status, competitor_activity, issues, photo_paths, files: [{ path, name }] }` |
+| `report_file_remove` | `DELETE /api/report-files/<file_id>`; `removalOutcome`: 2xx or 404 `gone` → done; 409 `locked` (or the old 400 text) → done, and when sent from the queue a notice is kept for the report page (`localStorage` `xtend.report-file-notices`, at most 10); 0/401/408/429/5xx → transient; other 4xx → done with a "could not be removed" notice. Run while the person watches, a refusal is thrown to the UI instead |
 | `xm_count` | Upload `reports/<uid>/xm-count-<uuid>.jpg` → `checkPhoto('reports', path)` → `POST /api/metrics/counts { outlet_id, lat, lng, accuracy_m, photo_path, captured_at, lines }` |
 | `xm_sales` | Optional photo `xm-sales-…` as above → `POST /api/metrics/sales { outlet_id, sale_date, photo_path, captured_at, lines }` |
 
 Storage buckets (all private, files reach the browser only as short-lived signed
 links): `selfies` (clock and visit selfies), `reports` (report photos, shelf and
 place photos, count sheets and the admin's blank sheet) and, since 0064,
-`report-files` (documents attached to the daily report, `<uid>/report-<uuid>.<ext>`;
+`report-files` (documents attached to the daily report, `<uid>/report-<client_id>.<ext>`;
 10 MB and the document allowlist set on the bucket as well; rules in
 `30-rules.md` §2.6). Uploads go straight from the phone to Supabase Storage, so
 the VPS's Nginx `client_max_body_size 25m` never sees them; the 10 MB limit is the
@@ -799,7 +802,8 @@ Error classification in `postJson` and `checkPhoto`:
 `flushOutbox()`: guarded by a module flag (concurrent call returns counts only).
 Walks records oldest first. A run of consecutive pings is batched (≤400), dropping
 pings older than 24 h or with ≥8 attempts. Other records older than their max age or
-with ≥8 attempts are dropped. The first transient failure **stops the flush**
+with ≥8 attempts are dropped (a dropped `report_file_remove` leaves a notice: "locked"
+when queued over 24 h ago, else "could not be removed"). The first transient failure **stops the flush**
 (preserves ordering). Returns `{ sent, failed, dropped, remaining }`.
 
 `submitOrQueue(job)`: offline (`navigator.onLine === false`) → enqueue; else run now;

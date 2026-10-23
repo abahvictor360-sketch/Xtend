@@ -231,7 +231,8 @@ export function StaffGuide() {
         </p>
         <Tip>
           No data? Your report and its documents wait on your phone and send themselves when you
-          get signal.
+          get signal. A document you remove with no data shows <Ui>Removing…</Ui> until then. If it
+          only gets through after midnight, the report has closed and the document stays on it.
         </Tip>
       </GuideSection>
 

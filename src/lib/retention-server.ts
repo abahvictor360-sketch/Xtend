@@ -89,3 +89,35 @@ export async function sweepExpiredSelfies(
   })
   return result
 }
+
+export interface OrphanSweepResult {
+  files_deleted: number
+  failed: number
+}
+
+/**
+ * Deletes report documents (0064) that are more than 24 hours old and on
+ * no report: uploads whose report never arrived or was never saved, and
+ * anything else left behind (0065). The database lists them
+ * (report_file_orphans, service role only); the Storage API deletes them,
+ * never a SQL DELETE. A file the job misses is picked up the next night.
+ */
+export async function purgeOrphanReportFiles(admin: SupabaseClient): Promise<OrphanSweepResult> {
+  const { data, error } = await admin.rpc('report_file_orphans', { p_hours: 24, p_limit: 1000 })
+  if (error) throw new Error(error.message)
+
+  const paths = ((data ?? []) as { path: string }[]).map((row) => row.path).filter(Boolean)
+  let deleted = 0
+  let failed = 0
+  for (let i = 0; i < paths.length; i += 100) {
+    const batch = paths.slice(i, i + 100)
+    const { data: removed, error: removeError } = await admin.storage.from('report-files').remove(batch)
+    if (removeError) {
+      failed += batch.length
+      console.error('report file clean-up failed for a batch', removeError.message)
+      continue
+    }
+    deleted += removed?.length ?? 0
+  }
+  return { files_deleted: deleted, failed }
+}

@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-23, after the mobile document controls and office dashboard usability fixes (no new migration)._
+_Last updated: 2026-10-23, after report documents that survive a bad connection (migration 0065) and the mobile document controls and office dashboard usability fixes._
 
 ---
 
@@ -346,6 +346,23 @@ the code lives.
   (`GET /api/report-files/<id>`: RLS-checked, 5-minute signed link, audited
   `report_file.download`); the day/month PDF, Word and Excel and Ask Xtend's
   field reports list them by name.
+- **Report documents offline** (0065): removing a saved document works with
+  no signal: it is queued in the outbox (`report_file_remove`), reads
+  **Removing…** at once and is sent when the phone is back online. A removal
+  that arrives after midnight is refused (`remove_report_file` hint
+  `report_locked`, `DELETE /api/report-files/<id>` 409 `locked`), dropped
+  from the queue, and the report page says "This document could not be
+  removed because the report closed at midnight." next time it is open
+  (kept in `localStorage`; nothing stays stuck). Each picked document gets an
+  id when picked and is uploaded to `<uid>/report-<id>.<ext>`; the queued
+  report records which are up (`uploaded_path`), a retry skips them and
+  treats storage's "already exists" as done, and `add_report_file` answers a
+  document already on today's report with the same row and accepts uploads
+  up to 24 hours old (was 30 minutes) so a report kept on the phone still
+  finds its copies (`src/lib/report-file-queue.ts`). The nightly
+  `/api/cron/purge-selfies` deletes `report-files` objects older than 24
+  hours that no report points at (`report_file_orphans`, service role only;
+  Storage API; `purgeOrphanReportFiles`).
 
 ## 6. The database: every migration
 
@@ -417,6 +434,7 @@ Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
 | 0062 | Activity log: sign-ins, sign-outs, app opens, password and photo changes (`user_activity`), the admin-only `activity_feed`, 180-day purge |
 | 0063 | X Metrics feature switches on `xm_settings` (`enabled`, `expiry_enabled`, `supplies_enabled`, `grading_enabled`, `sales_enabled`, all on; `reconcile_from`), `xm_feature_on`, admin-only `xm_set_features`, guards refusing switched-off writes, and the sweep, reconciliation, expiry and grading skipping what is off |
 | 0064 | Count sheets sent any time (`store_count_sheets.count_was_due`, `submit_count_sheet` without a due count); documents on the daily report: private `report-files` bucket and its storage rules, `report_files` with `add_report_file` / `remove_report_file`, the five-file trigger, `report_file_detail` |
+| 0065 | Report documents offline: `add_report_file` returns the existing row for a document already on today's report and accepts uploads up to 24 hours old; `remove_report_file` refusals carry hints (`report_file_gone`, `report_locked`); `report_file_orphans()` (service role only) lists `report-files` objects over 24 hours old on no report |
 
 ## 7. Environment variables
 
@@ -449,7 +467,7 @@ All need `Authorization: Bearer $CRON_SECRET`.
 
 | Path | When | Does |
 |---|---|---|
-| `/api/cron/purge-selfies` | 02:20 UTC daily | Deletes clock photos older than 24 hours; activity log rows older than 180 days (0062) |
+| `/api/cron/purge-selfies` | 02:20 UTC daily | Deletes clock photos older than 24 hours; activity log rows older than 180 days (0062); report documents on no report more than 24 hours after upload, through the Storage API, logging how many (0065) |
 | `/api/cron/absence-sweep` | 08:30 UTC daily | Tells the office who has not clocked in (skips anyone on a day off or on leave, 0059) |
 | `/api/cron/alerts` | Every 5 minutes | Sends unsent integrity flags, scheduled notifications, clock-out reminders (at shift end and an hour later, 0061), and hourly the X Metrics checks |
 | `/api/cron/metrics` | Optional, hourly | X Metrics checks on their own schedule |
@@ -641,6 +659,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-23 | **Report documents survive a bad connection**: removing a saved document works offline (queued, shows "Removing…", sent on signal; one that arrives after midnight is dropped and the report page says why); a report sent again does not upload its documents again (an id per picked file, progress kept in the outbox, "already exists" counts as done, `add_report_file` answers a repeat with the same row and takes uploads up to 24 hours old); the nightly purge job deletes report files left on no report after 24 hours. New `src/lib/report-file-queue.ts`; `check-report-files` extended | 0065 |
 | 2026-10-23 | Mobile UI: full office attachment filenames, 44px activity/export controls, descriptive download labels; staff attachment controls stay disabled through removal and refresh with accessible status/errors. Verified sample layouts at 320px and 390px | — |
 | 2026-10-23 | **Stock count sheet on the You page**: download this month's Xpel sheet as Excel, fill it and upload it back (Excel, PDF or photo) on any day, with this month's sheets and what each was for; the database now keeps a sheet sent when no count is due (`count_was_due`), and Count sheets on Stock count says what each was for. **Documents on the daily report**: attach up to 5 PDF, Word, Excel, CSV or picture files (10 MB each) to the report, remove them until midnight; private `report-files` bucket; office downloads on Marketer reports (audited), names in the report PDF/Word/Excel and Ask Xtend. New `GET`/`DELETE /api/report-files/<id>`, `scripts/check-report-files.ts` | 0064 |
 | 2026-10-23 | **X Metrics feature switches**: a Features card at the top of X Metrics → Settings turns the whole module, Expiry, Supplies, Grading and Sales off and back on without losing anything. Off hides the part from the dashboard (menu, sub-navigation, overview tiles, store and staff pages, downloads, Ask Xtend, marketer report sales) and the staff app (Metrics tab, sales form, expiry date box, score), and the database refuses or skips its work; reconciliation needs Supplies and Sales and restarts cleanly when they return. New `PUT /api/admin/metrics/features` (audited `xm.features.update`); check script `check-xm-features` | 0063 |
@@ -714,11 +733,9 @@ Newest first. Dates are when the work landed on the main branch.
   message and stays unsent. Expiry dates already known for a batch are
   carried from count to count while Expiry is off (the box is hidden), so
   they are there when it comes back on.
-- **Report documents** (0064): a document uploaded but never registered
-  (the report post failed after the upload, and the outbox retried with a
-  new copy) stays in the owner's `report-files` folder unreferenced; the
-  owner may delete it, nobody else sees it. A sweep could clear these later.
-  Removing a saved document needs a connection (no offline queue).
+- **Report photos** (not documents) are still uploaded again under new
+  names when a queued report is retried; the first copies stay in the
+  `reports` bucket unused.
 - **Clock-out reminders** ignore schedules: they go to anyone clocked in and
   not out, which covers someone working on a day off.
 - **Android signing secrets**: until they are set, the published APK is a

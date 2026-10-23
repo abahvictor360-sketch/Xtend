@@ -382,16 +382,30 @@ Stored in `attendance.time_verdict` and `time_detail` (`offset_s`,
   `can_file_report()` else "Only marketers file the daily report"; the
   caller's report for today must exist ("Save today's report first, then
   attach documents"; so nothing is added to a past day); the object in
-  bucket `report-files`, own folder, uploaded within **30 minutes** ("Upload
-  the document again, then save the report"); not already attached ("That
-  document is already attached"); type and size read from storage: "Attach
+  bucket `report-files`, own folder, uploaded within **24 hours** (30
+  minutes before 0065; "Upload the document again, then save the report");
+  since **0065** a path already on the caller's own report for today returns
+  that row's id (a retry after the first try got through: no error, no
+  second row, not counted against the five again); a path on any other
+  report is "That document is already attached"; type and size read from storage: "Attach
   a PDF, Word, Excel or CSV file, or a picture (JPG, PNG)", "That document
   is empty", "Each document must be 10 MB or smaller"; name cleaned of line
   breaks, tabs and slashes ("Document" when empty).
   `remove_report_file(id)` returns the path: owner only ("That document is
-  not on your report"), only while `report_date = business_date()`
-  ("Documents can only be removed on the day the report was filed"); the
-  app then deletes the stored file. RLS: owner, admins and the owner's
+  not on your report", hint `report_file_gone` since 0065), only while
+  `report_date = business_date()` ("Documents can only be removed on the
+  day the report was filed", hint `report_locked`); the app then deletes
+  the stored file. `DELETE /api/report-files/<id>` answers 404
+  `{ code: 'gone' }` and 409 `{ code: 'locked' }` for those two (a queued
+  removal reads "gone" as done and "locked" as final). **Clean-up (0065)**:
+  `report_file_orphans(p_hours = 24, p_limit = 1000)` (SECURITY DEFINER,
+  service role only) returns `path` for every `report-files` object older
+  than `greatest(p_hours, 24)` hours that no `report_files` row points at
+  (a report never saved or never arrived, a file removed whose delete
+  failed), oldest first, at most `p_limit` (1-5000); the nightly
+  `/api/cron/purge-selfies` deletes them through the Storage API in batches
+  of 100 (`purgeOrphanReportFiles`, `src/lib/retention-server.ts`) and logs
+  how many. RLS: owner, admins and the owner's
   supervisor read (`report_file_detail` view adds staff_name, report_date
   and `editable`). Storage bucket `report-files` (private; on Supabase
   `file_size_limit` 10 MB and the same `allowed_mime_types`): insert into
@@ -1262,7 +1276,9 @@ sets (created_by null): 4 templates, 5 quick replies (quick replies use a
 All need `Authorization: Bearer $CRON_SECRET` (`vercel.json`):
 - `/api/cron/purge-selfies` — 02:20 UTC daily: photo sweep, abandoned
   visits, beacons older than 60 days deleted, activity log rows older than
-  180 days (`purge_user_activity()`, 0062).
+  180 days (`purge_user_activity()`, 0062), report documents on no report
+  for over 24 hours (`report_file_orphans()`, deleted through the Storage
+  API, 0065; JSON `report_files_deleted`, `report_files_failed`).
 - `/api/cron/absence-sweep` — 08:30 UTC daily (`"30 8 * * *"`): no-shows
   (only people expected that day, 0059), then flag alerts.
 - `/api/cron/alerts` — every 5 minutes, run by
@@ -1873,7 +1889,7 @@ Testable statements, grouped by area. They mirror the assertions in
 - Units missing beyond the threshold are flagged for that product only; a same-day correction clears the flag; identical and round-number counts are flagged; more units is a delivery.
 - Sheet lines keep back store, shop floor and expiry with in_store as their total; blank figures are not counted; off-sheet products still count; half units, empty lines and bad dates are refused.
 - Count sheets: any time for someone who takes stock counts (0064; `count_was_due` false when none was open), own store, own folder, Excel/PDF/JPG/PNG, ≤ 10 MB, once; sending one while a count is open counts as counted. The template is an admin's PDF.
-- Report documents (0064): five at most, the allowlist only, 1 byte to 10 MB, own folder and fresh, only on today's report, removed only by the owner on the day; owner, admin and the owner's supervisor read them, nobody else; the table is never written directly.
+- Report documents (0064): five at most, the allowlist only, 1 byte to 10 MB, own folder and uploaded within 24 hours (0065), only on today's report, removed only by the owner on the day; owner, admin and the owner's supervisor read them, nobody else; the table is never written directly. Attaching the same path again to today's report returns the same row (0065). Files on no report for over 24 hours are deleted nightly (0065).
 - A role set not to count cannot count or be asked; it can still send X Metrics; built-in roles can be turned off and on; admins always count.
 
 ### Photos and integrity

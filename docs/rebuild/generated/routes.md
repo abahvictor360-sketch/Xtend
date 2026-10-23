@@ -1239,7 +1239,8 @@ server that only calls that one still gets it; or run it on its own:
 Nightly backstop for the 24-hour photo rule. Clock and store-visit
 selfies are normally swept by ordinary traffic within minutes of
 expiring; this catches the ones that expired overnight, when nobody was
-using the app.
+using the app. It also deletes report documents still on no report a
+day after they were uploaded (0065).
 
 Vercel Cron sends `Authorization: Bearer $CRON_SECRET`.
 

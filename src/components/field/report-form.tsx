@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Alert } from '@/components/ui/alert'
 import { processReportPhoto } from '@/lib/image'
 import { CameraCapture } from '@/components/field/camera-capture'
-import { submitOrQueue, PermanentJobError } from '@/lib/offline/sync'
+import { submitOrQueue, PermanentJobError, flushOutbox, queuedRemovals } from '@/lib/offline/sync'
 import { cn } from '@/lib/utils'
 import { writtenText } from '@/lib/fields'
 import { ReportFiles, type PendingReportFile, type SavedReportFile } from '@/components/field/report-files'
@@ -166,11 +166,16 @@ export function ReportForm({
     setBusy(true)
 
     try {
+      // A document removal still waiting on the phone goes first, so the
+      // report has room for what replaces it (0065).
+      if (docs.length && navigator.onLine && (await queuedRemovals()).length) {
+        await flushOutbox().catch(() => undefined)
+      }
       const result = await submitOrQueue({
         kind: 'report',
         ...fields,
         photos: photos.map((p) => p.blob),
-        files: docs.map((d) => ({ blob: d.blob, name: d.name, mime: d.mime })),
+        files: docs.map((d) => ({ blob: d.blob, name: d.name, mime: d.mime, client_id: d.key })),
         client_captured_at: new Date().toISOString(),
       })
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useTransition } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { FileSpreadsheet, FileText, Image as ImageIcon, Paperclip, X } from 'lucide-react'
 import { Label } from '@/components/ui/label'
@@ -11,6 +11,8 @@ import {
   fileSizeLabel,
   reportFileLabel,
 } from '@/lib/report-files'
+import { newClientId, savedFileView, takeRemovalNotices } from '@/lib/report-file-queue'
+import { PermanentJobError, flushOutbox, noticeStore, queuedRemovals, submitOrQueue } from '@/lib/offline/sync'
 
 /** A document already on today's report. */
 export interface SavedReportFile {
@@ -22,6 +24,7 @@ export interface SavedReportFile {
 
 /** A document picked on the phone, sent when the report is saved. */
 export interface PendingReportFile {
+  /** Its id from the moment it is picked: the name it is uploaded under (0065). */
   key: string
   blob: Blob
   name: string
@@ -57,10 +60,12 @@ function Row({
   removing?: boolean
 }) {
   return (
-    <li className="flex items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2">
+    <li
+      className={`flex items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2 ${removing ? 'opacity-60' : ''}`}
+    >
       <FileIcon mime={mime} />
       <div className="min-w-0 flex-1">
-        {href ? (
+        {href && !removing ? (
           <a href={href} className="line-clamp-2 text-sm font-semibold text-foreground [overflow-wrap:anywhere] hover:text-brand">
             {name}
           </a>
@@ -71,7 +76,7 @@ function Row({
           {reportFileLabel(mime)} · {fileSizeLabel(size)} · {note}
         </p>
       </div>
-      {onRemove && (
+      {onRemove && !removing && (
         <button
           type="button"
           aria-label={`Remove ${name}`}
@@ -90,7 +95,8 @@ function Row({
  * "Attach documents" on the daily report: PDF, Word, Excel or CSV files and
  * pictures, up to five, 10 MB each. Picked files wait on the phone and go
  * with the report when it is saved; saved ones can be removed until the
- * report locks at midnight.
+ * report locks at midnight. With no signal a removal waits on the phone
+ * (0065): the document reads "Removing…" and goes when there is signal.
  */
 export function ReportFiles({
   saved,
@@ -106,12 +112,46 @@ export function ReportFiles({
   const router = useRouter()
   const input = useRef<HTMLInputElement>(null)
   const [problems, setProblems] = useState<string[]>([])
-  const [removing, setRemoving] = useState<string | null>(null)
-  const [refreshing, startTransition] = useTransition()
-  const busy = removing !== null || refreshing
+  const [notices, setNotices] = useState<string[]>([])
+  // Removals being sent now, and those waiting on the phone.
+  const [sending, setSending] = useState<string[]>([])
+  const [waiting, setWaiting] = useState<string[]>([])
+  // Taken off: hidden until the page reloads without them.
+  const [gone, setGone] = useState<string[]>([])
+  const busy = sending.length > 0
 
-  const used = saved.length + pending.length
+  const shown = saved.filter((f) => !gone.includes(f.id))
+  const { files: savedView, counted } = savedFileView(shown, [...sending, ...waiting])
+  const used = counted + pending.length
   const room = MAX_REPORT_FILES - used
+
+  const lastWaiting = useRef<string[]>([])
+  const check = useCallback(async () => {
+    const now = await queuedRemovals()
+    // One that left the queue was sent (or given up, with a notice).
+    if (lastWaiting.current.some((id) => !now.includes(id))) router.refresh()
+    lastWaiting.current = now
+    setWaiting(now)
+    const fresh = takeRemovalNotices(noticeStore())
+    if (fresh.length) setNotices((current) => [...current, ...fresh.filter((n) => !current.includes(n))])
+  }, [router])
+
+  useEffect(() => {
+    void check()
+    const onOnline = () => {
+      void (async () => {
+        if ((await queuedRemovals()).length) await flushOutbox().catch(() => undefined)
+        await check()
+      })()
+    }
+    window.addEventListener('online', onOnline)
+    if (navigator.onLine) onOnline()
+    const timer = setInterval(() => void check(), 5000)
+    return () => {
+      window.removeEventListener('online', onOnline)
+      clearInterval(timer)
+    }
+  }, [check])
 
   function pick(event: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? [])
@@ -123,7 +163,7 @@ export function ReportFiles({
       onPendingChange([
         ...pending,
         ...ok.map(({ file, mime }) => ({
-          key: `${file.name}-${file.size}-${Math.random().toString(16).slice(2)}`,
+          key: newClientId(),
           blob: file,
           name: file.name,
           mime,
@@ -135,20 +175,28 @@ export function ReportFiles({
 
   async function removeSaved(file: SavedReportFile) {
     setProblems([])
-    setRemoving(file.id)
+    setSending((current) => [...current, file.id])
     try {
-      const res = await fetch(`/api/report-files/${file.id}`, { method: 'DELETE' })
-      const json = (await res.json().catch(() => ({}))) as { error?: string }
-      if (!res.ok) throw new Error(json.error ?? 'That document could not be removed.')
-      startTransition(() => router.refresh())
+      const result = await submitOrQueue({
+        kind: 'report_file_remove',
+        file_id: file.id,
+        name: file.name,
+        client_captured_at: new Date().toISOString(),
+      })
+      if (result.queued) {
+        await check()
+      } else {
+        setGone((current) => [...current, file.id])
+        router.refresh()
+      }
     } catch (e) {
       setProblems([
-        e instanceof Error && e.message !== 'Failed to fetch'
+        e instanceof PermanentJobError || (e instanceof Error && e.message !== 'Failed to fetch')
           ? e.message
-          : 'No connection. Try again when you have data.',
+          : 'That document could not be removed. Try again.',
       ])
     } finally {
-      setRemoving(null)
+      setSending((current) => current.filter((id) => id !== file.id))
     }
   }
 
@@ -162,6 +210,14 @@ export function ReportFiles({
         CSV files, or pictures. Up to {MAX_REPORT_FILES}, each 10 MB or smaller.
       </p>
 
+      {notices.length > 0 && (
+        <ul className="space-y-1 rounded-2xl bg-tint px-3 py-2 text-xs text-tint-foreground">
+          {notices.map((n) => (
+            <li key={n}>{n}</li>
+          ))}
+        </ul>
+      )}
+
       {problems.length > 0 && (
         <ul role="alert" className="space-y-1 rounded-2xl bg-destructive/10 px-3 py-2 text-xs text-destructive">
           {problems.map((p) => (
@@ -174,17 +230,17 @@ export function ReportFiles({
         {busy ? 'Updating documents…' : ''}
       </p>
 
-      {used > 0 && (
+      {savedView.length + pending.length > 0 && (
         <ul className="space-y-2">
-          {saved.map((f) => (
+          {savedView.map((f) => (
             <Row
               key={f.id}
               name={f.name}
               mime={f.mime}
               size={f.size_bytes}
-              note="Attached"
+              note={f.removing ? 'Removing…' : 'Attached'}
               href={`/api/report-files/${f.id}`}
-              removing={busy}
+              removing={f.removing}
               onRemove={disabled ? undefined : () => void removeSaved(f)}
             />
           ))}
@@ -200,6 +256,12 @@ export function ReportFiles({
             />
           ))}
         </ul>
+      )}
+
+      {waiting.some((id) => shown.some((f) => f.id === id)) && (
+        <p className="text-xs text-muted-foreground">
+          Documents you removed are taken off the report as soon as your phone has signal.
+        </p>
       )}
 
       {room > 0 && !disabled && (

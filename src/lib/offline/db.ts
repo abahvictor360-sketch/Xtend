@@ -2,8 +2,9 @@
 
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb'
 import type { AttendanceType } from '@/lib/types'
+import type { QueuedReportFile } from '@/lib/report-file-queue'
 
-export type OutboxKind = 'clock' | 'ping' | 'report' | 'xm_count' | 'xm_sales'
+export type OutboxKind = 'clock' | 'ping' | 'report' | 'report_file_remove' | 'xm_count' | 'xm_sales'
 
 export interface ClockJob {
   kind: 'clock'
@@ -37,8 +38,23 @@ export interface ReportJob {
   competitor_activity: string
   issues: string
   photos: Blob[]
-  /** Documents to attach (0064). Missing on jobs queued before it. */
-  files?: { blob: Blob; name: string; mime: string }[]
+  /**
+   * Documents to attach (0064). Missing on jobs queued before it. Each
+   * keeps its id and, once sent, where it went, so a retry does not upload
+   * it again (0065).
+   */
+  files?: QueuedReportFile[]
+  client_captured_at: string
+}
+
+/**
+ * Taking a saved document off today's report (0065), kept on the phone
+ * until there is signal. The server refuses it after midnight.
+ */
+export interface ReportFileRemoveJob {
+  kind: 'report_file_remove'
+  file_id: string
+  name: string
   client_captured_at: string
 }
 
@@ -66,7 +82,7 @@ export interface XmSalesJob {
   client_captured_at: string
 }
 
-export type OutboxJob = ClockJob | PingJob | ReportJob | XmCountJob | XmSalesJob
+export type OutboxJob = ClockJob | PingJob | ReportJob | ReportFileRemoveJob | XmCountJob | XmSalesJob
 
 export interface OutboxRecord {
   id?: number
@@ -126,6 +142,13 @@ export async function countOutbox(): Promise<number> {
 export async function dropOutbox(id: number) {
   const database = await db()
   await database.delete('outbox', id)
+}
+
+/** Saves progress on a queued job (which documents are already uploaded). */
+export async function saveOutboxRecord(record: OutboxRecord) {
+  if (record.id === undefined) return
+  const database = await db()
+  await database.put('outbox', record)
 }
 
 export async function markAttempt(record: OutboxRecord, error: string) {
