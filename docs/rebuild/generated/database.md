@@ -1166,7 +1166,7 @@ Policies:
 - `absentees_today()` → TABLE(user_id uuid, full_name text, phone text, outlet_name text) · definer · 0059_schedules_leave.sql
 - `activity_feed(p_from date, p_to date, p_user uuid, p_kinds text[], p_limit integer)` → TABLE(at timestamp with time zone, user_id uuid, full_name text, role text, kind text, label text, detail jsonb, ip text, platform text, device text, user_agent text) · definer · 0062_user_activity.sql
 - `activity_platform(p_ua text)` → text · 0062_user_activity.sql
-- `add_report_file(p_path text, p_name text)` → uuid · definer · 0064_count_sheets_any_time_report_files.sql
+- `add_report_file(p_path text, p_name text)` → uuid · definer · 0065_report_files_offline.sql
 - `admin_overview()` → jsonb · definer · 0059_schedules_leave.sql
 - `alert_watchers(p_user uuid)` → TABLE(user_id uuid, full_name text, role user_role) · definer · 0036_supervisor_alerts.sql
 - `apply_leave(p_kind text, p_from date, p_to date, p_reason text)` → uuid · definer · 0059_schedules_leave.sql
@@ -1325,7 +1325,7 @@ Policies:
 - `record_offline_pings(p_points jsonb, p_sent_at timestamp with time zone)` → integer · definer · 0029_offline_positions.sql
 - `record_selfie_sweep(p_result jsonb)` → void · definer · 0012_selfie_retention_24h.sql
 - `release_reports_on_demotion()` → trigger · definer · 0018_reporting_line_upkeep.sql
-- `remove_report_file(p_id uuid)` → text · definer · 0064_count_sheets_any_time_report_files.sql
+- `remove_report_file(p_id uuid)` → text · definer · 0065_report_files_offline.sql
 - `remove_schedule_override(p_id uuid)` → void · definer · 0059_schedules_leave.sql
 - `reopen_support_thread(p_thread uuid)` → void · definer · 0053_support_notifications.sql
 - `report_app_install(p_platform text, p_app_version text, p_app_build integer, p_web_build text)` → void · definer · 0057_app_updates.sql
@@ -1334,6 +1334,7 @@ Policies:
 - `report_file_attached(p_name text)` → boolean · definer · 0064_count_sheets_any_time_report_files.sql
 - `report_file_limit()` → trigger · definer · 0064_count_sheets_any_time_report_files.sql
 - `report_file_mime_ok(p_mime text)` → boolean · 0064_count_sheets_any_time_report_files.sql
+- `report_file_orphans(p_hours integer, p_limit integer)` → TABLE(path text) · definer · 0065_report_files_offline.sql
 - `report_file_readable(p_name text)` → boolean · definer · 0064_count_sheets_any_time_report_files.sql
 - `report_photo_limit()` → trigger · definer · 0002_logic.sql
 - `report_visits_snapshot(p_user uuid, p_date date)` → jsonb · definer · 0060_marketer_visits_reports.sql

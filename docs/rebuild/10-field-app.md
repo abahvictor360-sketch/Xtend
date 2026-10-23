@@ -20,7 +20,8 @@ X Metrics, history/account/support/guide/leave, background behaviours, copy
 rules. Schedules and leave come from migration 0059, allocated-store visits
 and visits in the report from 0060, the clock-out reminder from 0061, the
 stock count sheet on the You page and documents on the daily report from
-0064.
+0064, documents that survive a bad connection (no second upload on a
+retry, removals queued offline) from 0065.
 
 ---
 
@@ -755,8 +756,10 @@ capture time, so an offline clock-in is not late for waiting for signal.
 Storage: IndexedDB database `xtend` version 1, object store `outbox`
 (auto-increment `id`, index `by_queued_at`) (`src/lib/offline/db.ts`).
 Record: `{ kind, job, attempts, last_error, queued_at }`. Kinds: `clock`,
-`ping`, `report`, `xm_count`, `xm_sales`. Blobs (selfie, thumb, photos) are
-stored in the job.
+`ping`, `report`, `report_file_remove` (0065), `xm_count`, `xm_sales`. Blobs
+(selfie, thumb, photos, documents) are stored in the job. A queued report's
+documents record their progress on the record (`uploaded_path`), so a
+retry only uploads what has not gone yet (0065).
 
 `submitOrQueue(job)`:
 
@@ -777,6 +780,9 @@ stored in the job.
   `POST /api/pings/offline { sent_at, points[] }` (server accepts 1–500).
 - A permanent rejection drops the record; a transient failure marks the
   attempt and **stops** the flush (order is preserved).
+- A `report_file_remove` that is dropped (too old, too many tries, or
+  refused) is never silent: it leaves a notice for the report page (see the
+  report's **Attach documents**).
 - Flush triggers: OutboxBanner mount (when online), the `online` event (in
   OutboxBanner and PhoneBeacon), the **"Send now"** button, after a
   successful heartbeat ping when the outbox is non-empty, and after a place
@@ -1132,19 +1138,38 @@ redirected to `/field`.
   "<name>: a report can have up to 5 documents." (`checkReportFiles`). Rows:
   type icon, name, "<PDF|Word|Excel|CSV|Picture> · <size> · Attached" (a
   saved one, the name links to `/api/report-files/<id>`) or "… · Sent when
-  you save" (picked, not yet sent), and a 44 px **×** to remove. Removing a
-  picked one only drops it from the list; removing a saved one calls
-  `DELETE /api/report-files/<id>` and refreshes (online only: "No
-  connection. Try again when you have data."). Sizes read "850 KB",
-  "1.2 MB" (`fileSizeLabel`).
+  you save" (picked, not yet sent), and a 44 px **×** to remove. Each picked
+  file gets its id (`newClientId()`) the moment it is picked; it is the name
+  it is uploaded under. Removing a picked one only drops it from the list.
+  Removing a saved one (0065) goes through `submitOrQueue({ kind:
+  'report_file_remove', file_id, name })`: the row reads "… · Removing…"
+  at once (dimmed, no link, no ×) and stops counting towards the five;
+  online and accepted, it disappears and the page refreshes; with no
+  signal it waits in the outbox and the row stays "Removing…" (also after
+  reopening the page, read from the outbox), with the muted line
+  "Documents you removed are taken off the report as soon as your phone
+  has signal." The page checks the outbox every 5 s and on `online` (flushing
+  when removals wait) and refreshes when one has gone. A removal that
+  reaches the server after midnight is refused and dropped from the queue;
+  the next time the report page is open it shows, in a tint (light brand) list
+  above the documents, "“<name>”: This document could not be removed
+  because the report closed at midnight." (once). Any other final refusal,
+  or one given up after 8 tries: "“<name>”: This document could not be
+  removed. Open today’s report and remove it again if you still want it
+  gone." Refused while the person watches, the same words show in the red
+  list. Sizes read "850 KB", "1.2 MB" (`fileSizeLabel`).
 - Submit **"Submit report"** / **"Update report"** ("Saving…") →
   `submitOrQueue({ kind: 'report', …, files })`: uploads photos to
   `reports/{uid}/{uuid}.jpg` and documents to the private bucket
-  **`report-files`** at `{uid}/report-{uuid}.{ext}` (contentType = the
+  **`report-files`** at `{uid}/report-{client_id}.{ext}` (contentType = the
   stored type, no upsert), then `POST /api/reports { fields…, photo_paths,
   files[{ path, name }] }`. Documents are kept in the outbox with the
   report while offline (the job's `files` is optional for jobs queued
-  earlier). The route calls `add_report_file(path, name)` for each after
+  earlier). A retry (0065) skips documents already uploaded and treats
+  storage's "already exists" as uploaded, and the database answers a
+  document already on today's report with the same row, so nothing is
+  uploaded or attached twice. Saving with new documents while a removal is
+  still queued flushes the outbox first, so the removal frees its place. The route calls `add_report_file(path, name)` for each after
   saving the report; a refusal returns 400 "Your report is saved, but
   <name> was not attached: <reason>".
 - Server: one report per person per business day; a second submission

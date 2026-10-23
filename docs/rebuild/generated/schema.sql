@@ -407,13 +407,21 @@ begin
     raise exception 'Save today''s report first, then attach documents';
   end if;
 
+  -- Sent again after the first try got through: the same answer.
+  select f.id into new_id
+  from public.report_files f
+  where f.path = p_path and f.user_id = auth.uid() and f.report_id = rep.id;
+  if found then
+    return new_id;
+  end if;
+
   select o.metadata->>'mimetype' as mimetype, (o.metadata->>'size')::bigint as size
     into obj
   from storage.objects o
   where o.bucket_id = 'report-files'
     and o.name = p_path
     and p_path like auth.uid()::text || '/%'
-    and o.created_at >= now() - interval '30 minutes';
+    and o.created_at >= now() - interval '24 hours';
   if not found then
     raise exception 'Upload the document again, then save the report';
   end if;
@@ -4296,10 +4304,11 @@ begin
   join public.reports r on r.id = rf.report_id
   where rf.id = p_id;
   if not found or f.user_id is distinct from auth.uid() then
-    raise exception 'That document is not on your report';
+    raise exception 'That document is not on your report' using hint = 'report_file_gone';
   end if;
   if f.report_date <> public.business_date() then
-    raise exception 'Documents can only be removed on the day the report was filed';
+    raise exception 'Documents can only be removed on the day the report was filed'
+      using hint = 'report_locked';
   end if;
   delete from public.report_files where id = p_id;
   return f.path;
@@ -4481,6 +4490,24 @@ CREATE FUNCTION public.report_file_mime_ok(p_mime text) RETURNS boolean
     'image/heic',
     'image/heif'
   );
+$$;
+
+
+--
+-- Name: report_file_orphans(integer, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.report_file_orphans(p_hours integer DEFAULT 24, p_limit integer DEFAULT 1000) RETURNS TABLE(path text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'storage'
+    AS $$
+  select o.name
+  from storage.objects o
+  where o.bucket_id = 'report-files'
+    and o.created_at < now() - make_interval(hours => greatest(coalesce(p_hours, 24), 24))
+    and not exists (select 1 from public.report_files f where f.path = o.name)
+  order by o.created_at
+  limit greatest(least(coalesce(p_limit, 1000), 5000), 1);
 $$;
 
 
@@ -13120,6 +13147,14 @@ REVOKE ALL ON FUNCTION public.report_file_limit() FROM PUBLIC;
 
 GRANT ALL ON FUNCTION public.report_file_mime_ok(p_mime text) TO authenticated;
 GRANT ALL ON FUNCTION public.report_file_mime_ok(p_mime text) TO service_role;
+
+
+--
+-- Name: FUNCTION report_file_orphans(p_hours integer, p_limit integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.report_file_orphans(p_hours integer, p_limit integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.report_file_orphans(p_hours integer, p_limit integer) TO service_role;
 
 
 --

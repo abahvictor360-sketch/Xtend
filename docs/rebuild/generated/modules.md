@@ -668,14 +668,14 @@ Exports: `WatcherAlert`, `notifyWatchers`, `notifyUsers`
 
 The moment of capture, never the moment of sync.
 
-Exports: `OutboxKind`, `ClockJob`, `PingJob`, `ReportJob`, `XmCountJob`, `XmSalesJob`, `OutboxJob`, `OutboxRecord`, `enqueue`, `listOutbox`, `countOutbox`, `dropOutbox`, `markAttempt`
+Exports: `OutboxKind`, `ClockJob`, `PingJob`, `ReportJob`, `ReportFileRemoveJob`, `XmCountJob`, `XmSalesJob`, `OutboxJob`, `OutboxRecord`, `enqueue`, `listOutbox`, `countOutbox`, `dropOutbox`, `saveOutboxRecord`, `markAttempt`
 
 ## `src/lib/offline/sync.ts`
 
 A capture older than this can never be accepted by the server, so it is
 dropped locally instead of retried forever.
 
-Exports: `PermanentJobError`, `NamePlaceFirstError`, `checkPhoto`, `runJob`, `FlushResult`, `flushOutbox`, `submitOrQueue`
+Exports: `PermanentJobError`, `NamePlaceFirstError`, `checkPhoto`, `noticeStore`, `queuedRemovals`, `runJob`, `FlushResult`, `flushOutbox`, `submitOrQueue`
 
 ## `src/lib/phone-report.ts`
 
@@ -767,6 +767,19 @@ processes each keeps its own count, which still slows a guesser down.
 
 Exports: `allowAttempt`, `clientAddress`
 
+## `src/lib/report-file-queue.ts`
+
+How report documents behave in the phone's offline outbox (0065): each
+picked document keeps one name from the moment it is picked, so a retry
+finds the copy it already uploaded; removing a saved document can wait
+on the phone until there is signal; and what the person is told when a
+waiting removal arrives after the report closed at midnight.
+
+Pure on purpose (no Supabase, no browser APIs), so
+scripts/check-report-files.ts can test it.
+
+Exports: `QueuedReportFile`, `queuedFilePath`, `needsUpload`, `isAlreadyExists`, `uploadQueuedFiles`, `RemovalJobFields`, `RemovalOutcome`, `removalOutcome`, `REMOVAL_LOCKED_NOTICE`, `REMOVAL_FAILED_NOTICE`, `removalNotice`, `abandonedRemovalReason`, `NoticeStore`, `REMOVAL_NOTICES_KEY`, `addRemovalNotice`, `takeRemovalNotices`, `savedFileView`, `newClientId`
+
 ## `src/lib/report-files.ts`
 
 Documents attached to the daily report (migration 0064): which files
@@ -783,7 +796,7 @@ Exports: `REPORT_FILE_BUCKET`, `MAX_REPORT_FILES`, `MAX_REPORT_FILE_BYTES`, `REP
 
 False when the throttle said it was not due yet.
 
-Exports: `SweepResult`, `purgeExpiredSelfies`, `sweepExpiredSelfies`
+Exports: `SweepResult`, `purgeExpiredSelfies`, `sweepExpiredSelfies`, `OrphanSweepResult`, `purgeOrphanReportFiles`
 
 ## `src/lib/retention.ts`
 

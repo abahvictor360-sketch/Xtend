@@ -61,16 +61,27 @@ export async function GET(_request: Request, ctx: { params: Promise<{ id: string
  * Takes a document off the caller's own report while the report can still
  * be edited (the day it was filed). The database decides; the stored file
  * is then deleted, which storage only allows once it is off the report.
+ *
+ * A removal may have waited on the phone (0065), so the refusals are told
+ * apart: 404 `gone` (not on their report, e.g. an earlier try got through)
+ * and 409 `locked` (the report closed at midnight). Neither is retried.
  */
 export async function DELETE(_request: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     await requireApiSession(REPORTING_ROLES)
     const parsed = id.safeParse((await ctx.params).id)
-    if (!parsed.success) return Response.json({ error: 'That document was not found' }, { status: 404 })
+    if (!parsed.success) {
+      return Response.json({ error: 'That document was not found', code: 'gone' }, { status: 404 })
+    }
 
     const supabase = await createServerSupabase()
     const { data: path, error } = await supabase.rpc('remove_report_file', { p_id: parsed.data })
-    if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
+    if (error) {
+      const message = dbErrorMessage(error)
+      if (error.hint === 'report_file_gone') return Response.json({ error: message, code: 'gone' }, { status: 404 })
+      if (error.hint === 'report_locked') return Response.json({ error: message, code: 'locked' }, { status: 409 })
+      return Response.json({ error: message }, { status: 400 })
+    }
 
     // Best effort: the document is already off the report either way.
     if (typeof path === 'string' && path) {

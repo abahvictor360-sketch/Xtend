@@ -4307,12 +4307,10 @@ begin
       'report files: a PDF is attached to today''s report, with its type and size from storage');
     f2 := public.add_report_file(tobi || '/b.docx', 'Display plan.docx');
     perform assert(f2 is not null, 'report files: a Word document is accepted');
-    begin
-      perform public.add_report_file(tobi || '/a.pdf', 'again.pdf');
-      perform assert(false, 'report files: the same file cannot be attached twice');
-    exception when others then
-      perform assert(sqlerrm like '%already attached%', 'report files: the same file cannot be attached twice');
-    end;
+    -- Since 0065 the same file sent again is the same attachment, not a second.
+    perform assert(public.add_report_file(tobi || '/a.pdf', 'again.pdf') = f1
+                   and (select count(*) from public.report_files where path = tobi || '/a.pdf') = 1,
+      'report files: the same file cannot be attached twice');
     begin
       perform public.add_report_file(tobi || '/c.exe', 'tool.exe');
       perform assert(false, 'report files: a program is refused');
@@ -4449,6 +4447,142 @@ begin
       'count sheets: a sheet sent from the profile with no count due is kept, against no request');
     perform assert(exists (select 1 from public.store_count_sheet_detail where id = s1 and outlet_name = 'Yemi Store'),
       'count sheets: and the office sees it with the store''s name');
+  end;
+
+  -- ---------------------------------------------------------------
+  -- Report documents: retries, offline removal, clean-up (0065).
+  -- ---------------------------------------------------------------
+  declare
+    ada    uuid := gen_random_uuid();
+    ghost  uuid := gen_random_uuid();
+    shop   uuid;
+    rep    uuid;
+    f1     uuid;
+    f2     uuid;
+    f3     uuid;
+    k      integer;
+    h      text;
+    found_paths text[];
+  begin
+    perform act_as(boss);
+    insert into auth.users (id, email) values (ada, 'ada.rf2@xpel.ng'), (ghost, 'ghost.rf2@xpel.ng');
+    insert into public.outlets (name, lat, lng) values ('RF2 Store', 6.46, 3.41) returning id into shop;
+    insert into public.profiles (id, full_name, email, role, outlet_id) values
+      (ada, 'Ada Obi', 'ada.rf2@xpel.ng', 'marketer', shop),
+      (ghost, 'Gbenga Ola', 'ghost.rf2@xpel.ng', 'marketer', shop);
+
+    perform act_as(ada);
+    insert into storage.objects (bucket_id, name, metadata, created_at) values
+      ('report-files', ada || '/report-c1.pdf', '{"mimetype":"application/pdf","size":1000}', now()),
+      ('report-files', ada || '/report-c2.pdf', '{"mimetype":"application/pdf","size":1000}', now() - interval '3 hours'),
+      ('report-files', ada || '/report-stale.pdf', '{"mimetype":"application/pdf","size":1000}', now() - interval '25 hours'),
+      ('report-files', ada || '/report-loose.pdf', '{"mimetype":"application/pdf","size":1000}', now() - interval '3 hours');
+    insert into public.reports (body, sales_summary, stock_status)
+    values ('A busy day at the store', 'Sold thirty units', 'Low on the big tubs') returning id into rep;
+
+    f1 := public.add_report_file(ada || '/report-c1.pdf', 'One.pdf');
+    f2 := public.add_report_file(ada || '/report-c1.pdf', 'One again.pdf');
+    perform assert(f1 = f2 and (select count(*) from public.report_files rf where rf.report_id = rep) = 1
+                   and (select rf.name from public.report_files rf where rf.id = f1) = 'One.pdf',
+      'report files 0065: sending the same document again returns the one already attached, once');
+    f3 := public.add_report_file(ada || '/report-c2.pdf', 'Two.pdf');
+    perform assert(f3 is not null,
+      'report files 0065: a document uploaded hours ago (a report kept on the phone) can still be attached');
+    begin
+      perform public.add_report_file(ada || '/report-stale.pdf', 'Stale.pdf');
+      perform assert(false, 'report files 0065: a document uploaded more than 24 hours ago is refused');
+    exception when others then
+      perform assert(sqlerrm like 'Upload the document again%',
+        'report files 0065: a document uploaded more than 24 hours ago is refused');
+    end;
+
+    -- Five still means five, and a retry of one already on is not a sixth.
+    for k in 1..3 loop
+      insert into storage.objects (bucket_id, name, metadata)
+      values ('report-files', ada || '/report-more-' || k || '.csv', '{"mimetype":"text/csv","size":50}');
+      perform public.add_report_file(ada || '/report-more-' || k || '.csv', 'More ' || k || '.csv');
+    end loop;
+    perform assert(public.add_report_file(ada || '/report-c1.pdf', 'One.pdf') = f1,
+      'report files 0065: a retry with five attached is answered, not refused by the limit');
+    insert into storage.objects (bucket_id, name, metadata)
+    values ('report-files', ada || '/report-sixth.csv', '{"mimetype":"text/csv","size":50}');
+    begin
+      perform public.add_report_file(ada || '/report-sixth.csv', 'Sixth.csv');
+      perform assert(false, 'report files 0065: still five at most');
+    exception when others then
+      perform assert(sqlerrm like '%up to 5 documents%', 'report files 0065: still five at most');
+    end;
+
+    -- Another marketer's copy is still refused, retry or not.
+    perform act_as(ghost);
+    insert into public.reports (body, sales_summary, stock_status)
+    values ('Quiet day at the store', 'Sold three units', 'Shelves are full');
+    begin
+      perform public.add_report_file(ada || '/report-c1.pdf', 'Not mine.pdf');
+      perform assert(false, 'report files 0065: nobody attaches another person''s file');
+    exception when others then
+      perform assert(sqlerrm like '%already attached%' or sqlerrm like 'Upload the document again%',
+        'report files 0065: nobody attaches another person''s file');
+    end;
+
+    -- Removing: the refusals say which kind they are.
+    begin
+      perform public.remove_report_file(f1);
+      perform assert(false, 'report files 0065: nobody else removes it');
+    exception when others then
+      get stacked diagnostics h = pg_exception_hint;
+      perform assert(h = 'report_file_gone', 'report files 0065: someone else''s document reads as not theirs');
+    end;
+    perform act_as(ada);
+    perform assert(public.remove_report_file(f1) = ada || '/report-c1.pdf',
+      'report files 0065: the owner removes a document on the day');
+    begin
+      perform public.remove_report_file(f1);
+      perform assert(false, 'report files 0065: removing twice');
+    exception when others then
+      get stacked diagnostics h = pg_exception_hint;
+      perform assert(h = 'report_file_gone' and sqlerrm like '%not on your report%',
+        'report files 0065: a removal sent again after it got through reads as already gone');
+    end;
+    alter table public.reports disable trigger trg_report_enforce;
+    update public.reports set report_date = report_date - 1 where id = rep;
+    alter table public.reports enable trigger trg_report_enforce;
+    begin
+      perform public.remove_report_file(f3);
+      perform assert(false, 'report files 0065: no removing after midnight');
+    exception when others then
+      get stacked diagnostics h = pg_exception_hint;
+      perform assert(h = 'report_locked' and sqlerrm like '%only be removed on the day%',
+        'report files 0065: a removal that arrives after midnight is refused as locked');
+    end;
+    perform assert(exists (select 1 from public.report_files rf where rf.id = f3),
+      'report files 0065: and the document stays on the report');
+
+    -- Clean-up: only files on no report, only older than 24 hours.
+    perform act_as(boss);
+    insert into storage.objects (bucket_id, name, metadata, created_at) values
+      -- uploaded for a report that never arrived
+      ('report-files', ghost || '/report-never.pdf', '{"mimetype":"application/pdf","size":10}', now() - interval '30 hours'),
+      -- another bucket is not this job's business
+      ('reports', ada || '/report-old-photo.jpg', '{"mimetype":"image/jpeg","size":10}', now() - interval '30 hours');
+    update storage.objects set created_at = now() - interval '48 hours'
+      where bucket_id = 'report-files' and name = ada || '/report-c2.pdf';
+    select array_agg(o.path order by o.path) into found_paths
+    from public.report_file_orphans() o
+    where o.path like ada || '/%' or o.path like ghost || '/%';
+    perform assert(found_paths = array[ada || '/report-stale.pdf', ghost || '/report-never.pdf']
+                   or found_paths = array[ghost || '/report-never.pdf', ada || '/report-stale.pdf'],
+      'report files 0065: the clean-up lists old files on no report (never saved, never attached) and nothing else');
+    perform assert(not exists (select 1 from public.report_file_orphans(1) o where o.path = ada || '/report-loose.pdf'),
+      'report files 0065: a file on no report but younger than 24 hours is never listed, however few hours are asked');
+    perform assert(not exists (select 1 from public.report_file_orphans() o where o.path = ada || '/report-c2.pdf'),
+      'report files 0065: an old file still on a report is never listed');
+    perform assert((select count(*) from public.report_file_orphans(24, 1)) = 1,
+      'report files 0065: the clean-up takes a batch size');
+    perform assert(has_function_privilege('service_role', 'public.report_file_orphans(integer, integer)', 'execute')
+                   and not has_function_privilege('authenticated', 'public.report_file_orphans(integer, integer)', 'execute')
+                   and not has_function_privilege('anon', 'public.report_file_orphans(integer, integer)', 'execute'),
+      'report files 0065: only the service role may list them');
   end;
 
   raise notice 'ALL RULES PASSED';

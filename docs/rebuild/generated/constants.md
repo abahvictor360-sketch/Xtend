@@ -197,6 +197,12 @@ Every exported UPPER_CASE constant in `src/lib`, with the comment above it. Thes
 
 - `NATIVE_PREFIX` = `{ android: 'native-fcm:', ios: 'native-apns:' }` — Push to the Xtend Android and iOS apps (mobile/). Web push does not reach an app, so each phone's own service is used: Android — Firebase Cloud Messaging, HTTP v1. FIREBASE_SERVICE_ACCOUNT: the service account key JSON from the Firebase console (Project settings → Service accounts). iOS — Apple Push Notification service, HTTP/2 with a token key. APNS_KEY (the .p8 file's contents), APNS_KEY_ID, APNS_TEAM_ID, APNS_BUNDLE_ID (default ng.xpelbeauty.xtend), APNS_SANDBOX=true for builds run from Xcode. A device is stored in push_subscriptions with an endpoint of "native-fcm:<token>" or "native-apns:<token>" (migration 033). /
 
+## `src/lib/report-file-queue.ts`
+
+- `REMOVAL_LOCKED_NOTICE` = `'This document could not be removed because the report closed at midnight.'`
+- `REMOVAL_FAILED_NOTICE` = `'This document could not be removed. Open today’s report and remove it again if you still want it gone.'`
+- `REMOVAL_NOTICES_KEY` = `'xtend.report-file-notices'`
+
 ## `src/lib/report-files.ts`
 
 - `REPORT_FILE_BUCKET` = `'report-files'` — Documents attached to the daily report (migration 0064): which files are taken, how big, and the words people see about them. Pure on purpose (no Supabase, no browser APIs), so scripts/check-report-files.ts can test it. The database applies the same limits (report_file_mime_ok, add_report_file, report_file_limit); these are the friendly first check on the phone. /

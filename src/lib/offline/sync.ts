@@ -1,15 +1,25 @@
 'use client'
 
 import { supabase } from '@/lib/supabase/client'
-import { REPORT_FILE_BUCKET, reportFilePath } from '@/lib/report-files'
+import { REPORT_FILE_BUCKET } from '@/lib/report-files'
+import {
+  abandonedRemovalReason,
+  addRemovalNotice,
+  removalNotice,
+  removalOutcome,
+  uploadQueuedFiles,
+  type NoticeStore,
+} from '@/lib/report-file-queue'
 import {
   dropOutbox,
   enqueue,
   listOutbox,
   markAttempt,
+  saveOutboxRecord,
   type ClockJob,
   type OutboxRecord,
   type PingJob,
+  type ReportFileRemoveJob,
   type ReportJob,
   type XmCountJob,
   type XmSalesJob,
@@ -169,7 +179,8 @@ async function runPing(job: PingJob) {
   return sendPings([job])
 }
 
-async function runReport(job: ReportJob) {
+async function runReport(record: OutboxRecord & { job: ReportJob }) {
+  const job = record.job
   const userId = await currentUserId()
   const client = supabase()
   const paths: string[] = []
@@ -184,18 +195,22 @@ async function runReport(job: ReportJob) {
     paths.push(path)
   }
 
-  // Documents go to their own private bucket (0064), each under a new name
-  // so a retry never overwrites one already sent.
-  const files: { path: string; name: string }[] = []
-  for (const file of job.files ?? []) {
-    const path = reportFilePath(userId, uuid(), file.mime)
-    const { error } = await client.storage.from(REPORT_FILE_BUCKET).upload(path, file.blob, {
-      contentType: file.mime,
-      upsert: false,
-    })
-    if (error) throw new Error(error.message)
-    files.push({ path, name: file.name })
-  }
+  // Documents go to their own private bucket (0064), each under the id it
+  // was given when picked (0065). One already sent is not sent again, and
+  // "already there" from storage means an earlier try got through. Progress
+  // is saved on the phone after each, so a retry starts where this stopped.
+  const files = await uploadQueuedFiles(
+    userId,
+    job.files ?? [],
+    async (path, file) => {
+      const { error } = await client.storage.from(REPORT_FILE_BUCKET).upload(path, file.blob, {
+        contentType: file.mime,
+        upsert: false,
+      })
+      return error
+    },
+    () => saveOutboxRecord(record).catch(() => undefined),
+  )
 
   return postJson('/api/reports', {
     body: job.body,
@@ -206,6 +221,61 @@ async function runReport(job: ReportJob) {
     photo_paths: paths,
     files,
   })
+}
+
+/** Where notices for the report page wait (this phone only). */
+export function noticeStore(): NoticeStore | null {
+  try {
+    return typeof window !== 'undefined' ? window.localStorage : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Takes a saved document off today's report (0065). Sent from the outbox,
+ * a refusal is kept as a notice for the report page and the job is done:
+ * trying again would change nothing. Sent while the person watches, the
+ * refusal is shown to them there and then.
+ */
+async function runRemoveFile(job: ReportFileRemoveJob, fromQueue: boolean) {
+  let status = 0
+  let body: { code?: string; error?: string } = {}
+  try {
+    const res = await fetch(`/api/report-files/${encodeURIComponent(job.file_id)}`, { method: 'DELETE' })
+    status = res.status
+    body = (await res.json().catch(() => ({}))) as typeof body
+  } catch {
+    status = 0
+  }
+  const outcome = removalOutcome(status, body)
+  if (outcome === 'removed' || outcome === 'gone') return { removed: true }
+  if (outcome === 'retry') {
+    if (status === 401 && (body as { code?: string }).code === 'relogin' && typeof window !== 'undefined') {
+      window.location.href = '/api/auth/expired?reason=new-day'
+    }
+    throw new Error(body.error ?? 'No connection')
+  }
+  const why = outcome === 'locked' ? 'locked' : 'failed'
+  if (fromQueue) {
+    addRemovalNotice(noticeStore(), removalNotice(job.name, why))
+    return { removed: false }
+  }
+  throw new PermanentJobError(
+    why === 'locked' ? removalNotice(job.name, 'locked') : body.error ?? 'That document could not be removed.',
+  )
+}
+
+/** The saved documents waiting on this phone to be removed. */
+export async function queuedRemovals(): Promise<string[]> {
+  try {
+    return (await listOutbox())
+      .map((r) => r.job)
+      .filter((j): j is ReportFileRemoveJob => j.kind === 'report_file_remove')
+      .map((j) => j.file_id)
+  } catch {
+    return []
+  }
 }
 
 /** Uploads a shelf photo for X Metrics and has it checked. */
@@ -252,7 +322,9 @@ export async function runJob(record: OutboxRecord) {
     case 'ping':
       return runPing(record.job)
     case 'report':
-      return runReport(record.job)
+      return runReport(record as OutboxRecord & { job: ReportJob })
+    case 'report_file_remove':
+      return runRemoveFile(record.job, record.id !== undefined)
     case 'xm_count':
       return runXmCount(record.job)
     case 'xm_sales':
@@ -268,6 +340,18 @@ export interface FlushResult {
 }
 
 let flushing = false
+
+/**
+ * A removal given up without the server's answer is never silent: the
+ * report page says it did not happen. Nothing else needs this.
+ */
+function noteAbandoned(record: OutboxRecord) {
+  if (record.job.kind !== 'report_file_remove') return
+  addRemovalNotice(
+    noticeStore(),
+    removalNotice(record.job.name, abandonedRemovalReason(record.job.client_captured_at)),
+  )
+}
 
 /** Drains the outbox oldest-first. Safe to call on every reconnect. */
 export async function flushOutbox(): Promise<FlushResult> {
@@ -317,6 +401,7 @@ export async function flushOutbox(): Promise<FlushResult> {
       if (age > maxAge(record.kind) || record.attempts >= MAX_ATTEMPTS) {
         await dropOutbox(record.id!)
         result.dropped += 1
+        noteAbandoned(record)
         continue
       }
 
@@ -328,6 +413,7 @@ export async function flushOutbox(): Promise<FlushResult> {
         if (error instanceof PermanentJobError) {
           await dropOutbox(record.id!)
           result.dropped += 1
+          noteAbandoned(record)
           continue
         }
         await markAttempt(record, error instanceof Error ? error.message : 'Unknown error')

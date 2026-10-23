@@ -1,6 +1,6 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { cronAuthorized } from '@/lib/cron'
-import { purgeExpiredSelfies } from '@/lib/retention-server'
+import { purgeExpiredSelfies, purgeOrphanReportFiles } from '@/lib/retention-server'
 
 export const maxDuration = 60
 
@@ -8,7 +8,8 @@ export const maxDuration = 60
  * Nightly backstop for the 24-hour photo rule. Clock and store-visit
  * selfies are normally swept by ordinary traffic within minutes of
  * expiring; this catches the ones that expired overnight, when nobody was
- * using the app.
+ * using the app. It also deletes report documents still on no report a
+ * day after they were uploaded (0065).
  *
  * Vercel Cron sends `Authorization: Bearer $CRON_SECRET`.
  */
@@ -42,10 +43,25 @@ export async function GET(request: Request) {
   // The activity log (062) keeps 180 days. Missing before the migration runs.
   const { data: activityCleared } = await supabase.rpc('purge_user_activity')
 
+  // Report documents left on no report for over a day (0065): a report
+  // that never arrived or was never saved. Missing before the migration
+  // runs, so a failure here is logged and the rest of the job stands.
+  let reportFiles = { files_deleted: 0, failed: 0 }
+  try {
+    reportFiles = await purgeOrphanReportFiles(supabase)
+  } catch (error) {
+    console.error('report file clean-up skipped', error instanceof Error ? error.message : error)
+  }
+  console.log(
+    `purge-selfies: ${reportFiles.files_deleted} unused report file(s) deleted, ${reportFiles.failed} failed`,
+  )
+
   return Response.json({
     activity_cleared: activityCleared ?? 0,
     photos_deleted: purge.photos_deleted,
     records_cleared: purge.records_cleared,
+    report_files_deleted: reportFiles.files_deleted,
+    report_files_failed: reportFiles.failed,
     failed: purge.failed,
     visits_abandoned: abandoned ?? 0,
     ran_at: new Date().toISOString(),

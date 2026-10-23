@@ -493,7 +493,8 @@ export default async function AdminGuidePage() {
             can open them. <Ui>Documents attached</Ui> on Marketer reports lists them for the period with a{' '}
             <Ui>Download</Ui> link (each office download is recorded in the audit log as{' '}
             <Ui>report_file.download</Ui>); the PDF, Word and Excel reports and Ask Xtend&apos;s field
-            reports list them by name.
+            reports list them by name. A document uploaded from a phone but never attached (its report
+            never arrived) is deleted by the nightly clean-up a day later.
           </p>
           <p>
             <Ui>Clock-out reminders</Ui>: anyone still clocked in when their store&apos;s shift ends
