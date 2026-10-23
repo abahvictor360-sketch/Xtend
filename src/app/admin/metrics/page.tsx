@@ -9,6 +9,9 @@ import { KpiCards, RecentActivity, SalesOverviewChart, StockRings, TopStores } f
 import { loadXmDashboard } from '@/lib/metrics/dashboard'
 import { addDays, lagosDateString, longDate } from '@/lib/utils'
 import { monthStart, windowLabel } from '@/lib/metrics/shared'
+import { readXmFeatures } from '@/lib/metrics/features-server'
+import { xmDashboardParts, xmPageOn } from '@/lib/metrics/features'
+import { XmSwitchedOff } from '@/components/admin/xm/switched-off'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'X Metrics — Xtend' }
@@ -43,9 +46,13 @@ export default async function MetricsOverview() {
   const session = await requireSession(['admin', 'supervisor'])
   const readOnly = session.profile.role !== 'admin'
   const supabase = await createServerSupabase()
+  // Parts switched off (0063) are left out; the page itself needs X Metrics on.
+  const features = await readXmFeatures(supabase)
+  if (!xmPageOn(features, 'overview')) return <XmSwitchedOff title="X Metrics" readOnly={readOnly} />
+  const parts = xmDashboardParts(features)
   const today = lagosDateString()
   const month = monthStart(today)
-  const dashboardPromise = loadXmDashboard(supabase, today)
+  const dashboardPromise = loadXmDashboard(supabase, today, features)
 
   const [{ data: stores }, { data: gaps }, { data: expiry, count: expiryCount }, { data: onHand }, { data: sold }, { data: lastCounts }] =
     await Promise.all([
@@ -91,60 +98,86 @@ export default async function MetricsOverview() {
     <div className="space-y-5">
       <XmHeader
         title="X Metrics"
-        intro="Stock, sales and expiry for the stores in X Metrics: what merchandisers count and sell, what was supplied, and where the numbers do not add up."
+        intro={
+          parts.sales || parts.supplies || parts.expiry
+            ? 'Stock, sales and expiry for the stores in X Metrics: what merchandisers count and sell, what was supplied, and where the numbers do not add up.'
+            : 'Stock for the stores in X Metrics: what merchandisers count, batch by batch.'
+        }
         readOnly={readOnly}
       />
 
       <div className="flex flex-wrap items-center gap-3">
-        {!readOnly && <RunChecksButton />}
+        {!readOnly && (parts.reconcile || parts.expiry) && <RunChecksButton />}
         <ExportLinks kind="stock" label="Stock on hand" />
       </div>
 
-      <KpiCards kpis={dash.kpis} />
+      {dash.kpis.length > 0 && <KpiCards kpis={dash.kpis} />}
+
+      {(parts.sales || parts.supplies || parts.reconcile) && (
+        <div className="grid gap-5 xl:grid-cols-3">
+          {(parts.sales || parts.supplies) && (
+            <Card className={parts.sales || parts.reconcile ? 'min-w-0 xl:col-span-2' : 'min-w-0 xl:col-span-3'}>
+              <CardHeader>
+                <CardTitle>{parts.sales ? 'Sales overview' : 'Supplies overview'}</CardTitle>
+                <CardDescription>
+                  {parts.sales && parts.supplies ? 'Units sold and supplied' : parts.sales ? 'Units sold' : 'Units supplied'} across all
+                  X Metrics stores, last 12 months.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <SalesOverviewChart months={dash.months} series={{ sold: parts.sales, supplied: parts.supplies }} />
+              </CardContent>
+            </Card>
+          )}
+          {(parts.sales || parts.reconcile) && (
+            <Card className={parts.sales || parts.supplies ? 'min-w-0' : 'min-w-0 xl:col-span-3'}>
+              <CardHeader>
+                <CardTitle>Stock statistic</CardTitle>
+                <CardDescription>
+                  {parts.reconcile ? 'How well counts match, and sales against store targets, this month.' : 'Sales against store targets, this month.'}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <StockRings
+                  accuracy={dash.accuracy}
+                  salesVsTarget={dash.salesVsTarget}
+                  categories={dash.categories}
+                  showAccuracy={parts.reconcile}
+                />
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      )}
 
       <div className="grid gap-5 xl:grid-cols-3">
-        <Card className="min-w-0 xl:col-span-2">
-          <CardHeader>
-            <CardTitle>Sales overview</CardTitle>
-            <CardDescription>Units sold and supplied across all X Metrics stores, last 12 months.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <SalesOverviewChart months={dash.months} />
-          </CardContent>
-        </Card>
-        <Card className="min-w-0">
-          <CardHeader>
-            <CardTitle>Stock statistic</CardTitle>
-            <CardDescription>How well counts match, and sales against store targets, this month.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <StockRings accuracy={dash.accuracy} salesVsTarget={dash.salesVsTarget} categories={dash.categories} />
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-5 xl:grid-cols-3">
-        <Card className="min-w-0 xl:col-span-2">
+        <Card className={parts.sales ? 'min-w-0 xl:col-span-2' : 'min-w-0 xl:col-span-3'}>
           <CardHeader>
             <CardTitle>Recent activity</CardTitle>
-            <CardDescription>The latest counts, daily sales and supplies.</CardDescription>
+            <CardDescription>
+              The latest {['counts', parts.sales && 'daily sales', parts.supplies && 'supplies'].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' and $1')}.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <RecentActivity items={dash.activity} />
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Top stores</CardTitle>
-            <CardDescription>Units sold this month{dash.stores.some((s) => s.target) ? ', against each store\'s target' : ''}.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <TopStores stores={dash.stores} />
-          </CardContent>
-        </Card>
+        {parts.sales && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Top stores</CardTitle>
+              <CardDescription>Units sold this month{dash.stores.some((s) => s.target) ? ', against each store\'s target' : ''}.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <TopStores stores={dash.stores} />
+            </CardContent>
+          </Card>
+        )}
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-2">
+      {(parts.reconcile || parts.expiry) && (
+      <div className={parts.reconcile && parts.expiry ? 'grid gap-5 xl:grid-cols-2' : 'grid gap-5'}>
+      {parts.reconcile && (
       <Card>
         <CardHeader>
           <CardTitle>Stock gaps</CardTitle>
@@ -198,7 +231,9 @@ export default async function MetricsOverview() {
           </Link>
         </CardContent>
       </Card>
+      )}
 
+      {parts.expiry && (
       <Card>
         <CardHeader>
           <CardTitle>Expiry alerts</CardTitle>
@@ -231,13 +266,16 @@ export default async function MetricsOverview() {
           </Link>
         </CardContent>
       </Card>
-
+      )}
       </div>
+      )}
 
       <Card>
         <CardHeader>
           <CardTitle>Stores</CardTitle>
-          <CardDescription>Open a store for its stock, sales, supplies and reconciliation.</CardDescription>
+          <CardDescription>
+            Open a store for its stock{parts.sales ? ', sales' : ''}{parts.supplies ? ', supplies' : ''}{parts.reconcile ? ' and reconciliation' : ''}.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {storeRows.length === 0 ? (
@@ -252,8 +290,8 @@ export default async function MetricsOverview() {
                   <TableHead>Store</TableHead>
                   <TableHead>Last count</TableHead>
                   <TableHead className="text-right">Units on hand</TableHead>
-                  <TableHead className="text-right">Sold this month</TableHead>
-                  <TableHead className="text-right">Gaps (30 days)</TableHead>
+                  {parts.sales && <TableHead className="text-right">Sold this month</TableHead>}
+                  {parts.reconcile && <TableHead className="text-right">Gaps (30 days)</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -264,8 +302,8 @@ export default async function MetricsOverview() {
                     </TableCell>
                     <TableCell>{lastBy.has(s.id) ? longDate(lastBy.get(s.id)!) : <span className="text-muted-foreground">No count yet</span>}</TableCell>
                     <TableCell className="text-right">{unitsBy.get(s.id) ?? '—'}</TableCell>
-                    <TableCell className="text-right">{soldBy.get(s.id) ?? 0}</TableCell>
-                    <TableCell className="text-right">{gapsBy.get(s.id) ?? 0}</TableCell>
+                    {parts.sales && <TableCell className="text-right">{soldBy.get(s.id) ?? 0}</TableCell>}
+                    {parts.reconcile && <TableCell className="text-right">{gapsBy.get(s.id) ?? 0}</TableCell>}
                   </TableRow>
                 ))}
               </TableBody>

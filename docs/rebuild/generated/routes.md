@@ -2,7 +2,7 @@
 
 # API routes
 
-110 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+111 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
 
 ## `POST /api/activity`
 
@@ -353,6 +353,27 @@ const schema = z.object({ note: note(300) })
 - Who: ['admin', 'supervisor']
 
 X Metrics grades and stock reports as Excel, Word, PDF or CSV.
+
+## `PUT /api/admin/metrics/features`
+
+- File: `src/app/api/admin/metrics/features/route.ts`
+- Who: public / own check
+
+Switches X Metrics, or parts of it, on and off (0063). Admins only; the
+database refuses anyone else, keeps the earlier switches in the settings
+history, and nothing is deleted.
+
+```ts
+const schema = z.object({
+  enabled: z.boolean(),
+  expiry: z.boolean(),
+  supplies: z.boolean(),
+  grading: z.boolean(),
+  sales: z.boolean(),
+})
+```
+
+- Database functions: `xm_set_features`
 
 ## `POST /api/admin/metrics/grades/[id]`
 

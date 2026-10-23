@@ -35,6 +35,7 @@ import {
   RefreshCw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { xmMenuItem, XM_ALL_ON } from '@/lib/metrics/features'
 
 interface NavLink {
   href: string
@@ -106,11 +107,19 @@ const GROUPS: { title: string | null; links: NavLink[] }[] = [
   },
 ]
 
-function useLinks(readOnly: boolean) {
+function useLinks(readOnly: boolean, xmEnabled: boolean) {
   const pathname = usePathname()
+  // X Metrics switched off (0063): gone for supervisors; admins keep it,
+  // marked off, opening Settings so they can switch it back on.
+  const xm = xmMenuItem({ ...XM_ALL_ON, enabled: xmEnabled }, !readOnly)
   const groups = GROUPS.map((g) => ({
     ...g,
-    links: g.links.filter((link) => (!link.adminOnly || !readOnly) && (!link.supervisorOnly || readOnly)),
+    links: g.links
+      .filter((link) => (!link.adminOnly || !readOnly) && (!link.supervisorOnly || readOnly))
+      .filter((link) => link.href !== '/admin/metrics' || xm.show)
+      .map((link) =>
+        link.href === '/admin/metrics' && xm.off ? { ...link, href: xm.href, label: `${link.label} (off)` } : link,
+      ),
   })).filter((g) => g.links.length > 0)
   const isActive = (href: string) =>
     href === '/admin' ? pathname === href : pathname.startsWith(href)
@@ -121,8 +130,8 @@ function useLinks(readOnly: boolean) {
  * Desktop: a menu down the left side, always in view, grouped. Rendered in
  * the layout's sidebar column, which only exists on large screens.
  */
-export function AdminSidebarNav({ readOnly }: { readOnly: boolean }) {
-  const { groups, isActive } = useLinks(readOnly)
+export function AdminSidebarNav({ readOnly, xmEnabled = true }: { readOnly: boolean; xmEnabled?: boolean }) {
+  const { groups, isActive } = useLinks(readOnly, xmEnabled)
 
   return (
     <nav aria-label="Dashboard" className="space-y-6">
@@ -163,8 +172,8 @@ export function AdminSidebarNav({ readOnly }: { readOnly: boolean }) {
  * Phone and tablet: one button that drops the whole menu down. A long tab
  * strip hides most of the dashboard from anyone holding a phone.
  */
-export function AdminNav({ readOnly }: { readOnly: boolean }) {
-  const { pathname, groups, isActive } = useLinks(readOnly)
+export function AdminNav({ readOnly, xmEnabled = true }: { readOnly: boolean; xmEnabled?: boolean }) {
+  const { pathname, groups, isActive } = useLinks(readOnly, xmEnabled)
   const [open, setOpen] = useState(false)
   const menu = useRef<HTMLDivElement | null>(null)
   const trigger = useRef<HTMLButtonElement | null>(null)

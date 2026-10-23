@@ -1,5 +1,8 @@
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { readXmFeatures } from '@/lib/metrics/features-server'
+import { xmPageOn } from '@/lib/metrics/features'
+import { XmSwitchedOff } from '@/components/admin/xm/switched-off'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -35,6 +38,8 @@ export default async function ExpiryPage({ searchParams }: { searchParams: Promi
   const { show } = await searchParams
   const handled = show === 'handled'
   const supabase = await createServerSupabase()
+  const xmFeatures = await readXmFeatures(supabase)
+  if (!xmPageOn(xmFeatures, 'expiry')) return <XmSwitchedOff title="Expiry" readOnly={readOnly} />
 
   let q = supabase.from('xm_expiry_alert_detail').select('*').limit(500)
   q = handled

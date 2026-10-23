@@ -275,7 +275,7 @@ and try again."
   active `xm_stores` outlet ids, `my_place_due()`.
 - `canFileReport` = role is marketer or admin (read from the session, no
   round-trip).
-- `hasMetrics` = any of `my_outlets` is an active X Metrics store.
+- `hasMetrics` = X Metrics is switched on (0063) and any of `my_outlets` is an active X Metrics store.
 - Renders: the column; if a place is due, the **NamePlace** card at the top
   of every field page (§6); the page; `PhoneBeacon` (§13.2); `NativeBridge`
   (§13.6); `ActivityPing`; `FieldNav`.
@@ -1259,8 +1259,9 @@ upload it here: the Excel file, a PDF or a photo."
 
 ## 10. X Metrics (field side, migrations 043–044)
 
-Page `/field/metrics` (field roles; others → `/field`). Sheet title "X
-Metrics". Stores = the person's outlets that are active X Metrics stores.
+Page `/field/metrics` (field roles; others → `/field`; X Metrics switched
+off (0063) → `/field`). Sheet title "X Metrics". Stores = the person's
+outlets that are active X Metrics stores.
 None: "None of your stores is in X Metrics yet. When the office adds your
 store, its stock count and daily sales appear here."
 
@@ -1271,6 +1272,24 @@ tab: info "The scoring policy has been updated. **Read it**". No products:
 "There are no products in X Metrics yet. The office adds them." Bottom:
 "Sent this week" list (last 7 days, up to 30 each): "Stock count · <store>"
 or "Sales · <store>", date, or struck-through "Voided".
+
+**Switched-off parts (0063, `xmFieldView`)**: staff are never told why;
+the part is simply not there.
+
+- Sales off: no **Daily sales** chip or form, no sales in "Sent this week",
+  the empty-store line ends "its stock count appears here."; `?tab=sales`
+  opens the count. A queued sales report is refused by the server: "Sales
+  are not being collected at the moment".
+- Grading off: no **My score** chip, no policy banner; `?tab=score` opens
+  the count; `xm_grade` is not called.
+- Expiry off: no expiry date box on a batch, and the count text drops
+  ", with the expiry date printed on it". A batch's known expiry date (from
+  `xm_my_store_batches`) still goes with it, unseen.
+- Only the count left: the chip row is not shown.
+- X Metrics off: no Metrics tab, the page sends to `/field`; a queued count
+  is refused: "Stock counts are not being collected here at the moment".
+- The score card leaves out the factors whose part is off (`grade.parts`),
+  and "How the score is worked out" leaves out their weights and lines.
 
 ### 10.1 Stock count by batch
 
@@ -1345,7 +1364,10 @@ or "Sales · <store>", date, or struck-through "Voided".
 
 ### Acceptance checks
 
-- The Metrics tab appears only when one of the person's stores is enrolled.
+- The Metrics tab appears only when one of the person's stores is enrolled
+  and X Metrics is switched on.
+- With Sales off there is no Daily sales tab; with Expiry off no expiry date
+  box; with Grading off no My score tab.
 - An X Metrics count saved offline sends up to 72 hours later; a 4-day-old
   one is dropped.
 - Sales for 4 days ago cannot be chosen.

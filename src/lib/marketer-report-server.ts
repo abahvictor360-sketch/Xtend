@@ -13,6 +13,8 @@ import {
   type SourceVisit,
 } from '@/lib/marketer-report'
 import { lagosDateString } from '@/lib/utils'
+import { readXmFeatures } from '@/lib/metrics/features-server'
+import { xmOn } from '@/lib/metrics/features'
 
 type SourceClockRow = Parameters<typeof buildMarketerReport>[0]['events'][number]
 
@@ -32,6 +34,8 @@ export async function loadMarketerReport(supabase: SupabaseClient, req: ReportRe
     .maybeSingle<{ id: string; full_name: string; role: UserRole; staff_role_id: string | null; outlet_id: string | null; supervisor_id: string | null }>()
   if (!profile) return null
 
+  // X Metrics sales are left out while sales are switched off (0063).
+  const salesOn = xmOn(await readXmFeatures(supabase), 'sales')
   const [roles, home, lead, got, visits, reports, counts, sales] = await Promise.all([
     supabase.from('staff_roles').select('id, name, base_role, is_active'),
     profile.outlet_id
@@ -62,13 +66,15 @@ export async function loadMarketerReport(supabase: SupabaseClient, req: ReportRe
       .gte('count_date', req.from)
       .lte('count_date', req.to)
       .limit(3000),
-    supabase
-      .from('xm_live_sale_lines')
-      .select('sale_date, outlet_id, product_id, units')
-      .eq('user_id', req.userId)
-      .gte('sale_date', req.from)
-      .lte('sale_date', req.to)
-      .limit(3000),
+    salesOn
+      ? supabase
+          .from('xm_live_sale_lines')
+          .select('sale_date, outlet_id, product_id, units')
+          .eq('user_id', req.userId)
+          .gte('sale_date', req.from)
+          .lte('sale_date', req.to)
+          .limit(3000)
+      : Promise.resolve({ data: [] as { sale_date: string; outlet_id: string; product_id: string; units: number }[] }),
   ])
   if (visits.error) throw new Error(visits.error.message)
   if (reports.error) throw new Error(reports.error.message)

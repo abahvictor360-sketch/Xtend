@@ -601,7 +601,7 @@ A gap between your count and the expected stock is a reason for the office to as
 -- Data for Name: xm_settings; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.xm_settings VALUES (true, 5.00, 40, 30, 20, 10, 40, 70, '{730,365,180,90,30}', 30, 7, 12, true, NULL, '2026-01-01 00:00:00+00');
+INSERT INTO public.xm_settings VALUES (true, 5.00, 40, 30, 20, 10, 40, 70, '{730,365,180,90,30}', 30, 7, 12, true, NULL, '2026-01-01 00:00:00+00', true, true, true, true, true, NULL);
 
 
 --

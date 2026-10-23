@@ -1009,6 +1009,12 @@ Policies:
 | sales_photo_required | boolean(bool) |  | true |
 | updated_by | uuid(uuid) | yes |  |
 | updated_at | timestamp with time zone(timestamptz) |  | now() |
+| enabled | boolean(bool) |  | true |
+| expiry_enabled | boolean(bool) |  | true |
+| supplies_enabled | boolean(bool) |  | true |
+| grading_enabled | boolean(bool) |  | true |
+| sales_enabled | boolean(bool) |  | true |
+| reconcile_from | date(date) | yes |  |
 
 Policies:
 - `xm_settings_admin` UPDATE to public: using `is_admin()`; check `is_admin()`
@@ -1348,25 +1354,29 @@ Policies:
 - `xm_acknowledge_expiry(p_alert uuid, p_note text)` → void · definer · 0043_x_metrics.sql
 - `xm_can_submit()` → boolean · definer · 0046_role_store_counts.sql
 - `xm_check_field_submission(p_outlet uuid, p_captured_at timestamp with time zone)` → void · definer · 0046_role_store_counts.sql
-- `xm_claim_expiry_alerts()` → TABLE(id uuid, outlet_name text, product_name text, batch text, expiry_date date, days_left integer, units_on_hand integer, consider_pulling boolean) · definer · 0043_x_metrics.sql
+- `xm_claim_expiry_alerts()` → TABLE(id uuid, outlet_name text, product_name text, batch text, expiry_date date, days_left integer, units_on_hand integer, consider_pulling boolean) · definer · 0063_xm_feature_switches.sql
 - `xm_create_supply_import(p_file_name text, p_kind text, p_read_by text, p_supplier text, p_invoice_no text, p_invoice_date date, p_rows integer)` → uuid · definer · 0047_supply_imports_cartons.sql
 - `xm_daily_velocity(p_outlet uuid, p_product uuid)` → numeric · definer · 0043_x_metrics.sql
-- `xm_expiry_scan()` → integer · definer · 0043_x_metrics.sql
-- `xm_finalise_month(p_month date)` → integer · definer · 0043_x_metrics.sql
-- `xm_grade(p_user uuid, p_month date)` → jsonb · definer · 0044_xm_scoring_policy.sql
+- `xm_expiry_scan()` → integer · definer · 0063_xm_feature_switches.sql
+- `xm_feature_guard()` → trigger · definer · 0063_xm_feature_switches.sql
+- `xm_feature_on(p_feature text)` → boolean · definer · 0063_xm_feature_switches.sql
+- `xm_finalise_month(p_month date)` → integer · definer · 0063_xm_feature_switches.sql
+- `xm_grade(p_user uuid, p_month date)` → jsonb · definer · 0063_xm_feature_switches.sql
 - `xm_log_supply(p_outlet uuid, p_product uuid, p_quantity integer, p_batch text, p_expiry date, p_supplied_on date, p_note text, p_cartons integer, p_units_per_carton integer, p_import uuid)` → uuid · definer · 0047_supply_imports_cartons.sql
 - `xm_log_supply_import(p_import uuid, p_rows jsonb)` → integer · definer · 0047_supply_imports_cartons.sql
 - `xm_mark_policy_read(p_policy uuid)` → void · definer · 0044_xm_scoring_policy.sql
-- `xm_month_grades(p_month date)` → SETOF jsonb · definer · 0043_x_metrics.sql
+- `xm_month_grades(p_month date)` → SETOF jsonb · definer · 0063_xm_feature_switches.sql
 - `xm_my_store_batches()` → TABLE(outlet_id uuid, product_id uuid, batch text, expiry_date date) · definer · 0043_x_metrics.sql
 - `xm_oversees_outlet(p_outlet uuid)` → boolean · definer · 0043_x_metrics.sql
 - `xm_publish_policy(p_title text, p_body text, p_note text)` → uuid · definer · 0044_xm_scoring_policy.sql
-- `xm_reconcile_pending()` → integer · definer · 0043_x_metrics.sql
+- `xm_reconcile_pending()` → integer · definer · 0063_xm_feature_switches.sql
 - `xm_require_admin()` → void · definer · 0043_x_metrics.sql
 - `xm_review_grade(p_grade uuid, p_note text)` → void · definer · 0043_x_metrics.sql
+- `xm_set_features(p_enabled boolean, p_expiry boolean, p_supplies boolean, p_grading boolean, p_sales boolean)` → jsonb · definer · 0063_xm_feature_switches.sql
 - `xm_set_store(p_outlet uuid, p_active boolean)` → void · definer · 0043_x_metrics.sql
 - `xm_set_target(p_month date, p_user uuid, p_outlet uuid, p_units integer)` → uuid · definer · 0043_x_metrics.sql
 - `xm_settings_keep()` → trigger · definer · 0043_x_metrics.sql
+- `xm_settings_resume()` → trigger · definer · 0063_xm_feature_switches.sql
 - `xm_submit_count(p_outlet uuid, p_lines jsonb, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_photo_path text, p_captured_at timestamp with time zone)` → uuid · definer · 0043_x_metrics.sql
 - `xm_submit_sales(p_outlet uuid, p_sale_date date, p_lines jsonb, p_photo_path text, p_captured_at timestamp with time zone)` → uuid · definer · 0043_x_metrics.sql
 - `xm_void(p_kind text, p_id uuid, p_reason text)` → void · definer · 0043_x_metrics.sql
@@ -1410,6 +1420,13 @@ Policies:
 - `store_visits`: `trg_store_visits_zz_place_due` — AFTER INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION visit_place_due()
 - `support_messages`: `realtime_broadcast` — AFTER INSERT OR DELETE OR UPDATE ON public.support_messages FOR EACH ROW EXECUTE FUNCTION realtime_notify_support_message()
 - `support_threads`: `realtime_broadcast` — AFTER INSERT OR DELETE OR UPDATE ON public.support_threads FOR EACH ROW EXECUTE FUNCTION realtime_notify_field_owner()
+- `xm_counts`: `trg_xm_counts_feature_guard` — BEFORE INSERT ON public.xm_counts FOR EACH ROW EXECUTE FUNCTION xm_feature_guard()
 - `xm_counts`: `trg_xm_counts_place_due_guard` — BEFORE INSERT ON public.xm_counts FOR EACH ROW EXECUTE FUNCTION place_due_guard()
+- `xm_monthly_grades`: `trg_xm_monthly_grades_feature_guard` — BEFORE INSERT OR UPDATE ON public.xm_monthly_grades FOR EACH ROW EXECUTE FUNCTION xm_feature_guard()
+- `xm_sales`: `trg_xm_sales_feature_guard` — BEFORE INSERT ON public.xm_sales FOR EACH ROW EXECUTE FUNCTION xm_feature_guard()
 - `xm_sales`: `trg_xm_sales_place_due_guard` — BEFORE INSERT ON public.xm_sales FOR EACH ROW EXECUTE FUNCTION place_due_guard()
 - `xm_settings`: `trg_xm_settings_keep` — BEFORE UPDATE ON public.xm_settings FOR EACH ROW EXECUTE FUNCTION xm_settings_keep()
+- `xm_settings`: `trg_xm_settings_resume` — BEFORE UPDATE ON public.xm_settings FOR EACH ROW EXECUTE FUNCTION xm_settings_resume()
+- `xm_supplies`: `trg_xm_supplies_feature_guard` — BEFORE INSERT ON public.xm_supplies FOR EACH ROW EXECUTE FUNCTION xm_feature_guard()
+- `xm_supply_imports`: `trg_xm_supply_imports_feature_guard` — BEFORE INSERT ON public.xm_supply_imports FOR EACH ROW EXECUTE FUNCTION xm_feature_guard()
+- `xm_targets`: `trg_xm_targets_feature_guard` — BEFORE INSERT ON public.xm_targets FOR EACH ROW EXECUTE FUNCTION xm_feature_guard()

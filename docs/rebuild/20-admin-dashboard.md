@@ -85,7 +85,7 @@ Groups and items, exactly in this order (label, path, icon, flags):
 | | Support | `/admin/support` | Headset | — |
 | | Analytics | `/admin/analytics` | BarChart3 | — |
 | Stock | Stock count | `/admin/store-counts` | PackageSearch | — |
-| | X Metrics | `/admin/metrics` | Gauge | — |
+| | X Metrics | `/admin/metrics` | Gauge | — (0063: hidden from supervisors while X Metrics is off; admins see "X Metrics (off)" opening `/admin/metrics/settings`) |
 | Checks | Integrity | `/admin/integrity` | ShieldAlert | — |
 | | Check an excuse | `/admin/excuses` | PhoneOff | — |
 | People | Staff | `/admin/users` | Users | — |
@@ -1109,7 +1109,7 @@ Only their team's people, counts and sheets. They can ask for counts and close r
 
 ## 15. X Metrics — `/admin/metrics` and sub-pages
 
-Files: `src/app/admin/metrics/**/page.tsx`, `src/components/admin/xm/dashboard.tsx`, `widgets.tsx`, `forms.tsx`, `policy-editor.tsx`, `supply-import.tsx`, `day-bars.tsx`, `src/components/admin/score-bars.tsx`, `src/components/metrics/policy.tsx` (shared with the staff app); logic `src/lib/metrics/dashboard.ts`, `shared.ts`, `server.ts`, `supply-import.ts`, `export.ts`, `admin-route.ts`. Schema: migrations 043 (X Metrics), 044 (policy), 047 (cartons). The scoring and reconciliation rules live in Postgres (see `generated/database.md`: `xm_*` tables, views and functions).
+Files: `src/app/admin/metrics/**/page.tsx`, `src/components/admin/xm/dashboard.tsx`, `widgets.tsx`, `forms.tsx`, `policy-editor.tsx`, `supply-import.tsx`, `day-bars.tsx`, `src/components/admin/score-bars.tsx`, `src/components/metrics/policy.tsx` (shared with the staff app); logic `src/lib/metrics/dashboard.ts`, `shared.ts`, `server.ts`, `supply-import.ts`, `export.ts`, `admin-route.ts`, `features.ts` (pure switch rules, tested by `scripts/check-xm-features.ts`), `features-server.ts`; switches UI `src/components/admin/xm/features-form.tsx`, `features-context.tsx`, `switched-off.tsx`, `src/app/admin/metrics/layout.tsx`. Schema: migrations 043 (X Metrics), 044 (policy), 047 (cartons), 063 (feature switches). The scoring and reconciliation rules live in Postgres (see `generated/database.md`: `xm_*` tables, views and functions).
 
 ### Common parts
 
@@ -1221,9 +1221,21 @@ Two columns on `lg` (3 : 2):
 
 ### 14.8 Settings — `/admin/metrics/settings` (admins only)
 
-Title "Settings — X Metrics"; header **"X Metrics settings"**: "The rules X Metrics applies. Every change is kept, with who made it." Missing row: "The settings could not be read. Has migration 043 been run?"
+Title "Settings — X Metrics"; header **"X Metrics settings"**: "Which parts of X Metrics are in use, and the rules it applies. Every change is kept, with who made it." Missing row: "The settings could not be read. Has migration 043 been run?"
 
-Form sections:
+**Features** card (0063, first on the page) / "Switch X Metrics, or parts of it, off while you are not using them, and back on later. Off hides the part from the dashboard and the staff app; all its records are kept." (`FeaturesForm`, `src/components/admin/xm/features-form.tsx`). Five rows, each a label, one muted line and a brand-orange switch (`role="switch"`, 48 × 28 px; on = brand, off = `#e6d9cf`; on but blocked by the master = `#f2b48a`):
+
+| Switch | Line |
+|---|---|
+| **X Metrics** (larger label) | "The whole module: stock counts by batch, stores and products. Off hides X Metrics from the menu and the staff app." |
+| **Expiry** | "Expiry dates on stock counts, expiry alerts, the Expiry page and expiry in grades." |
+| **Supplies** | "Stock supplied to stores: the Supplies page, invoice imports, and checking counts against what was supplied." |
+| **Grading** | "Monthly grades, the Grades and Scoring policy pages, and the score staff see." |
+| **Sales** | "Units sold: the daily sales form for staff, month-end sales, sales against target and the Targets page." |
+
+The four parts are indented under X Metrics on wide screens; with X Metrics off, a part still on reads "(off while X Metrics is off)". With Supplies on and Sales off (or the reverse) the on one adds "Checking counts against supplies also needs Sales on." / "… needs Supplies on.". Footer: "Turning a part off hides it and stops its work. Nothing it recorded is deleted: turn it back on and it carries on." Each switch saves at once (PUT `/api/admin/metrics/features` `{enabled, expiry, supplies, grading, sales}` → `xm_set_features`, audited `xm.features.update` with `changes` such as "Sales off"); switching the whole module off first asks "Switch X Metrics off? It disappears from the menu and the staff app. All its records are kept.". Messages: "`Part` is off. Everything it recorded is kept, and comes back when you turn it on." / "`Part` is on again. It carries on from where it stopped.". Before 0063: warning "Run migration 0063 in Supabase to switch parts of X Metrics on and off."
+
+**Rules** card, form sections:
 
 - **Reconciliation**: Tolerance (%) (0–100, step 0.5). "A count further than this from expected is flagged. More than four times it is a high flag."
 - **Grade weights (must add up to 100; now N)**: Sales vs target, Stock accuracy, Reporting consistency, Expiry handling (0–100 each).
@@ -1233,7 +1245,22 @@ Form sections:
 
 **Save settings** is disabled unless the weights sum to exactly 100 and every window is a whole number ≥ 1 → PUT `/api/admin/metrics/settings`; "Settings saved. The earlier version is kept in the history below."
 
-**Earlier versions** (20 newest of `xm_settings_history`): "Replaced `date time` by `name`" and "Was: tolerance T% · weights a/b/c/d · bands p/s · windows … days". Empty "Not changed yet."
+**Earlier versions** (20 newest of `xm_settings_history`): "Replaced `date time` by `name`" and "Was: tolerance T% · weights a/b/c/d · bands p/s · windows … days" + (0063 rows) " · all parts on" or " · off: Expiry, Sales". Empty "Not changed yet."
+
+### 14.8.1 What each switch hides (0063, `src/lib/metrics/features.ts`)
+
+`readXmFeatures(client)` reads the switches (all on before 0063 or when unreadable); `src/app/admin/metrics/layout.tsx` hands them to the sub-navigation (`XmFeaturesProvider`). Every X Metrics page checks `xmPageOn(features, page)` and, when off, shows its header plus info alert "This part of X Metrics is switched off. An admin can turn it on in X Metrics → Settings." (+ **Open Settings** link for admins) instead (`XmSwitchedOff`). Reconciliation counts as on only with Supplies and Sales on; with the module off every part is off.
+
+| Off | Gone from the dashboard |
+|---|---|
+| X Metrics | Menu item for supervisors; for admins the item reads "X Metrics (off)" and opens `/admin/metrics/settings`. Every X Metrics page but Settings; sub-navigation shows only Settings. Downloads, Ask Xtend's `x_metrics` and `propose_xmetrics_store` |
+| Expiry | Expiry pill and page; overview "Open expiry alerts" tile and Expiry alerts card; store page Expiry column; Expiry and Time left columns in stock and supplies downloads; Expiry column in grades; expiry in Ask Xtend's `x_metrics` |
+| Supplies | Supplies pill and page (and the import route, refused before reading the file); "Units supplied" tile and the supplied bars; supplies in Recent activity and on the store page; `supplies` download |
+| Grading | Grades and Scoring policy pills and pages; grade cards, breakdown and finalised grades on the staff page; `grades` download |
+| Sales | Targets pill and page; "Units sold" tile, sold bars (the chart becomes "Supplies overview"), Top stores, Sold columns, Units sold per day, daily sales in activity lists; Sales columns in grades; sales in Ask Xtend's `x_metrics`, `propose_sales_target`; X Metrics sales in marketer reports |
+| Supplies or Sales | Reconciliation: "Stock accuracy" tile and ring (the ring shows sales against target only), Stock gaps card, Gaps column, store and staff Reconciliation tables, `discrepancies` download, Accuracy in grades |
+
+Overview grids re-span so the remaining cards fill the row. **Run checks now** shows only when reconciliation or expiry is on. Ask Xtend is told in its system prompt what is off (`xmAssistantNote`).
 
 ### 14.9 Staff — `/admin/metrics/staff/[id]` (both)
 

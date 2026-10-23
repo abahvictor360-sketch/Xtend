@@ -12,6 +12,9 @@ import { ScoreBars } from '@/components/admin/score-bars'
 import { LATE, ON_TIME } from '@/lib/chart-colours'
 import { longDate } from '@/lib/utils'
 import { bandVariant, fmtScore, monthLabel, monthStart, type XmGrade } from '@/lib/metrics/shared'
+import { readXmFeatures } from '@/lib/metrics/features-server'
+import { xmDashboardParts, xmPageOn } from '@/lib/metrics/features'
+import { XmSwitchedOff } from '@/components/admin/xm/switched-off'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Staff — X Metrics' }
@@ -30,26 +33,35 @@ export default async function StaffMetricsPage({
   const [y, m] = month.split('-').map(Number)
   const end = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10)
   const supabase = await createServerSupabase()
+  const features = await readXmFeatures(supabase)
+  if (!xmPageOn(features, 'staff')) return <XmSwitchedOff title="X Metrics" readOnly={readOnly} />
+  const parts = xmDashboardParts(features)
 
   const { data: person } = await supabase.from('profiles').select('id, full_name, role').eq('id', id).maybeSingle<{ id: string; full_name: string; role: string }>()
   if (!person) notFound()
 
   const [{ data: grade }, { data: history }, { data: counts }, { data: sales }, { data: lines }, { data: recs }] = await Promise.all([
-    supabase.rpc('xm_grade', { p_user: id, p_month: month }),
+    parts.grading ? supabase.rpc('xm_grade', { p_user: id, p_month: month }) : Promise.resolve({ data: null }),
     supabase.from('xm_monthly_grades').select('month, score, band').eq('user_id', id).order('month', { ascending: false }).limit(12),
     supabase.from('xm_counts').select('id, outlet_id, count_date, captured_at, distance_m, is_opening, voided_at, void_reason, outlets(name)').eq('user_id', id).gte('count_date', month).lte('count_date', end).order('captured_at', { ascending: false }),
     supabase.from('xm_sales').select('id, outlet_id, sale_date, captured_at, created_at, superseded_by, voided_at, void_reason, outlets(name)').eq('user_id', id).gte('sale_date', month).lte('sale_date', end).order('sale_date', { ascending: false }),
     supabase.from('xm_live_sale_lines').select('sale_date, units').eq('user_id', id).gte('sale_date', month).lte('sale_date', end).limit(20000),
     supabase.from('xm_reconciliation_detail').select('id, count_date, outlet_name, product_name, expected_units, actual_units, variance_units, variance_pct, flagged').eq('user_id', id).gte('count_date', month).lte('count_date', end).order('count_date', { ascending: false }),
   ])
-  const g = grade as XmGrade | null
+  const g = parts.grading ? (grade as XmGrade | null) : null
+  // Factors whose part is switched off are left out of the grade (0063).
+  const has = { sales: g?.parts?.sales !== false, accuracy: g?.parts?.accuracy !== false, expiry: g?.parts?.expiry !== false }
   const byDay = new Map<string, number>()
   for (const l of (lines ?? []) as { sale_date: string; units: number }[]) byDay.set(l.sale_date, (byDay.get(l.sale_date) ?? 0) + l.units)
   const storeName = (o: unknown) => (Array.isArray(o) ? o[0]?.name : (o as { name?: string } | null)?.name) ?? ''
 
   return (
     <div className="space-y-5">
-      <XmHeader title={person.full_name} intro={`X Metrics for ${monthLabel(month)}: grade, counts, sales and reconciliation.`} readOnly={readOnly} />
+      <XmHeader
+        title={person.full_name}
+        intro={`X Metrics for ${monthLabel(month)}: ${[parts.grading && 'grade', 'counts', parts.sales && 'sales', parts.reconcile && 'reconciliation'].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' and $1')}.`}
+        readOnly={readOnly}
+      />
       <MonthPicker month={month} />
 
       {g && (
@@ -61,14 +73,16 @@ export default async function StaffMetricsPage({
               <Badge variant={bandVariant(g.band)}>{g.band ?? 'Not graded'}</Badge>
             </CardContent>
           </Card>
-          <Factor title={`Sales (${g.weights.sales})`} score={g.sales.score}
-            detail={g.sales.target ? `${g.sales.target_kind === 'store' ? `${g.sales.store_units_sold ?? 0} store` : g.sales.units_sold} of ${g.sales.target} ${g.sales.target_kind === 'store' ? '(store target)' : ''}` : `${g.sales.units_sold} sold, no target`} />
-          <Factor title={`Accuracy (${g.weights.accuracy})`} score={g.accuracy.score}
-            detail={`${g.accuracy.within_tolerance} of ${g.accuracy.reconciliations} within ${g.accuracy.tolerance_pct}%`} />
+          {has.sales && <Factor title={`Sales (${g.weights.sales})`} score={g.sales.score}
+            detail={g.sales.target ? `${g.sales.target_kind === 'store' ? `${g.sales.store_units_sold ?? 0} store` : g.sales.units_sold} of ${g.sales.target} ${g.sales.target_kind === 'store' ? '(store target)' : ''}` : `${g.sales.units_sold} sold, no target`} />}
+          {has.accuracy && <Factor title={`Accuracy (${g.weights.accuracy})`} score={g.accuracy.score}
+            detail={`${g.accuracy.within_tolerance} of ${g.accuracy.reconciliations} within ${g.accuracy.tolerance_pct}%`} />}
           <Factor title={`Consistency (${g.weights.consistency})`} score={g.consistency.score}
-            detail={`${g.consistency.days_present} days present: sales on time ${g.consistency.sales_on_time}, count in time ${g.consistency.counts_in_time}`} />
-          <Factor title={`Expiry (${g.weights.expiry})`} score={g.expiry.score}
-            detail={`${g.expiry.expiry_recorded} of ${g.expiry.lines_counted} lines dated, ${g.expiry.expired_on_shelf} expired on shelf`} />
+            detail={has.sales
+              ? `${g.consistency.days_present} days present: sales on time ${g.consistency.sales_on_time}, count in time ${g.consistency.counts_in_time}`
+              : `${g.consistency.days_present} days present: count in time ${g.consistency.counts_in_time}`} />
+          {has.expiry && <Factor title={`Expiry (${g.weights.expiry})`} score={g.expiry.score}
+            detail={`${g.expiry.expiry_recorded} of ${g.expiry.lines_counted} lines dated, ${g.expiry.expired_on_shelf} expired on shelf`} />}
         </div>
       )}
 
@@ -80,15 +94,15 @@ export default async function StaffMetricsPage({
               <ScoreBars
                 unit=""
                 rows={[
-                  { key: 'sales', label: 'Sales vs target', value: g.sales.score },
-                  { key: 'accuracy', label: 'Stock accuracy', value: g.accuracy.score },
-                  { key: 'consistency', label: 'Reporting', value: g.consistency.score },
-                  { key: 'expiry', label: 'Expiry handling', value: g.expiry.score },
-                ]}
+                  { key: 'sales', label: 'Sales vs target', value: g.sales.score, on: has.sales },
+                  { key: 'accuracy', label: 'Stock accuracy', value: g.accuracy.score, on: has.accuracy },
+                  { key: 'consistency', label: 'Reporting', value: g.consistency.score, on: true },
+                  { key: 'expiry', label: 'Expiry handling', value: g.expiry.score, on: has.expiry },
+                ].filter((r) => r.on).map(({ key, label, value }) => ({ key, label, value }))}
               />
             </CardContent>
           </Card>
-          <Card>
+          {has.accuracy && <Card>
             <CardHeader><CardTitle>Stock counts reconciled</CardTitle></CardHeader>
             <CardContent>
               <Donut
@@ -100,16 +114,18 @@ export default async function StaffMetricsPage({
                 centreLabel="accurate"
               />
             </CardContent>
-          </Card>
+          </Card>}
         </div>
       )}
 
-      <Card>
-        <CardHeader><CardTitle>Units sold per day</CardTitle></CardHeader>
-        <CardContent><DayBars month={month} byDay={byDay} /></CardContent>
-      </Card>
+      {parts.sales && (
+        <Card>
+          <CardHeader><CardTitle>Units sold per day</CardTitle></CardHeader>
+          <CardContent><DayBars month={month} byDay={byDay} /></CardContent>
+        </Card>
+      )}
 
-      {(history ?? []).length > 0 && (
+      {parts.grading && (history ?? []).length > 0 && (
         <Card>
           <CardHeader><CardTitle>Finalised grades</CardTitle></CardHeader>
           <CardContent className="flex flex-wrap gap-2">
@@ -122,6 +138,7 @@ export default async function StaffMetricsPage({
         </Card>
       )}
 
+      {parts.reconcile && (
       <Card>
         <CardHeader><CardTitle>Reconciliation</CardTitle></CardHeader>
         <CardContent className="p-0">
@@ -144,6 +161,7 @@ export default async function StaffMetricsPage({
           )}
         </CardContent>
       </Card>
+      )}
 
       <Card>
         <CardHeader><CardTitle>What they sent</CardTitle></CardHeader>
@@ -160,7 +178,7 @@ export default async function StaffMetricsPage({
                   <TableCell>{c.voided_at ? <span className="text-xs">Voided: {c.void_reason}</span> : !readOnly && <VoidButton kind="count" id={c.id} />}</TableCell>
                 </TableRow>
               ))}
-              {((sales ?? []) as { id: string; sale_date: string; captured_at: string; created_at: string; superseded_by: string | null; voided_at: string | null; void_reason: string | null; outlets: unknown }[]).map((s) => (
+              {parts.sales && ((sales ?? []) as { id: string; sale_date: string; captured_at: string; created_at: string; superseded_by: string | null; voided_at: string | null; void_reason: string | null; outlets: unknown }[]).map((s) => (
                 <TableRow key={s.id} className={s.voided_at || s.superseded_by ? 'opacity-60' : undefined}>
                   <TableCell>Daily sales {s.superseded_by && <Badge variant="outline">Replaced</Badge>}</TableCell>
                   <TableCell>{longDate(s.sale_date)}</TableCell>

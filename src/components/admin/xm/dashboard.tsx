@@ -76,9 +76,18 @@ function niceMax(value: number) {
   return 10 * step
 }
 
-export function SalesOverviewChart({ months }: { months: MonthBar[] }) {
+export function SalesOverviewChart({
+  months,
+  series = { sold: true, supplied: true },
+}: {
+  months: MonthBar[]
+  /** Which bars to draw: a part switched off (0063) is left out. */
+  series?: { sold: boolean; supplied: boolean }
+}) {
   const [picked, setPicked] = useState<number | null>(null)
-  const max = niceMax(Math.max(1, ...months.map((m) => Math.max(m.sold, m.supplied))))
+  const max = niceMax(
+    Math.max(1, ...months.map((m) => Math.max(series.sold ? m.sold : 0, series.supplied ? m.supplied : 0))),
+  )
   const ticks = [max, (max * 3) / 4, max / 2, max / 4, 0]
   const fmt = (n: number) => n.toLocaleString('en-GB')
   const shown = picked ?? months.length - 1
@@ -88,15 +97,20 @@ export function SalesOverviewChart({ months }: { months: MonthBar[] }) {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-sm" style={{ background: SOLD }} /> Units sold
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-2.5 w-2.5 rounded-sm" style={{ background: SUPPLIED }} /> Units supplied
-          </span>
+          {series.sold && (
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-sm" style={{ background: SOLD }} /> Units sold
+            </span>
+          )}
+          {series.supplied && (
+            <span className="flex items-center gap-1.5">
+              <span className="h-2.5 w-2.5 rounded-sm" style={{ background: SUPPLIED }} /> Units supplied
+            </span>
+          )}
         </div>
         <p className="text-xs text-muted-foreground" aria-live="polite">
-          <span className="font-semibold text-foreground">{m.label}</span>: {fmt(m.sold)} sold · {fmt(m.supplied)} supplied
+          <span className="font-semibold text-foreground">{m.label}</span>:{' '}
+          {[series.sold && `${fmt(m.sold)} sold`, series.supplied && `${fmt(m.supplied)} supplied`].filter(Boolean).join(' · ')}
         </p>
       </div>
 
@@ -126,15 +140,15 @@ export function SalesOverviewChart({ months }: { months: MonthBar[] }) {
                   onMouseLeave={() => setPicked(null)}
                   onFocus={() => setPicked(i)}
                   onClick={() => setPicked(i)}
-                  aria-label={`${mo.label}: ${mo.sold} units sold, ${mo.supplied} units supplied`}
+                  aria-label={`${mo.label}: ${[series.sold && `${mo.sold} units sold`, series.supplied && `${mo.supplied} units supplied`].filter(Boolean).join(', ')}`}
                 >
                   <div className={cn('flex w-full flex-1 items-end justify-center gap-[3px] rounded-xl px-0.5 transition-colors', on && 'bg-[#fdf0e7]')}>
                     {(
                       [
-                        [mo.sold, SOLD],
-                        [mo.supplied, SUPPLIED],
+                        [mo.sold, SOLD, series.sold],
+                        [mo.supplied, SUPPLIED, series.supplied],
                       ] as const
-                    ).map(([v, colour], j) => (
+                    ).filter(([, , on]) => on).map(([v, colour], j) => (
                       <span
                         key={j}
                         className="block w-full max-w-[14px] rounded-t-[4px]"
@@ -155,14 +169,18 @@ export function SalesOverviewChart({ months }: { months: MonthBar[] }) {
                   {on && picked !== null && (
                     <span className="pointer-events-none absolute -top-2 left-1/2 z-10 -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-xl border border-border bg-card px-3 py-2 text-left text-xs shadow-lg">
                       <span className="block font-semibold">{mo.label}</span>
-                      <span className="block text-muted-foreground">
-                        <span className="mr-1 inline-block h-2 w-2 rounded-sm" style={{ background: SOLD }} />
-                        Sold <b className="text-foreground">{fmt(mo.sold)}</b>
-                      </span>
-                      <span className="block text-muted-foreground">
-                        <span className="mr-1 inline-block h-2 w-2 rounded-sm" style={{ background: SUPPLIED }} />
-                        Supplied <b className="text-foreground">{fmt(mo.supplied)}</b>
-                      </span>
+                      {series.sold && (
+                        <span className="block text-muted-foreground">
+                          <span className="mr-1 inline-block h-2 w-2 rounded-sm" style={{ background: SOLD }} />
+                          Sold <b className="text-foreground">{fmt(mo.sold)}</b>
+                        </span>
+                      )}
+                      {series.supplied && (
+                        <span className="block text-muted-foreground">
+                          <span className="mr-1 inline-block h-2 w-2 rounded-sm" style={{ background: SUPPLIED }} />
+                          Supplied <b className="text-foreground">{fmt(mo.supplied)}</b>
+                        </span>
+                      )}
                     </span>
                   )}
                 </button>
@@ -178,16 +196,16 @@ export function SalesOverviewChart({ months }: { months: MonthBar[] }) {
           <thead>
             <tr className="text-muted-foreground">
               <th className="py-1 font-medium">Month</th>
-              <th className="py-1 text-right font-medium">Sold</th>
-              <th className="py-1 text-right font-medium">Supplied</th>
+              {series.sold && <th className="py-1 text-right font-medium">Sold</th>}
+              {series.supplied && <th className="py-1 text-right font-medium">Supplied</th>}
             </tr>
           </thead>
           <tbody>
             {months.map((mo) => (
               <tr key={mo.month} className="border-t border-border">
                 <td className="py-1">{new Date(`${mo.month}T00:00:00Z`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })}</td>
-                <td className="py-1 text-right tabular-nums">{fmt(mo.sold)}</td>
-                <td className="py-1 text-right tabular-nums">{fmt(mo.supplied)}</td>
+                {series.sold && <td className="py-1 text-right tabular-nums">{fmt(mo.sold)}</td>}
+                {series.supplied && <td className="py-1 text-right tabular-nums">{fmt(mo.supplied)}</td>}
               </tr>
             ))}
           </tbody>
@@ -224,11 +242,15 @@ export function StockRings({
   accuracy,
   salesVsTarget,
   categories,
+  showAccuracy = true,
 }: {
   accuracy: { pct: number | null; checked: number; gaps: number }
   salesVsTarget: { pct: number | null; sold: number; target: number }
   categories: CategoryShare[]
+  /** False while reconciliation is off (supplies or sales switched off, 0063). */
+  showAccuracy?: boolean
 }) {
+  const headline = showAccuracy ? accuracy.pct : salesVsTarget.pct
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-4">
@@ -236,23 +258,29 @@ export function StockRings({
           viewBox="-60 -60 120 120"
           className="h-32 w-32 shrink-0 rotate-90 sm:h-36 sm:w-36"
           role="img"
-          aria-label={`Stock accuracy ${accuracy.pct ?? 'not known'}%, sales ${salesVsTarget.pct ?? 'no'}% of target`}
+          aria-label={
+            showAccuracy
+              ? `Stock accuracy ${accuracy.pct ?? 'not known'}%, sales ${salesVsTarget.pct ?? 'no'}% of target`
+              : `Sales ${salesVsTarget.pct ?? 'no'}% of target`
+          }
         >
-          <Arc r={50} pct={accuracy.pct ?? 0} colour={SOLD} width={9} />
-          <Arc r={36} pct={salesVsTarget.pct ?? 0} colour={SUPPLIED} width={9} />
+          {showAccuracy && <Arc r={50} pct={accuracy.pct ?? 0} colour={SOLD} width={9} />}
+          <Arc r={showAccuracy ? 36 : 50} pct={salesVsTarget.pct ?? 0} colour={showAccuracy ? SUPPLIED : SOLD} width={9} />
         </svg>
         <div>
-          <p className="text-4xl font-bold tabular-nums tracking-tight">{accuracy.pct === null ? '—' : `${accuracy.pct}%`}</p>
-          <p className="text-xs text-muted-foreground">Stock accuracy this month</p>
+          <p className="text-4xl font-bold tabular-nums tracking-tight">{headline === null ? '—' : `${headline}%`}</p>
+          <p className="text-xs text-muted-foreground">{showAccuracy ? 'Stock accuracy this month' : 'Of store targets this month'}</p>
         </div>
       </div>
       <div className="space-y-1 text-xs">
+        {showAccuracy && (
+          <p className="flex items-center gap-1.5">
+            <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: SOLD }} />
+            {accuracy.checked ? `${accuracy.checked - accuracy.gaps} of ${accuracy.checked} counts matched` : 'No counts checked yet'}
+          </p>
+        )}
         <p className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: SOLD }} />
-          {accuracy.checked ? `${accuracy.checked - accuracy.gaps} of ${accuracy.checked} counts matched` : 'No counts checked yet'}
-        </p>
-        <p className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: SUPPLIED }} />
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: showAccuracy ? SUPPLIED : SOLD }} />
           {salesVsTarget.target
             ? `${salesVsTarget.pct}% of store targets (${salesVsTarget.sold.toLocaleString('en-GB')} / ${salesVsTarget.target.toLocaleString('en-GB')})`
             : 'No store targets this month'}

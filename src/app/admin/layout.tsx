@@ -4,6 +4,7 @@ import { assistantConfigured } from '@/lib/assistant'
 import { AdminFrame } from '@/components/admin/admin-frame'
 import { AdminLocation } from '@/components/admin/admin-location'
 import { ActivityPing } from '@/components/activity-ping'
+import { readXmFeatures } from '@/lib/metrics/features-server'
 
 export const dynamic = 'force-dynamic'
 
@@ -15,7 +16,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // suspicious activity still to review. RLS narrows both to a
   // supervisor's own team.
   const supabase = await createServerSupabase()
-  const [{ count: location }, { count: flags }] = await Promise.all([
+  const [{ count: location }, { count: flags }, xmFeatures] = await Promise.all([
     supabase
       .from('location_alerts')
       .select('id', { count: 'exact', head: true })
@@ -25,6 +26,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       .select('id', { count: 'exact', head: true })
       .is('reviewed_at', null)
       .in('severity', ['medium', 'high']),
+    // Whether X Metrics is switched on (0063), for the menu.
+    readXmFeatures(supabase),
   ])
   const openAlerts = location === null && flags === null ? null : (location ?? 0) + (flags ?? 0)
 
@@ -35,6 +38,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       readOnly={readOnly}
       openAlerts={openAlerts}
       assistant={assistantConfigured()}
+      xmEnabled={xmFeatures.enabled}
     >
       <AdminLocation />
       <ActivityPing />

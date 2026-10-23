@@ -3,6 +3,8 @@ import { apiError, requireApiSession, dbErrorMessage, ApiError } from '@/lib/aut
 import { audit } from '@/lib/audit'
 import { bestMatch, readSupplyFile } from '@/lib/metrics/supply-import'
 import { lagosDateString } from '@/lib/utils'
+import { readXmFeatures } from '@/lib/metrics/features-server'
+import { XM_OFF_MESSAGE, xmOn } from '@/lib/metrics/features'
 
 export const maxDuration = 120
 
@@ -14,6 +16,9 @@ export const maxDuration = 120
 export async function POST(request: Request) {
   try {
     await requireApiSession(['admin'])
+    // Supplies switched off (0063): refuse before reading the file (the
+    // database refuses the import itself too).
+    if (!xmOn(await readXmFeatures(await createServerSupabase()), 'supplies')) throw new ApiError(XM_OFF_MESSAGE, 400)
     const form = await request.formData().catch(() => null)
     const file = form?.get('file')
     if (!(file instanceof File) || !file.size) throw new ApiError('Choose a file to import', 400)

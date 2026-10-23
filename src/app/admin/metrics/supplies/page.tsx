@@ -1,5 +1,8 @@
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { readXmFeatures } from '@/lib/metrics/features-server'
+import { xmPageOn } from '@/lib/metrics/features'
+import { XmSwitchedOff } from '@/components/admin/xm/switched-off'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -38,6 +41,8 @@ export default async function SuppliesPage({ searchParams }: { searchParams: Pro
   const [y, m] = month.split('-').map(Number)
   const end = new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10)
   const supabase = await createServerSupabase()
+  const xmFeatures = await readXmFeatures(supabase)
+  if (!xmPageOn(xmFeatures, 'supplies')) return <XmSwitchedOff title="Supplies" readOnly={false} />
 
   const [{ data: stores }, { data: products }, { data: supplies }] = await Promise.all([
     supabase.from('xm_stores').select('outlet_id, outlets(name)').eq('is_active', true),

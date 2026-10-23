@@ -1,5 +1,8 @@
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { readXmFeatures } from '@/lib/metrics/features-server'
+import { xmPageOn } from '@/lib/metrics/features'
+import { XmSwitchedOff } from '@/components/admin/xm/switched-off'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,6 +20,8 @@ export default async function PolicyPage() {
   const session = await requireSession(['admin', 'supervisor'])
   const readOnly = session.profile.role !== 'admin'
   const supabase = await createServerSupabase()
+  const xmFeatures = await readXmFeatures(supabase)
+  if (!xmPageOn(xmFeatures, 'policy')) return <XmSwitchedOff title="Scoring policy" readOnly={readOnly} />
 
   const [{ data: versions }, { data: settings }, { data: staff }] = await Promise.all([
     supabase
