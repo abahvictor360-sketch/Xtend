@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-22, after the admin Activity log (migration 0062)._
+_Last updated: 2026-10-23, after holding the Movement maps to Nigeria._
 
 ---
 
@@ -594,6 +594,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-23 | Movement: the live map opens on the whole of Nigeria, and every Movement map is held to Nigeria (no panning or zooming out beyond it); a person's route still zooms to the route | — |
 | 2026-10-22 | Admin **Activity log** (`/admin/activity`, menu after Audit log): everyone's sign-ins, sign-outs, app opens, clock-ins, visits, reports, counts, leave, support messages, password and photo changes with time, device, platform and IP; filters, summary cards, per-person table with Movement/Attendance links, day-by-day timeline, Excel/PDF/Word/CSV downloads. New `POST /api/activity` and `POST /api/auth/password` (the change-password form now saves through the server); nightly purge after 180 days; check script `check-activity` | 0062 |
 | 2026-10-21 | Restrict post-login destinations to local pages; retain photos on temporary 401/429 check failures; roll back failed PM2 reloads and verify rollback health. Added three regression scripts | — |
 | 2026-10-21 | UI/UX pass: the "Clock in" quick-action on the shift pill meets the 44 px touch target; white-on-orange small text (DayCard outlet line, HeaderField label, X Metrics deep-tile note) raised to pass 4.5:1 contrast; calendar day-labels enlarged from 8.5–9 px to 10 px for readability | — |
