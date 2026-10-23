@@ -86,7 +86,7 @@ How to run the Xtend dashboard, page by page. Admins only: it covers
 how location, checks and the phone app work, which staff and
 supervisors are not shown. Staff have their own guide at /guide.
 
-On screen: Do these once, in this order, before staff start clocking in.
+On screen: The latest changes, where to find them, and the one-off steps they need.
 
 ## `/admin/integrity` — Integrity checks — Xtend
 

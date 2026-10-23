@@ -354,6 +354,7 @@ Sections (id, title, intro) and what each must say:
 
 | id | Title | Intro | Content in short |
 |---|---|---|---|
+| whats-new | What’s new (October 2026) | The latest changes, where to find them, and the one-off steps they need. | First: run migrations 0059–0067 in order in Supabase. Bullets: Schedules and Leave; Marketer reports and allocated-stores-only check-ins; clock-out reminders; Activity log (admins only); X Metrics switches; count sheets from the You page and report documents; Movement map of Nigeria with clickable photos; files kept 14 days with a day-before notice; Test mode and reset (Setup → System, We are live); iPhone app via TestFlight. |
 | first-week | Your first week | Do these once, in this order, before staff start clocking in. | Steps: Outlets (radius 50–100 m small shop, 150–300 m supermarket or mall); Staff (one by one or Bulk import CSV); Store allocation; Teams; share download page and staff guide and download Login details (Word); optional X Metrics. |
 | every-day | Every day | Ten minutes each morning keeps on top of the field. | Steps: Overview; Alerts oldest first; Support longest waiting first; Integrity "Who to look at first"; late in the day Attendance and Store visits. Tip with Ask Xtend questions. |
 | overview | Overview, Ask Xtend and the guide | The top of the menu. | What Overview shows; screenshot `/guide/admin-overview.png` (2880×1800) "The overview, before anyone has clocked in"; Ask Xtend abilities and examples; nothing happens until the card's button; chats under Earlier chats. |
