@@ -145,6 +145,11 @@ export default async function SupervisorGuidePage() {
           <ul className="list-disc space-y-1.5 pl-5">
             <li>Late means after the store&apos;s shift start.</li>
             <li>
+              Xtend reminds your team 5 minutes before their shift starts (if they have not clocked in on
+              a working day) and 5 minutes before it ends, then again at the end if they are still clocked
+              in. These show in Notifications history as automatic alerts.
+            </li>
+            <li>
               Days off and approved leave never count as absent. In the calendar a day off shows
               grey “–” and leave soft orange “Lv”.
             </li>

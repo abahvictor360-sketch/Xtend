@@ -208,6 +208,15 @@ begin
 exception when insufficient_privilege then
   perform assert(true, 'rls: only the scheduled job claims clock-out reminders');
 end $$;
+do $$
+begin
+  perform * from public.claim_shift_soon_reminders();
+  perform assert(false, 'rls: only the scheduled job claims the five-minute shift heads-ups (069)');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: only the scheduled job claims the five-minute shift heads-ups (069)');
+end $$;
+select assert(public.shift_start_for(auth.uid()) is not null,
+  'rls: anyone signed in can read the shift start that applies to them (069)');
 select set_config('request.jwt.claim.sub', :'tunde', false);
 select assert(not exists (select 1 from public.clock_out_reminders r
                           where r.user_id <> :'tunde' and not public.supervises_user(r.user_id)),

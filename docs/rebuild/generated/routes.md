@@ -2,7 +2,7 @@
 
 # API routes
 
-115 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+116 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
 
 ## `POST /api/activity`
 
@@ -21,6 +21,15 @@ const schema = z.object({
   app_build: z.number().int().min(0).max(100_000_000).nullable().optional(),
 })
 ```
+
+## `POST /api/admin/acting`
+
+- File: `src/app/api/admin/acting/route.ts`
+- Who: ['admin']
+
+An admin picks whether to view the app as an admin, a merchandiser or a
+marketer. Only an admin may call this; the cookie is otherwise ignored, so
+it can never grant a field member more than their role allows.
 
 ## `POST /api/admin/alerts/[id]`
 
@@ -1261,7 +1270,9 @@ usually sent the moment the clock-in, ping or photo that raised them
 arrives; this catches the rest (a flag raised by a database job, or a
 send that failed). It also sends scheduled notifications that are due,
 and asks anyone still clocked in after their shift end to clock out
-(migration 0061). It runs every five minutes from
+(migration 0061), and gives a heads-up five minutes before each shift
+starts and ends (migration 0069; it only sends inside those five minutes,
+so it depends on this job running on time). It runs every five minutes from
 .github/workflows/alerts-cron.yml, or from a server's crontab:
 
   0-59/5 * * * *  curl -s -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/alerts

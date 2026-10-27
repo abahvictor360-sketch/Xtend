@@ -127,6 +127,7 @@ Policies:
 | stage | smallint(int2) |  |  |
 | shift_end | time without time zone(time) |  |  |
 | claimed_at | timestamp with time zone(timestamptz) |  | now() |
+| stage_name | text(text) | yes |  |
 
 Policies:
 - `clock_out_reminders_read` SELECT to public: using `((user_id = auth.uid()) OR is_admin() OR supervises_user(user_id))`
@@ -1226,11 +1227,12 @@ Policies:
 - `check_excuse(p_user uuid, p_from timestamp with time zone, p_to timestamp with time zone)` → jsonb · definer · 0048_excuse_check_advanced.sql
 - `check_excuse_more(p_user uuid, p_from timestamp with time zone, p_to timestamp with time zone)` → jsonb · definer · 0048_excuse_check_advanced.sql
 - `check_store_count(p_outlet_id uuid, today date)` → void · definer · 0040_xpel_count_sheet.sql
-- `claim_clock_out_reminders(p_now timestamp with time zone)` → TABLE(user_id uuid, reminder_date date, stage smallint, shift_end text) · definer · 0061_clock_out_reminders.sql
+- `claim_clock_out_reminders(p_now timestamp with time zone)` → TABLE(user_id uuid, reminder_date date, stage smallint, shift_end text) · definer · 0069_shift_soon_reminders.sql
 - `claim_due_notifications(p_limit integer)` → SETOF scheduled_notifications · definer · 0053_support_notifications.sql
 - `claim_flag_alerts(p_limit integer)` → TABLE(id uuid, user_id uuid, staff_name text, kind text, severity text, summary text, outlet_name text, created_at timestamp with time zone) · definer · 0036_supervisor_alerts.sql
 - `claim_scheduled_notification(p_id uuid)` → SETOF scheduled_notifications · definer · 0053_support_notifications.sql
 - `claim_selfie_sweep(p_min_minutes integer)` → boolean · definer · 0012_selfie_retention_24h.sql
+- `claim_shift_soon_reminders(p_now timestamp with time zone)` → TABLE(user_id uuid, reminder_date date, stage text, shift_time text, store text) · definer · 0069_shift_soon_reminders.sql
 - `clear_temp_password()` → trigger · definer · 0041_staff_login_sheet.sql
 - `clock_timing(p_user uuid, p_captured timestamp with time zone, p_device jsonb, p_now timestamp with time zone)` → jsonb · definer · 0029_offline_positions.sql
 - `close_abandoned_visits()` → integer · definer · 0010_store_visits.sql
@@ -1402,6 +1404,7 @@ Policies:
 - `set_staff_outlets(p_user_id uuid, p_outlet_ids uuid[])` → SETOF uuid · definer · 0011_store_allocation.sql
 - `set_work_pattern(p_users uuid[], p_days smallint[])` → integer · definer · 0059_schedules_leave.sql
 - `shift_end_for(p_user uuid)` → time without time zone · definer · 0061_clock_out_reminders.sql
+- `shift_start_for(p_user uuid)` → time without time zone · definer · 0069_shift_soon_reminders.sql
 - `staff_analytics(p_from date, p_to date)` → TABLE(user_id uuid, full_name text, outlet_name text, days_present integer, days_late integer, days_off_site integer, avg_distance_m double precision) · definer · 0005_marketer_role.sql
 - `staff_day(p_date date)` → TABLE(user_id uuid, staff_name text, role user_role, clocked_in_at timestamp with time zone, clocked_in_at_place text, clocked_out_at timestamp with time zone, clocked_out_at_place text, stores_visited integer, minutes_in_store integer, still_in_store text) · definer · 0016_visits_without_allocation.sql
 - `staff_no_show(p_grace_minutes integer)` → TABLE(user_id uuid, full_name text, phone text, outlet_id uuid, outlet_name text, shift_start time without time zone, minutes_late integer) · definer · 0059_schedules_leave.sql

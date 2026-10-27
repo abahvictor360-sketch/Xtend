@@ -292,6 +292,7 @@ export function StaffGuide() {
           <Ui>Clock out</Ui> button at the top of the home screen. If you are still checked in at a
           store, check out of it first, then clock out.
         </p>
+        <p>Xtend also reminds you 5 minutes before your shift starts and 5 minutes before it ends.</p>
         <GuideShot
           src="/guide/staff-progress.png"
           alt="The day's progress: clock in, daily report, clock out"

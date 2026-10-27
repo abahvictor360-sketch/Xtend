@@ -86,6 +86,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0065_report_files_offline.sql  # report documents: no second upload on a retry, removals queued offline, nightly clean-up of unused files
    supabase/migrations/0066_test_mode_reset.sql             # test mode (one-way off) and resetting chosen parts of the test run; reset file queue
    supabase/migrations/0067_report_photos_offline.sql       # report photos sent once on a retry; files kept 14 days, announced to admins/supervisors the day before
+   supabase/migrations/0069_shift_soon_reminders.sql        # reminders 5 minutes before the shift starts (clock in) and ends (clock out)
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

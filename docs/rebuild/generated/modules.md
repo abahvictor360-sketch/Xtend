@@ -4,6 +4,18 @@
 
 Every shared file, what it is for (its own header comment) and what it exports.
 
+## `src/lib/acting.ts`
+
+"View as": an admin can use the field app as a merchandiser or a marketer,
+to test-run clock-in, store visits and reports in different places. The
+admin already has every field capability in the database (can_visit_stores,
+can_file_report are true for admin), so this only tailors the experience:
+a merchandiser view hides store visits and the report; a marketer view
+shows both. The choice is a cookie, honoured only when the signed-in person
+really is an admin, so it can never widen a field member's own access.
+
+Exports: `ACTING_COOKIE`, `ActingRole`, `getActingRole`
+
 ## `src/lib/activity-client.ts`
 
 Tells the server about a sign-out or an app open (migration 062). Never
@@ -852,6 +864,25 @@ the staff calendars and scripts/check-schedules-leave.ts share it.
 
 Exports: `DayKind`, `DEFAULT_WORK_DAYS`, `WEEKDAYS`, `PatternRow`, `OverrideRow`, `LEAVE_KINDS`, `LeaveKind`, `isLeaveKind`, `LEAVE_STATUS`, `LeaveStatus`, `isLeaveStatus`, `LeaveRow`, `LEAVE_LIMITS`, `dow`, `daysInclusive`, `cleanDays`, `samePattern`, `patternText`, `ScheduleBook`, `makeSchedule`, `DEFAULT_SCHEDULE`, `overlaps`, `leaveDateProblem`, `sortLeave`, `CalendarDay`, `CalendarMark`, `calendarMark`, `MARK_LABEL`, `isMissed`, `monthWeeks`, `shiftMonth`, `monthEnd`, `shortDay`, `leaveRangeText`
 
+## `src/lib/shift-reminder.ts`
+
+Five-minute heads-ups (migration 0069): "Time to clock in" five minutes
+before the shift starts, and "Your shift ends at HH:MM" five minutes
+before it ends. The database decides who is sent a push
+(claim_shift_soon_reminders); this file holds the same timing for the
+phone screen, and the wording of the pushes.
+
+Plain functions so the browser, the server and the check script
+(scripts/check-shift-reminders.ts) all use the same rules.
+
+Exports: `DEFAULT_SHIFT_START`, `HEADS_UP_MIN`, `SoonStage`, `shiftStartLabel`, `shiftStartAt`, `SoonState`, `clockInSoon`, `clockOutSoon`, `msUntilSoonChange`, `soonDue`, `soonMessage`
+
+## `src/lib/shift-reminders.ts`
+
+History kind for each heads-up.
+
+Exports: `flushShiftSoonReminders`
+
 ## `src/lib/staff-logins.ts`
 
 Keeps a temporary password for the staff login sheet (migration 041)
@@ -1433,7 +1464,7 @@ Exports: `DayStrip`
 
 ## `src/components/field/field-home.tsx`
 
-The last seven days from my_calendar (migration 059).
+Overrides the day's own answer when an admin views as a role.
 
 Exports: `FieldHome`
 
@@ -1558,6 +1589,14 @@ their own when it is saved; nothing to type.
 
 Exports: `ReportVisits`
 
+## `src/components/field/role-switch-bar.tsx`
+
+Shown at the top of the field app only when an admin is viewing it. It says
+which role they are testing as and lets them switch role or go back to the
+dashboard, so they are never stuck in the field app.
+
+Exports: `RoleSwitchBar`
+
 ## `src/components/field/screen.tsx`
 
 The brand-header screen from the reference: a coloured block carrying the
@@ -1565,6 +1604,12 @@ title and any read-only summary, with a white sheet lifted over its lower
 edge holding the interactive part.
 
 Exports: `SheetScreen`, `HeaderField`, `SectionHeader`
+
+## `src/components/field/shift-soon-prompt.tsx`
+
+Scrolls to the clock panel and puts the focus on its button.
+
+Exports: `focusClockButton`, `ShiftSoonPrompt`
 
 ## `src/components/field/shift-tracker.tsx`
 
@@ -1697,6 +1742,14 @@ Exports: `NativeBridge`
 Server-rendered feedback while the requested screen fetches its data.
 
 Exports: `PageLoading`
+
+## `src/components/role-switch.tsx`
+
+The admin's "view as" switch. Picking a field role sends the admin into the
+field app in that role; picking Admin brings them back to the dashboard.
+Only ever rendered for an admin (the server enforces that too).
+
+Exports: `RoleSwitch`
 
 ## `src/components/route-error.tsx`
 

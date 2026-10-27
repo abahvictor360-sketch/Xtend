@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-23, after the priority-led dashboard redesign (no new migration)._
+_Last updated: 2026-10-27, after the five-minute shift heads-ups (migration 0069)._
 
 ---
 
@@ -317,6 +317,17 @@ the code lives.
   pushes "Time to clock out", and again an hour later; the home screen shows a
   **Clock out** prompt (`src/lib/clock-out-reminder*.ts`,
   `src/components/field/clock-out-prompt.tsx`).
+- **Five-minute heads-ups** (0069): five minutes before the shift starts the
+  alerts job pushes "Time to clock in" ("Your shift at <store> starts at
+  HH:MM. Clock in with a selfie when you arrive.") to field staff with a
+  working day who have not clocked in; five minutes before it ends, "Your
+  shift ends at HH:MM. Get ready to clock out with a selfie." to those
+  clocked in. Each at most once a day, only inside its five minutes (a late
+  job skips it; the at-end reminder covers clock-out), never on a day off or
+  leave, never for admins or supervisors. The home screen shows a gentle
+  "Your shift starts at HH:MM. Clock in when you arrive." card with a
+  **Clock in** button, and a heads-up line before the end
+  (`src/lib/shift-reminder*.ts`, `src/components/field/shift-soon-prompt.tsx`).
 - **Activity log** (0062, admins only, `/admin/activity`): what everyone does
   in Xtend with time, device, platform and IP. Sign-ins (`/api/auth/sign-in`),
   sign-outs and app opens (`POST /api/activity`, `ActivityPing` in the field
@@ -506,6 +517,7 @@ Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
 | 0065 | Report documents offline: `add_report_file` returns the existing row for a document already on today's report and accepts uploads up to 24 hours old; `remove_report_file` refusals carry hints (`report_file_gone`, `report_locked`); `report_file_orphans()` (service role only) lists `report-files` objects over 24 hours old on no report |
 | 0067 | Report photos offline and the 14-day rule: `add_report_photo(path)` (idempotent by path on today's report, own folder, uploaded within 24 h, image, on no other report; the 5-photo trigger still applies) and an index on `report_photos.storage_path`; `retention_days()` (14), `retention_delete_before`, `retention_cutoff`, `retention_announce` (job_runs `retention_notice`), `report_photo_orphans(hours, limit)` / `report_photo_orphans_before`, `report_file_orphans` (now 14 days and announced) / `report_file_orphans_before`, `expired_selfie_paths` and `forget_expired_selfies` on the same rule, `forget_selfie_paths(paths)`, `supervisor_covers`, `retention_notice_due(through)`, `record_retention_purge(result)` (job_runs `retention_purge`, audit `retention.purge`), `selfie_retention_status` (14 days); all service role only except `add_report_photo` and `retention_days` |
 | 0066 | Test mode and reset: `system_settings` (one row, `test_mode` on, one-way off by trigger, admins read), `system_reset_files` (files a reset queued), `reset_category_keys/tables`, `reset_resolve_categories`, `reset_test_data(actor, categories)` (service role), `system_go_live(actor)`, `reset_files_next/done/pending`. WIPE: attendance, location_pings, location_alerts, integrity_flags, excuse_checks, phone_checks, photo_checks, device_beacons, clock_out_reminders, tracking_tokens, store_visits, known_places, place_naming_due, reports, report_photos, report_files, store_counts, count_requests, count_request_targets, store_count_sheets, all xm_ record tables (counts, count lines, sales, sale lines, supplies, supply imports, reconciliations, monthly grades, expiry alerts, targets, policy reads), leave_requests, schedule_overrides, work_patterns, support_threads, support_messages, notifications, notification_deliveries, scheduled_notifications, user_activity, assistant_conversations, staff_outlets, outlets, xm_stores, audit_log. Admins kept: profiles, push_subscriptions, app_installs, staff_temp_passwords. KEEP: products, staff_roles, role_store_counts, count_sheet_templates, notification_templates, support_quick_replies, xm_settings, xm_settings_history, xm_policy_versions, app_releases, job_runs, system_settings, system_reset_files. |
+| 0069 | Five-minute heads-ups: `clock_out_reminders` takes stages 3 (`clock_in_soon`) and 4 (`clock_out_soon`) with a generated `stage_name`; `shift_start_for(user)` (home store's start, else 08:00); `claim_shift_soon_reminders(p_now)` (service role only: Lagos time, working days only for clock-in, merchandisers and marketers, active accounts, only inside [time − 5 min, time), once per stage per day); `claim_clock_out_reminders` redefined so the new stages never block the at-end reminder |
 
 ## 7. Environment variables
 
@@ -540,7 +552,7 @@ All need `Authorization: Bearer $CRON_SECRET`.
 |---|---|---|
 | `/api/cron/purge-selfies` | 02:20 UTC daily | The only place files are deleted automatically (0067). Deletes, through the Storage API in batches of 100, what was announced the night before and is at least 14 days old: clock-in and store-visit photos, report photos on no report, report documents on no report. Logs and returns the counts (`photos_deleted`, `report_photos_deleted` / `report_photos_failed`, `report_files_deleted` / `report_files_failed`, `failed`), keeps them on `job_runs` and audits `retention.purge`; then announces the next night's deletions and notifies admins (all) and supervisors (their team) once (`notices_sent`, `next_deletion_before`). Also: device reports and phone checks older than 60 days, activity log rows older than 180 days (0062), yesterday's open visits closed as abandoned. Reports and anything on a report are never deleted |
 | `/api/cron/absence-sweep` | 08:30 UTC daily | Tells the office who has not clocked in (skips anyone on a day off or on leave, 0059) |
-| `/api/cron/alerts` | Every 5 minutes | Sends unsent integrity flags, scheduled notifications, clock-out reminders (at shift end and an hour later, 0061), and hourly the X Metrics checks |
+| `/api/cron/alerts` | Every 5 minutes | Sends unsent integrity flags, scheduled notifications, five-minute heads-ups before the shift starts and ends (0069, sent first and only inside those five minutes, so they depend on the job running on time), clock-out reminders (at shift end and an hour later, 0061), and hourly the X Metrics checks |
 | `/api/cron/metrics` | Optional, hourly | X Metrics checks on their own schedule |
 
 The two daily jobs are in `vercel.json`. The Vercel Hobby plan only allows
@@ -654,7 +666,8 @@ for s in check-allocate check-assistant-actions check-attendance check-audit \
          check-movement check-push-endpoints check-supply-import \
          check-support-notifications check-updates check-visits-alerts check-xm-exports \
          check-schedules-leave check-marketer-reports check-clock-out-reminder check-activity \
-         check-xm-features check-report-files check-system-reset check-report-photos check-retention; do
+         check-xm-features check-report-files check-system-reset check-report-photos check-retention \
+         check-shift-reminders; do
   npx tsx --tsconfig tsconfig.scripts.json scripts/$s.ts | tail -1
 done
 ```
@@ -739,6 +752,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-27 | **Reminders five minutes before the shift starts and ends**: "Time to clock in" (to field staff with a working day who have not clocked in) and "Your shift ends at HH:MM. Get ready to clock out with a selfie." (to those clocked in), each once a day, only inside its five minutes, from the alerts job; history kinds `clock_in_reminder` / `clock_out_soon` (automatic alerts). Home screen card "Your shift starts at HH:MM. Clock in when you arrive." with a **Clock in** button, and a heads-up line before the end. New `src/lib/shift-reminder.ts`, `src/lib/shift-reminders.ts`, `src/components/field/shift-soon-prompt.tsx`, check script `check-shift-reminders` | 0069 |
 | 2026-10-23 | Redesigned office overview around Start here, four linked metrics, attendance follow-up and expandable coverage; alerts use compact copy and expandable filters/notification settings; staff Home shows Your next step before clock controls, with progress/week under My day; normalise SQL line endings in the system reset check for Windows | — |
 | 2026-10-23 | Admin guide: new “What’s new (October 2026)” section (migrations 0059–0067 to run in order and where each new feature lives), X Metrics on/off step by step, the Movement map held to Nigeria, and the iPhone app through TestFlight | — |
 | 2026-10-23 | **Report photos survive a bad connection, and files are kept 14 days**: a report sent again does not upload its photos again (an id per photo when taken or picked, `<uid>/report-photo-<id>.jpg`, progress kept in the outbox, "already exists" counts as done, old queued jobs get ids on their first try) and `add_report_photo` answers a repeat with the same row (no duplicates, the five-photo limit still holds). Nothing is deleted automatically before 14 days (was 24 hours for clock photos and unused report documents) or without the day-before notice to admins (all) and supervisors (their team); reports and anything on them are never deleted; unused report photos are now cleaned up too; each night's deletions audited `retention.purge`. The ping-driven selfie sweep is removed. New `src/lib/report-photo-queue.ts`, `scripts/check-report-photos.ts`, `scripts/check-retention.ts`; admin and supervisor guides updated | 0067 |
@@ -811,6 +825,12 @@ Newest first. Dates are when the work landed on the main branch.
   the `CRON_SECRET` repo secret to match Vercel's exactly (a 401 means they
   differ). Until it runs, scheduled notifications show as "Late" and
   clock-out reminders are not sent. GitHub's schedule is best-effort.
+- **Five-minute heads-ups** (0069) are only sent inside their five minutes,
+  so they depend on the alerts job running on time: the VPS crontab is
+  reliable; GitHub's schedule is often several minutes late and can miss
+  them (a missed clock-out heads-up is covered by the at-end reminder; a
+  missed clock-in one is not resent). The phone screen shows its own card
+  either way.
 - **Activity log** (0062): clock-ins, visits, reports, counts, leave and
   support messages carry no IP address (those tables never stored one); only
   sign-ins, sign-outs, app opens and password/photo changes do. A sign-in
@@ -841,7 +861,9 @@ Newest first. Dates are when the work landed on the main branch.
   deletes on `auth.users`, the route removes the sign-ins with the Auth admin
   API instead (`auth_fallback`).
 - **Clock-out reminders** ignore schedules: they go to anyone clocked in and
-  not out, which covers someone working on a day off.
+  not out, which covers someone working on a day off. The clock-in heads-up
+  (0069) follows schedules and leave; it uses the home store's shift start,
+  so a marketer working elsewhere is reminded by their home store's time.
 - **Android signing secrets**: until they are set, the published APK is a
   debug build and each update needs the old app uninstalled first.
 - Migrations to run in production after each merge: check the change log
