@@ -789,9 +789,11 @@ minutes**, so retry loops do not flood the queue.
 
 ### 4.2 Place names on clock events
 
-The app names where someone is (`src/lib/geocode.ts`): inside their store →
-the outlet; else a known place; else Google Places (if configured) or
-OpenStreetMap; else coordinates (`place_source`). Labels read "premises,
+The app names where someone is (`src/lib/geocode.ts`, order in
+`src/lib/place-resolve.ts`): inside their store → the outlet; else any store;
+else a known place; else an address Google gave before (0068); else Google
+Places (if configured and under the monthly limit) or OpenStreetMap; else
+coordinates (`place_source`; a saved address reads as `google`). Labels read "premises,
 street" and fall back to the address, then `lat, lng` to 5 decimals
 (`location_label` in `attendance_detail`).
 
@@ -827,6 +829,46 @@ street" and fall back to the address, then `lat, lng` to 5 decimals
 - `note_place_visit(place)`: a staff-named, unverified place whose namer is
   its **only** visitor, seen **3 or more** times, raises `own_named_place`
   (medium) **once per place**. The Places page shows `only_namer_visits`.
+  Since 0068 it calls `note_place_visit_for(auth.uid(), place)`; nobody
+  signed in counts nothing.
+
+### 4.3a Google only for spots Xtend has never seen (0068)
+
+- `learn_place_for(person, lat, lng, name, address, source)` and
+  `note_place_visit_for(person, place)`: the same learning and visit count
+  for the server when nobody is signed in (the phone's background tracker
+  naming a "left the store" spot). **Service role only.** `person` must be
+  a profile ("Unknown person"); source only `google` or `osm` ("Only places
+  named by a map are learned for someone": staff names need their photos
+  through `name_place`); name 2–120 characters; needs a position; inside a
+  store → null; an existing place → seen again with the person added to
+  `visitors`; a new place has `named_by` null and `visitors = [person]`.
+- `place_addresses` (address 3–400, lat/lng, radius default **40 m**
+  (15–200), source `google`, times seen): what Google gave when it found no
+  shop. Not a learned place, so the spot still counts as unknown for place
+  naming (0045) and the audit log (0049). `remember_address(lat, lng,
+  address)` keeps one (whitespace collapsed; null inside a store or a known
+  place; within an existing address's radius it is seen again);
+  `address_at(lat, lng)` returns the nearest covering address and counts it
+  used. Both service role only; admins read the table; nobody writes it.
+- `place_lookup_stats(month, source, lookups)`: per Lagos month
+  (`date_trunc('month', business_date())`), sources
+  (`place_lookup_sources()`): answers `store | known | address | cache |
+  google | osm | none` and Google requests `call_nearby | call_geocode |
+  call_text_search | call_forward_geocode`. `count_place_lookups(text[])`
+  adds one per listed source (unknown names ignored);
+  `google_calls_this_month()` sums the `call_` rows. Both service role only;
+  admins read the table.
+- Monthly limit (`GOOGLE_MONTHLY_LOOKUP_LIMIT`, a whole number > 0, else
+  none): Google is skipped once this month's requests reach it (OpenStreetMap
+  answers; logged once a month); a counter that cannot be read leaves Google
+  on. The store importer's searches count and obey it too.
+- Order and learning (`resolveWith`): own store → any store → known place
+  (visit counted when learning) → saved address → Google (unless a preview
+  or the limit) → OpenStreetMap → coordinates. With `learn`: a map name →
+  `learn_place` (signed-in caller) or `learn_place_for` (tracker); a Google
+  address with no name → `remember_address`. A provider error never stops
+  naming. Counted once per lookup after the response (`after()`).
 
 ### 4.4 Stores pinned from clock-ins (0034)
 
@@ -1917,7 +1959,7 @@ calculation.
 | `staff` | Staff accounts | every non-admin account: `auth.users` (cascading to `profiles`), so their rows in push_subscriptions, app_installs, staff_temp_passwords, and their own leave, support, notification deliveries, activity, chats and allocations go too; admins keep theirs | everything under `<uid>/` in every bucket, profile photos included |
 | `audit` | Audit log | audit_log (then the single reset row is written) | — |
 
-**KEEP** (never touched): products, staff_roles, role_store_counts, count_sheet_templates (and the template file), notification_templates, support_quick_replies, xm_settings, xm_settings_history, xm_policy_versions, app_releases, job_runs, system_settings, system_reset_files. **Admins kept**: profiles, push_subscriptions, app_installs, staff_temp_passwords (only the people removed lose rows).
+**KEEP** (never touched): place_addresses, place_lookup_stats (0068), products, staff_roles, role_store_counts, count_sheet_templates (and the template file), notification_templates, support_quick_replies, xm_settings, xm_settings_history, xm_policy_versions, app_releases, job_runs, system_settings, system_reset_files. **Admins kept**: profiles, push_subscriptions, app_installs, staff_temp_passwords (only the people removed lose rows).
 
 **Dependencies** (`reset_resolve_categories(text[])`, same in `resolveCategories`): unknown keys raise "Unknown thing to reset: …"; an empty list raises "Choose at least one thing to reset"; `everything` = all 14; `staff` adds clock_ins, visits_places, reports, stock_counts, xm (their records reference the accounts with ON DELETE RESTRICT); `stores` adds visits_places, stock_counts, xm, teams (store references). Returned in the canonical order.
 

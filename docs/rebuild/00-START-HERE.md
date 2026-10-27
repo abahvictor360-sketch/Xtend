@@ -86,7 +86,7 @@ Ask for these together, at stage 1 and stage 8:
 - A long random `CRON_SECRET` (the builder can generate one).
 - VAPID key pair (the builder can generate one).
 - Anthropic API key (optional).
-- Google Maps API key with Places API (New) and Geocoding API (optional).
+- Google Maps API key with Places API (New) and Geocoding API (optional, server only); a second, browser key restricted to the site and the Maps JavaScript API for the office maps (optional, `NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY`).
 - Firebase project `google-services.json` and service-account JSON (Android push).
 - Apple Developer account, APNs key, Team ID, Key ID (iPhone app and push).
 - Android signing keystore and passwords (or let the builder generate one).

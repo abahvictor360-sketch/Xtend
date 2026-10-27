@@ -175,6 +175,18 @@ INSERT INTO public.notification_templates VALUES ('00000000-0000-4000-8000-00000
 
 
 --
+-- Data for Name: place_addresses; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
+-- Data for Name: place_lookup_stats; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
 -- Data for Name: place_naming_due; Type: TABLE DATA; Schema: public; Owner: -
 --
 

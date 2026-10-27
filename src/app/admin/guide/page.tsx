@@ -76,7 +76,7 @@ export default async function AdminGuidePage() {
         <GuideSection topic={T.news} intro="The latest changes, where to find them, and the one-off steps they need.">
           <p>
             <Ui>First, run the new database updates</Ui> in Supabase (SQL editor), in this order, if they
-            have not been run yet: 0059, 0060, 0061, 0062, 0063, 0064, 0065, 0066, 0067, 0069. A page that needs
+            have not been run yet: 0059, 0060, 0061, 0062, 0063, 0064, 0065, 0066, 0067, 0068, 0069. A page that needs
             one it does not have says which number to run.
           </p>
           <ul className="list-disc space-y-1.5 pl-5">
@@ -111,6 +111,11 @@ export default async function AdminGuidePage() {
             <li>
               <Ui>Movement map</Ui>: opens on the whole of Nigeria with everyone on shift as their photo;
               click a photo to follow that person.
+            </li>
+            <li>
+              <Ui>Google map and Satellite</Ui> (migration 0068): once the Google map key is set, Movement and
+              Attendance show Google&apos;s map, with <Ui>Map</Ui> and <Ui>Satellite</Ui> at the top right.
+              Places page: how many place names came from Xtend&apos;s own list and how many from Google.
             </li>
             <li>
               <Ui>Files kept 14 days</Ui>: clock-in photos and unused files are deleted after 14 days, never
@@ -251,6 +256,14 @@ export default async function AdminGuidePage() {
             times nothing was heard, with a strip per day and totals. <Ui>Worth a look</Ui> points out
             impossible jumps (faster than 150 km/h, which a fake-location app makes), long silences
             (linked to Check an excuse) and long stays away.
+          </p>
+          <p>
+            <Ui>Which map</Ui>: when the Google map key is set, the maps show Google&apos;s map, and{' '}
+            <Ui>Map</Ui> / <Ui>Satellite</Ui> at the top right switch between streets and the aerial view
+            with street names. If Google cannot be reached or refuses the key, the map changes to
+            OpenStreetMap by itself; a small note on the map says which one is in use (
+            <Ui>Map: Google</Ui> or <Ui>Map: OpenStreetMap</Ui>). The page refreshes every minute without
+            moving or re-zooming the map.
           </p>
           <p>
             <Ui>Store visits</Ui> shows marketers&apos; rounds: where they checked in and out, for how long,
@@ -481,6 +494,15 @@ export default async function AdminGuidePage() {
             agree with each other and with the clock-in. Here you check the names and photos (
             <Ui>Save and verify</Ui>), turn a place into a store (<Ui>Make it a store</Ui>), delete a wrong
             one, or <Ui>Dismiss</Ui> one that is not a shop (a depot gate) so the person can carry on.
+          </p>
+          <p>
+            <Ui>Place lookups this month</Ui> (top of Places): how the names of places were found this month —
+            from Xtend&apos;s own list (stores, places learned before, addresses saved before), from Google, or
+            from OpenStreetMap — and how many paid requests went to Google. Google is asked only for a spot
+            Xtend has never seen: whatever it finds is saved, so the next clock-in, visit or alert there is
+            named from Xtend&apos;s own list, including alerts from the phone app while it is closed. If a
+            monthly limit is set (<Ui>GOOGLE_MONTHLY_LOOKUP_LIMIT</Ui>), OpenStreetMap is used once it is
+            reached, until the next month.
           </p>
           <p>
             <Ui>Audit log</Ui>: every change an admin or supervisor makes, with when, where they were and on

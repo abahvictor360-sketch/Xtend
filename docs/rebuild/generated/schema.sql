@@ -512,6 +512,36 @@ $$;
 
 
 --
+-- Name: address_at(double precision, double precision); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.address_at(p_lat double precision, p_lng double precision) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  hit record;
+begin
+  if p_lat is null or p_lng is null then
+    return null;
+  end if;
+  select a.id, a.address into hit
+  from public.place_addresses a
+  where a.lat between p_lat - 0.005 and p_lat + 0.005
+    and a.lng between p_lng - 0.005 and p_lng + 0.005
+    and public.distance_metres(p_lat, p_lng, a.lat, a.lng) <= a.radius_m
+  order by public.distance_metres(p_lat, p_lng, a.lat, a.lng)
+  limit 1;
+  if hit.id is null then
+    return null;
+  end if;
+  update public.place_addresses set times_seen = times_seen + 1, last_seen_at = now() where id = hit.id;
+  return hit.address;
+end;
+$$;
+
+
+--
 -- Name: admin_overview(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1982,6 +2012,28 @@ $$;
 
 
 --
+-- Name: count_place_lookups(text[]); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.count_place_lookups(p_sources text[]) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  this_month date := date_trunc('month', public.business_date())::date;
+begin
+  insert into public.place_lookup_stats as s (month, source, lookups)
+  select this_month, x.source, count(*)
+  from unnest(coalesce(p_sources, '{}')) as x(source)
+  where x.source = any (public.place_lookup_sources())
+  group by x.source
+  on conflict (month, source)
+  do update set lookups = s.lookups + excluded.lookups, updated_at = now();
+end;
+$$;
+
+
+--
 -- Name: counted_product_names(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2441,6 +2493,21 @@ $$;
 
 
 --
+-- Name: google_calls_this_month(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.google_calls_this_month() RETURNS bigint
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select coalesce(sum(s.lookups), 0)::bigint
+  from public.place_lookup_stats s
+  where s.month = date_trunc('month', public.business_date())::date
+    and s.source like 'call\_%';
+$$;
+
+
+--
 -- Name: has_allocated_stores(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2666,6 +2733,54 @@ begin
           case when p_source = 'staff' then me end,
           case when p_source = 'staff' then p_photo_path end,
           array[me])
+  returning id into found;
+  return found;
+end;
+$$;
+
+
+--
+-- Name: learn_place_for(uuid, double precision, double precision, text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.learn_place_for(p_user uuid, p_lat double precision, p_lng double precision, p_name text, p_address text, p_source text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  clean text := regexp_replace(btrim(coalesce(p_name, '')), '\s+', ' ', 'g');
+  found uuid;
+begin
+  if p_user is null or not exists (select 1 from public.profiles where id = p_user) then
+    raise exception 'Unknown person';
+  end if;
+  -- A person names a place with their own photos, through name_place().
+  if p_source is null or p_source not in ('google', 'osm') then
+    raise exception 'Only places named by a map are learned for someone';
+  end if;
+  if length(clean) < 2 or length(clean) > 120 then
+    raise exception 'A place name needs 2 to 120 characters';
+  end if;
+  if p_lat is null or p_lng is null or abs(p_lat) > 90 or abs(p_lng) > 180 then
+    raise exception 'A place needs a position';
+  end if;
+
+  -- Inside a store: the store's own record already names it.
+  if public.outlet_containing(p_lat, p_lng) is not null then
+    return null;
+  end if;
+
+  select k.id into found from public.known_place_at(p_lat, p_lng) k;
+  if found is not null then
+    update public.known_places
+    set times_seen = times_seen + 1, last_seen_at = now(),
+        visitors = case when p_user = any(visitors) then visitors else visitors || p_user end
+    where id = found;
+    return found;
+  end if;
+
+  insert into public.known_places (name, address, lat, lng, source, named_by, visitors)
+  values (clean, nullif(btrim(coalesce(p_address, '')), ''), p_lat, p_lng, p_source, null, array[p_user])
   returning id into found;
   return found;
 end;
@@ -3402,25 +3517,41 @@ CREATE FUNCTION public.note_place_visit(p_id uuid) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
+begin
+  if auth.uid() is null then
+    return;
+  end if;
+  perform public.note_place_visit_for(auth.uid(), p_id);
+end;
+$$;
+
+
+--
+-- Name: note_place_visit_for(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.note_place_visit_for(p_user uuid, p_id uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
 declare
-  me uuid := auth.uid();
   place record;
 begin
-  if me is null then
+  if p_user is null or p_id is null then
     return;
   end if;
   update public.known_places
   set times_seen = times_seen + 1, last_seen_at = now(),
-      visitors = case when me = any(visitors) then visitors else visitors || me end
+      visitors = case when p_user = any(visitors) then visitors else visitors || p_user end
   where id = p_id
   returning id, name, source, verified, named_by, visitors, times_seen into place;
 
   if place.id is not null and place.source = 'staff' and not place.verified
-     and place.named_by = me and place.visitors = array[me] and place.times_seen >= 3
+     and place.named_by = p_user and place.visitors = array[p_user] and place.times_seen >= 3
      and not exists (select 1 from public.integrity_flags f
                      where f.kind = 'own_named_place' and f.detail->>'place_id' = place.id::text) then
     insert into public.integrity_flags (user_id, kind, severity, summary, detail)
-    values (me, 'own_named_place', 'medium',
+    values (p_user, 'own_named_place', 'medium',
             format('Keeps being found at "%s", a place they named themselves that nobody else has visited',
                    place.name),
             jsonb_build_object('place_id', place.id, 'times', place.times_seen));
@@ -3775,6 +3906,19 @@ CREATE FUNCTION public.place_key(p_name text) RETURNS text
     LANGUAGE sql IMMUTABLE
     AS $$
   select btrim(regexp_replace(lower(coalesce(p_name, '')), '[^a-z0-9]+', ' ', 'g'))
+$$;
+
+
+--
+-- Name: place_lookup_sources(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.place_lookup_sources() RETURNS text[]
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  -- Answers: who named the spot. Calls: requests actually sent to Google.
+  select array['store', 'known', 'address', 'cache', 'google', 'osm', 'none',
+               'call_nearby', 'call_geocode', 'call_text_search', 'call_forward_geocode'];
 $$;
 
 
@@ -4460,6 +4604,48 @@ begin
     where supervisor_id = new.id;
   end if;
   return new;
+end;
+$$;
+
+
+--
+-- Name: remember_address(double precision, double precision, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.remember_address(p_lat double precision, p_lng double precision, p_address text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  clean text := regexp_replace(btrim(coalesce(p_address, '')), '\s+', ' ', 'g');
+  found uuid;
+begin
+  if length(clean) < 3 or length(clean) > 400 then
+    raise exception 'An address needs 3 to 400 characters';
+  end if;
+  if p_lat is null or p_lng is null or abs(p_lat) > 90 or abs(p_lng) > 180 then
+    raise exception 'An address needs a position';
+  end if;
+  if public.outlet_containing(p_lat, p_lng) is not null
+     or exists (select 1 from public.known_place_at(p_lat, p_lng)) then
+    return null;
+  end if;
+
+  select a.id into found
+  from public.place_addresses a
+  where a.lat between p_lat - 0.005 and p_lat + 0.005
+    and a.lng between p_lng - 0.005 and p_lng + 0.005
+    and public.distance_metres(p_lat, p_lng, a.lat, a.lng) <= a.radius_m
+  order by public.distance_metres(p_lat, p_lng, a.lat, a.lng)
+  limit 1;
+  if found is not null then
+    update public.place_addresses set times_seen = times_seen + 1, last_seen_at = now() where id = found;
+    return found;
+  end if;
+
+  insert into public.place_addresses (address, lat, lng) values (clean, p_lat, p_lng)
+  returning id into found;
+  return found;
 end;
 $$;
 
@@ -8511,6 +8697,43 @@ CREATE TABLE public.photo_checks (
 
 
 --
+-- Name: place_addresses; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.place_addresses (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    address text NOT NULL,
+    lat double precision NOT NULL,
+    lng double precision NOT NULL,
+    radius_m integer DEFAULT 40 NOT NULL,
+    source text DEFAULT 'google'::text NOT NULL,
+    times_seen integer DEFAULT 1 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_seen_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT place_addresses_address_check CHECK (((length(btrim(address)) >= 3) AND (length(btrim(address)) <= 400))),
+    CONSTRAINT place_addresses_lat_check CHECK (((lat >= ('-90'::integer)::double precision) AND (lat <= (90)::double precision))),
+    CONSTRAINT place_addresses_lng_check CHECK (((lng >= ('-180'::integer)::double precision) AND (lng <= (180)::double precision))),
+    CONSTRAINT place_addresses_radius_m_check CHECK (((radius_m >= 15) AND (radius_m <= 200))),
+    CONSTRAINT place_addresses_source_check CHECK ((source = 'google'::text))
+);
+
+
+--
+-- Name: place_lookup_stats; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.place_lookup_stats (
+    month date NOT NULL,
+    source text NOT NULL,
+    lookups bigint DEFAULT 0 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT place_lookup_stats_lookups_check CHECK ((lookups >= 0)),
+    CONSTRAINT place_lookup_stats_month_check CHECK ((EXTRACT(day FROM month) = (1)::numeric)),
+    CONSTRAINT place_lookup_stats_source_check CHECK ((source = ANY (public.place_lookup_sources())))
+);
+
+
+--
 -- Name: place_naming_due; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -9798,6 +10021,22 @@ ALTER TABLE ONLY public.photo_checks
 
 
 --
+-- Name: place_addresses place_addresses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.place_addresses
+    ADD CONSTRAINT place_addresses_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: place_lookup_stats place_lookup_stats_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.place_lookup_stats
+    ADD CONSTRAINT place_lookup_stats_pkey PRIMARY KEY (month, source);
+
+
+--
 -- Name: place_naming_due place_naming_due_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -10449,6 +10688,13 @@ CREATE INDEX phone_checks_by_user ON public.phone_checks USING btree (user_id, c
 --
 
 CREATE INDEX photo_checks_by_user ON public.photo_checks USING btree (user_id, created_at DESC);
+
+
+--
+-- Name: place_addresses_by_position; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX place_addresses_by_position ON public.place_addresses USING btree (lat, lng);
 
 
 --
@@ -12416,6 +12662,32 @@ CREATE POLICY pings_supervisor_select ON public.location_pings FOR SELECT USING 
 
 
 --
+-- Name: place_addresses; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.place_addresses ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: place_addresses place_addresses_admin_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY place_addresses_admin_read ON public.place_addresses FOR SELECT USING (public.is_admin());
+
+
+--
+-- Name: place_lookup_stats; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.place_lookup_stats ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: place_lookup_stats place_lookup_stats_admin_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY place_lookup_stats_admin_read ON public.place_lookup_stats FOR SELECT USING (public.is_admin());
+
+
+--
 -- Name: place_naming_due; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -13093,6 +13365,14 @@ GRANT ALL ON FUNCTION public.add_report_photo(p_path text) TO service_role;
 
 
 --
+-- Name: FUNCTION address_at(p_lat double precision, p_lng double precision); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.address_at(p_lat double precision, p_lng double precision) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.address_at(p_lat double precision, p_lng double precision) TO service_role;
+
+
+--
 -- Name: FUNCTION admin_overview(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -13405,6 +13685,14 @@ GRANT ALL ON FUNCTION public.close_count_request(p_request_id uuid) TO service_r
 
 
 --
+-- Name: FUNCTION count_place_lookups(p_sources text[]); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.count_place_lookups(p_sources text[]) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.count_place_lookups(p_sources text[]) TO service_role;
+
+
+--
 -- Name: FUNCTION counted_product_names(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -13531,6 +13819,14 @@ GRANT ALL ON FUNCTION public.forget_selfie_paths(p_paths text[]) TO service_role
 
 
 --
+-- Name: FUNCTION google_calls_this_month(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.google_calls_this_month() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.google_calls_this_month() TO service_role;
+
+
+--
 -- Name: FUNCTION has_allocated_stores(target uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -13608,6 +13904,14 @@ GRANT ALL ON FUNCTION public.known_place_at(p_lat double precision, p_lng double
 REVOKE ALL ON FUNCTION public.learn_place(p_lat double precision, p_lng double precision, p_name text, p_address text, p_source text, p_photo_path text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.learn_place(p_lat double precision, p_lng double precision, p_name text, p_address text, p_source text, p_photo_path text) TO authenticated;
 GRANT ALL ON FUNCTION public.learn_place(p_lat double precision, p_lng double precision, p_name text, p_address text, p_source text, p_photo_path text) TO service_role;
+
+
+--
+-- Name: FUNCTION learn_place_for(p_user uuid, p_lat double precision, p_lng double precision, p_name text, p_address text, p_source text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.learn_place_for(p_user uuid, p_lat double precision, p_lng double precision, p_name text, p_address text, p_source text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.learn_place_for(p_user uuid, p_lat double precision, p_lng double precision, p_name text, p_address text, p_source text) TO service_role;
 
 
 --
@@ -13768,6 +14072,14 @@ GRANT ALL ON FUNCTION public.no_show_already_reported(p_user uuid) TO service_ro
 REVOKE ALL ON FUNCTION public.note_place_visit(p_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.note_place_visit(p_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.note_place_visit(p_id uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION note_place_visit_for(p_user uuid, p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.note_place_visit_for(p_user uuid, p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.note_place_visit_for(p_user uuid, p_id uuid) TO service_role;
 
 
 --
@@ -13979,6 +14291,14 @@ GRANT ALL ON FUNCTION public.record_retention_purge(p_result jsonb) TO service_r
 
 REVOKE ALL ON FUNCTION public.record_selfie_sweep(p_result jsonb) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.record_selfie_sweep(p_result jsonb) TO service_role;
+
+
+--
+-- Name: FUNCTION remember_address(p_lat double precision, p_lng double precision, p_address text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.remember_address(p_lat double precision, p_lng double precision, p_address text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.remember_address(p_lat double precision, p_lng double precision, p_address text) TO service_role;
 
 
 --

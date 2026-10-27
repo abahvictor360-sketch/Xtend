@@ -547,4 +547,67 @@ reset role;
 delete from public.system_reset_files where name = 'rls-check/x.jpg';
 
 reset role;
+
+-- ---------------------------------------------------------------
+-- Place lookups (0068): admins read the counter and saved addresses;
+-- nobody writes them, or learns for someone else, from the browser.
+-- ---------------------------------------------------------------
+grant insert, update, delete on public.place_addresses, public.place_lookup_stats to authenticated;
+revoke insert, update, delete, truncate on public.place_addresses from anon, authenticated;
+revoke insert, update, delete, truncate on public.place_lookup_stats from anon, authenticated;
+insert into public.place_addresses (address, lat, lng) values ('1 RLS Street, Lagos', 7.9, 3.9);
+select public.count_place_lookups(array['known', 'call_nearby']);
+set role authenticated;
+
+select set_config('request.jwt.claim.sub', :'boss', false);
+select assert((select count(*) from public.place_lookup_stats) = 2 and (select count(*) from public.place_addresses) = 1,
+  'rls: an admin reads place lookups and saved addresses');
+select set_config('request.jwt.claim.sub', :'tunde', false);
+select assert((select count(*) from public.place_lookup_stats) = 0 and (select count(*) from public.place_addresses) = 0,
+  'rls: a supervisor reads neither');
+select set_config('request.jwt.claim.sub', :'ada', false);
+select assert((select count(*) from public.place_lookup_stats) = 0 and (select count(*) from public.place_addresses) = 0,
+  'rls: nor does staff');
+do $$
+begin
+  insert into public.place_lookup_stats (month, source, lookups) values (date_trunc('month', now())::date, 'google', 1);
+  perform assert(false, 'rls: no counting from the browser');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: nobody adds to the counter directly');
+end $$;
+do $$
+begin
+  perform public.count_place_lookups(array['google']);
+  perform assert(false, 'rls: no counter function from the browser');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: nor through its function');
+end $$;
+do $$
+begin
+  perform public.learn_place_for(auth.uid(), 7.0, 3.0, 'Fake Mall', null, 'google');
+  perform assert(false, 'rls: no learning for someone from the browser');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: staff cannot learn places in someone else''s name');
+end $$;
+do $$
+begin
+  perform public.remember_address(7.0, 3.0, 'My street');
+  perform assert(false, 'rls: no saved addresses from the browser');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: nor save addresses');
+end $$;
+select set_config('request.jwt.claim.sub', :'boss', false);
+do $$
+begin
+  update public.place_lookup_stats set lookups = 0;
+  perform assert(false, 'rls: admins only read');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: an admin only reads the counter');
+end $$;
+
+reset role;
+delete from public.place_addresses where address = '1 RLS Street, Lagos';
+delete from public.place_lookup_stats;
+
+reset role;
 select 'ALL RLS CHECKS PASSED';

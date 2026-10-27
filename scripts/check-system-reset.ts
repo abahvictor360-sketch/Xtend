@@ -39,7 +39,7 @@ const throws = (f: () => unknown) => {
 }
 
 // Every table in the database (docs/rebuild/generated/database.md, plus
-// 0066's two), as the owner classified them.
+// 0066's two and 0068's two), as the owner classified them.
 const FIXTURE: Record<string, 'wipe' | 'admins-kept' | 'keep'> = {
   app_installs: 'admins-kept', app_releases: 'keep', assistant_conversations: 'wipe', attendance: 'wipe',
   audit_log: 'wipe', clock_out_reminders: 'wipe', count_request_targets: 'wipe', count_requests: 'wipe',
@@ -56,6 +56,8 @@ const FIXTURE: Record<string, 'wipe' | 'admins-kept' | 'keep'> = {
   xm_monthly_grades: 'wipe', xm_policy_reads: 'wipe', xm_policy_versions: 'keep', xm_reconciliations: 'wipe',
   xm_sale_lines: 'wipe', xm_sales: 'wipe', xm_settings: 'keep', xm_settings_history: 'keep', xm_stores: 'wipe',
   xm_supplies: 'wipe', xm_supply_imports: 'wipe', xm_targets: 'wipe',
+  // 0068: map answers and counts, not anybody's records.
+  place_addresses: 'keep', place_lookup_stats: 'keep',
 }
 
 // --- Typed confirmations.

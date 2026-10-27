@@ -164,6 +164,8 @@ export const KEPT_TABLES: { table: string; what: string }[] = [
   { table: 'job_runs', what: 'Scheduled job bookkeeping' },
   { table: 'system_settings', what: 'Test mode itself' },
   { table: 'system_reset_files', what: 'Files a reset is still removing' },
+  { table: 'place_addresses', what: 'Street addresses Google gave for spots with no shop' },
+  { table: 'place_lookup_stats', what: 'Counts of place lookups (Google use)' },
 ]
 
 /** What stays, for the page. */

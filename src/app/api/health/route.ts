@@ -15,6 +15,8 @@ export async function GET() {
     supabase_anon_key: Boolean(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
     supabase_service_role: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
     google_maps: Boolean(process.env.GOOGLE_MAPS_API_KEY),
+    // The office maps' Google base map (separate, browser-restricted key).
+    google_maps_browser: Boolean(process.env.NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY),
     // Both keys present, well formed, and actually a pair. Two keys from
     // different generator runs look configured and fail on every send.
     web_push: vapid.present && vapid.well_formed && vapid.matched && vapid.subject_valid,

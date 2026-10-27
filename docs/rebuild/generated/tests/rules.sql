@@ -4977,7 +4977,7 @@ begin
     keep_tables text[] := array['products', 'staff_roles', 'role_store_counts', 'count_sheet_templates',
                                 'notification_templates', 'support_quick_replies', 'xm_settings',
                                 'xm_settings_history', 'xm_policy_versions', 'app_releases', 'job_runs',
-                                'system_settings'];
+                                'system_settings', 'place_addresses', 'place_lookup_stats'];
     all_keys text[] := public.reset_category_keys();
     k text;
     cats text[];
@@ -5232,6 +5232,130 @@ begin
     end;
     perform assert((select test_mode from public.system_settings), 'reset: (the tests above rolled back)');
   end;
+
+  -- ---------------------------------------------------------------
+  -- Google only for places Xtend has never seen (0068).
+  -- ---------------------------------------------------------------
+  declare
+    pid uuid;
+    own uuid;
+    aid uuid;
+    places_before bigint;
+  begin
+    perform set_config('request.jwt.claim.sub', '', false);
+    -- The server learns a map's name for the background tracker, with nobody signed in.
+    pid := public.learn_place_for(grace, 7.2000, 3.9000, '  Bukka   Hut Ring Road ', '12 Ring Rd, Ibadan', 'google');
+    perform assert(pid is not null
+                   and (select name from public.known_places where id = pid) = 'Bukka Hut Ring Road'
+                   and (select visitors from public.known_places where id = pid) = array[grace]
+                   and (select named_by from public.known_places where id = pid) is null
+                   and (select source from public.known_places where id = pid) = 'google',
+      'places 0068: the server learns a map''s name for someone with nobody signed in');
+    select count(*) into places_before from public.known_places;
+    perform assert(public.learn_place_for(bala, 7.20005, 3.90005, 'Another Name', null, 'osm') = pid,
+      'places 0068: the same spot is the same place');
+    perform assert((select times_seen from public.known_places where id = pid) = 2
+                   and (select visitors from public.known_places where id = pid) = array[grace, bala]
+                   and (select count(*) from public.known_places) = places_before,
+      'places 0068: the same spot is counted as seen again, with who was there');
+    perform assert(public.learn_place_for(grace, 6.6018, 3.3515, 'Not a new place', null, 'google') is null,
+      'places 0068: nothing is learned inside a store');
+    begin
+      perform public.learn_place_for(grace, 7.25, 3.95, 'My Shop', null, 'staff');
+      perform assert(false, 'places 0068: no staff names through the server');
+    exception when others then
+      perform assert(sqlerrm like 'Only places named by a map%',
+        'places 0068: a person''s own name still needs their photos (name_place), not the server');
+    end;
+    begin
+      perform public.learn_place_for(gen_random_uuid(), 7.25, 3.95, 'Some Shop', null, 'google');
+      perform assert(false, 'places 0068: unknown person');
+    exception when others then
+      perform assert(sqlerrm like 'Unknown person%', 'places 0068: only for a real person');
+    end;
+    begin
+      perform public.learn_place_for(grace, 7.25, 3.95, 'x', null, 'google');
+      perform assert(false, 'places 0068: short name');
+    exception when others then
+      perform assert(sqlerrm like 'A place name needs%', 'places 0068: the same name rules as learn_place');
+    end;
+
+    -- Counting a visit for the server keeps the "only its namer goes there" check.
+    insert into public.known_places (name, lat, lng, source, named_by, visitors)
+    values ('Grace Corner Shop', 7.4000, 3.9000, 'staff', grace, array[grace]) returning id into own;
+    perform public.note_place_visit_for(grace, own);
+    perform public.note_place_visit_for(grace, own);
+    perform assert((select times_seen from public.known_places where id = own) = 3
+                   and exists (select 1 from public.integrity_flags f
+                               where f.kind = 'own_named_place' and f.user_id = grace
+                                 and f.detail->>'place_id' = own::text),
+      'places 0068: a visit counted by the server still flags a place only its namer visits');
+    perform act_as(bala);
+    perform public.note_place_visit(own);
+    perform assert((select times_seen from public.known_places where id = own) = 4
+                   and (select visitors from public.known_places where id = own) = array[grace, bala],
+      'places 0068: note_place_visit still counts the signed-in caller');
+    perform set_config('request.jwt.claim.sub', '', false);
+    perform public.note_place_visit(own);
+    perform assert((select times_seen from public.known_places where id = own) = 4,
+      'places 0068: and nobody signed in counts nothing');
+
+    -- Addresses without a shop name.
+    aid := public.remember_address(7.3000, 3.9500, '  5 Adeola   Street, Ibadan ');
+    perform assert(aid is not null and (select address from public.place_addresses where id = aid) = '5 Adeola Street, Ibadan',
+      'places 0068: an address Google gave without a shop is kept');
+    perform assert(public.address_at(7.30020, 3.95020) = '5 Adeola Street, Ibadan',
+      'places 0068: 30 m away the saved address answers');
+    perform assert((select times_seen from public.place_addresses where id = aid) = 2,
+      'places 0068: and is counted as used');
+    perform assert(public.address_at(7.3010, 3.9500) is null, 'places 0068: 110 m away it does not');
+    perform assert(public.remember_address(7.30010, 3.95010, '5 Adeola St') = aid,
+      'places 0068: the same spot is not saved twice');
+    perform assert(public.remember_address(6.6018, 3.3515, 'Inside the mall') is null
+                   and public.remember_address(7.2000, 3.9000, '12 Ring Rd, Ibadan') is null,
+      'places 0068: nothing is saved inside a store or a learned place');
+    perform assert((select count(*) from public.place_addresses) = 1,
+      'places 0068: one saved address after all that');
+    begin
+      perform public.remember_address(7.5, 3.9, ' ');
+      perform assert(false, 'places 0068: empty address');
+    exception when others then
+      perform assert(sqlerrm like 'An address needs%', 'places 0068: an empty address is refused');
+    end;
+
+    -- The counter.
+    perform public.count_place_lookups(array['store', 'google', 'call_nearby', 'call_geocode', 'call_nearby', 'bogus']);
+    perform public.count_place_lookups(array['call_text_search', 'osm']);
+    perform public.count_place_lookups(null);
+    perform assert((select lookups from public.place_lookup_stats
+                    where month = date_trunc('month', public.business_date())::date and source = 'call_nearby') = 2
+                   and (select lookups from public.place_lookup_stats where source = 'store') = 1
+                   and not exists (select 1 from public.place_lookup_stats where source = 'bogus'),
+      'places 0068: each lookup is counted by what answered it, per Lagos month; unknown names are ignored');
+    perform assert(public.google_calls_this_month() = 4,
+      'places 0068: Google requests this month are the call_ rows only');
+    insert into public.place_lookup_stats (month, source, lookups)
+    values ((date_trunc('month', public.business_date()) - interval '1 month')::date, 'call_nearby', 50);
+    perform assert(public.google_calls_this_month() = 4, 'places 0068: last month is not this month');
+
+    -- Service role only.
+    perform assert(
+      not has_function_privilege('authenticated', 'public.learn_place_for(uuid, double precision, double precision, text, text, text)', 'execute')
+      and not has_function_privilege('authenticated', 'public.note_place_visit_for(uuid, uuid)', 'execute')
+      and not has_function_privilege('authenticated', 'public.address_at(double precision, double precision)', 'execute')
+      and not has_function_privilege('authenticated', 'public.remember_address(double precision, double precision, text)', 'execute')
+      and not has_function_privilege('authenticated', 'public.count_place_lookups(text[])', 'execute')
+      and not has_function_privilege('authenticated', 'public.google_calls_this_month()', 'execute')
+      and not has_function_privilege('anon', 'public.learn_place_for(uuid, double precision, double precision, text, text, text)', 'execute')
+      and has_function_privilege('service_role', 'public.learn_place_for(uuid, double precision, double precision, text, text, text)', 'execute')
+      and has_function_privilege('service_role', 'public.count_place_lookups(text[])', 'execute')
+      and has_function_privilege('authenticated', 'public.note_place_visit(uuid)', 'execute'),
+      'places 0068: learning for someone, saved addresses and the counter are for the server alone');
+    raise exception 'places-0068-done';
+  exception when others then
+    if sqlerrm <> 'places-0068-done' then raise; end if;
+  end;
+  perform assert(not exists (select 1 from public.place_addresses), 'places 0068: (the tests above rolled back)');
 
   raise notice 'ALL RULES PASSED';
 end $$;

@@ -1,9 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Skeleton } from '@/components/ui/skeleton'
-import { loadLeaflet } from '@/lib/leaflet'
+import { MapFrame, useLeafletMap } from '@/components/admin/map-base'
 import { formatLagos, metres } from '@/lib/utils'
 import { GAP_MINUTES, KIND_LABEL, ROUGH_M, storeAt, type Trail } from '@/lib/movement'
 import type { LiveLocation } from '@/components/admin/live-locations'
@@ -59,86 +58,35 @@ function photoPin(L: any, url: string | null | undefined, name: string, colour: 
   })
 }
 
-// Nigeria, south-west and north-east corners. The Movement maps open on the
-// whole country and cannot be panned or zoomed out beyond it.
-const NIGERIA: [[number, number], [number, number]] = [
-  [4.0, 2.6],
-  [13.95, 14.7],
-]
-const NIGERIA_EDGE: [[number, number], [number, number]] = [
-  [3.0, 1.6],
-  [14.9, 15.7],
-]
-
-function baseMap(L: any, el: HTMLElement) {
-  const map = L.map(el, {
-    scrollWheelZoom: false,
-    maxBounds: NIGERIA_EDGE,
-    maxBoundsViscosity: 1,
-    worldCopyJump: false,
-  })
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    noWrap: true,
-    bounds: NIGERIA_EDGE,
-    attribution: '© OpenStreetMap contributors',
-  }).addTo(map)
-  return map
-}
-
-/** Never let the map zoom out past the whole of Nigeria. */
-function holdToNigeria(map: any) {
-  const fit = () => map.setMinZoom(map.getBoundsZoom(NIGERIA, false))
-  fit()
-  map.on('resize', fit)
-}
-
-function useMap(
-  draw: (L: any, map: any) => [number, number][],
+/**
+ * The map is made once (useLeafletMap); each refresh only redraws what is
+ * on it, so the zoom stays where the viewer left it. The view is fitted to
+ * what is drawn the first time, and again only when `fitKey` changes (a
+ * different person or day). A null `fitKey` keeps the whole of Nigeria.
+ */
+function useDrawnMap(
+  draw: (L: any, layer: any) => [number, number][],
   deps: unknown[],
-  /** Open on the whole of Nigeria instead of zooming to what is drawn. */
-  wholeCountry = false,
+  fitKey: string | null,
 ) {
-  const container = useRef<HTMLDivElement | null>(null)
-  const [error, setError] = useState<string | null>(null)
-  const [ready, setReady] = useState(false)
+  const map = useLeafletMap({ nigeria: true })
+  const layer = useRef<any>(null)
+  const fitted = useRef<string | null>(null)
+  const { L, map: m } = map
 
   useEffect(() => {
-    let map: any
-    loadLeaflet()
-      .then((L) => {
-        if (!container.current) return
-        map = baseMap(L, container.current)
-        map.fitBounds(NIGERIA)
-        holdToNigeria(map)
-        const bounds = draw(L, map)
-        if (!wholeCountry && bounds.length) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 })
-        setReady(true)
-      })
-      .catch(() => setError('The map could not load. Check your connection.'))
-    return () => {
-      if (map) map.remove()
+    if (!L || !m) return
+    if (!layer.current) layer.current = L.layerGroup().addTo(m)
+    layer.current.clearLayers()
+    const bounds = draw(L, layer.current)
+    if (fitKey != null && fitted.current !== fitKey && bounds.length) {
+      m.fitBounds(bounds, { padding: [40, 40], maxZoom: 17 })
+      fitted.current = fitKey
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps)
+  }, [L, m, fitKey, ...deps])
 
-  return { container, error, ready }
-}
-
-function Frame({
-  map,
-  height = 'h-[460px] lg:h-[560px]',
-}: {
-  map: ReturnType<typeof useMap>
-  height?: string
-}) {
-  return (
-    <div className="relative overflow-hidden rounded-3xl border border-border bg-muted">
-      {!map.ready && !map.error && <Skeleton className="absolute inset-0 z-10" />}
-      {map.error && <p className="p-8 text-center text-sm text-muted-foreground">{map.error}</p>}
-      <div ref={map.container} className={`${height} w-full`} />
-    </div>
-  )
+  return map
 }
 
 /**
@@ -147,7 +95,7 @@ function Frame({
  */
 export function LiveMap({ rows, date }: { rows: LiveLocation[]; date: string }) {
   const router = useRouter()
-  const map = useMap(
+  const map = useDrawnMap(
     (L, m) => {
       const bounds: [number, number][] = []
       const stores = new Set<string>()
@@ -193,10 +141,10 @@ export function LiveMap({ rows, date }: { rows: LiveLocation[]; date: string }) 
       }
       return bounds
     },
-    [rows],
-    true,
+    [rows, date],
+    null,
   )
-  return <Frame map={map} />
+  return <MapFrame map={map} />
 }
 
 /** One person's day as a route: where they went, in order, and the gaps. */
@@ -210,7 +158,9 @@ export function TrailMap({
   name?: string
   photo?: string | null
 }) {
-  const map = useMap(
+  // Fitted again only for another person or another stretch of days.
+  const fitKey = `${trail.person?.id ?? name ?? ''}|${trail.date}|${trail.points[0]?.at ?? ''}`
+  const map = useDrawnMap(
     (L, m) => {
       const bounds: [number, number][] = []
       for (const s of trail.stores) {
@@ -292,8 +242,9 @@ export function TrailMap({
       return bounds
     },
     [trail, name, photo],
+    fitKey,
   )
-  return <Frame map={map} />
+  return <MapFrame map={map} />
 }
 
 /** Refreshes the page's data on a timer, for today's live view. */

@@ -1,37 +1,43 @@
 import 'server-only'
 import { unstable_cache } from 'next/cache'
+import { after } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { createAdminSupabase } from '@/lib/supabase/admin'
+import {
+  join,
+  parseLimit,
+  resolveWith,
+  withinLimit,
+  type GoogleAnswer,
+  type GoogleCall,
+  type LookupCount,
+  type OutletAnchor,
+  type ResolvedPlace,
+} from '@/lib/place-resolve'
+
+export type { OutletAnchor, PlaceSource, ResolvedPlace } from '@/lib/place-resolve'
 
 /**
  * Resolving "where is this person standing" into something a human reads as
  * a place: "Justrite Superstore Bariga, 56/58 Jagun Molu St, Bariga, Lagos".
  *
- * Three sources, best first:
+ * Xtend's own list first, a map only for somewhere new (the order is in
+ * src/lib/place-resolve.ts):
  *
- *  1. The assigned outlet, when the fix is inside its geofence. If someone
- *     is standing in their own store, the store's own record is the most
- *     accurate answer there is, and it costs no API call.
- *  2. Google — Places (New) for the business name, Geocoding for the street
+ *  1. Stores: the assigned outlet, then any store containing the spot.
+ *  2. Places learned before (migration 024), and addresses Google gave
+ *     before where there is no shop (0068). No API call.
+ *  3. Google — Places (New) for the business name, Geocoding for the street
  *     address. This is the only source that reliably names Nigerian retail
- *     premises, and it is what produces the format above. Needs
- *     GOOGLE_MAPS_API_KEY with "Places API (New)" and "Geocoding API"
- *     enabled on the project.
- *  3. OpenStreetMap — Nominatim for the address, Overpass for a named
+ *     premises. Needs GOOGLE_MAPS_API_KEY with "Places API (New)" and
+ *     "Geocoding API" enabled. Paid per request: answers are cached 30 days
+ *     per spot, learned for good, counted per month (place_lookup_stats),
+ *     and GOOGLE_MONTHLY_LOOKUP_LIMIT, when set, stops Google for the rest
+ *     of the month once reached.
+ *  4. OpenStreetMap — Nominatim for the address, Overpass for a named
  *     business within 80 m. Free and needs no key, but Nigerian POI
  *     coverage is thin, so it often names the street rather than the shop.
  */
-
-export type PlaceSource = 'outlet' | 'known' | 'google' | 'osm' | 'coordinates'
-
-export interface ResolvedPlace {
-  /** The business or landmark, when one could be identified. */
-  name: string | null
-  /** Street address, as complete as the provider gives it. */
-  address: string | null
-  /** What to show the user: name and address joined, or the best available. */
-  label: string
-  source: PlaceSource
-}
 
 const TIMEOUT_MS = 6000
 
@@ -49,13 +55,64 @@ async function getJson<T>(url: string, init?: RequestInit): Promise<T | null> {
   }
 }
 
-function join(name: string | null, address: string | null, fallback: string) {
-  if (name && address) {
-    // Google's formatted_address often already starts with the premises
-    // name; do not say it twice.
-    return address.toLowerCase().startsWith(name.toLowerCase()) ? address : `${name}, ${address}`
+// ---------------------------------------------------------------------------
+// The server's own access, for saved addresses and the counter (0068).
+// ---------------------------------------------------------------------------
+
+let service: SupabaseClient | null | undefined
+function serviceDb(): SupabaseClient | null {
+  if (service === undefined) {
+    try {
+      service = createAdminSupabase()
+    } catch {
+      service = null
+    }
   }
-  return name ?? address ?? fallback
+  return service
+}
+
+/** Adds to this month's counter once the answer has gone out. */
+function countLookups(what: LookupCount[]) {
+  const db = serviceDb()
+  if (!db || what.length === 0) return
+  const task = async () => {
+    await db.rpc('count_place_lookups', { p_sources: what }).then(
+      () => undefined,
+      () => undefined,
+    )
+  }
+  try {
+    after(task)
+  } catch {
+    // Outside a request: send it now, without waiting for it.
+    void task()
+  }
+}
+
+let warnedMonth: string | null = null
+
+/** Google is asked only with its key set and this month's limit not reached. */
+async function googleAllowed(): Promise<boolean> {
+  if (!process.env.GOOGLE_MAPS_API_KEY) return false
+  const limit = parseLimit(process.env.GOOGLE_MONTHLY_LOOKUP_LIMIT)
+  if (limit == null) return true
+  const db = serviceDb()
+  let used: number | null = null
+  if (db) {
+    const { data, error } = await db.rpc('google_calls_this_month')
+    if (!error && data != null) used = Number(data)
+  }
+  const ok = withinLimit(used, limit)
+  if (!ok) {
+    const month = new Date().toISOString().slice(0, 7)
+    if (warnedMonth !== month) {
+      warnedMonth = month
+      console.warn(
+        `Google place lookups: this month's limit of ${limit} is reached; OpenStreetMap is used until next month`,
+      )
+    }
+  }
+  return ok
 }
 
 // ---------------------------------------------------------------------------
@@ -77,39 +134,59 @@ interface GoogleGeocode {
 /**
  * Google bills per lookup, and the same shops come up day after day. Answers
  * are kept for 30 days per spot, rounded to four decimals (about 11 m), in
- * the platform's shared data cache, so a store visited every day is paid
- * for once a month rather than every time.
+ * the platform's shared data cache, on top of the places and addresses
+ * Xtend keeps for good.
  */
 const GOOGLE_CACHE_SECONDS = 60 * 60 * 24 * 30
 
-class NothingFound extends Error {}
-
-const cachedGoogle = unstable_cache(
-  async (lat: number, lng: number) => {
-    const place = await askGoogle(lat, lng)
-    // Throwing keeps a timeout or an empty answer out of the cache, so the
-    // next lookup tries Google again instead of repeating a miss for a month.
-    if (!place) throw new NothingFound()
-    return place
-  },
-  ['google-place-v1'],
-  { revalidate: GOOGLE_CACHE_SECONDS },
-)
-
-async function fromGoogle(lat: number, lng: number): Promise<ResolvedPlace | null> {
-  if (!process.env.GOOGLE_MAPS_API_KEY) return null
-  const round = (v: number) => Math.round(v * 1e4) / 1e4
-  try {
-    return await cachedGoogle(round(lat), round(lng))
-  } catch (error) {
-    if (!(error instanceof NothingFound)) console.error('google place lookup failed', error)
-    return null
+class NothingFound extends Error {
+  constructor(readonly calls: GoogleCall[]) {
+    super('nothing found')
   }
 }
 
-async function askGoogle(lat: number, lng: number): Promise<ResolvedPlace | null> {
+interface CachedGoogle {
+  place: ResolvedPlace
+  /** When Google was asked: older than this lookup means the cache answered. */
+  fetchedAt: number
+  calls: GoogleCall[]
+}
+
+const cachedGoogle = unstable_cache(
+  async (lat: number, lng: number): Promise<CachedGoogle> => {
+    const { place, calls } = await askGoogle(lat, lng)
+    // Throwing keeps a timeout or an empty answer out of the cache, so the
+    // next lookup tries Google again instead of repeating a miss for a month.
+    if (!place) throw new NothingFound(calls)
+    return { place, fetchedAt: Date.now(), calls }
+  },
+  ['google-place-v2'],
+  { revalidate: GOOGLE_CACHE_SECONDS },
+)
+
+async function fromGoogle(lat: number, lng: number): Promise<GoogleAnswer> {
+  if (!process.env.GOOGLE_MAPS_API_KEY) return { place: null, fresh: false, calls: [] }
+  const round = (v: number) => Math.round(v * 1e4) / 1e4
+  const started = Date.now()
+  try {
+    const got = await cachedGoogle(round(lat), round(lng))
+    const fresh = got.fetchedAt >= started
+    return { place: got.place, fresh, calls: fresh ? got.calls : [] }
+  } catch (error) {
+    if (error instanceof NothingFound) return { place: null, fresh: true, calls: error.calls }
+    console.error('google place lookup failed', error)
+    // Something was sent before it failed.
+    return { place: null, fresh: true, calls: ['call_nearby'] }
+  }
+}
+
+async function askGoogle(
+  lat: number,
+  lng: number,
+): Promise<{ place: ResolvedPlace | null; calls: GoogleCall[] }> {
   const key = process.env.GOOGLE_MAPS_API_KEY
-  if (!key) return null
+  if (!key) return { place: null, calls: [] }
+  const calls: GoogleCall[] = ['call_nearby']
 
   // Nearest establishment, ranked by distance. maxResultCount 1 keeps the
   // billed SKU small.
@@ -138,20 +215,25 @@ async function askGoogle(lat: number, lng: number): Promise<ResolvedPlace | null
 
   // The street address. Places already gives one with the business, so the
   // separately billed Geocoding call is only made when it did not.
-  const geocode = placeAddress
-    ? null
-    : await getJson<GoogleGeocode>(
-        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${key}`,
-      )
+  let geocode: GoogleGeocode | null = null
+  if (!placeAddress) {
+    calls.push('call_geocode')
+    geocode = await getJson<GoogleGeocode>(
+      `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${key}`,
+    )
+  }
   const address = placeAddress ?? geocode?.results?.[0]?.formatted_address ?? null
 
-  if (!name && !address) return null
+  if (!name && !address) return { place: null, calls }
 
   return {
-    name,
-    address,
-    label: join(name, address, `${lat.toFixed(5)}, ${lng.toFixed(5)}`),
-    source: 'google',
+    place: {
+      name,
+      address,
+      label: join(name, address, `${lat.toFixed(5)}, ${lng.toFixed(5)}`),
+      source: 'google',
+    },
+    calls,
   }
 }
 
@@ -224,25 +306,6 @@ async function fromOsm(lat: number, lng: number): Promise<ResolvedPlace | null> 
 
 // ---------------------------------------------------------------------------
 
-export interface OutletAnchor {
-  name: string
-  address: string | null
-  lat: number
-  lng: number
-  radius_m: number
-}
-
-function metresBetween(lat1: number, lng1: number, lat2: number, lng2: number) {
-  const R = 6371000
-  const toRad = (v: number) => (v * Math.PI) / 180
-  const dLat = toRad(lat2 - lat1)
-  const dLng = toRad(lng2 - lng1)
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
-  return 2 * R * Math.asin(Math.sqrt(a))
-}
-
 /**
  * Names the spot. `outlet` is the caller's assigned store, if they have one:
  * standing inside it is answered from the store's own record rather than
@@ -259,69 +322,74 @@ export async function resolvePlace(
   options: {
     google?: boolean
     /**
-     * The caller's own client. With it, any store the person is standing in
-     * and Xtend's own list of learned places are tried before any map.
+     * The caller's own client (or the service client, with `person`). With
+     * it, any store the person is standing in and Xtend's own list of
+     * learned places are tried before any map.
      */
     supabase?: SupabaseClient
     /** Record what a map finds, so the next person there needs no map. */
     learn?: boolean
+    /**
+     * Whose position this is, when nobody is signed in (the phone's
+     * background tracker): places are learned and visits counted for them
+     * through the service-role functions of migration 0068.
+     */
+    person?: string
   } = {},
 ): Promise<ResolvedPlace> {
-  const useGoogle = options.google ?? true
   const db = options.supabase
-  if (outlet) {
-    const distance = metresBetween(lat, lng, outlet.lat, outlet.lng)
-    if (distance <= outlet.radius_m) {
-      return {
-        name: outlet.name,
-        address: outlet.address,
-        label: join(outlet.name, outlet.address, outlet.name),
-        source: 'outlet',
-      }
-    }
-  }
+  const person = options.person
+  const service = serviceDb()
+  // Learning for someone needs the service client: the given one if it is
+  // that (the tracker passes it), else the server's own.
+  const learner = person ? service ?? db : db
 
-  if (db) {
-    const store = await fromStores(db, lat, lng)
-    if (store) return store
-    const known = await fromKnownPlaces(db, lat, lng)
-    if (known) {
-      // Counts who is seen where, so a place only its namer ever uses is
-      // noticed (migration 025). Not for a preview before the clock-in.
-      if (options.learn) {
-        await db.rpc('note_place_visit', { p_id: known.id }).then(
-          () => undefined,
-          () => undefined,
-        )
-      }
-      return known.place
-    }
-  }
-
-  const mapped = (useGoogle ? await fromGoogle(lat, lng) : null) ?? (await fromOsm(lat, lng))
-  if (mapped?.name && db && options.learn) {
-    // Remembered, so the next person here is named from Xtend's own list.
-    await db
-      .rpc('learn_place', {
-        p_lat: lat,
-        p_lng: lng,
-        p_name: mapped.name,
-        p_address: mapped.address,
-        p_source: mapped.source,
-      })
-      .then(
-        () => undefined,
-        () => undefined,
-      )
-  }
-
-  return (
-    mapped ?? {
-      name: null,
-      address: null,
-      label: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
-      source: 'coordinates',
-    }
+  return resolveWith(
+    {
+      store: db ? (la, ln) => fromStores(db, la, ln) : undefined,
+      known: db ? (la, ln) => fromKnownPlaces(db, la, ln) : undefined,
+      noteVisit: learner
+        ? async (id) => {
+            await (person
+              ? learner.rpc('note_place_visit_for', { p_user: person, p_id: id })
+              : learner.rpc('note_place_visit', { p_id: id }))
+          }
+        : undefined,
+      savedAddress: service
+        ? async (la, ln) => {
+            const { data, error } = await service.rpc('address_at', { p_lat: la, p_lng: ln })
+            // Before 0068 the function does not exist: go on to the maps.
+            return error ? null : ((data as string | null) ?? null)
+          }
+        : undefined,
+      googleAllowed,
+      google: fromGoogle,
+      osm: fromOsm,
+      learnPlace: learner
+        ? async (la, ln, place) => {
+            const args = {
+              p_lat: la,
+              p_lng: ln,
+              p_name: place.name,
+              p_address: place.address,
+              p_source: place.source,
+            }
+            await (person
+              ? learner.rpc('learn_place_for', { p_user: person, ...args })
+              : learner.rpc('learn_place', args))
+          }
+        : undefined,
+      rememberAddress: service
+        ? async (la, ln, address) => {
+            await service.rpc('remember_address', { p_lat: la, p_lng: ln, p_address: address })
+          }
+        : undefined,
+      count: countLookups,
+    },
+    lat,
+    lng,
+    outlet,
+    { google: options.google, learn: options.learn },
   )
 }
 
@@ -408,59 +476,66 @@ interface NominatimSearchResult {
  * Text search first: "Justrite Superstore Bariga" is a business, and Places
  * pins the shop door. Plain geocoding only knows streets, so it lands on the
  * middle of the road — good enough to start a geofence from, but second best.
+ * Each request is counted, and the monthly limit applies here too.
  */
 async function locateWithGoogle(query: string): Promise<LocatedPlace | null> {
   const key = process.env.GOOGLE_MAPS_API_KEY
-  if (!key) return null
+  if (!key || !(await googleAllowed())) return null
+  const calls: GoogleCall[] = ['call_text_search']
 
-  const search = await getJson<GoogleTextSearch>(
-    'https://places.googleapis.com/v1/places:searchText',
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': key,
-        'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location',
+  try {
+    const search = await getJson<GoogleTextSearch>(
+      'https://places.googleapis.com/v1/places:searchText',
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': key,
+          'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location',
+        },
+        body: JSON.stringify({
+          textQuery: query,
+          maxResultCount: 1,
+          // Nigeria, so a bare "Ikeja City Mall" does not match Ikeja, Texas.
+          regionCode: 'NG',
+        }),
       },
-      body: JSON.stringify({
-        textQuery: query,
-        maxResultCount: 1,
-        // Nigeria, so a bare "Ikeja City Mall" does not match Ikeja, Texas.
-        regionCode: 'NG',
-      }),
-    },
-  )
+    )
 
-  const place = search?.places?.[0]
-  const lat = place?.location?.latitude
-  const lng = place?.location?.longitude
-  if (typeof lat === 'number' && typeof lng === 'number') {
-    return {
-      name: place?.displayName?.text ?? null,
-      address: place?.formattedAddress ?? null,
-      lat,
-      lng,
-      source: 'google_places',
+    const place = search?.places?.[0]
+    const lat = place?.location?.latitude
+    const lng = place?.location?.longitude
+    if (typeof lat === 'number' && typeof lng === 'number') {
+      return {
+        name: place?.displayName?.text ?? null,
+        address: place?.formattedAddress ?? null,
+        lat,
+        lng,
+        source: 'google_places',
+      }
     }
-  }
 
-  const geocode = await getJson<GoogleForwardGeocode>(
-    `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&region=ng&key=${key}`,
-  )
-  const first = geocode?.results?.[0]
-  const gLat = first?.geometry?.location?.lat
-  const gLng = first?.geometry?.location?.lng
-  if (typeof gLat === 'number' && typeof gLng === 'number') {
-    return {
-      name: null,
-      address: first?.formatted_address ?? null,
-      lat: gLat,
-      lng: gLng,
-      source: 'google_geocode',
+    calls.push('call_forward_geocode')
+    const geocode = await getJson<GoogleForwardGeocode>(
+      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&region=ng&key=${key}`,
+    )
+    const first = geocode?.results?.[0]
+    const gLat = first?.geometry?.location?.lat
+    const gLng = first?.geometry?.location?.lng
+    if (typeof gLat === 'number' && typeof gLng === 'number') {
+      return {
+        name: null,
+        address: first?.formatted_address ?? null,
+        lat: gLat,
+        lng: gLng,
+        source: 'google_geocode',
+      }
     }
-  }
 
-  return null
+    return null
+  } finally {
+    countLookups(calls)
+  }
 }
 
 async function locateWithOsm(query: string): Promise<LocatedPlace | null> {
