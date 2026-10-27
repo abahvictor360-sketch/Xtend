@@ -306,6 +306,8 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
 CRON_SECRET=generate-a-long-random-string
 GOOGLE_MAPS_API_KEY=
+GOOGLE_MONTHLY_LOOKUP_LIMIT=
+NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY=
 GEOCODER_USER_AGENT=Xtend/1.0 (ops@xpelbeauty.example)
 NEXT_PUBLIC_VAPID_PUBLIC_KEY=
 VAPID_PRIVATE_KEY=
@@ -534,17 +536,25 @@ export route and `ask/act`, `ask/apply`, `ask/report` 60 s.
 All HTTP goes through `getJson(url, init)`: `AbortController` timeout `TIMEOUT_MS = 6000`,
 `cache: 'no-store'`, returns null on non-2xx or any error.
 
-`resolvePlace(lat, lng, outlet?, { google = true, supabase?, learn? })` resolution order:
+`resolvePlace(lat, lng, outlet?, { google = true, supabase?, learn?, person? })` builds providers for
+the pure `resolveWith` (`src/lib/place-resolve.ts`) and resolves in this order:
 
 1. **Assigned outlet** if the haversine distance (R = 6 371 000 m) ≤ `outlet.radius_m` → source `outlet`.
 2. With a `supabase` client: `rpc('outlet_containing', { p_lat, p_lng })` → outlet name/address (source `outlet`);
-   then `rpc('known_place_at', …)` → learned place (source `known`); with `learn`, `rpc('note_place_visit', { p_id })`.
-3. **Google** (only if `google !== false` and `GOOGLE_MAPS_API_KEY` set), cached.
-4. **OpenStreetMap**.
-5. Fallback label `"<lat.toFixed(5)>, <lng.toFixed(5)>"`, source `coordinates`.
+   then `rpc('known_place_at', …)` → learned place (source `known`); with `learn`, `rpc('note_place_visit', { p_id })`
+   (or `note_place_visit_for { p_user: person, p_id }` when `person` is given).
+3. **Saved address** (service client): `rpc('address_at', { p_lat, p_lng })` → `{ name: null, address, label: address, source: 'google' }`.
+4. **Google** (only if `google !== false`, `GOOGLE_MAPS_API_KEY` set and `google_calls_this_month()` < `GOOGLE_MONTHLY_LOOKUP_LIMIT` when set), cached.
+5. **OpenStreetMap**.
+6. Fallback label `"<lat.toFixed(5)>, <lng.toFixed(5)>"`, source `coordinates`.
 
-When a map source finds a name and `learn` is set: `rpc('learn_place', { p_lat, p_lng, p_name, p_address, p_source })`.
-RPC errors are swallowed. `google: false` is used for the home screen's "you are at…" line (free OSM only);
+With `learn`: a map name → `rpc('learn_place', { p_lat, p_lng, p_name, p_address, p_source })` on the caller's client,
+or `rpc('learn_place_for', { p_user: person, … })` on the service client when `person` is given (the background
+tracker route `/api/track/device` passes `learn: true, person: user_id`); a Google answer with an address but no
+name → `rpc('remember_address', { p_lat, p_lng, p_address })` (service client). Every lookup is counted once,
+after the response (`after()` from `next/server`), with `rpc('count_place_lookups', { p_sources })` on the
+service client: the answer (`store | known | address | cache | google | osm | none`) plus each Google request
+made (`call_nearby`, `call_geocode`). Provider and RPC errors are swallowed. `google: false` is used for the home screen's "you are at…" line (free OSM only);
 clock-ins, visits and alerts use Google.
 
 Google reverse lookup (`askGoogle`):
@@ -562,8 +572,10 @@ X-Goog-FieldMask: places.displayName,places.formattedAddress,places.primaryType
 Only if Places returned no address: `GET https://maps.googleapis.com/maps/api/geocode/json?latlng=LAT,LNG&key=KEY`.
 Label join rule: if the address already starts with the name (case-insensitive) show the address alone, else `"<name>, <address>"`.
 
-Caching: `unstable_cache(fn, ['google-place-v1'], { revalidate: 60 * 60 * 24 * 30 })` (30 days),
-keyed on lat/lng rounded to 4 decimals (~11 m). A miss throws `NothingFound` so it is not cached.
+Caching: `unstable_cache(fn, ['google-place-v2'], { revalidate: 60 * 60 * 24 * 30 })` (30 days),
+keyed on lat/lng rounded to 4 decimals (~11 m); the cached value is `{ place, fetchedAt, calls }`, and an answer
+whose `fetchedAt` is older than the lookup's start came from the cache (counted `cache`, no request). A miss
+throws `NothingFound(calls)` so it is not cached but its requests are counted.
 
 OSM reverse lookup:
 
@@ -586,8 +598,35 @@ Forward geocoding `locateAddress(name, address?)` (store import): query = `name,
    `places.displayName,places.formattedAddress,places.location`, body
    `{ textQuery, maxResultCount: 1, regionCode: 'NG' }` → source `google_places`.
 2. `GET https://maps.googleapis.com/maps/api/geocode/json?address=<q>&region=ng&key=KEY` → `google_geocode`.
+   Google is skipped past the monthly limit; requests are counted `call_text_search` / `call_forward_geocode`.
 3. `GET https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ng&q=<q>`
    with `User-Agent: Xtend/1.0 (field attendance)` → `osm`.
+
+### 3.2a Office maps: Google or OpenStreetMap (`src/lib/leaflet.ts`, `src/lib/base-map.ts`, `src/components/admin/map-base.tsx`)
+
+- Leaflet 1.9.4 from cdnjs (`loadLeaflet`). With `NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY` (a separate key restricted
+  to the site's HTTP referrers and the Maps JavaScript API), `loadGoogleMutant()` loads, once per page,
+  `https://maps.googleapis.com/maps/api/js?key=KEY&v=weekly&loading=async&callback=__xtendGoogleReady`
+  (the callback awaits `google.maps.importLibrary('maps')`) and
+  `https://unpkg.com/leaflet.gridlayer.googlemutant@0.15.0/dist/Leaflet.GoogleMutant.js`; `window.gm_authFailure`
+  tells every open map that Google refused the key.
+- `chooseBaseMap({ hasKey, google: off|loading|ready|failed, osmErrors, waitedMs })` → `google | osm | wait`:
+  Google when key and ready; while loading, `wait` for the first `GOOGLE_GRACE_MS` = 1500 ms (or while
+  OpenStreetMap is failing: `osmErrors` ≥ `OSM_ERROR_LIMIT` = 4 in a row), else `osm`; failed or no key → `osm`.
+  Google fails when it has not loaded in `GOOGLE_LOAD_TIMEOUT_MS` = 6000, refuses the key, or draws no tile within
+  `GOOGLE_TILE_TIMEOUT_MS` = 8000 of being added. Re-asked on every change; the switch happens in place.
+- `useLeafletMap({ nigeria? })` makes the map **once per component** (scroll-wheel zoom off; with `nigeria`, the
+  Movement bounds, `noWrap` tiles and minimum zoom), adds OpenStreetMap
+  (`https://tile.openstreetmap.org/{z}/{x}/{y}.png`, max zoom 19, "© OpenStreetMap contributors") or
+  `L.gridLayer.googleMutant({ type: 'roadmap', maxZoom: 19 })` as chosen. Pages draw into one `L.layerGroup`,
+  cleared and redrawn on new data, so the 60-second refresh keeps the view; Movement refits only when the person or
+  days change (`fitKey`), the live map never; Attendance fits each new filter.
+- `MapFrame`: top right, while Google is shown, a **Map / Satellite** pill switch (roadmap / hybrid: sets
+  `setMapTypeId` on the same Google map, clears GoogleMutant's tile cache and redraws: no second map load), and a
+  small note **"Map: Google"** or **"Map: OpenStreetMap"**. Skeleton while loading; "The map could not load.
+  Check your connection." when Leaflet fails.
+- No Content-Security-Policy is set; if one is added it must allow `maps.googleapis.com`, `maps.gstatic.com`,
+  `unpkg.com` scripts and Google tile images.
 
 ### 3.3 IP geolocation (`src/lib/ip-geo.ts`)
 

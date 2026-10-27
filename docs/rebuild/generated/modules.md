@@ -229,6 +229,16 @@ Sign the photo path already read by the session guard, without querying the prof
 
 Exports: `profileAvatarUrl`, `avatarUrls`, `withAvatars`
 
+## `src/lib/base-map.ts`
+
+Which base map the office maps show: Google when the browser key is set
+and Google is working, OpenStreetMap otherwise. Pure, so the rule can be
+checked without a browser (scripts/check-places-usage.ts); the maps apply
+it in src/components/admin/map-base.tsx and re-ask it whenever something
+changes (Google loads or fails, OpenStreetMap tiles fail or load).
+
+Exports: `GoogleStatus`, `BaseChoice`, `GoogleType`, `GOOGLE_LOAD_TIMEOUT_MS`, `GOOGLE_TILE_TIMEOUT_MS`, `GOOGLE_GRACE_MS`, `OSM_ERROR_LIMIT`, `BaseMapState`, `osmUnreachable`, `chooseBaseMap`, `baseMapLabel`
+
 ## `src/lib/chart-colours.ts`
 
 What each kind of day is drawn in.
@@ -437,21 +447,24 @@ Exports: `ACCURACY_CEILING_M`, `HEARTBEAT_INTERVAL_MS`, `HEARTBEAT_GEOFENCE_M`, 
 Resolving "where is this person standing" into something a human reads as
 a place: "Justrite Superstore Bariga, 56/58 Jagun Molu St, Bariga, Lagos".
 
-Three sources, best first:
+Xtend's own list first, a map only for somewhere new (the order is in
+src/lib/place-resolve.ts):
 
- 1. The assigned outlet, when the fix is inside its geofence. If someone
-    is standing in their own store, the store's own record is the most
-    accurate answer there is, and it costs no API call.
- 2. Google — Places (New) for the business name, Geocoding for the street
+ 1. Stores: the assigned outlet, then any store containing the spot.
+ 2. Places learned before (migration 024), and addresses Google gave
+    before where there is no shop (0068). No API call.
+ 3. Google — Places (New) for the business name, Geocoding for the street
     address. This is the only source that reliably names Nigerian retail
-    premises, and it is what produces the format above. Needs
-    GOOGLE_MAPS_API_KEY with "Places API (New)" and "Geocoding API"
-    enabled on the project.
- 3. OpenStreetMap — Nominatim for the address, Overpass for a named
+    premises. Needs GOOGLE_MAPS_API_KEY with "Places API (New)" and
+    "Geocoding API" enabled. Paid per request: answers are cached 30 days
+    per spot, learned for good, counted per month (place_lookup_stats),
+    and GOOGLE_MONTHLY_LOOKUP_LIMIT, when set, stops Google for the rest
+    of the month once reached.
+ 4. OpenStreetMap — Nominatim for the address, Overpass for a named
     business within 80 m. Free and needs no key, but Nigerian POI
     coverage is thin, so it often names the street rather than the shop.
 
-Exports: `PlaceSource`, `ResolvedPlace`, `OutletAnchor`, `resolvePlace`, `LocatedPlace`, `locateAddress`
+Exports: `resolvePlace`, `LocatedPlace`, `locateAddress`
 
 ## `src/lib/image.ts`
 
@@ -512,7 +525,7 @@ Exports: `IpGeo`, `clientIp`, `lookupIp`
 Leaflet, fetched from a CDN only when a map is opened, so pages without a
 map (and the phone app) never pay for it.
 
-Exports: `loadLeaflet`
+Exports: `loadLeaflet`, `hasGoogleMapsKey`, `onGoogleAuthFailure`, `loadGoogleMutant`
 
 ## `src/lib/login-destination.ts`
 
@@ -719,6 +732,25 @@ purpose; the server's check decides the hard cases (a photo of a screen
 or of a printed photo), and an honest photo should never fail here.
 
 Exports: `FrameQuality`, `assessFrame`
+
+## `src/lib/place-resolve.ts`
+
+The order in which Xtend names a spot, and the rule that keeps Google for
+spots it has never seen. Pure: the providers are passed in, so the order
+can be checked without a database or a network (scripts/check-places-usage.ts).
+src/lib/geocode.ts supplies the real ones.
+
+  1. the person's own store, when they stand inside its geofence;
+  2. any store Xtend knows;
+  3. a place Xtend learned before (named by a map or by staff);
+  4. an address Google gave before for this spot (no shop there);
+  5. Google (its answers are also kept 30 days per spot in the server's
+     cache), unless this is only a preview or this month's limit is used;
+  6. OpenStreetMap, free.
+
+What a map finds is learned, so the next lookup there stops at 3 or 4.
+
+Exports: `PlaceSource`, `ResolvedPlace`, `OutletAnchor`, `LookupAnswer`, `GoogleCall`, `LookupCount`, `OWN_LIST`, `GoogleAnswer`, `PlaceProviders`, `join`, `metresBetween`, `parseLimit`, `withinLimit`, `resolveWith`, `lookupSummary`
 
 ## `src/lib/platform.ts`
 
@@ -1113,7 +1145,9 @@ Exports: `AttendanceGrid`, `GridKey`
 
 Pins for every event in the current filter, with each outlet's geofence
 drawn as a circle. Leaflet is fetched from a CDN only when the map tab is
-opened, so the mobile bundle never pays for it.
+opened, so the mobile bundle never pays for it. The map itself is made
+once (Google's or OpenStreetMap's, see map-base.tsx); a new filter only
+redraws the pins and fits the view to them.
 
 Exports: `AttendanceMap`
 
@@ -1179,6 +1213,12 @@ Exports: `LiveAlertFeed`
 Signed link to their profile photo (037), when they have one.
 
 Exports: `LiveLocation`, `LiveLocations`
+
+## `src/components/admin/map-base.tsx`
+
+Never let the map zoom out past the whole of Nigeria.
+
+Exports: `NIGERIA`, `LeafletMap`, `useLeafletMap`, `MapFrame`
 
 ## `src/components/admin/marketer-report-list.tsx`
 
@@ -1247,6 +1287,15 @@ became of it. One still waiting can be dismissed, with a reason, when it
 was not a shop: until then that person's store work for the day waits.
 
 Exports: `PlaceDueRow`, `PlaceDues`
+
+## `src/components/admin/place-lookups.tsx`
+
+How this month's place lookups were answered (migration 0068): from
+Xtend's own list (stores, learned places, saved addresses, the server's
+cache), by Google, or by OpenStreetMap; and how many requests went to
+Google, against the monthly limit when one is set. Admins only.
+
+Exports: `PlaceLookups`
 
 ## `src/components/admin/place-manager.tsx`
 

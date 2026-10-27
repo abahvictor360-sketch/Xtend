@@ -63,7 +63,14 @@ export async function POST(request: Request) {
     // heartbeat does.
     if (got.alert && got.user_id) {
       const { data: person } = await admin.from('profiles').select('full_name').eq('id', got.user_id).single()
-      const place = await resolvePlace(got.alert.lat, got.alert.lng, null, { supabase: admin, learn: false })
+      // Nobody is signed in here, so the spot is learned for the person
+      // through the service-role functions (0068): the next alert there is
+      // named from Xtend's own list, without asking Google again.
+      const place = await resolvePlace(got.alert.lat, got.alert.lng, null, {
+        supabase: admin,
+        learn: true,
+        person: got.user_id,
+      })
       if (place.label && got.alert.ping_id) {
         await admin.from('location_pings').update({ place_name: place.label }).eq('id', got.alert.ping_id)
       }

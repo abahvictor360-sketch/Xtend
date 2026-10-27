@@ -426,6 +426,35 @@ Policies:
 | message | text(text) | yes |  |
 | created_at | timestamp with time zone(timestamptz) |  | now() |
 
+### `place_addresses`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| id | uuid(uuid) |  | gen_random_uuid() |
+| address | text(text) |  |  |
+| lat | double precision(float8) |  |  |
+| lng | double precision(float8) |  |  |
+| radius_m | integer(int4) |  | 40 |
+| source | text(text) |  | 'google'::text |
+| times_seen | integer(int4) |  | 1 |
+| created_at | timestamp with time zone(timestamptz) |  | now() |
+| last_seen_at | timestamp with time zone(timestamptz) |  | now() |
+
+Policies:
+- `place_addresses_admin_read` SELECT to public: using `is_admin()`
+
+### `place_lookup_stats`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| month | date(date) |  |  |
+| source | text(text) |  |  |
+| lookups | bigint(int8) |  | 0 |
+| updated_at | timestamp with time zone(timestamptz) |  | now() |
+
+Policies:
+- `place_lookup_stats_admin_read` SELECT to public: using `is_admin()`
+
 ### `place_naming_due`
 
 | Column | Type | Null | Default |
@@ -1193,6 +1222,7 @@ Policies:
 - `activity_platform(p_ua text)` → text · 0062_user_activity.sql
 - `add_report_file(p_path text, p_name text)` → uuid · definer · 0065_report_files_offline.sql
 - `add_report_photo(p_path text)` → uuid · definer · 0067_report_photos_offline.sql
+- `address_at(p_lat double precision, p_lng double precision)` → text · definer · 0068_place_lookups.sql
 - `admin_overview()` → jsonb · definer · 0059_schedules_leave.sql
 - `alert_watchers(p_user uuid)` → TABLE(user_id uuid, full_name text, role user_role) · definer · 0036_supervisor_alerts.sql
 - `apply_leave(p_kind text, p_from date, p_to date, p_reason text)` → uuid · definer · 0059_schedules_leave.sql
@@ -1237,6 +1267,7 @@ Policies:
 - `clock_timing(p_user uuid, p_captured timestamp with time zone, p_device jsonb, p_now timestamp with time zone)` → jsonb · definer · 0029_offline_positions.sql
 - `close_abandoned_visits()` → integer · definer · 0010_store_visits.sql
 - `close_count_request(p_request_id uuid)` → void · definer · 0020_count_requests.sql
+- `count_place_lookups(p_sources text[])` → void · definer · 0068_place_lookups.sql
 - `counted_product_names()` → TABLE(name text) · definer · 0021_counted_product_names.sql
 - `coverage_today()` → TABLE(user_id uuid, full_name text, outlet_name text, ping_count integer, coverage_pct integer, last_ping_at timestamp with time zone) · definer · 0005_marketer_role.sql
 - `crypt(text, text)` → text
@@ -1265,6 +1296,7 @@ Policies:
 - `gen_random_uuid()` → uuid
 - `gen_salt(text)` → text
 - `gen_salt(text, integer)` → text
+- `google_calls_this_month()` → bigint · definer · 0068_place_lookups.sql
 - `has_allocated_stores(target uuid)` → boolean · definer · 0060_marketer_visits_reports.sql
 - `has_live_push(p_user uuid)` → boolean · definer · 0033_native_push.sql
 - `hmac(bytea, bytea, text)` → bytea
@@ -1277,6 +1309,7 @@ Policies:
 - `known_place_at(p_lat double precision, p_lng double precision)` → TABLE(id uuid, name text, address text, source text, verified boolean, distance_m double precision) · definer · 0025_place_safeguards.sql
 - `lagos_hm(t timestamp with time zone)` → text · 0026_phone_evidence.sql
 - `learn_place(p_lat double precision, p_lng double precision, p_name text, p_address text, p_source text, p_photo_path text)` → uuid · definer · 0026_phone_evidence.sql
+- `learn_place_for(p_user uuid, p_lat double precision, p_lng double precision, p_name text, p_address text, p_source text)` → uuid · definer · 0068_place_lookups.sql
 - `live_locations()` → TABLE(user_id uuid, full_name text, phone text, outlet_name text, outlet_lat double precision, outlet_lng double precision, outlet_radius_m integer, clocked_in_at timestamp with time zone, clock_in_label text, clock_in_status attendance_status, last_ping_at timestamp with time zone, minutes_since_ping integer, last_lat double precision, last_lng double precision, last_place_name text, distance_from_outlet_m double precision, inside_geofence boolean) · definer · 0009_live_locations.sql
 - `log_location_block(p_reason text, p_accuracy_m double precision)` → uuid · definer · 0002_logic.sql
 - `mark_notifications_read()` → integer · definer · 0006_push_notifications.sql
@@ -1297,7 +1330,8 @@ Policies:
 - `names_overlap(a text, b text)` → boolean · 0025_place_safeguards.sql
 - `nearest_outlet_for_user(target uuid, p_lat double precision, p_lng double precision)` → uuid · definer · 0034_stores_pinned_from_clock_in.sql
 - `no_show_already_reported(p_user uuid)` → boolean · definer · 0007_watchers_and_no_show.sql
-- `note_place_visit(p_id uuid)` → void · definer · 0025_place_safeguards.sql
+- `note_place_visit(p_id uuid)` → void · definer · 0068_place_lookups.sql
+- `note_place_visit_for(p_user uuid, p_id uuid)` → void · definer · 0068_place_lookups.sql
 - `notification_sent_by_me(p_notification uuid)` → boolean · definer · 0053_support_notifications.sql
 - `office_name(p uuid)` → text · definer · 0053_support_notifications.sql
 - `open_support_thread(p_subject text, p_body text)` → uuid · definer · 0031_support_messages.sql
@@ -1335,6 +1369,7 @@ Policies:
 - `place_due_guard()` → trigger · definer · 0045_mandatory_place_naming.sql
 - `place_is_recognised(p_lat double precision, p_lng double precision)` → boolean · definer · 0045_mandatory_place_naming.sql
 - `place_key(p_name text)` → text · 0025_place_safeguards.sql
+- `place_lookup_sources()` → text[] · 0068_place_lookups.sql
 - `position_point(p jsonb)` → TABLE(lat double precision, lng double precision, accuracy_m double precision) · 0045_mandatory_place_naming.sql
 - `post_support_message(p_thread uuid, p_body text)` → uuid · definer · 0053_support_notifications.sql
 - `product_key(p_name text)` → text · 0021_counted_product_names.sql
@@ -1354,6 +1389,7 @@ Policies:
 - `record_retention_purge(p_result jsonb)` → void · definer · 0067_report_photos_offline.sql
 - `record_selfie_sweep(p_result jsonb)` → void · definer · 0012_selfie_retention_24h.sql
 - `release_reports_on_demotion()` → trigger · definer · 0018_reporting_line_upkeep.sql
+- `remember_address(p_lat double precision, p_lng double precision, p_address text)` → uuid · definer · 0068_place_lookups.sql
 - `remove_report_file(p_id uuid)` → text · definer · 0065_report_files_offline.sql
 - `remove_schedule_override(p_id uuid)` → void · definer · 0059_schedules_leave.sql
 - `reopen_support_thread(p_thread uuid)` → void · definer · 0053_support_notifications.sql

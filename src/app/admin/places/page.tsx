@@ -3,6 +3,9 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { PlaceManager, type KnownPlace, type WaitingStore } from '@/components/admin/place-manager'
 import { PlaceDues, type PlaceDueRow } from '@/components/admin/place-dues'
+import { PlaceLookups } from '@/components/admin/place-lookups'
+import { parseLimit } from '@/lib/place-resolve'
+import { lagosDateString } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Places — Xtend' }
@@ -10,7 +13,8 @@ export const metadata = { title: 'Places — Xtend' }
 export default async function PlacesPage() {
   await requireSession(['admin'])
   const supabase = await createServerSupabase()
-  const [{ data, error }, { data: waiting }, { data: dues }] = await Promise.all([
+  const month = `${lagosDateString().slice(0, 7)}-01`
+  const [{ data, error }, { data: waiting }, { data: dues }, { data: lookups }] = await Promise.all([
     supabase
       .from('known_place_detail')
       .select('*')
@@ -29,6 +33,8 @@ export default async function PlacesPage() {
       .gte('due_date', new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10))
       .order('created_at', { ascending: false })
       .limit(200),
+    // How lookups were answered this month (0068); empty before it is run.
+    supabase.from('place_lookup_stats').select('source, lookups').eq('month', month),
   ])
 
   // The shop-front photos staff took when naming a place (migration 025).
@@ -71,6 +77,10 @@ export default async function PlacesPage() {
         </p>
       ) : (
         <>
+        <PlaceLookups
+          rows={(lookups ?? []) as { source: string; lookups: number }[]}
+          limit={parseLimit(process.env.GOOGLE_MONTHLY_LOOKUP_LIMIT)}
+        />
         <PlaceDues dues={(dues ?? []) as PlaceDueRow[]} />
         <PlaceManager
           places={places}

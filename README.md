@@ -86,6 +86,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0065_report_files_offline.sql  # report documents: no second upload on a retry, removals queued offline, nightly clean-up of unused files
    supabase/migrations/0066_test_mode_reset.sql             # test mode (one-way off) and resetting chosen parts of the test run; reset file queue
    supabase/migrations/0067_report_photos_offline.sql       # report photos sent once on a retry; files kept 14 days, announced to admins/supervisors the day before
+   supabase/migrations/0068_place_lookups.sql               # Google only for new spots: the tracker learns places, addresses kept, monthly lookup counter
    supabase/migrations/0069_shift_soon_reminders.sql        # reminders 5 minutes before the shift starts (clock in) and ends (clock out)
    ```
 
@@ -98,6 +99,9 @@ cp .env.example .env.local     # fill in your Supabase keys
    | `SUPABASE_SERVICE_ROLE_KEY` | Admin route handlers only, never shipped to the browser |
    | `CRON_SECRET` | Shared secret for the nightly retention job |
    | `GEOCODER_USER_AGENT` | Contact string for Nominatim's usage policy |
+   | `GOOGLE_MAPS_API_KEY` | Optional, server only: shop names at clock-in (Places API (New), Geocoding API) |
+   | `GOOGLE_MONTHLY_LOOKUP_LIMIT` | Optional: most Google place requests a month; past it OpenStreetMap is used until the next month |
+   | `NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY` | Optional: Google's map on Movement and Attendance. A separate key, restricted to the site's addresses (HTTP referrers) and to the Maps JavaScript API only; without it (or if Google fails) the maps use OpenStreetMap |
    | `CREDENTIALS_WEBHOOK_URL` | Optional: relay that SMS/emails temporary passwords |
    | `ANTHROPIC_API_KEY` | Optional: turns on **Ask Xtend**, the attendance assistant |
    | `TRUSTED_PROXY_HOPS` | Optional: proxies in front of the app (default 1: Nginx, Caddy or Vercel; 2 with Cloudflare in front). Used to read the real caller IP |
@@ -243,11 +247,15 @@ Clock-in records the premises, not just coordinates:
    answer available and it costs no API call.
 2. **Any store Xtend knows** (`outlet_containing`), whoever it is allocated to.
 3. **Xtend's own learned places** (`known_places`, migration 024). See below.
+   Then **addresses Google gave before** where there is no shop
+   (`place_addresses`, 0068, within 40 m), so a street is not paid for twice.
 4. **Google**: Places (New) `searchNearby` for the business name, and
    Geocoding for the street only when Places gave none. Answers are cached
    for 30 days per ~11 m spot. Set `GOOGLE_MAPS_API_KEY` with *Places API
    (New)* and *Geocoding API* enabled. The home screen's "you are at…"
-   preview never uses Google.
+   preview never uses Google. Every request is counted per month
+   (`place_lookup_stats`, 0068, shown on the Places page) and
+   `GOOGLE_MONTHLY_LOOKUP_LIMIT` caps them.
 5. **OpenStreetMap**: Nominatim for the address, Overpass for a named
    business within 80 m. Free, no key, but thin Nigerian shop coverage.
 

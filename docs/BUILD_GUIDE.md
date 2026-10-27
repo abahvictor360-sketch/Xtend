@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-27, after the five-minute shift heads-ups (migration 0069)._
+_Last updated: 2026-10-27, after Google's map on Movement and Google used only for new places (migration 0068), merged with the five-minute shift heads-ups (0069)._
 
 ---
 
@@ -443,6 +443,34 @@ the code lives.
   `job_runs` (`retention_purge`, the Overview footnote) and audited
   `retention.purge` (`record_retention_purge`). Selfie rows forget only the
   paths actually removed (`forget_selfie_paths`).
+- **Google only for places Xtend has never seen** (0068): a spot is named,
+  best first, by the person's own store, any store, a learned place, an
+  address Google gave before (`place_addresses`, 40 m), Google (server
+  cache 30 days per ~11 m spot), then OpenStreetMap; the order lives in
+  `src/lib/place-resolve.ts` (pure) and `src/lib/geocode.ts` supplies the
+  providers. The phone's background tracker now learns the "left the store"
+  spots it names, for the person (`learn_place_for`, `note_place_visit_for`,
+  service role only), and an address Google gives with no shop is kept on its
+  own (not as a named place, so place naming (0045) and the audit log still
+  treat the spot as unknown). Every lookup is counted per Lagos month by what
+  answered it, with every request actually sent to Google
+  (`place_lookup_stats`, `count_place_lookups` after the response via
+  `after()`), shown on the Places page; `GOOGLE_MONTHLY_LOOKUP_LIMIT` switches
+  to OpenStreetMap for the rest of the month once reached (also for the store
+  importer's searches).
+- **Google's map on Movement and Attendance**: with
+  `NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY`, the Leaflet maps show Google's base
+  map through the GoogleMutant plugin (`leaflet.gridlayer.googlemutant@0.15.0`
+  from unpkg, Maps JavaScript API `v=weekly&loading=async`), with a **Map /
+  Satellite** switch and a small "Map: Google" / "Map: OpenStreetMap" note.
+  The base map is chosen at run time (`src/lib/base-map.ts`): Google when it
+  loads (6 s), accepts the key (`gm_authFailure`) and draws tiles (8 s);
+  otherwise OpenStreetMap, switching without a reload; OpenStreetMap is shown
+  after 1.5 s while Google is still loading, so the map is never blank. The
+  map is made once per page view (`useLeafletMap` in
+  `src/components/admin/map-base.tsx`): the 60-second refresh redraws pins
+  in place, keeps the zoom, and costs no new Google map load; Satellite
+  reuses the same Google map.
 
 ## 6. The database: every migration
 
@@ -517,6 +545,7 @@ Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
 | 0065 | Report documents offline: `add_report_file` returns the existing row for a document already on today's report and accepts uploads up to 24 hours old; `remove_report_file` refusals carry hints (`report_file_gone`, `report_locked`); `report_file_orphans()` (service role only) lists `report-files` objects over 24 hours old on no report |
 | 0067 | Report photos offline and the 14-day rule: `add_report_photo(path)` (idempotent by path on today's report, own folder, uploaded within 24 h, image, on no other report; the 5-photo trigger still applies) and an index on `report_photos.storage_path`; `retention_days()` (14), `retention_delete_before`, `retention_cutoff`, `retention_announce` (job_runs `retention_notice`), `report_photo_orphans(hours, limit)` / `report_photo_orphans_before`, `report_file_orphans` (now 14 days and announced) / `report_file_orphans_before`, `expired_selfie_paths` and `forget_expired_selfies` on the same rule, `forget_selfie_paths(paths)`, `supervisor_covers`, `retention_notice_due(through)`, `record_retention_purge(result)` (job_runs `retention_purge`, audit `retention.purge`), `selfie_retention_status` (14 days); all service role only except `add_report_photo` and `retention_days` |
 | 0066 | Test mode and reset: `system_settings` (one row, `test_mode` on, one-way off by trigger, admins read), `system_reset_files` (files a reset queued), `reset_category_keys/tables`, `reset_resolve_categories`, `reset_test_data(actor, categories)` (service role), `system_go_live(actor)`, `reset_files_next/done/pending`. WIPE: attendance, location_pings, location_alerts, integrity_flags, excuse_checks, phone_checks, photo_checks, device_beacons, clock_out_reminders, tracking_tokens, store_visits, known_places, place_naming_due, reports, report_photos, report_files, store_counts, count_requests, count_request_targets, store_count_sheets, all xm_ record tables (counts, count lines, sales, sale lines, supplies, supply imports, reconciliations, monthly grades, expiry alerts, targets, policy reads), leave_requests, schedule_overrides, work_patterns, support_threads, support_messages, notifications, notification_deliveries, scheduled_notifications, user_activity, assistant_conversations, staff_outlets, outlets, xm_stores, audit_log. Admins kept: profiles, push_subscriptions, app_installs, staff_temp_passwords. KEEP: products, staff_roles, role_store_counts, count_sheet_templates, notification_templates, support_quick_replies, xm_settings, xm_settings_history, xm_policy_versions, app_releases, job_runs, system_settings, system_reset_files. |
+| 0068 | Google only for new spots: `learn_place_for(person, …)` and `note_place_visit_for(person, place)` (service role only; map names only, same name rules, nothing inside a store; `note_place_visit` now calls the latter for the signed-in caller), `place_addresses` with `address_at` / `remember_address` (service role; admins read; 40 m; nothing saved inside a store or learned place), `place_lookup_stats` (month, source, lookups; admins read) with `place_lookup_sources()`, `count_place_lookups(sources)` and `google_calls_this_month()` (service role). Both tables are kept by a test-mode reset |
 | 0069 | Five-minute heads-ups: `clock_out_reminders` takes stages 3 (`clock_in_soon`) and 4 (`clock_out_soon`) with a generated `stage_name`; `shift_start_for(user)` (home store's start, else 08:00); `claim_shift_soon_reminders(p_now)` (service role only: Lagos time, working days only for clock-in, merchandisers and marketers, active accounts, only inside [time − 5 min, time), once per stage per day); `claim_clock_out_reminders` redefined so the new stages never block the at-end reminder |
 
 ## 7. Environment variables
@@ -531,7 +560,9 @@ Set in `.env.local` for development, and for production in Vercel or, on the VPS
 | `CRON_SECRET` | Yes | Bearer token the scheduled jobs must send |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Yes for web push | Generate with `node -e "console.log(require('web-push').generateVAPIDKeys())"` |
 | `ANTHROPIC_API_KEY` | Optional | Ask Xtend, support helper, invoice reading |
-| `GOOGLE_MAPS_API_KEY` | Optional | Shop names at clock-in |
+| `GOOGLE_MAPS_API_KEY` | Optional | Shop names at clock-in (server only: Places API (New), Geocoding API) |
+| `GOOGLE_MONTHLY_LOOKUP_LIMIT` | Optional | Most Google place requests a month (Lagos time); once reached, OpenStreetMap until the next month, logged once. Unset = no limit. Shown on the Places page |
+| `NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY` | Optional | Google's map (Map / Satellite) on Movement and Attendance. A **separate** key, visible in the browser: restrict it to HTTP referrers (the site's addresses, e.g. `https://your-domain/*`) and to the **Maps JavaScript API** only. Without it, or whenever Google fails, the maps use OpenStreetMap. Needs a deploy. No CSP is set, so no header change is needed; if one is added, allow `maps.googleapis.com`, `maps.gstatic.com`, `*.googleapis.com`, `unpkg.com` (scripts) and `*.googleusercontent.com`, `*.gstatic.com`, `*.google.com` (images) |
 | `GEOCODER_USER_AGENT` | Recommended | Contact string for OpenStreetMap's policy |
 | `FIREBASE_SERVICE_ACCOUNT` | For Android push | Firebase service account JSON |
 | `APNS_KEY`, `APNS_KEY_ID`, `APNS_TEAM_ID` (`APNS_BUNDLE_ID`, `APNS_SANDBOX`) | For iPhone push | Apple push key |
@@ -667,7 +698,7 @@ for s in check-allocate check-assistant-actions check-attendance check-audit \
          check-support-notifications check-updates check-visits-alerts check-xm-exports \
          check-schedules-leave check-marketer-reports check-clock-out-reminder check-activity \
          check-xm-features check-report-files check-system-reset check-report-photos check-retention \
-         check-shift-reminders; do
+         check-places-usage check-shift-reminders; do
   npx tsx --tsconfig tsconfig.scripts.json scripts/$s.ts | tail -1
 done
 ```
@@ -752,7 +783,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
-| 2026-10-27 | **Reminders five minutes before the shift starts and ends**: "Time to clock in" (to field staff with a working day who have not clocked in) and "Your shift ends at HH:MM. Get ready to clock out with a selfie." (to those clocked in), each once a day, only inside its five minutes, from the alerts job; history kinds `clock_in_reminder` / `clock_out_soon` (automatic alerts). Home screen card "Your shift starts at HH:MM. Clock in when you arrive." with a **Clock in** button, and a heads-up line before the end. New `src/lib/shift-reminder.ts`, `src/lib/shift-reminders.ts`, `src/components/field/shift-soon-prompt.tsx`, check script `check-shift-reminders` | 0069 |
+         check-places-usage check-shift-reminders; do
 | 2026-10-23 | Redesigned office overview around Start here, four linked metrics, attendance follow-up and expandable coverage; alerts use compact copy and expandable filters/notification settings; staff Home shows Your next step before clock controls, with progress/week under My day; normalise SQL line endings in the system reset check for Windows | — |
 | 2026-10-23 | Admin guide: new “What’s new (October 2026)” section (migrations 0059–0067 to run in order and where each new feature lives), X Metrics on/off step by step, the Movement map held to Nigeria, and the iPhone app through TestFlight | — |
 | 2026-10-23 | **Report photos survive a bad connection, and files are kept 14 days**: a report sent again does not upload its photos again (an id per photo when taken or picked, `<uid>/report-photo-<id>.jpg`, progress kept in the outbox, "already exists" counts as done, old queued jobs get ids on their first try) and `add_report_photo` answers a repeat with the same row (no duplicates, the five-photo limit still holds). Nothing is deleted automatically before 14 days (was 24 hours for clock photos and unused report documents) or without the day-before notice to admins (all) and supervisors (their team); reports and anything on them are never deleted; unused report photos are now cleaned up too; each night's deletions audited `retention.purge`. The ping-driven selfie sweep is removed. New `src/lib/report-photo-queue.ts`, `scripts/check-report-photos.ts`, `scripts/check-retention.ts`; admin and supervisor guides updated | 0067 |
@@ -866,5 +897,15 @@ Newest first. Dates are when the work landed on the main branch.
   so a marketer working elsewhere is reminded by their home store's time.
 - **Android signing secrets**: until they are set, the published APK is a
   debug build and each update needs the old app uninstalled first.
+- **Google map and place lookups** (0068): the Map / Satellite switch uses
+  GoogleMutant's internal Google map (`setMapTypeId` on the same map, so no
+  second map load); a future plugin version may need that line changed. The
+  Google path was checked against a stand-in for Google's script (Google
+  cannot be reached from the build machine); confirm on the live site once
+  the browser key is set. Lookup counts start at zero when 0068 runs; Google
+  answers cached before it are re-fetched once (the cache key changed to hold
+  when each answer was fetched). Place learning by staff's own client
+  (`learn_place` with a map source) is still open to any signed-in caller, as
+  before 0068.
 - Migrations to run in production after each merge: check the change log
   above against what has been run in Supabase.

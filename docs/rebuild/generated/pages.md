@@ -220,7 +220,7 @@ On screen: Load the July customer list, or paste your own — names and addresse
 
 - File: `src/app/admin/places/page.tsx`
 - Who: ['admin']
-- Components: `admin/place-manager`, `admin/place-dues`
+- Components: `admin/place-manager`, `admin/place-dues`, `admin/place-lookups`
 
 On screen: Places Xtend has learned. When someone clocks in or checks in somewhere no store, learned place or map can name, they must add it before they go on: standing outside, they type the name on the sign, take a photo of the building with the sign and a selfie holding one of our products, both live in the app, and the phone&apos;s GPS gives the position. Next time anyone
 
