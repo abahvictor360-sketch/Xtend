@@ -1199,7 +1199,7 @@ Exports: `DayCount`, `niceMax`, `AttendanceChart`, `Part`, `SegmentBar`, `Gauge`
 
 ## `src/components/admin/overview-view.tsx`
 
-The overview screen, drawn from data the page has already fetched.
+Priorities first, with detailed monitoring available below.
 
 Exports: `OverviewData`, `OverviewView`
 
@@ -1598,6 +1598,12 @@ The list row from the reference: tinted icon tile, title, meta line, and
 whatever status marker belongs on the right.
 
 Exports: `TaskRow`
+
+## `src/components/field/today-focus.tsx`
+
+A presentation-only guide to the next daily task; clock rules remain in ClockPanel.
+
+Exports: `TodayFocus`
 
 ## `src/components/field/use-dashboard-refresh.ts`
 

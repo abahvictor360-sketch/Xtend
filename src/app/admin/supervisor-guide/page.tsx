@@ -120,6 +120,7 @@ export default async function SupervisorGuidePage() {
         </GuideSection>
 
         <GuideSection topic={T.overview} intro="The top of the menu. On a phone, tap the page name at the top to open navigation. Tap outside it or press Escape to close it.">
+          <p>Start with <Ui>Start here</Ui> on Overview, then tap a summary card to open its page. Attendance follow-up lists missing clock-ins. Expand <Ui>Live locations &amp; coverage</Ui> for details. On Alerts, expand <Ui>Filters &amp; downloads</Ui> to narrow results; notification settings are at the bottom.</p>
           <p>
             <Ui>Overview</Ui> shows your team today: clocked in, late, not in their store, not in yet, and
             open alerts, with the week at a glance.

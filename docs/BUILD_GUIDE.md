@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-23, after the admin guide’s What’s new section._
+_Last updated: 2026-10-23, after the priority-led dashboard redesign (no new migration)._
 
 ---
 
@@ -560,6 +560,12 @@ GitHub workflow stands down. The plain crontab equivalent:
 
 ## 9. The phone apps
 
+Home now leads with Your next step (clock in, open visit, report, on shift or complete).
+Clock controls remain above the detail tabs; My day groups progress and recent days.
+Office Overview leads with follow-up actions, four linked summary cards and attendance.
+Live locations and coverage expand below; alerts keep filters and notifications in disclosures.
+
+
 Admin and supervisor headers wrap at constrained desktop widths. Mobile dashboard
 navigation is a disclosure with normal links, closes on selection/outside press/Escape,
 and restores trigger focus on Escape. User account menus also dismiss outside and
@@ -733,6 +739,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-23 | Redesigned office overview around Start here, four linked metrics, attendance follow-up and expandable coverage; alerts use compact copy and expandable filters/notification settings; staff Home shows Your next step before clock controls, with progress/week under My day; normalise SQL line endings in the system reset check for Windows | — |
 | 2026-10-23 | Admin guide: new “What’s new (October 2026)” section (migrations 0059–0067 to run in order and where each new feature lives), X Metrics on/off step by step, the Movement map held to Nigeria, and the iPhone app through TestFlight | — |
 | 2026-10-23 | **Report photos survive a bad connection, and files are kept 14 days**: a report sent again does not upload its photos again (an id per photo when taken or picked, `<uid>/report-photo-<id>.jpg`, progress kept in the outbox, "already exists" counts as done, old queued jobs get ids on their first try) and `add_report_photo` answers a repeat with the same row (no duplicates, the five-photo limit still holds). Nothing is deleted automatically before 14 days (was 24 hours for clock photos and unused report documents) or without the day-before notice to admins (all) and supervisors (their team); reports and anything on them are never deleted; unused report photos are now cleaned up too; each night's deletions audited `retention.purge`. The ping-driven selfie sweep is removed. New `src/lib/report-photo-queue.ts`, `scripts/check-report-photos.ts`, `scripts/check-retention.ts`; admin and supervisor guides updated | 0067 |
 | 2026-10-23 | iPhone app: every production build can sign itself and upload to **TestFlight** from GitHub (no Mac) once the App Store Connect API key secrets are set (`APPSTORE_API_KEY_P8`, `APPSTORE_KEY_ID`, `APPSTORE_ISSUER_ID`, `APPLE_TEAM_ID`); build numbers match the APK; `ITSAppUsesNonExemptEncryption` = false | — |
