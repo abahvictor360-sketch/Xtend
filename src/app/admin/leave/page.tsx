@@ -17,8 +17,8 @@ type Search = { status?: string; person?: string; from?: string; to?: string }
 const DATE = /^\d{4}-\d{2}-\d{2}$/
 
 export default async function LeaveAdminPage({ searchParams }: { searchParams: Promise<Search> }) {
-  const session = await requireSession(['admin', 'supervisor'])
-  const isAdmin = session.profile.role === 'admin'
+  const session = await requireSession(['admin', 'supervisor', 'hr'])
+  const isAdmin = session.profile.role === 'admin' || session.profile.role === 'hr'
   const params = await searchParams
   const status = isLeaveStatus(params.status) ? params.status : null
   const person = typeof params.person === 'string' && /^[0-9a-f-]{36}$/i.test(params.person) ? params.person : null

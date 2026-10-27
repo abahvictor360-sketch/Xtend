@@ -65,6 +65,7 @@ create policy selfies_read on storage.objects as PERMISSIVE for SELECT to public
 
 do $$ begin if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'attendance') then alter publication supabase_realtime add table public.attendance; end if; end $$;
 do $$ begin if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'location_alerts') then alter publication supabase_realtime add table public.location_alerts; end if; end $$;
+do $$ begin if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'messages') then alter publication supabase_realtime add table public.messages; end if; end $$;
 do $$ begin if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'notification_deliveries') then alter publication supabase_realtime add table public.notification_deliveries; end if; end $$;
 do $$ begin if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'notifications') then alter publication supabase_realtime add table public.notifications; end if; end $$;
 do $$ begin if not exists (select 1 from pg_publication_tables where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'store_visits') then alter publication supabase_realtime add table public.store_visits; end if; end $$;

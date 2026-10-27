@@ -10,7 +10,7 @@ export const maxDuration = 60
 /** The Attendance page's day-by-day table, as filtered on screen, as Excel, Word, PDF or CSV. */
 export async function GET(request: Request, ctx: { params: Promise<{ format: string }> }) {
   try {
-    await requireApiSession(['admin', 'supervisor'])
+    await requireApiSession(['admin', 'supervisor', 'hr'])
     const { format } = await ctx.params
     const filter = parseReportFilter(new URL(request.url).searchParams, 1)
     // Through RLS: a supervisor's file holds their own team only.

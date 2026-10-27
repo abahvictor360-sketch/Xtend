@@ -12,7 +12,7 @@ const createUserSchema = z.object({
   full_name: personName,
   email: emailAddress,
   phone: optionalPhone,
-  role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).default('merchandiser'),
+  role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin', 'hr']).default('merchandiser'),
   /** A role an admin added (042); the person then works like its base role. */
   staff_role_id: z.string().uuid().nullable().optional(),
   outlet_id: z.string().uuid().nullable().optional(),
@@ -21,7 +21,7 @@ const createUserSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const session = await requireApiSession(['admin', 'supervisor'])
+    const session = await requireApiSession(['admin', 'supervisor', 'hr'])
     const parsed = createUserSchema.safeParse(await request.json())
     if (!parsed.success) {
       return Response.json(
@@ -48,9 +48,12 @@ export async function POST(request: Request) {
     // them. Role is the one field that grants power, so it stays with
     // admins.
     const isSupervisor = session.profile.role === 'supervisor'
-    if (isSupervisor && input.role !== 'merchandiser' && input.role !== 'marketer') {
+    // HR (0072) staffs the whole company, field roles only: any store, any
+    // supervisor, but never an account that grants power.
+    const isHr = session.profile.role === 'hr'
+    if ((isSupervisor || isHr) && input.role !== 'merchandiser' && input.role !== 'marketer') {
       return Response.json(
-        { error: 'Supervisors can create merchandisers and marketers only.' },
+        { error: `${isHr ? 'HR' : 'Supervisors'} can create merchandisers and marketers only.` },
         { status: 403 },
       )
     }
@@ -68,6 +71,16 @@ export async function POST(request: Request) {
       }
     }
     const supervisor_id = isSupervisor ? session.userId : (input.supervisor_id ?? null)
+    if (isHr && supervisor_id) {
+      const { data: sup } = await createAdminSupabase()
+        .from('profiles')
+        .select('role, is_active')
+        .eq('id', supervisor_id)
+        .maybeSingle<{ role: string; is_active: boolean }>()
+      if (!sup?.is_active || (sup.role !== 'supervisor' && sup.role !== 'admin')) {
+        return Response.json({ error: 'Pick an active supervisor.' }, { status: 400 })
+      }
+    }
     const outlet_id = isSupervisor
       ? (input.outlet_id ?? session.profile.outlet_id ?? null)
       : (input.outlet_id ?? null)

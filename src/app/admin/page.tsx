@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation'
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { OverviewView, type OverviewData } from '@/components/admin/overview-view'
@@ -14,7 +15,9 @@ const day = (date: string, options: Intl.DateTimeFormatOptions) =>
   new Date(`${date}T12:00:00Z`).toLocaleDateString('en-GB', { timeZone: 'UTC', ...options })
 
 export default async function AdminOverview() {
-  const session = await requireSession(['admin', 'supervisor'])
+  const session = await requireSession(['admin', 'supervisor', 'hr'])
+  // HR (0072) has no overview of stores and locations: they start on attendance.
+  if (session.profile.role === 'hr') redirect('/admin/attendance')
   const isAdmin = session.profile.role === 'admin'
   const supabase = await createServerSupabase()
   const today = lagosDateString()

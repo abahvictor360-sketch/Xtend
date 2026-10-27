@@ -89,6 +89,9 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0068_place_lookups.sql               # Google only for new spots: the tracker learns places, addresses kept, monthly lookup counter
    supabase/migrations/0069_shift_soon_reminders.sql        # reminders 5 minutes before the shift starts (clock in) and ends (clock out)
    supabase/migrations/0070_follow_live.sql                 # Follow live: watch one clocked-in person move on the map; only their phone speeds up
+   supabase/migrations/0071_hr_role_value.sql               # the 'hr' role value (run alone, before 0072)
+   supabase/migrations/0072_hr_role.sql                     # HR: every staff member's details, attendance, leave and schedules; adds field staff
+   supabase/migrations/0073_messages.sql                    # Messages: each merchandiser or marketer talks to their supervisor in the app
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-27, after Follow live on Movement (migration 0070), following Google's map on Movement (0068) and the five-minute shift heads-ups (0069)._
+_Last updated: 2026-10-27, after the HR role and Messages (migrations 0071–0073), following Follow live on Movement (0070)._
 
 ---
 
@@ -36,8 +36,9 @@ marketers across Nigeria.
 
 | Who | Uses | Does |
 |---|---|---|
-| Merchandisers, marketers | The Xtend app (Android, iPhone) or Chrome | Clock in and out with a GPS fix and an in-app selfie, check in at stores (marketers), stock counts, daily reports, X Metrics sales, support messages |
-| Supervisors | Web dashboard (`/admin`) | Their own team only: attendance, movement, visits, alerts, support, stock counts, notifications, integrity, excuses |
+| Merchandisers, marketers | The Xtend app (Android, iPhone) or Chrome | Clock in and out with a GPS fix and an in-app selfie, check in at stores (marketers), stock counts, daily reports, X Metrics sales, messages to their supervisor, support messages |
+| Supervisors | Web dashboard (`/admin`) | Their own team only: attendance, movement, visits, alerts, messages, support, stock counts, notifications, integrity, excuses |
+| HR | Web dashboard (`/admin`) | Every staff member but admins: staff details, attendance and lateness, analytics, leave (decide), schedules, exports, messages; adds and deactivates merchandisers and marketers. No settings, stores, X Metrics, movement, alerts or integrity |
 | Admins | Web dashboard (`/admin`) | Everything, plus stores, places, teams, roles, X Metrics setup, audit log, activity log, updates |
 
 Three guides exist, one per audience: staff at `/guide` (and in the app),
@@ -511,6 +512,41 @@ the code lives.
   (`src/lib/follow-live.ts`, `follow-live-server.ts`,
   `src/app/api/admin/follow/*`).
 
+- **HR role** (0071, 0072): a fifth account type, `hr`, for people
+  work rather than stock or locations. HR signs in to the dashboard and
+  lands on Attendance; the menu shows Guide, Attendance, Analytics,
+  Messages, Staff, Schedules and Leave only (`HR_LINKS` in
+  `admin-nav.tsx`), with no alerts bell. `is_hr()` and `hr_sees(target)`
+  (anyone but admins) open new read policies beside the existing ones on
+  profiles, attendance, leave requests, work patterns, schedule overrides
+  and staff stores; `my_staff`, `staff_analytics`, `available_supervisors`,
+  `can_manage_schedule`, `schedule_guard`, `is_working_day` and
+  `decide_leave` let HR in; `write_audit` accepts HR so every HR change is
+  audited. In the app HR adds merchandisers and marketers (any store, any
+  active supervisor), edits their store and supervisor, and deactivates
+  them, but never creates or changes admins, supervisors or HR, and never
+  changes a role, email or the notification exemption (`/api/admin/users`).
+  Nothing about settings, stores, X Metrics, movement, alerts, integrity or
+  excuses names HR, so it stays closed. The enum value is its own file
+  (0071) because Postgres needs it committed before 0072 uses it.
+
+- **Messages** (0073): every merchandiser and marketer has one
+  conversation (`message_threads`, `messages`, `message_reads`) with
+  whoever supervises them; admins and HR can read and reply in any of them
+  (`can_message`). Staff open it from **You → Messages** (unread count) or
+  the orange "You have a new message" banner on Home (`/field/messages`);
+  the office from **Messages** in the menu (`/admin/messages`: inbox with
+  unread counts, search, people with no conversation yet under "Start a
+  conversation"; `/admin/messages/<person>`). `send_message` is the only
+  way in (staff always write in their own; 2,000 characters; never edited
+  or deleted); `read_messages`, `unread_messages`, `conversation`,
+  `message_inbox`, `my_supervisor_name`. `POST /api/messages` sends the
+  push: a staff message to their supervisor (or every admin when they have
+  none), an office reply to the staff member. New messages show at once:
+  the staff member's own Realtime topic hears a `messages` change, the
+  office pages follow the table; a minute's poll covers a dropped
+  connection. Support (020) stays for problems with the app.
+
 ## 6. The database: every migration
 
 Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
@@ -586,6 +622,9 @@ Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
 | 0066 | Test mode and reset: `system_settings` (one row, `test_mode` on, one-way off by trigger, admins read), `system_reset_files` (files a reset queued), `reset_category_keys/tables`, `reset_resolve_categories`, `reset_test_data(actor, categories)` (service role), `system_go_live(actor)`, `reset_files_next/done/pending`. WIPE: attendance, location_pings, location_alerts, integrity_flags, excuse_checks, phone_checks, photo_checks, device_beacons, clock_out_reminders, tracking_tokens, store_visits, known_places, place_naming_due, reports, report_photos, report_files, store_counts, count_requests, count_request_targets, store_count_sheets, all xm_ record tables (counts, count lines, sales, sale lines, supplies, supply imports, reconciliations, monthly grades, expiry alerts, targets, policy reads), leave_requests, schedule_overrides, work_patterns, support_threads, support_messages, notifications, notification_deliveries, scheduled_notifications, user_activity, assistant_conversations, staff_outlets, outlets, xm_stores, audit_log. Admins kept: profiles, push_subscriptions, app_installs, staff_temp_passwords. KEEP: products, staff_roles, role_store_counts, count_sheet_templates, notification_templates, support_quick_replies, xm_settings, xm_settings_history, xm_policy_versions, app_releases, job_runs, system_settings, system_reset_files. |
 | 0068 | Google only for new spots: `learn_place_for(person, …)` and `note_place_visit_for(person, place)` (service role only; map names only, same name rules, nothing inside a store; `note_place_visit` now calls the latter for the signed-in caller), `place_addresses` with `address_at` / `remember_address` (service role; admins read; 40 m; nothing saved inside a store or learned place), `place_lookup_stats` (month, source, lookups; admins read) with `place_lookup_sources()`, `count_place_lookups(sources)` and `google_calls_this_month()` (service role). Both tables are kept by a test-mode reset |
 | 0070 | Follow live: `system_settings.follow_max_sessions` (20); `follow_sessions` (watcher, subject, started/expires/last seen/ended with `end_reason` stopped, closed, expired or clocked_out, `extended`, the latest live position; RLS: admins all, supervisors their team's, staff none, no direct writes); `follow_start(subject)`, `follow_heartbeat(session)`, `follow_extend(session)`, `follow_stop(session, reason)` (the follower only; audited `follow.start` / `follow.extend` / `follow.stop`); `follow_interval_for(user)` and `follow_live_position_for(user, …)` (service role only; 8 s while live; broadcast on `follow:<session>`, never a ping row); `follow_on_shift`, `follow_tidy`, `follow_state`; trigger `trg_follow_end_at_clock_out` on attendance; realtime policy "Followers read their own follow topic" (`can_hear_follow`); `reset_category_tables()` redefined with `follow_sessions` under clock-ins and locations |
+| 0071 | HR role value: `alter type user_role add value 'hr'` (alone, so it is committed before 0072) |
+| 0072 | HR role: `is_hr()`, `hr_sees(target)`; read policies `profiles_hr_select`, `attendance_hr_select`, `leave_requests_hr_read`, `work_patterns_hr_read`, `schedule_overrides_hr_read`, `staff_outlets_hr_select`; `my_staff`, `available_supervisors`, `staff_analytics`, `can_manage_schedule`, `schedule_guard`, `is_working_day`, `decide_leave` and `write_audit` replaced to let HR in ("Only admins, HR and supervisors …", "Admins, HR and supervisors only") |
+| 0073 | Messages: `message_threads` (one per staff member), `messages` (never edited, `clock_timestamp()`), `message_reads`; RLS through `can_message(staff)` (the person, their supervisor, admins, HR), no direct writes; `send_message(staff, body)`, `read_messages(staff)`, `unread_messages()`, `conversation(staff)`, `my_supervisor_name()`, `message_inbox()`; trigger `realtime_broadcast` on messages (staff topic); `messages` in the `supabase_realtime` publication; `reset_category_tables()` redefined with the three tables under support |
 | 0069 | Five-minute heads-ups: `clock_out_reminders` takes stages 3 (`clock_in_soon`) and 4 (`clock_out_soon`) with a generated `stage_name`; `shift_start_for(user)` (home store's start, else 08:00); `claim_shift_soon_reminders(p_now)` (service role only: Lagos time, working days only for clock-in, merchandisers and marketers, active accounts, only inside [time − 5 min, time), once per stage per day); `claim_clock_out_reminders` redefined so the new stages never block the at-end reminder |
 
 ## 7. Environment variables
@@ -767,12 +806,13 @@ screenshot it at 1280 px and 390 px (Playwright), then delete the page and
 ## 11. Where things are
 
 ```
-src/app/field/…           Staff app pages (home, count, report, metrics, history, account, support, guide)
+src/app/field/…           Staff app pages (home, count, report, metrics, history, account, messages, support, guide)
 src/app/admin/…           Dashboard pages, one folder per menu item
-src/app/api/…             Route handlers (field, admin, cron, track, version, push, support)
+src/app/api/…             Route handlers (field, admin, cron, track, version, push, support, messages)
 src/app/guide, download   Public staff guide and app download page
 src/components/field/…    Staff app components (clock panel, heartbeat, shift tracker, forms)
 src/components/admin/…    Dashboard components
+src/components/messages/  The staff ↔ supervisor conversation, shared by app and dashboard
 src/components/ui/…       Buttons, cards, inputs, badges, tables
 src/lib/…                 Shared logic: auth, audit, geo, integrity, movement, assistant,
                           exports (export/), X Metrics (metrics/), offline outbox (offline/)
@@ -838,6 +878,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-10-27 | **HR role and Messages**: a new HR account (People & attendance): every staff member but admins, attendance, analytics, leave decisions, schedules, exports, adds and deactivates merchandisers and marketers; no settings, stores, X Metrics, movement or alerts; audited. **Messages**: each merchandiser and marketer has one conversation with their supervisor (You → Messages, a Home banner when unread; `/admin/messages` for the office, where admins and HR read and reply in any); push on every message; live updates. New `POST /api/messages`, `/api/messages/read` | 0071, 0072, 0073 |
 | 2026-10-27 | **Follow live**: from Movement, admins (anyone) and supervisors (their team) follow one clocked-in person moving on the map like a delivery rider (`/admin/follow/<person>`): smooth photo pin, heading arrow, accuracy circle, 5-minute trail, store circle, "Updated N s ago", km/h, last named place, Follow on map / free pan, Call, Stop. Only the followed phone speeds up (8 s, told through `interval_ms` on the location answers; web heartbeat and both native trackers obey); quick positions go over private Realtime (`follow:<session>`) and are never stored as pings; sessions end at clock-out, after 30 minutes (Keep following) or when the page closes; at most 20 at once; audited. New `POST /api/admin/follow`, `/api/admin/follow/<id>`, `/api/pings/live`; check script `check-follow-live`; native `ShiftTracker.follow` (new app build). Also removed a stray line that broke this table | 0070 |
 | 2026-10-23 | Redesigned office overview around Start here, four linked metrics, attendance follow-up and expandable coverage; alerts use compact copy and expandable filters/notification settings; staff Home shows Your next step before clock controls, with progress/week under My day; normalise SQL line endings in the system reset check for Windows | — |
 | 2026-10-23 | Admin guide: new “What’s new (October 2026)” section (migrations 0059–0067 to run in order and where each new feature lives), X Metrics on/off step by step, the Movement map held to Nigeria, and the iPhone app through TestFlight | — |

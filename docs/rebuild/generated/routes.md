@@ -2,7 +2,7 @@
 
 # API routes
 
-119 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+121 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
 
 ## `POST /api/activity`
 
@@ -241,14 +241,14 @@ Alerts, as filtered on screen, as Excel, Word, PDF or CSV. RLS keeps a superviso
 ## `GET /api/admin/export/analytics/[format]`
 
 - File: `src/app/api/admin/export/analytics/[format]/route.ts`
-- Who: ['admin', 'supervisor']
+- Who: ['admin', 'supervisor', 'hr']
 
 The Analytics page's comparison table (by person, store or team), as Excel, Word, PDF or CSV.
 
 ## `GET /api/admin/export/attendance/[format]`
 
 - File: `src/app/api/admin/export/attendance/[format]/route.ts`
-- Who: ['admin', 'supervisor']
+- Who: ['admin', 'supervisor', 'hr']
 
 The Attendance page's day-by-day table, as filtered on screen, as Excel, Word, PDF or CSV.
 
@@ -359,7 +359,7 @@ const schema = z.object({
 ## `POST /api/admin/leave/[id]`
 
 - File: `src/app/api/admin/leave/[id]/route.ts`
-- Who: ['admin', 'supervisor']
+- Who: ['admin', 'supervisor', 'hr']
 
 The person's supervisor or an admin approves or rejects a leave request.
 decide_leave() (migration 059) checks who may, refuses anyone deciding
@@ -862,7 +862,7 @@ const schema = z.object({
 ## `DELETE /api/admin/schedules/overrides/[id]`
 
 - File: `src/app/api/admin/schedules/overrides/[id]/route.ts`
-- Who: ['admin', 'supervisor']
+- Who: ['admin', 'supervisor', 'hr']
 
 Removes a date change, so the weekly pattern applies again (audited in 059).
 
@@ -871,7 +871,7 @@ Removes a date change, so the weekly pattern applies again (audited in 059).
 ## `POST /api/admin/schedules/overrides`
 
 - File: `src/app/api/admin/schedules/overrides/route.ts`
-- Who: ['admin', 'supervisor']
+- Who: ['admin', 'supervisor', 'hr']
 
 One date made an extra day in or an extra day off for someone
 (set_schedule_override, migration 059; audited there).
@@ -890,7 +890,7 @@ const schema = z.object({
 ## `POST /api/admin/schedules`
 
 - File: `src/app/api/admin/schedules/route.ts`
-- Who: ['admin', 'supervisor']
+- Who: ['admin', 'supervisor', 'hr']
 
 Sets one weekly pattern for one or several people (set_work_pattern,
 migration 059). The database checks every person is on the caller's team
@@ -1110,7 +1110,7 @@ const schema = z.object({
 ## `PATCH, DELETE /api/admin/users/[id]`
 
 - File: `src/app/api/admin/users/[id]/route.ts`
-- Who: ['admin', 'supervisor']
+- Who: ['admin', 'supervisor', 'hr']
 
 Admin only: also their login, so it changes the sign-in address.
 
@@ -1121,7 +1121,7 @@ const patchSchema = z.object({
   email: emailAddress.optional(),
   // Left out: unchanged. Empty or null: removed. Otherwise a mobile number.
   phone: z.union([z.literal(''), z.null(), phoneNumber]).optional().transform((v) => (v === '' ? null : v)),
-  role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).optional(),
+  role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin', 'hr']).optional(),
   /** A role an admin added (042), or null for a built-in one. */
   staff_role_id: z.string().uuid().nullable().optional(),
   outlet_id: z.string().uuid().nullable().optional(),
@@ -1148,7 +1148,7 @@ const rowSchema = z.object({
   email: emailAddress,
   phone: optionalPhone,
   outlet_name: z.string().max(160).nullable().optional(),
-  role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).default('merchandiser'),
+  role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin', 'hr']).default('merchandiser'),
 })
 
 const bodySchema = z.object({
@@ -1161,7 +1161,7 @@ const bodySchema = z.object({
 ## `POST /api/admin/users`
 
 - File: `src/app/api/admin/users/route.ts`
-- Who: ['admin', 'supervisor']
+- Who: ['admin', 'supervisor', 'hr']
 
 A role an admin added (042); the person then works like its base role.
 
@@ -1170,7 +1170,7 @@ const createUserSchema = z.object({
   full_name: personName,
   email: emailAddress,
   phone: optionalPhone,
-  role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).default('merchandiser'),
+  role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin', 'hr']).default('merchandiser'),
   /** A role an admin added (042); the person then works like its base role. */
   staff_role_id: z.string().uuid().nullable().optional(),
   outlet_id: z.string().uuid().nullable().optional(),
@@ -1400,6 +1400,28 @@ const schema = z.object({
 ```
 
 - Database functions: `log_location_block`
+
+## `POST /api/messages/read`
+
+- File: `src/app/api/messages/read/route.ts`
+- Who: ['merchandiser', 'marketer', 'supervisor', 'admin', 'hr']
+
+Marks a conversation read for the person looking at it (0073).
+
+- Database functions: `read_messages`
+
+## `POST /api/messages`
+
+- File: `src/app/api/messages/route.ts`
+- Who: ['merchandiser', 'marketer', 'supervisor', 'admin', 'hr']
+
+Sends a message in a staff member's conversation (0073). Postgres decides
+who may write where; this tells the other side with a push. A staff
+member's message goes to their supervisor, or to the admins when they
+have none. The office's reply goes to the staff member.
+
+- Database functions: `send_message`
+- Tables and views: `profiles`
 
 ## `POST /api/metrics/counts`
 

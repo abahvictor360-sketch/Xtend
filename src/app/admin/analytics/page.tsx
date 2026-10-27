@@ -38,7 +38,7 @@ type Search = Record<string, string | string[] | undefined>
 const NOUN = { person: 'people', store: 'stores', team: 'teams' } as const
 
 export default async function AnalyticsPage({ searchParams }: { searchParams: Promise<Search> }) {
-  await requireSession(['admin', 'supervisor'])
+  await requireSession(['admin', 'supervisor', 'hr'])
   const filter = parseReportFilter(await searchParams, 30)
   const supabase = await createServerSupabase()
 

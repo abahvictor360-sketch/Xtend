@@ -63,7 +63,7 @@ default in the last column.
 | Stack | Next.js 15 App Router, React 19, TypeScript strict, Tailwind 3, Supabase, a Hostinger VPS (Nginx + PM2; Vercel also works), Capacitor 8 | Latest patch of the versions in `40-platform-and-design.md` |
 | Where logic lives | Postgres (triggers, `SECURITY DEFINER` functions); thin route handlers; React only displays | Put new rules in SQL, not React |
 | Database | Apply `generated/schema.sql`, `seed.sql`, `platform.sql` as given | Never rewrite the SQL by hand |
-| Who sees what | Row-level security; supervisors see their own team only | Read through the caller's client, never the service role |
+| Who sees what | Row-level security; supervisors see their own team only; HR (0072) sees every staff member but admins, for people work only (attendance, leave, schedules, staff, messages) | Read through the caller's client, never the service role |
 | Audit | Every admin or supervisor change is audited with location and device | Call `audit()` after any write |
 | Time | Africa/Lagos for every date, day and time shown | Format with `en-NG`, 24-hour `HH:MM` |
 | Language | Plain English for Nigerian office and field staff; no jargon; no ids on screen | Short sentences; say what to do |
@@ -163,7 +163,8 @@ Build in this order. Finish each stage's checks before starting the next.
 
 ### Stage 7 — Checks, support, notifications, AI
 
-- Integrity, Check an excuse, phone checks, Support (with the helper),
+- Integrity, Check an excuse, phone checks, Messages between staff and
+  their supervisor (0073, `30-rules.md` §13a), Support (with the helper),
   Notifications (templates, scheduling, history), Ask Xtend (tools, reports,
   allocation plans, action cards, saved chats), Audit log, Updates, System
   (test mode, choosing what to reset, going live for good; 0066,

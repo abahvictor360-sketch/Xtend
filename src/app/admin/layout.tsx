@@ -9,8 +9,9 @@ import { readXmFeatures } from '@/lib/metrics/features-server'
 export const dynamic = 'force-dynamic'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const session = await requireSession(['admin', 'supervisor'])
-  const readOnly = session.profile.role === 'supervisor'
+  const session = await requireSession(['admin', 'supervisor', 'hr'])
+  const hr = session.profile.role === 'hr'
+  const readOnly = session.profile.role !== 'admin'
 
   // Open alerts, for the bell: location alerts and the late, early and
   // suspicious activity still to review. RLS narrows both to a
@@ -38,18 +39,21 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           .maybeSingle<{ test_mode: boolean }>()
           .then(({ data }) => data?.test_mode === true),
   ])
-  const openAlerts = location === null && flags === null ? null : (location ?? 0) + (flags ?? 0)
+  // HR sees no alerts (0072), so no bell.
+  const openAlerts =
+    hr || (location === null && flags === null) ? null : (location ?? 0) + (flags ?? 0)
 
   return (
     <AdminFrame
       name={session.profile.full_name}
-      role={readOnly ? 'Supervisor' : 'Admin'}
+      role={hr ? 'HR' : readOnly ? 'Supervisor' : 'Admin'}
       readOnly={readOnly}
       openAlerts={openAlerts}
       assistant={assistantConfigured()}
       xmEnabled={xmFeatures.enabled}
       testMode={testMode}
       isAdmin={session.profile.role === 'admin'}
+      hr={hr}
     >
       <AdminLocation />
       <ActivityPing />

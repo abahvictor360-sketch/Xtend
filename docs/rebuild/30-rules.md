@@ -86,7 +86,23 @@ in force.
 ### 1.2 Roles
 
 - Built-in roles (`user_role` enum): `merchandiser`, `marketer`,
-  `supervisor`, `admin`.
+  `supervisor`, `admin`, `hr` (0071).
+- **HR** (0072): `is_hr()` = an active profile with role `hr`;
+  `hr_sees(target)` = HR looking at anyone who is not an admin. Extra
+  read policies (`profiles_hr_select`, `attendance_hr_select`,
+  `leave_requests_hr_read`, `work_patterns_hr_read`,
+  `schedule_overrides_hr_read`, `staff_outlets_hr_select`) sit beside the
+  others. `my_staff`, `staff_analytics`, `can_manage_schedule`,
+  `is_working_day` and `decide_leave` include `hr_sees`;
+  `available_supervisors` is admins or HR; `schedule_guard` says "Only
+  admins, HR and supervisors set schedules", `decide_leave` "Only admins, HR
+  and supervisors decide leave", `write_audit` "Admins, HR and supervisors
+  only". HR is nobody's supervisor and sends no notifications. Nothing
+  about settings, stores, places, X Metrics, pings, movement, alerts,
+  integrity or excuses names HR. The users API lets HR create and edit
+  merchandisers and marketers only (any store, an active supervisor or
+  admin as "Reports to"; 403 "HR can create merchandisers and marketers
+  only."), never role, email or the notification exemption.
 - **Field roles** (`is_field_role`): merchandiser and marketer. They clock
   in and out, are tracked, are counted absent, appear in attendance and
   analytics, and are the only people a supervisor can reach.
@@ -1862,6 +1878,39 @@ calculation.
   "<name>: issue needs the office" (`kind: 'support_escalated'`).
 
 ---
+
+## 13a. Messages (0073)
+
+- One conversation per merchandiser or marketer: `message_threads`
+  (`staff_id` unique, `last_message_at`, `last_sender_id`), `messages`
+  (`body` 1–2000 after trimming, `created_at` = `clock_timestamp()`,
+  `sender_id` set null if an account is removed), `message_reads`
+  (`thread_id`, `user_id`, `read_at`).
+- `can_message(staff)`: the staff member is a field role and the caller is
+  them, an admin, HR, or `supervises_user(staff)`. Select policies use it;
+  reads are own rows only; no direct inserts, updates or deletes.
+- `send_message(staff, body)` → `{message_id, thread_id, staff_id,
+  from_staff, supervisor_id}`. A field caller always writes in their own
+  conversation whatever `staff` says. Errors: "Sign in first", "You can only
+  message your own team", "That person's account is not active", "Write your
+  message first", "Keep the message under 2,000 characters". Creates the
+  thread on the first message and marks it read for the sender
+  (`clock_timestamp()`, so the sender's own message never counts unread).
+- `read_messages(staff)`, `unread_messages()` (messages from others after
+  your read marker, over every conversation you may see),
+  `conversation(staff)` (oldest first, limit 500: id, body, created_at,
+  sender_name or "Former staff", from_staff, mine), `my_supervisor_name()`,
+  `message_inbox()` (every active field person the caller may message, with
+  store, supervisor, latest message, whether the staff member wrote it, and
+  unread; people with no conversation last).
+- Push (`POST /api/messages`): from staff → their supervisor, or every
+  active admin when they have none; from the office → the staff member.
+  Title "Message from <sender>", body the first 120 characters, link
+  `/admin/messages/<staff>` or `/field/messages`.
+- Realtime: trigger `realtime_broadcast` sends `{table: 'messages'}` to the
+  staff member's `field:<uid>` topic; `messages` is in the
+  `supabase_realtime` publication for the office pages (RLS applies).
+- Test reset: `message_reads`, `messages`, `message_threads` go with support.
 
 ## 14. Audit
 

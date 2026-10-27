@@ -1,4 +1,4 @@
-export type UserRole = 'merchandiser' | 'marketer' | 'supervisor' | 'admin'
+export type UserRole = 'merchandiser' | 'marketer' | 'supervisor' | 'admin' | 'hr'
 export type AttendanceType = 'opening' | 'closing'
 export type AttendanceStatus = 'on_site' | 'off_site' | 'flagged'
 export type AlertType = 'left_geofence' | 'low_accuracy' | 'permission_denied' | 'off_site_clock'

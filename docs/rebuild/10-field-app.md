@@ -1722,6 +1722,38 @@ reached from the home week row, History ("Your month") and You.
   with "Cancel request", and after cancelling it shows "Cancelled" with no
   button.
 
+
+### 11.7 Messages (`/field/messages`, migration 0073)
+
+- Entry: on **You**, under "Need help?", first row **Messages** ("Talk to
+  your supervisor about your work.", icon `MessagesSquare`) with an orange
+  count pill when there are unread messages (`unread_messages()`). On
+  **Home**, above everything, an orange banner "You have a new message" /
+  "You have N new messages", "Tap to read and reply", while unread > 0
+  (`messages-banner.tsx`).
+- Page: `SheetScreen` "Messages", back to `/field/account`. Line: "Talk to
+  <supervisor name or 'the office'> about your work: stock, the store, your
+  shift or anything you need." Data `conversation(null)` and
+  `my_supervisor_name()`.
+- `Conversation` (`src/components/messages/conversation.tsx`, shared with
+  the dashboard): bubbles oldest first, own on the right in brand orange,
+  others on the left in grey with the sender's name; Lagos time under each.
+  Empty: "No messages yet. Write to <name> below." Textarea (placeholder
+  "Message <name>", 2,000 characters) and a **Send** button; errors in a red
+  alert ("Your message was not sent. Try again."). Opening the page and each
+  new message marks it read (`POST /api/messages/read`). New messages appear
+  live (the private `field:<uid>` topic hears `messages`), with a 60 s
+  refresh while visible as a fallback.
+- Push: a reply from the office arrives as "Message from <name>" and opens
+  `/field/messages`.
+
+### Acceptance checks
+
+- A staff member's message shows at once on their screen and in their
+  supervisor's inbox; the supervisor's reply shows on the phone without
+  refreshing and the Home banner appears until it is read.
+- A staff member can never see or write in anyone else's conversation.
+
 ---
 
 ## 12. Field screens summary (build checklist)
@@ -1738,6 +1770,7 @@ reached from the home week row, History ("Your month") and You.
 | `/field/count` | when allowed | §9 |
 | `/field/metrics` | field roles | §10 |
 | `/field/account` | field roles | §11.2 |
+| `/field/messages` | field roles | §11.7 |
 | `/field/support` | field roles | §11.4 |
 | `/field/leave` | field roles (form: merchandiser, marketer) | §11.6 |
 | `/field/guide` | field roles | §11.5 |

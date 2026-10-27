@@ -12,7 +12,7 @@ const rowSchema = z.object({
   email: emailAddress,
   phone: optionalPhone,
   outlet_name: z.string().max(160).nullable().optional(),
-  role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).default('merchandiser'),
+  role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin', 'hr']).default('merchandiser'),
 })
 
 const bodySchema = z.object({

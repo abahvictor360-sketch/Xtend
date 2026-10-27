@@ -33,13 +33,13 @@ This layout supersedes the previous overview arrangement described below. The fr
 
 Server component. Steps:
 
-1. `requireSession(['admin','supervisor'])`. `readOnly = role === 'supervisor'`.
+1. `requireSession(['admin','supervisor','hr'])`. `readOnly = role !== 'admin'`; `hr = role === 'hr'` (0072).
 2. Counts open alerts for the bell, in parallel (RLS narrows both to a supervisor's team):
    - `location_alerts` with `is_resolved = false` (count only, `head: true`).
    - `integrity_flags` with `reviewed_at IS NULL` and `severity IN ('medium','high')`.
    - `openAlerts = null` when both counts came back null (query failed); otherwise the sum (nulls as 0).
 3. For admins only, reads `system_settings.test_mode` (0066; error or no row means false). For supervisors it is not read.
-4. Renders `<AdminFrame name role readOnly openAlerts assistant xmEnabled testMode>` where `role` is the word `"Supervisor"` or `"Admin"` and `assistant = assistantConfigured()` (true when `ANTHROPIC_API_KEY` is set). Inside it, `<AdminLocation />` then the page.
+4. Renders `<AdminFrame name role readOnly openAlerts assistant xmEnabled testMode>` where `role` is the word `"Supervisor"`, `"HR"` or `"Admin"` (HR gets no alerts bell: `openAlerts = null`, and `/admin` sends HR to `/admin/attendance`) and `assistant = assistantConfigured()` (true when `ANTHROPIC_API_KEY` is set). Inside it, `<AdminLocation />` then the page.
 
 `src/app/admin/loading.tsx` re-exports `PageLoading`: a `role="status"` block reading **"Loading page…"** above three pulsing grey shapes (a 32×160 px bar and two 112 px tall rounded cards; the pulse only with `motion-safe`).
 
@@ -148,13 +148,14 @@ Invisible. On mount, and then every 15 minutes (`REFRESH_MS = 15 * 60_000`), it 
 |---|---|---|---|
 | Overview | full | team | — (second quick action is "Stores" instead of "Teams") |
 | Ask Xtend | full | team | Change who someone reports to; admin-only actions are refused by their routes |
-| Admin guide | full | hidden (menu shows "Guide" instead) | — |
+| Admin guide | full | hidden (menu shows "Guide" instead) | — (HR reads it) |
 | Supervisor guide ("Guide") | can open by URL (not in menu) | full | — |
 | Attendance | full | team (read) | Nothing to change: clock records are never editable by anyone |
 | Movement | full | team | — |
 | Store visits | full | team | No Team filter; coverage limited to their team's stores |
 | Marketer reports | full | team | — (lists and downloads their team only) |
 | Alerts | full | team, read-only | Resolve alerts (single or bulk) — admin only. They can run phone checks. |
+| Messages | full (any conversation) | team | Read or write to anyone outside their team |
 | Support | full | team | — (reply, close, reopen, assign, quick replies on their team) |
 | Analytics | full | team (read) | — |
 | Stock count | full | team | Upload/replace the PDF count sheet. They can request counts and close requests they made. |
@@ -184,8 +185,13 @@ Invisible. On mount, and then every 15 minutes (`REFRESH_MS = 15 * 60_000`), it 
 
 Underlying API permissions worth knowing (from `generated/routes.md`): alert resolve routes, X Metrics admin routes (`xmAdminAction`), X Metrics exports, `/api/admin/metrics/run`, `/api/admin/teams`, `/api/admin/staff-roles`, `/api/admin/staff-logins`, `/api/admin/count-template`, `/api/admin/export/audit/*`, `/api/admin/export/activity/*` are `['admin']`; everything else under `/api/admin` admits both and relies on RLS/RPC checks.
 
+### HR (0071, 0072)
+
+HR's menu shows only Guide (the admin guide), Attendance, Analytics, Messages, Staff, Schedules and Leave (`HR_LINKS` in `admin-nav.tsx`). On those pages HR sees every staff member except admins. Attendance, Analytics: full read and downloads. Leave: decide anybody's but their own. Schedules: set for any merchandiser or marketer. Staff: add merchandisers and marketers to any store with any active supervisor ("Reports to"), edit name, phone, store and supervisor, reset passwords, deactivate and reactivate; never create or change an admin, supervisor or HR account, a role, an email or the notification rule; no delete, Login details or bulk import. Messages: every conversation. Every other page redirects HR to `/`.
+
 ### Acceptance checks
 
+- Signed in as HR, `/admin` opens Attendance; `/admin/tracking`, `/admin/alerts`, `/admin/outlets`, `/admin/metrics`, `/admin/system` land on `/`.
 - Signed in as a supervisor, typing each hidden URL (`/admin/guide`, `/admin/teams`, `/admin/roles`, `/admin/places`, `/admin/audit`, `/admin/activity`, `/admin/updates`, `/admin/system`, `/admin/users/import`, `/admin/outlets/import`, `/admin/metrics/supplies`, `/admin/metrics/targets`, `/admin/metrics/setup`, `/admin/metrics/settings`) lands on `/`.
 - A field worker typing any `/admin` URL lands on `/`; a signed-out visitor on `/login`.
 - A supervisor never sees a person outside their team on any page or in any download.
@@ -349,9 +355,9 @@ Same UI. Answers cover their team only. Plans can only change store allocations;
 
 ---
 
-## 5. Admin guide — `/admin/guide` (admins only)
+## 5. Admin guide — `/admin/guide` (admins and HR)
 
-File: `src/app/admin/guide/page.tsx`, building blocks in `src/components/guide.tsx`. `requireSession(['admin'])`; supervisors who type the URL are redirected to `/`.
+File: `src/app/admin/guide/page.tsx`, building blocks in `src/components/guide.tsx`. `requireSession(['admin','hr'])`; supervisors who type the URL are redirected to `/`.
 
 Layout: heading **"Admin guide"**, intro "How to use the dashboard, page by page, in the order of the menu. Only admins can see this guide. Staff have a short guide of their own at /guide (clocking in and out, stock counts, using the app and reporting a problem), which you can share with them. Times everywhere are Lagos time." Then a row of contents pills (icon + title, each an anchor), then sections in a 2-column grid on `xl`. Each section is a card with an icon tile, an h2 title, a muted intro, and body text. Building blocks: `Steps` (numbered list with grey number circles), `Tip` (tint rounded box), `Questions` (expanding `<details>` with a brand "+" that rotates 45° when open), `Ui` (bold text for on-screen names), `GuideShot` (bordered screenshot with caption).
 
@@ -359,7 +365,7 @@ Sections (id, title, intro) and what each must say:
 
 | id | Title | Intro | Content in short |
 |---|---|---|---|
-| whats-new | What’s new (October 2026) | The latest changes, where to find them, and the one-off steps they need. | First: run migrations 0059–0070 in order in Supabase. Bullets: Schedules and Leave; Follow live on Movement (0070; phones need the new app version for it with the app closed); Marketer reports and allocated-stores-only check-ins; clock-out reminders; Activity log (admins only); X Metrics switches; count sheets from the You page and report documents; Movement map of Nigeria with clickable photos; Google map and Satellite on Movement and Attendance once the key is set, and the Places page count of where place names came from (0068); files kept 14 days with a day-before notice; Test mode and reset (Setup → System, We are live); iPhone app via TestFlight. |
+| whats-new | What’s new (October 2026) | The latest changes, where to find them, and the one-off steps they need. | First: run migrations 0059–0073 in order in Supabase (0071 on its own first). Bullets: Messages (0073); HR role (0071, 0072); Schedules and Leave; Follow live on Movement (0070; phones need the new app version for it with the app closed); Marketer reports and allocated-stores-only check-ins; clock-out reminders; Activity log (admins only); X Metrics switches; count sheets from the You page and report documents; Movement map of Nigeria with clickable photos; Google map and Satellite on Movement and Attendance once the key is set, and the Places page count of where place names came from (0068); files kept 14 days with a day-before notice; Test mode and reset (Setup → System, We are live); iPhone app via TestFlight. |
 | first-week | Your first week | Do these once, in this order, before staff start clocking in. | Steps: Outlets (radius 50–100 m small shop, 150–300 m supermarket or mall); Staff (one by one or Bulk import CSV); Store allocation; Teams; share download page and staff guide and download Login details (Word); optional X Metrics. |
 | every-day | Every day | Ten minutes each morning keeps on top of the field. | Steps: Overview; Alerts oldest first; Support longest waiting first; Integrity "Who to look at first"; late in the day Attendance and Store visits. Tip with Ask Xtend questions. |
 | overview | Overview, Ask Xtend and the guide | The top of the menu. | What Overview shows; screenshot `/guide/admin-overview.png` (2880×1800) "The overview, before anyone has clocked in"; Ask Xtend abilities and examples; nothing happens until the card's button; chats under Earlier chats. |
@@ -916,6 +922,16 @@ Their team only (RLS). No checkboxes, no notes, no Resolve; each open alert says
 - While a box is ticked the list does not refresh itself.
 - A supervisor sees no checkboxes and no Resolve buttons.
 - The phone check reports "No answer after 3 minutes" when the phone never acknowledges.
+
+---
+
+## 11a. Messages — `/admin/messages` and `/admin/messages/<staffId>` (migration 0073)
+
+Files: `src/app/admin/messages/page.tsx`, `src/app/admin/messages/[staffId]/page.tsx`, shared `src/components/messages/conversation.tsx`, `src/lib/messages.ts`; routes `POST /api/messages` (`{ staff_id, body }` → `send_message`, then the push) and `POST /api/messages/read` (`{ staff_id }`). Admins, supervisors and HR. Menu item **Messages** (icon `MessagesSquare`) just above Support.
+
+**Inbox.** Heading **"Messages"**; intro for supervisors "Talk to the merchandisers and marketers on your team. They get your reply in their app straight away.", for admins and HR "Every merchandiser and marketer has one conversation with their supervisor. You can read and reply in any of them." Refreshes every 60 s. A find box ("Find a name or store", matches name, store or supervisor) and "N unread messages" / "Nothing unread". Two lists from `message_inbox()`: **Conversations** (newest first: name in bold with an orange unread count when unread, role · store · reports to, the latest message with "Office: " when the office wrote it, Lagos time on wider screens) and **Start a conversation** (people with no messages yet). Missing function: "This page needs the messages update (0073) run in Supabase."
+
+**Conversation.** "All messages" back link, the person's name, role · store · "reports to <name>" or "no supervisor", then `Conversation` with `staffId` (empty "No messages yet. Write to <first name> below."). A person the viewer may not message gives 404. New messages arrive live through `postgres_changes` on `messages`.
 
 ---
 

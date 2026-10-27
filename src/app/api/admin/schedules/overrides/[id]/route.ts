@@ -5,7 +5,7 @@ import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 /** Removes a date change, so the weekly pattern applies again (audited in 059). */
 export async function DELETE(_request: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    await requireApiSession(['admin', 'supervisor'])
+    await requireApiSession(['admin', 'supervisor', 'hr'])
     const { id } = await ctx.params
     if (!z.string().uuid().safeParse(id).success) {
       return Response.json({ error: 'That date change was not found' }, { status: 404 })

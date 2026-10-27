@@ -20,6 +20,7 @@ import {
   Headset,
   Menu,
   MessageSquareText,
+  MessagesSquare,
   PackageSearch,
   PhoneOff,
   Route,
@@ -66,6 +67,7 @@ const GROUPS: { title: string | null; links: NavLink[] }[] = [
       { href: '/admin/visits', label: 'Store visits', icon: MapPin, adminOnly: false },
       { href: '/admin/marketer-reports', label: 'Marketer reports', icon: FileText, adminOnly: false },
       { href: '/admin/alerts', label: 'Alerts', icon: Siren, adminOnly: false },
+      { href: '/admin/messages', label: 'Messages', icon: MessagesSquare, adminOnly: false },
       { href: '/admin/support', label: 'Support', icon: Headset, adminOnly: false },
       { href: '/admin/analytics', label: 'Analytics', icon: BarChart3, adminOnly: false },
     ],
@@ -109,7 +111,18 @@ const GROUPS: { title: string | null; links: NavLink[] }[] = [
   },
 ]
 
-function useLinks(readOnly: boolean, xmEnabled: boolean) {
+/** What HR (0072) uses: people, not stock, locations or settings. */
+const HR_LINKS = new Set([
+  '/admin/guide',
+  '/admin/attendance',
+  '/admin/analytics',
+  '/admin/messages',
+  '/admin/users',
+  '/admin/schedules',
+  '/admin/leave',
+])
+
+function useLinks(readOnly: boolean, xmEnabled: boolean, hr = false) {
   const pathname = usePathname()
   // X Metrics switched off (0063): gone for supervisors; admins keep it,
   // marked off, opening Settings so they can switch it back on.
@@ -117,7 +130,11 @@ function useLinks(readOnly: boolean, xmEnabled: boolean) {
   const groups = GROUPS.map((g) => ({
     ...g,
     links: g.links
-      .filter((link) => (!link.adminOnly || !readOnly) && (!link.supervisorOnly || readOnly))
+      .filter((link) =>
+        hr
+          ? HR_LINKS.has(link.href)
+          : (!link.adminOnly || !readOnly) && (!link.supervisorOnly || readOnly),
+      )
       .filter((link) => link.href !== '/admin/metrics' || xm.show)
       .map((link) =>
         link.href === '/admin/metrics' && xm.off ? { ...link, href: xm.href, label: `${link.label} (off)` } : link,
@@ -132,8 +149,16 @@ function useLinks(readOnly: boolean, xmEnabled: boolean) {
  * Desktop: a menu down the left side, always in view, grouped. Rendered in
  * the layout's sidebar column, which only exists on large screens.
  */
-export function AdminSidebarNav({ readOnly, xmEnabled = true }: { readOnly: boolean; xmEnabled?: boolean }) {
-  const { groups, isActive } = useLinks(readOnly, xmEnabled)
+export function AdminSidebarNav({
+  readOnly,
+  xmEnabled = true,
+  hr = false,
+}: {
+  readOnly: boolean
+  xmEnabled?: boolean
+  hr?: boolean
+}) {
+  const { groups, isActive } = useLinks(readOnly, xmEnabled, hr)
 
   return (
     <nav aria-label="Dashboard" className="space-y-6">
@@ -174,8 +199,16 @@ export function AdminSidebarNav({ readOnly, xmEnabled = true }: { readOnly: bool
  * Phone and tablet: one button that drops the whole menu down. A long tab
  * strip hides most of the dashboard from anyone holding a phone.
  */
-export function AdminNav({ readOnly, xmEnabled = true }: { readOnly: boolean; xmEnabled?: boolean }) {
-  const { pathname, groups, isActive } = useLinks(readOnly, xmEnabled)
+export function AdminNav({
+  readOnly,
+  xmEnabled = true,
+  hr = false,
+}: {
+  readOnly: boolean
+  xmEnabled?: boolean
+  hr?: boolean
+}) {
+  const { pathname, groups, isActive } = useLinks(readOnly, xmEnabled, hr)
   const [open, setOpen] = useState(false)
   const menu = useRef<HTMLDivElement | null>(null)
   const trigger = useRef<HTMLButtonElement | null>(null)

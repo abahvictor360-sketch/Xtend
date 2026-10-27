@@ -11,8 +11,8 @@ export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Schedules — Xtend' }
 
 export default async function SchedulesPage({ searchParams }: { searchParams: Promise<{ user?: string }> }) {
-  const session = await requireSession(['admin', 'supervisor'])
-  const isAdmin = session.profile.role === 'admin'
+  const session = await requireSession(['admin', 'supervisor', 'hr'])
+  const isAdmin = session.profile.role === 'admin' || session.profile.role === 'hr'
   const { user } = await searchParams
   const supabase = await createServerSupabase()
   const today = lagosDateString()

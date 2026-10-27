@@ -2,7 +2,7 @@
 
 # Pages
 
-57 pages. "Who" is what `requireSession` admits (field pages are also guarded by their layout).
+60 pages. "Who" is what `requireSession` admits (field pages are also guarded by their layout).
 
 ## `/admin/activity` — Activity log — Xtend
 
@@ -25,7 +25,7 @@ On screen: Review what happened, check the context, then follow up.
 ## `/admin/analytics` — Analytics — Xtend
 
 - File: `src/app/admin/analytics/page.tsx`
-- Who: ['admin', 'supervisor']
+- Who: ['admin', 'supervisor', 'hr']
 - Components: `ui/alert`, `ui/card`, `ui/table`, `admin/attendance-filters`, `admin/analytics-charts`
 
 Clock-ins somebody needs before their punctuality is ranked.
@@ -51,7 +51,7 @@ On screen: Choose which stores each person works. A marketer with stores here ca
 ## `/admin/attendance` — Attendance — Xtend
 
 - File: `src/app/admin/attendance/page.tsx`
-- Who: ['admin', 'supervisor']
+- Who: ['admin', 'supervisor', 'hr']
 - Components: `ui/alert`, `admin/attendance-filters`, `admin/attendance-grid`, `admin/attendance-table`
 
 Days handed to the table at once; the download has the rest.
@@ -91,7 +91,7 @@ when following starts.
 ## `/admin/guide` — Admin guide — Xtend
 
 - File: `src/app/admin/guide/page.tsx`
-- Who: ['admin']
+- Who: ['admin', 'hr']
 - Components: `guide`
 
 How to run the Xtend dashboard, page by page. Admins only: it covers
@@ -111,7 +111,7 @@ On screen: Things that look wrong: signs of a fake-location app, phone clocks ch
 ## `/admin/leave` — Leave — Xtend
 
 - File: `src/app/admin/leave/page.tsx`
-- Who: ['admin', 'supervisor']
+- Who: ['admin', 'supervisor', 'hr']
 - Components: `admin/leave-decisions`, `ui/alert`, `ui/input`, `ui/label`, `ui/select`, `ui/button`
 
 ## `/admin/marketer-reports` — Marketer reports — Xtend
@@ -121,6 +121,20 @@ On screen: Things that look wrong: signs of a fake-location app, phone clocks ch
 - Components: `admin/marketer-report-list`, `admin/report-file-list`, `admin/visit-views`, `ui/alert`, `ui/button`, `ui/card`, `ui/input`, `ui/label`
 
 On screen: A report to download for each marketer, for one day or a whole month: when they clocked in and out, every store they checked in to and how long they spent there, the time between stores, and the daily report they filed. PDF is the one to share; Word and Excel hold the same.
+
+## `/admin/messages/[staffId]` — Conversation — Xtend
+
+- File: `src/app/admin/messages/[staffId]/page.tsx`
+- Who: ['admin', 'supervisor', 'hr']
+- Components: `messages/conversation`
+
+## `/admin/messages` — Messages — Xtend
+
+- File: `src/app/admin/messages/page.tsx`
+- Who: ['admin', 'supervisor', 'hr']
+- Components: `ui/alert`, `ui/badge`, `ui/button`, `ui/input`, `admin/movement-map`
+
+On screen: No merchandisers or marketers to message yet.
 
 ## `/admin/metrics/expiry` — Expiry alerts — X Metrics
 
@@ -225,7 +239,7 @@ On screen: Load the July customer list, or paste your own — names and addresse
 ## `/admin` — Overview — Xtend
 
 - File: `src/app/admin/page.tsx`
-- Who: ['admin', 'supervisor']
+- Who: ['admin', 'supervisor', 'hr']
 - Components: `admin/overview-view`, `admin/live-locations`, `admin/overview-charts`
 
 ## `/admin/places` — Places — Xtend
@@ -249,7 +263,7 @@ On screen: Add a role with its own name, such as Account Receivable or Promoter,
 ## `/admin/schedules` — Schedules — Xtend
 
 - File: `src/app/admin/schedules/page.tsx`
-- Who: ['admin', 'supervisor']
+- Who: ['admin', 'supervisor', 'hr']
 - Components: `admin/schedule-manager`, `ui/alert`
 
 ## `/admin/store-counts` — Stock count — Xtend
@@ -327,7 +341,7 @@ On screen: Upload a CSV with the columns
 ## `/admin/users` — Staff — Xtend
 
 - File: `src/app/admin/users/page.tsx`
-- Who: ['admin', 'supervisor']
+- Who: ['admin', 'supervisor', 'hr']
 - Components: `ui/button`, `admin/staff-manager`
 
 ## `/admin/visits` — Store visits — Xtend
@@ -406,6 +420,12 @@ The staff guide inside the app, with the menu bar still to hand.
 
 On screen: Pick the type, your first and last day of leave, and say why. Your supervisor approves it, and you get a message when they do.
 
+## `/field/messages` — Messages — Xtend
+
+- File: `src/app/field/messages/page.tsx`
+- Who: FIELD_ROLES
+- Components: `field/screen`, `messages/conversation`
+
 ## `/field/metrics` — X Metrics — Xtend
 
 - File: `src/app/field/metrics/page.tsx`
@@ -420,7 +440,7 @@ Metrics. Both work offline and are sent when there is signal.
 
 - File: `src/app/field/page.tsx`
 - Who: FIELD_ROLES
-- Components: `field/field-home`, `field/dashboard-retry`, `field/count-due-banner`, `field/store-visits`
+- Components: `field/field-home`, `field/dashboard-retry`, `field/count-due-banner`, `field/messages-banner`, `field/store-visits`
 
 ## `/field/report` — Daily report — Xtend
 

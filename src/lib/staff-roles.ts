@@ -35,6 +35,7 @@ export const BUILT_IN_ROLES: { value: UserRole; label: string; plural: string }[
   { value: 'marketer', label: 'Marketer', plural: 'Marketers' },
   { value: 'supervisor', label: 'Supervisor', plural: 'Supervisors' },
   { value: 'admin', label: 'Admin', plural: 'Admins' },
+  { value: 'hr', label: 'HR', plural: 'HR' },
 ]
 
 export const BASE_LABEL: Record<UserRole, string> = {
@@ -42,6 +43,7 @@ export const BASE_LABEL: Record<UserRole, string> = {
   marketer: 'Marketer',
   supervisor: 'Supervisor',
   admin: 'Admin',
+  hr: 'HR',
 }
 
 /** One value for a role picker: a built-in role, or "custom:<id>". */

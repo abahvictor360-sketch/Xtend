@@ -306,7 +306,7 @@ export function StaffGuide() {
       <GuideSection topic={T.history} intro="Your own record and settings.">
         <p>
           <Ui>History</Ui> shows your attendance day by day. <Ui>You</Ui> shows your
-          account: your store, notifications, <Ui>Change your password</Ui> and{' '}
+          account: your store, notifications, <Ui>Messages</Ui>, <Ui>Change your password</Ui> and{' '}
           <Ui>Message support</Ui>.
         </p>
         <p>The week on the home screen and the calendar in History are coloured:</p>
@@ -367,6 +367,12 @@ export function StaffGuide() {
           ]}
         />
         <Tip>Urgent and on shift? Call your supervisor as well.</Tip>
+        <p>
+          To talk to your supervisor about your work (stock, the store, your shift), open{' '}
+          <Ui>You</Ui>, then <Ui>Messages</Ui>. Write your message and tap <Ui>Send</Ui>. Their reply
+          arrives as a notification, and the home screen shows <Ui>You have a new message</Ui> until
+          you read it.
+        </p>
       </GuideSection>
 
       <GuideSection topic={T.fix}>

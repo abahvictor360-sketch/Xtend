@@ -147,6 +147,24 @@ SET row_security = off;
 
 
 --
+-- Data for Name: message_threads; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
+-- Data for Name: message_reads; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
+-- Data for Name: messages; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
 -- Data for Name: notifications; Type: TABLE DATA; Schema: public; Owner: -
 --
 
