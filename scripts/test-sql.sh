@@ -89,5 +89,8 @@ run supabase/migrations/0067_report_photos_offline.sql
 run supabase/migrations/0068_place_lookups.sql
 run supabase/migrations/0069_shift_soon_reminders.sql
 run supabase/migrations/0070_follow_live.sql
+run supabase/migrations/0071_hr_role_value.sql
+run supabase/migrations/0072_hr_role.sql
+run supabase/migrations/0073_messages.sql
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rules.sql 2>&1 | grep -E 'NOTICE|ERROR' | sed 's/^psql:[^ ]*: //'
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_counts.sql 2>&1 | grep -E 'NOTICE|ERROR|PASSED' | sed 's/^psql:[^ ]*: //'

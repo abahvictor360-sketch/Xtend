@@ -429,7 +429,7 @@ begin
     perform public.write_audit('user.delete', 'profiles', boss, '{"forged":true}'::jsonb);
     perform assert(false, 'a merchandiser must not write an audit row');
   exception when others then
-    perform assert(sqlerrm like '%Admins and supervisors only%', 'a merchandiser cannot write an audit row');
+    perform assert(sqlerrm like '%Admins, HR and supervisors only%', 'a merchandiser cannot write an audit row');
   end;
 
   -- ---------------------------------------------------------------
@@ -3020,7 +3020,7 @@ begin
         perform public.write_audit('test.staff', null, null, '{}'::jsonb, null);
         perform assert(false, 'audit: staff cannot write the audit log');
       exception when others then
-        perform assert(sqlerrm like '%Admins and supervisors only%', 'audit: staff cannot write the audit log');
+        perform assert(sqlerrm like '%Admins, HR and supervisors only%', 'audit: staff cannot write the audit log');
       end;
       perform act_as(boss);
     end;
@@ -3748,7 +3748,7 @@ begin
         perform public.set_work_pattern(array[kemi], '{0,1}'::smallint[]);
         perform assert(false, 'schedules: staff must not set schedules');
       exception when others then
-        perform assert(sqlerrm like '%Only admins and supervisors%', 'schedules: staff cannot set their own schedule');
+        perform assert(sqlerrm like '%Only admins, HR and supervisors%', 'schedules: staff cannot set their own schedule');
       end;
       perform act_as(sola);
       begin
@@ -3855,7 +3855,7 @@ begin
         perform public.decide_leave(lv, true, '');
         perform assert(false, 'leave: staff must not decide leave');
       exception when others then
-        perform assert(sqlerrm like '%Only admins and supervisors%', 'leave: staff cannot approve their own request');
+        perform assert(sqlerrm like '%Only admins, HR and supervisors%', 'leave: staff cannot approve their own request');
       end;
       perform act_as(sade);
       begin
@@ -5182,6 +5182,123 @@ begin
     if sqlerrm <> 'follow-0070-done' then raise; end if;
   end;
   perform assert(not exists (select 1 from public.follow_sessions), 'follow 0070: (the tests above rolled back)');
+
+  -- ---------------------------------------------------------------
+  -- HR (0072) and messages between staff and their supervisor (0073).
+  -- Rolled back, except one conversation kept for the reset and RLS tests.
+  -- ---------------------------------------------------------------
+  declare
+    halima uuid := gen_random_uuid();
+    lv uuid;
+    r jsonb;
+  begin
+    begin
+      perform set_config('request.jwt.claim.sub', '', false);
+      insert into auth.users (id, email) values (halima, 'halima.hr@xpel.ng');
+      insert into public.profiles (id, full_name, email, role) values (halima, 'Halima Musa', 'halima.hr@xpel.ng', 'hr');
+      update public.profiles set supervisor_id = tunde, outlet_id = null where id = grace;
+      update public.profiles set supervisor_id = null where id = ada;
+      insert into public.leave_requests (user_id, kind, from_date, to_date, reason)
+      values (ada, 'annual', public.business_date() + 20, public.business_date() + 21, 'Family visit')
+      returning id into lv;
+
+      -- HR sees people, not admins, and nothing about locations or checks.
+      perform act_as(halima);
+      perform assert(public.is_hr() and not public.is_admin(), 'hr 0072: an HR account is HR, not an admin');
+      perform assert(public.hr_sees(ada) and public.hr_sees(tunde) and not public.hr_sees(boss),
+        'hr 0072: HR sees staff and supervisors, not admins');
+      perform assert(exists (select 1 from public.my_staff() where id = ada)
+                       and not exists (select 1 from public.my_staff() where id = boss),
+        'hr 0072: the staff list is everyone but admins');
+      perform assert(exists (select 1 from public.staff_analytics(public.business_date() - 30, public.business_date())
+                             where user_id = ada),
+        'hr 0072: HR sees punctuality');
+      perform assert(exists (select 1 from public.available_supervisors()),
+        'hr 0072: HR can name a supervisor');
+      perform assert(not public.supervises_user(ada), 'hr 0072: HR is nobody''s supervisor');
+      perform assert(not public.can_send_notifications(), 'hr 0072: HR does not send notifications');
+
+      perform public.decide_leave(lv, true, 'Enjoy it');
+      perform assert((select status = 'approved' and decided_by = halima from public.leave_requests where id = lv),
+        'hr 0072: HR decides leave');
+      perform public.set_schedule_override(ada, public.business_date() + 3, false, 'Training day');
+      perform assert(exists (select 1 from public.schedule_overrides where user_id = ada and day = public.business_date() + 3),
+        'hr 0072: HR sets schedules');
+      perform public.write_audit('user.update', 'profiles', ada, '{}'::jsonb);
+      perform assert(exists (select 1 from public.audit_log where actor_id = halima),
+        'hr 0072: HR changes are audited');
+
+      -- Messages.
+      perform act_as(ada);
+      r := public.send_message(null, 'Good morning, the shelf needs restocking.');
+      perform assert((r->>'from_staff')::boolean and (r->>'staff_id')::uuid = ada,
+        'messages 0073: staff write in their own conversation');
+      begin
+        perform public.send_message(null, '   ');
+        perform assert(false, 'messages 0073: an empty message is refused');
+      exception when others then
+        perform assert(sqlerrm like '%Write your message%', 'messages 0073: an empty message is refused');
+      end;
+
+      perform act_as(bala);
+      perform assert(not public.can_message(ada), 'messages 0073: staff cannot take part in another person''s conversation');
+      r := public.send_message(ada, 'Hello');
+      perform assert((r->>'staff_id')::uuid = bala, 'messages 0073: and cannot write in it');
+
+      perform act_as(tunde);
+      begin
+        perform public.send_message(ada, 'Hi Ada');
+        perform assert(false, 'messages 0073: a supervisor only messages their own team');
+      exception when others then
+        perform assert(sqlerrm like '%own team%', 'messages 0073: a supervisor only messages their own team');
+      end;
+      perform public.send_message(grace, 'Please call me when you arrive.');
+      perform assert(exists (select 1 from public.message_inbox() where staff_id = grace and not last_from_staff)
+                       and not exists (select 1 from public.message_inbox() where staff_id = ada),
+        'messages 0073: the supervisor''s inbox is their team');
+
+      perform act_as(grace);
+      perform assert(public.unread_messages() = 1, 'messages 0073: the staff member sees one unread');
+      perform public.read_messages(null);
+      perform assert(public.unread_messages() = 0, 'messages 0073: reading clears it');
+
+      perform act_as(boss);
+      perform assert((select unread from public.message_inbox() where staff_id = ada) = 1,
+        'messages 0073: admins see every conversation, with unread counts');
+      perform public.read_messages(ada);
+      perform assert((select unread from public.message_inbox() where staff_id = ada) = 0,
+        'messages 0073: and can mark it read');
+
+      perform act_as(halima);
+      r := public.send_message(ada, 'Thanks Ada, noted.');
+      perform assert(not (r->>'from_staff')::boolean, 'messages 0073: HR can reply too');
+
+      perform act_as(ada);
+      perform assert((select count(*) from public.conversation(grace)) = 2,
+        'messages 0073: staff only ever read their own conversation');
+      perform assert((select bool_and(mine = from_staff) from public.conversation(null)),
+        'messages 0073: staff see which messages are theirs');
+      perform assert((select sender_name from public.conversation(null) where not mine)
+                       = (select full_name from public.profiles where id = halima),
+        'messages 0073: replies show who wrote them');
+      perform act_as(grace);
+      perform assert(public.my_supervisor_name() = (select full_name from public.profiles where id = tunde),
+        'messages 0073: staff see who they are writing to');
+      perform act_as(tunde);
+      perform assert(not exists (select 1 from public.conversation(ada)),
+        'messages 0073: a supervisor cannot read another team''s conversation');
+
+      perform set_config('request.jwt.claim.sub', '', false);
+      raise exception 'hr-0072-done';
+    exception when others then
+      if sqlerrm <> 'hr-0072-done' then raise; end if;
+    end;
+    perform assert(not exists (select 1 from public.messages), 'messages 0073: (the tests above rolled back)');
+  end;
+  -- One conversation stays, for the reset and RLS tests below.
+  perform act_as(ada);
+  perform public.send_message(null, 'Good morning, I am at the store.');
+  perform set_config('request.jwt.claim.sub', '', false);
 
   -- Test mode and resetting the test run (066). Every case runs in its
   -- own block that is rolled back, so the data stays for the RLS tests.

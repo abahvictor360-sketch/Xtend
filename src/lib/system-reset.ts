@@ -88,8 +88,8 @@ export const RESET_CATEGORIES: ResetCategory[] = [
   {
     key: 'support',
     label: 'Support chats',
-    line: 'Every support conversation and message.',
-    tables: ['support_threads', 'support_messages'],
+    line: 'Every support conversation and message, and every message between staff and their supervisor.',
+    tables: ['support_threads', 'support_messages', 'message_threads', 'messages', 'message_reads'],
   },
   {
     key: 'notifications',

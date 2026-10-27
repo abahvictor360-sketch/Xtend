@@ -102,7 +102,10 @@ export default async function SupervisorGuidePage() {
                 <Ui>Alerts</Ui>: follow up anyone who left their store or clocked in away from it.
               </>,
               <>
-                <Ui>Support</Ui>: answer your team&apos;s messages, longest waiting first.
+                <Ui>Messages</Ui>: read and answer what your team wrote to you. Unread ones are in bold.
+              </>,
+              <>
+                <Ui>Support</Ui>: answer your team&apos;s problems with the app, longest waiting first.
               </>,
               <>
                 <Ui>Leave</Ui>: answer pending leave requests so people know where they stand.
@@ -189,6 +192,13 @@ export default async function SupervisorGuidePage() {
             <Ui>Alerts</Ui> shows when someone on your team left their store during a shift, clocked in away
             from it, or had location off. Each alert links to their movement that day, a phone check and a
             call. Follow up, then tell your admin what you found; admins resolve alerts.
+          </p>
+          <p>
+            <Ui>Messages</Ui> is your chat with each merchandiser and marketer on your team: stock, the
+            store, their shift, anything about the work. They write from <Ui>You</Ui> →{' '}
+            <Ui>Messages</Ui> in the app and you get a notification; open their name, read, and reply. Your
+            reply reaches their phone straight away. Admins and HR can read and reply in these chats too.
+            Anyone with no messages yet is under <Ui>Start a conversation</Ui>.
           </p>
           <p>
             <Ui>Support</Ui> holds your team&apos;s problems and complaints from the app. The Xtend helper

@@ -11,7 +11,7 @@ export const maxDuration = 60
 /** The Analytics page's comparison table (by person, store or team), as Excel, Word, PDF or CSV. */
 export async function GET(request: Request, ctx: { params: Promise<{ format: string }> }) {
   try {
-    await requireApiSession(['admin', 'supervisor'])
+    await requireApiSession(['admin', 'supervisor', 'hr'])
     const { format } = await ctx.params
     const filter = parseReportFilter(new URL(request.url).searchParams, 30)
     const supabase = await createServerSupabase()

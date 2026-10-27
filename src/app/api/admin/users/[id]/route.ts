@@ -14,7 +14,7 @@ const patchSchema = z.object({
   email: emailAddress.optional(),
   // Left out: unchanged. Empty or null: removed. Otherwise a mobile number.
   phone: z.union([z.literal(''), z.null(), phoneNumber]).optional().transform((v) => (v === '' ? null : v)),
-  role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).optional(),
+  role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin', 'hr']).optional(),
   /** A role an admin added (042), or null for a built-in one. */
   staff_role_id: z.string().uuid().nullable().optional(),
   outlet_id: z.string().uuid().nullable().optional(),
@@ -27,7 +27,7 @@ const patchSchema = z.object({
 
 export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const session = await requireApiSession(['admin', 'supervisor'])
+    const session = await requireApiSession(['admin', 'supervisor', 'hr'])
     const { id } = await ctx.params
     const parsed = patchSchema.safeParse(await request.json())
     if (!parsed.success) {
@@ -72,6 +72,42 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
           { error: "Only an admin can change somebody's email, role, store, supervisor or notification rule." },
           { status: 403 },
         )
+      }
+    }
+
+    // HR (0072) edits merchandisers and marketers anywhere: details, store,
+    // supervisor, active, a new password. Never a role, email or an account
+    // above field staff.
+    const isHr = session.profile.role === 'hr'
+    if (isHr) {
+      const { data: target } = await admin
+        .from('profiles')
+        .select('role')
+        .eq('id', id)
+        .maybeSingle<{ role: string }>()
+      if (target?.role !== 'merchandiser' && target?.role !== 'marketer') {
+        return Response.json({ error: 'HR can change merchandisers and marketers only.' }, { status: 403 })
+      }
+      if (
+        input.role !== undefined ||
+        input.staff_role_id !== undefined ||
+        input.email !== undefined ||
+        input.push_exempt !== undefined
+      ) {
+        return Response.json(
+          { error: "Only an admin can change somebody's email, role or notification rule." },
+          { status: 403 },
+        )
+      }
+      if (input.supervisor_id) {
+        const { data: sup } = await admin
+          .from('profiles')
+          .select('role, is_active')
+          .eq('id', input.supervisor_id)
+          .maybeSingle<{ role: string; is_active: boolean }>()
+        if (!sup?.is_active || (sup.role !== 'supervisor' && sup.role !== 'admin')) {
+          return Response.json({ error: 'Pick an active supervisor.' }, { status: 400 })
+        }
       }
     }
 

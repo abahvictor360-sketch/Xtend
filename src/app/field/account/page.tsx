@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Bell, BookOpen, CalendarCheck, CalendarDays, Clock, Headset, KeyRound, MapPin, Smartphone } from 'lucide-react'
+import { Bell, BookOpen, CalendarCheck, CalendarDays, Clock, Headset, KeyRound, MapPin, MessagesSquare, Smartphone } from 'lucide-react'
 import { FIELD_ROLES, requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { BASE_LABEL } from '@/lib/staff-roles'
@@ -23,7 +23,8 @@ export default async function AccountPage() {
   const session = await requireSession(FIELD_ROLES)
   const supabase = await createServerSupabase()
 
-  const [{ data: inbox }, { data: addedRole }, { data: outlet }, photo, countStatus, { data: today }] = await Promise.all([
+  const [{ data: inbox }, { data: addedRole }, { data: outlet }, photo, countStatus, { data: today }, { data: unread }] =
+    await Promise.all([
     supabase.rpc('my_notifications', { p_limit: 10 }),
     // A role an admin added (042) shows by its own name.
     session.profile.staff_role_id
@@ -50,7 +51,10 @@ export default async function AccountPage() {
     // Whether their role takes stock counts (046); a due count is not needed.
     getCountStatus(supabase),
     supabase.rpc('business_date'),
+    // Unread messages from their supervisor (0073).
+    supabase.rpc('unread_messages'),
   ])
+  const unreadMessages = (unread as number | null) ?? 0
   const businessDate = (today as string | null) ?? ''
 
   // The stock count sheet, any time (0064): their stores, this month's
@@ -167,6 +171,20 @@ export default async function AccountPage() {
 
         <section className="space-y-3">
           <SectionHeader title="Need help?" />
+          <Link href="/field/messages" className="block">
+            <TaskRow
+              icon={<MessagesSquare className="h-5 w-5" />}
+              title="Messages"
+              meta="Talk to your supervisor about your work."
+              trailing={
+                unreadMessages > 0 ? (
+                  <span className="rounded-full bg-brand px-2 py-0.5 text-xs font-bold text-white">
+                    {unreadMessages}
+                  </span>
+                ) : undefined
+              }
+            />
+          </Link>
           <Link href="/field/support" className="block">
             <TaskRow
               icon={<Headset className="h-5 w-5" />}

@@ -16,7 +16,7 @@ const schema = z.object({
  */
 export async function POST(request: Request) {
   try {
-    await requireApiSession(['admin', 'supervisor'])
+    await requireApiSession(['admin', 'supervisor', 'hr'])
     const parsed = schema.safeParse(await request.json())
     if (!parsed.success) {
       return Response.json({ error: parsed.error.issues[0]?.message ?? 'Check the date' }, { status: 400 })

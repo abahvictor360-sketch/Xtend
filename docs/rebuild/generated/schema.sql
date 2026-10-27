@@ -114,7 +114,8 @@ CREATE TYPE public.user_role AS ENUM (
     'merchandiser',
     'supervisor',
     'admin',
-    'marketer'
+    'marketer',
+    'hr'
 );
 
 
@@ -1138,7 +1139,7 @@ CREATE FUNCTION public.available_supervisors() RETURNS TABLE(id uuid, full_name 
     AS $$
   select p.id, p.full_name, p.role, p.outlet_id
   from public.profiles p
-  where public.is_admin()
+  where (public.is_admin() or public.is_hr())
     and p.is_active
     and p.role in ('supervisor'::user_role, 'admin'::user_role)
   order by p.full_name;
@@ -1249,9 +1250,24 @@ CREATE FUNCTION public.can_manage_schedule(p_user uuid) RETURNS boolean
     AS $$
   select coalesce(
     (select public.is_field_role(p.role)
-            and (public.is_admin() or public.supervises_user(p.id))
+            and (public.is_admin() or public.supervises_user(p.id) or public.hr_sees(p.id))
        from public.profiles p where p.id = p_user),
     false);
+$$;
+
+
+--
+-- Name: can_message(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.can_message(p_staff uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select exists (
+    select 1 from public.profiles s
+    where s.id = p_staff and public.is_field_role(s.role)
+      and (s.id = auth.uid() or public.is_admin() or public.is_hr() or public.supervises_user(s.id)));
 $$;
 
 
@@ -2026,6 +2042,29 @@ $$;
 
 
 --
+-- Name: conversation(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.conversation(p_staff uuid) RETURNS TABLE(id uuid, body text, created_at timestamp with time zone, sender_name text, from_staff boolean, mine boolean)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  with who as (
+    select case when public.is_field_role(public.current_user_role()) then auth.uid() else p_staff end as staff
+  )
+  select m.id, m.body, m.created_at, coalesce(s.full_name, 'Former staff'),
+         m.sender_id = t.staff_id, m.sender_id = auth.uid()
+  from who
+  join public.message_threads t on t.staff_id = who.staff
+  join public.messages m on m.thread_id = t.id
+  left join public.profiles s on s.id = m.sender_id
+  where public.can_message(who.staff)
+  order by m.created_at
+  limit 500;
+$$;
+
+
+--
 -- Name: count_place_lookups(text[]); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2142,8 +2181,8 @@ declare
   clean text := btrim(coalesce(p_note, ''));
   outcome text;
 begin
-  if not (public.is_admin() or public.current_user_role() = 'supervisor') then
-    raise exception 'Only admins and supervisors decide leave';
+  if not (public.is_admin() or public.is_hr() or public.current_user_role() = 'supervisor') then
+    raise exception 'Only admins, HR and supervisors decide leave';
   end if;
   if p_approve is null then
     raise exception 'Approve or reject the request';
@@ -2155,7 +2194,7 @@ begin
   if l.user_id = auth.uid() then
     raise exception 'You cannot decide your own leave';
   end if;
-  if not (public.is_admin() or public.supervises_user(l.user_id)) then
+  if not (public.is_admin() or public.supervises_user(l.user_id) or public.hr_sees(l.user_id)) then
     raise exception 'You can only decide leave for your own team';
   end if;
   if l.status = 'cancelled' then
@@ -2986,6 +3025,19 @@ $_$;
 
 
 --
+-- Name: hr_sees(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.hr_sees(target uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select public.is_hr() and exists (
+    select 1 from public.profiles p where p.id = target and p.role <> 'admin'::user_role);
+$$;
+
+
+--
 -- Name: is_admin(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3006,6 +3058,20 @@ CREATE FUNCTION public.is_field_role(r public.user_role) RETURNS boolean
     SET search_path TO 'public'
     AS $$
   select r in ('merchandiser'::user_role, 'marketer'::user_role);
+$$;
+
+
+--
+-- Name: is_hr(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.is_hr() RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select coalesce(
+    (select role = 'hr'::user_role and is_active from public.profiles where id = auth.uid()),
+    false);
 $$;
 
 
@@ -3031,6 +3097,7 @@ CREATE FUNCTION public.is_working_day(p_user uuid, p_day date) RETURNS boolean
     AS $$
   select case
     when auth.uid() is null or p_user = auth.uid() or public.is_admin() or public.supervises_user(p_user)
+         or public.hr_sees(p_user)
       then public.day_kind(p_user, p_day) = 'working'
   end;
 $$;
@@ -3366,6 +3433,32 @@ $$;
 
 
 --
+-- Name: message_inbox(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.message_inbox() RETURNS TABLE(staff_id uuid, full_name text, role public.user_role, outlet_name text, supervisor_name text, last_message_at timestamp with time zone, last_body text, last_from_staff boolean, unread integer)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select p.id, p.full_name, p.role, o.name, sup.full_name,
+         t.last_message_at,
+         (select m.body from public.messages m where m.thread_id = t.id order by m.created_at desc limit 1),
+         t.last_sender_id = p.id,
+         coalesce((select count(*)::integer from public.messages m
+                   left join public.message_reads r on r.thread_id = t.id and r.user_id = auth.uid()
+                   where m.thread_id = t.id and m.sender_id is distinct from auth.uid()
+                     and m.created_at > coalesce(r.read_at, '-infinity'::timestamptz)), 0)
+  from public.profiles p
+  left join public.outlets o on o.id = p.outlet_id
+  left join public.profiles sup on sup.id = p.supervisor_id
+  left join public.message_threads t on t.staff_id = p.id
+  where p.is_active and public.is_field_role(p.role) and p.id <> auth.uid()
+    and public.can_message(p.id)
+  order by t.last_message_at desc nulls last, p.full_name;
+$$;
+
+
+--
 -- Name: minutes_label(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3671,7 +3764,7 @@ CREATE FUNCTION public.my_staff() RETURNS SETOF public.profiles
     SET search_path TO 'public'
     AS $$
   select p.* from public.profiles p
-  where public.is_admin() or public.supervises_user(p.id) or p.id = auth.uid()
+  where public.is_admin() or public.supervises_user(p.id) or public.hr_sees(p.id) or p.id = auth.uid()
   order by p.full_name;
 $$;
 
@@ -3782,6 +3875,20 @@ CREATE FUNCTION public.my_store_visits() RETURNS SETOF public.store_visit_detail
   select * from public.store_visit_detail
   where user_id = auth.uid() and visit_date = public.business_date()
   order by arrived_at desc;
+$$;
+
+
+--
+-- Name: my_supervisor_name(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_supervisor_name() RETURNS text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select s.full_name from public.profiles me
+  join public.profiles s on s.id = me.supervisor_id and s.is_active
+  where me.id = auth.uid();
 $$;
 
 
@@ -4602,6 +4709,33 @@ $$;
 
 
 --
+-- Name: read_messages(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.read_messages(p_staff uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  t uuid;
+  me public.profiles;
+begin
+  select * into me from public.profiles where id = auth.uid();
+  if me.id is null then
+    return;
+  end if;
+  select id into t from public.message_threads
+  where staff_id = case when public.is_field_role(me.role) then me.id else p_staff end;
+  if t is null or not public.can_message(case when public.is_field_role(me.role) then me.id else p_staff end) then
+    return;
+  end if;
+  insert into public.message_reads (thread_id, user_id, read_at) values (t, me.id, clock_timestamp())
+  on conflict (thread_id, user_id) do update set read_at = excluded.read_at;
+end;
+$$;
+
+
+--
 -- Name: realtime_notify_field_owner(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4619,6 +4753,27 @@ begin
       public.field_topic(owner),
       true  -- private channel; receipt gated by RLS on realtime.messages
     );
+  end if;
+  return null;
+end;
+$$;
+
+
+--
+-- Name: realtime_notify_message(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.realtime_notify_message() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'realtime'
+    AS $$
+declare
+  owner uuid;
+begin
+  select staff_id into owner from public.message_threads where id = new.thread_id;
+  if owner is not null then
+    perform realtime.send(jsonb_build_object('table', 'messages', 'op', tg_op),
+                          'change', public.field_topic(owner), true);
   end if;
   return null;
 end;
@@ -5542,7 +5697,8 @@ CREATE FUNCTION public.reset_category_tables() RETURNS TABLE(category text, tabl
     'clock_ins:photo_checks', 'clock_ins:device_beacons', 'clock_ins:clock_out_reminders',
     'clock_ins:tracking_tokens', 'clock_ins:integrity_flags', 'clock_ins:attendance',
     'leave_schedules:leave_requests', 'leave_schedules:schedule_overrides',
-    'leave_schedules:work_patterns', 'support:support_messages', 'support:support_threads',
+    'leave_schedules:work_patterns', 'support:message_reads', 'support:messages',
+    'support:message_threads', 'support:support_messages', 'support:support_threads',
     'notifications:notification_deliveries', 'notifications:scheduled_notifications',
     'notifications:notifications', 'activity:user_activity', 'ask:assistant_conversations',
     'stores:xm_stores', 'stores:outlets', 'audit:audit_log'
@@ -6189,8 +6345,8 @@ CREATE FUNCTION public.schedule_guard(p_user uuid) RETURNS void
 declare
   target_role user_role;
 begin
-  if not (public.is_admin() or public.current_user_role() = 'supervisor') then
-    raise exception 'Only admins and supervisors set schedules';
+  if not (public.is_admin() or public.is_hr() or public.current_user_role() = 'supervisor') then
+    raise exception 'Only admins, HR and supervisors set schedules';
   end if;
   select role into target_role from public.profiles where id = p_user;
   if target_role is null then
@@ -6306,6 +6462,56 @@ CREATE FUNCTION public.selfie_retention_status() RETURNS jsonb
           and created_at < now() - make_interval(days => public.retention_days() + 1))
     )
   ) end;
+$$;
+
+
+--
+-- Name: send_message(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.send_message(p_staff uuid, p_body text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  me public.profiles;
+  staff uuid;
+  clean text := btrim(coalesce(p_body, ''));
+  t uuid;
+  m uuid;
+begin
+  select * into me from public.profiles where id = auth.uid();
+  if me.id is null or not me.is_active then
+    raise exception 'Sign in first';
+  end if;
+  staff := case when public.is_field_role(me.role) then me.id else p_staff end;
+  if staff is null or not public.can_message(staff) then
+    raise exception 'You can only message your own team';
+  end if;
+  if not exists (select 1 from public.profiles where id = staff and is_active) then
+    raise exception 'That person''s account is not active';
+  end if;
+  if length(clean) < 1 then
+    raise exception 'Write your message first';
+  end if;
+  if length(clean) > 2000 then
+    raise exception 'Keep the message under 2,000 characters';
+  end if;
+
+  insert into public.message_threads (staff_id) values (staff)
+  on conflict (staff_id) do nothing;
+  select id into t from public.message_threads where staff_id = staff;
+
+  insert into public.messages (thread_id, sender_id, body) values (t, me.id, clean)
+  returning id into m;
+  update public.message_threads set last_message_at = now(), last_sender_id = me.id where id = t;
+  insert into public.message_reads (thread_id, user_id, read_at) values (t, me.id, clock_timestamp())
+  on conflict (thread_id, user_id) do update set read_at = excluded.read_at;
+
+  return jsonb_build_object('message_id', m, 'thread_id', t, 'staff_id', staff,
+                            'from_staff', staff = me.id,
+                            'supervisor_id', (select supervisor_id from public.profiles where id = staff));
+end;
 $$;
 
 
@@ -6584,7 +6790,7 @@ CREATE FUNCTION public.staff_analytics(p_from date, p_to date) RETURNS TABLE(use
   left join public.attendance a
     on a.user_id = p.id and a.attendance_date between p_from and p_to
   where public.is_field_role(p.role)
-    and (public.is_admin() or public.supervises_user(p.id))
+    and (public.is_admin() or public.supervises_user(p.id) or public.hr_sees(p.id))
   group by p.id, p.full_name, o.name
   order by p.full_name;
 $$;
@@ -7282,6 +7488,24 @@ $$;
 
 
 --
+-- Name: unread_messages(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.unread_messages() RETURNS integer
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select count(*)::integer
+  from public.messages m
+  join public.message_threads t on t.id = m.thread_id
+  left join public.message_reads r on r.thread_id = t.id and r.user_id = auth.uid()
+  where public.can_message(t.staff_id)
+    and m.sender_id is distinct from auth.uid()
+    and m.created_at > coalesce(r.read_at, '-infinity'::timestamptz);
+$$;
+
+
+--
 -- Name: visit_place_due(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -7312,8 +7536,8 @@ declare
   c record;
 begin
   if not (public.is_admin() or exists (select 1 from public.profiles
-                                       where id = auth.uid() and role = 'supervisor' and is_active)) then
-    raise exception 'Admins and supervisors only';
+                                       where id = auth.uid() and role in ('supervisor', 'hr') and is_active)) then
+    raise exception 'Admins, HR and supervisors only';
   end if;
   select * into c from public.audit_context_columns(p_context);
   insert into public.audit_log (actor_id, action, target_table, target_id, meta,
@@ -9024,6 +9248,44 @@ COMMENT ON COLUMN public.location_pings.place_name IS 'Resolved only for pings t
 
 
 --
+-- Name: message_reads; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.message_reads (
+    thread_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    read_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: message_threads; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.message_threads (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    staff_id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_message_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_sender_id uuid
+);
+
+
+--
+-- Name: messages; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.messages (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    thread_id uuid NOT NULL,
+    sender_id uuid,
+    body text NOT NULL,
+    created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
+    CONSTRAINT messages_body_check CHECK (((length(btrim(body)) >= 1) AND (length(btrim(body)) <= 2000)))
+);
+
+
+--
 -- Name: notification_deliveries; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -10428,6 +10690,38 @@ ALTER TABLE ONLY public.location_pings
 
 
 --
+-- Name: message_reads message_reads_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_reads
+    ADD CONSTRAINT message_reads_pkey PRIMARY KEY (thread_id, user_id);
+
+
+--
+-- Name: message_threads message_threads_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_threads
+    ADD CONSTRAINT message_threads_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: message_threads message_threads_staff_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_threads
+    ADD CONSTRAINT message_threads_staff_id_key UNIQUE (staff_id);
+
+
+--
+-- Name: messages messages_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.messages
+    ADD CONSTRAINT messages_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: notification_deliveries notification_deliveries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -11125,6 +11419,20 @@ CREATE INDEX location_pings_user_id_created_at_idx ON public.location_pings USIN
 
 
 --
+-- Name: message_threads_latest; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX message_threads_latest ON public.message_threads USING btree (last_message_at DESC);
+
+
+--
+-- Name: messages_by_thread; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX messages_by_thread ON public.messages USING btree (thread_id, created_at);
+
+
+--
 -- Name: notification_deliveries_notification; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11479,6 +11787,13 @@ CREATE INDEX xm_targets_by_month ON public.xm_targets USING btree (month);
 --
 
 CREATE TRIGGER realtime_broadcast AFTER INSERT OR DELETE OR UPDATE ON public.attendance FOR EACH ROW EXECUTE FUNCTION public.realtime_notify_field_owner();
+
+
+--
+-- Name: messages realtime_broadcast; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER realtime_broadcast AFTER INSERT ON public.messages FOR EACH ROW EXECUTE FUNCTION public.realtime_notify_message();
 
 
 --
@@ -12045,6 +12360,54 @@ ALTER TABLE ONLY public.location_pings
 
 ALTER TABLE ONLY public.location_pings
     ADD CONSTRAINT location_pings_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: message_reads message_reads_thread_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_reads
+    ADD CONSTRAINT message_reads_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES public.message_threads(id) ON DELETE CASCADE;
+
+
+--
+-- Name: message_reads message_reads_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_reads
+    ADD CONSTRAINT message_reads_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: message_threads message_threads_last_sender_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_threads
+    ADD CONSTRAINT message_threads_last_sender_id_fkey FOREIGN KEY (last_sender_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: message_threads message_threads_staff_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.message_threads
+    ADD CONSTRAINT message_threads_staff_id_fkey FOREIGN KEY (staff_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: messages messages_sender_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.messages
+    ADD CONSTRAINT messages_sender_id_fkey FOREIGN KEY (sender_id) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: messages messages_thread_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.messages
+    ADD CONSTRAINT messages_thread_id_fkey FOREIGN KEY (thread_id) REFERENCES public.message_threads(id) ON DELETE CASCADE;
 
 
 --
@@ -12854,6 +13217,13 @@ CREATE POLICY assistant_conversations_update ON public.assistant_conversations F
 ALTER TABLE public.attendance ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: attendance attendance_hr_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY attendance_hr_select ON public.attendance FOR SELECT USING (public.hr_sees(user_id));
+
+
+--
 -- Name: attendance attendance_insert_own; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -13019,6 +13389,13 @@ CREATE POLICY known_places_admin ON public.known_places USING (public.is_admin()
 ALTER TABLE public.leave_requests ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: leave_requests leave_requests_hr_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY leave_requests_hr_read ON public.leave_requests FOR SELECT USING (public.hr_sees(user_id));
+
+
+--
 -- Name: leave_requests leave_requests_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -13036,6 +13413,47 @@ ALTER TABLE public.location_alerts ENABLE ROW LEVEL SECURITY;
 --
 
 ALTER TABLE public.location_pings ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: message_reads; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.message_reads ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: message_reads message_reads_own; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY message_reads_own ON public.message_reads FOR SELECT USING ((user_id = auth.uid()));
+
+
+--
+-- Name: message_threads; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.message_threads ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: message_threads message_threads_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY message_threads_read ON public.message_threads FOR SELECT USING (public.can_message(staff_id));
+
+
+--
+-- Name: messages; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: messages messages_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY messages_read ON public.messages FOR SELECT USING ((EXISTS ( SELECT 1
+   FROM public.message_threads t
+  WHERE ((t.id = messages.thread_id) AND public.can_message(t.staff_id)))));
+
 
 --
 -- Name: notification_deliveries; Type: ROW SECURITY; Schema: public; Owner: -
@@ -13239,6 +13657,13 @@ CREATE POLICY profiles_admin_all ON public.profiles USING (public.is_admin()) WI
 
 
 --
+-- Name: profiles profiles_hr_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY profiles_hr_select ON public.profiles FOR SELECT USING (public.hr_sees(id));
+
+
+--
 -- Name: profiles profiles_self_select; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -13391,6 +13816,13 @@ CREATE POLICY role_store_counts_read ON public.role_store_counts FOR SELECT USIN
 ALTER TABLE public.schedule_overrides ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: schedule_overrides schedule_overrides_hr_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY schedule_overrides_hr_read ON public.schedule_overrides FOR SELECT USING (public.hr_sees(user_id));
+
+
+--
 -- Name: schedule_overrides schedule_overrides_read; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -13415,6 +13847,13 @@ CREATE POLICY scheduled_notifications_read ON public.scheduled_notifications FOR
 --
 
 ALTER TABLE public.staff_outlets ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: staff_outlets staff_outlets_hr_select; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY staff_outlets_hr_select ON public.staff_outlets FOR SELECT USING (public.hr_sees(user_id));
+
 
 --
 -- Name: staff_outlets staff_outlets_select; Type: POLICY; Schema: public; Owner: -
@@ -13609,6 +14048,13 @@ CREATE POLICY user_activity_admin_read ON public.user_activity FOR SELECT USING 
 --
 
 ALTER TABLE public.work_patterns ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: work_patterns work_patterns_hr_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY work_patterns_hr_read ON public.work_patterns FOR SELECT USING (public.hr_sees(user_id));
+
 
 --
 -- Name: work_patterns work_patterns_read; Type: POLICY; Schema: public; Owner: -
@@ -14049,6 +14495,15 @@ GRANT ALL ON FUNCTION public.can_manage_schedule(p_user uuid) TO service_role;
 
 
 --
+-- Name: FUNCTION can_message(p_staff uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.can_message(p_staff uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.can_message(p_staff uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.can_message(p_staff uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION can_see_count_request(p_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -14195,6 +14650,14 @@ GRANT ALL ON FUNCTION public.close_abandoned_visits() TO service_role;
 REVOKE ALL ON FUNCTION public.close_count_request(p_request_id uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.close_count_request(p_request_id uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.close_count_request(p_request_id uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION conversation(p_staff uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.conversation(p_staff uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.conversation(p_staff uuid) TO authenticated;
 
 
 --
@@ -14448,6 +14911,15 @@ GRANT ALL ON FUNCTION public.has_live_push(p_user uuid) TO service_role;
 
 
 --
+-- Name: FUNCTION hr_sees(target uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.hr_sees(target uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.hr_sees(target uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.hr_sees(target uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION is_admin(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -14463,6 +14935,15 @@ GRANT ALL ON FUNCTION public.is_admin() TO service_role;
 REVOKE ALL ON FUNCTION public.is_field_role(r public.user_role) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.is_field_role(r public.user_role) TO authenticated;
 GRANT ALL ON FUNCTION public.is_field_role(r public.user_role) TO service_role;
+
+
+--
+-- Name: FUNCTION is_hr(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.is_hr() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.is_hr() TO authenticated;
+GRANT ALL ON FUNCTION public.is_hr() TO service_role;
 
 
 --
@@ -14542,6 +15023,14 @@ GRANT ALL ON FUNCTION public.log_location_block(p_reason text, p_accuracy_m doub
 REVOKE ALL ON FUNCTION public.mark_notifications_read() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.mark_notifications_read() TO authenticated;
 GRANT ALL ON FUNCTION public.mark_notifications_read() TO service_role;
+
+
+--
+-- Name: FUNCTION message_inbox(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.message_inbox() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.message_inbox() TO authenticated;
 
 
 --
@@ -14631,6 +15120,14 @@ GRANT ALL ON FUNCTION public.my_staff() TO service_role;
 REVOKE ALL ON FUNCTION public.my_store_visits() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.my_store_visits() TO authenticated;
 GRANT ALL ON FUNCTION public.my_store_visits() TO service_role;
+
+
+--
+-- Name: FUNCTION my_supervisor_name(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.my_supervisor_name() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.my_supervisor_name() TO authenticated;
 
 
 --
@@ -14835,6 +15332,14 @@ GRANT ALL ON FUNCTION public.purge_user_activity(p_days integer) TO service_role
 --
 
 REVOKE ALL ON FUNCTION public.raise_place_due(p_user uuid, p_lat double precision, p_lng double precision, p_accuracy double precision, p_kind text, p_source uuid, p_position jsonb) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION read_messages(p_staff uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.read_messages(p_staff uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.read_messages(p_staff uuid) TO authenticated;
 
 
 --
@@ -15217,6 +15722,14 @@ GRANT ALL ON FUNCTION public.selfie_retention_status() TO service_role;
 
 
 --
+-- Name: FUNCTION send_message(p_staff uuid, p_body text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.send_message(p_staff uuid, p_body text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.send_message(p_staff uuid, p_body text) TO authenticated;
+
+
+--
 -- Name: FUNCTION set_count_sheet_template(p_path text, p_file_name text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -15401,6 +15914,14 @@ REVOKE ALL ON FUNCTION public.touch_updated_at() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.tracking_coverage(p_user uuid, p_date date) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.tracking_coverage(p_user uuid, p_date date) TO authenticated;
 GRANT ALL ON FUNCTION public.tracking_coverage(p_user uuid, p_date date) TO service_role;
+
+
+--
+-- Name: FUNCTION unread_messages(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.unread_messages() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.unread_messages() TO authenticated;
 
 
 --

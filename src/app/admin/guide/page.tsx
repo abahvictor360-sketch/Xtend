@@ -53,7 +53,7 @@ const T = {
  * supervisors are not shown. Staff have their own guide at /guide.
  */
 export default async function AdminGuidePage() {
-  await requireSession(['admin'])
+  await requireSession(['admin', 'hr'])
 
   return (
     <div className="space-y-5">
@@ -76,10 +76,19 @@ export default async function AdminGuidePage() {
         <GuideSection topic={T.news} intro="The latest changes, where to find them, and the one-off steps they need.">
           <p>
             <Ui>First, run the new database updates</Ui> in Supabase (SQL editor), in this order, if they
-            have not been run yet: 0059, 0060, 0061, 0062, 0063, 0064, 0065, 0066, 0067, 0068, 0069, 0070. A page that needs
+            have not been run yet: 0059, 0060, 0061, 0062, 0063, 0064, 0065, 0066, 0067, 0068, 0069, 0070, 0071, 0072, 0073 (run 0071 on its own first). A page that needs
             one it does not have says which number to run.
           </p>
           <ul className="list-disc space-y-1.5 pl-5">
+            <li>
+              <Ui>Messages</Ui> (0073): merchandisers and marketers chat with their supervisor from{' '}
+              <Ui>You</Ui> → <Ui>Messages</Ui>; the office answers under <Ui>Messages</Ui>. Admins and HR
+              can read and reply in any chat.
+            </li>
+            <li>
+              <Ui>HR role</Ui> (0071, 0072): an account for people work only. See the HR note under
+              Staff, teams, roles and notifications.
+            </li>
             <li>
               <Ui>Schedules and Leave</Ui> (People menu): weekly days on and off per person, one-off
               changes, and leave requests from the app to approve or reject. Days off and leave never count
@@ -179,6 +188,9 @@ export default async function AdminGuidePage() {
               <>
                 <Ui>Alerts</Ui>: deal with anything open (someone left their store, clocked in away from
                 it, or had location off), oldest first.
+              </>,
+              <>
+                <Ui>Messages</Ui>: staff whose supervisor is away, or who have none, may be waiting on you.
               </>,
               <>
                 <Ui>Support</Ui>: answer the threads that need a person, longest waiting first.
@@ -343,6 +355,13 @@ export default async function AdminGuidePage() {
             note; each is still written to the audit log.
           </p>
           <p>
+            <Ui>Messages</Ui>: every merchandiser and marketer has one chat with their supervisor, for
+            day-to-day work. You (and HR) can read and reply in any of them; a supervisor only sees their
+            own team&apos;s. Staff write from <Ui>You</Ui> → <Ui>Messages</Ui>; each message sends a
+            notification to their supervisor, or to every admin when they have none. Messages are never
+            edited or deleted.
+          </p>
+          <p>
             <Ui>Support</Ui>: problems and complaints staff send from the app. The Xtend helper answers the
             simple ones; the rest wait for a person, longest waiting first. Open a thread to see who they
             are, their store and supervisor and whether they clocked in today. Reply in your own words or
@@ -501,6 +520,15 @@ export default async function AdminGuidePage() {
             people between teams, and see Places, Roles, Teams, the audit log, Updates and this guide.
             Supervisors have their own guide.
           </Tip>
+          <Tip>
+            <strong>HR accounts</strong> look after people, not stock or locations. Create one on{' '}
+            <Ui>Staff</Ui> with the role <Ui>HR</Ui>. HR sees every staff member except admins:
+            Attendance, Analytics and their downloads, Leave (they decide requests), Schedules, Staff and
+            Messages. HR can add merchandisers and marketers to any store and supervisor, edit their
+            details, reset passwords and deactivate them, but cannot create supervisors, admins or HR,
+            change a role or email, or open Movement, Alerts, Integrity, Stores, X Metrics or Setup. HR
+            reads this guide. Every HR change is in the audit log.
+          </Tip>
         </GuideSection>
 
         <GuideSection topic={T.setup} intro="The Setup part of the menu.">
@@ -584,7 +612,7 @@ export default async function AdminGuidePage() {
               <>
                 <strong>Reset.</strong> On <Ui>System</Ui>, tick what to clear: <Ui>Clock-ins and locations</Ui>,{' '}
                 <Ui>Store visits and places</Ui>, <Ui>Daily reports</Ui>, <Ui>Stock counts and count sheets</Ui>,{' '}
-                <Ui>X Metrics records</Ui>, <Ui>Leave and schedules</Ui>, <Ui>Support chats</Ui>,{' '}
+                <Ui>X Metrics records</Ui>, <Ui>Leave and schedules</Ui>, <Ui>Support chats</Ui> (with Messages),{' '}
                 <Ui>Notifications</Ui>, <Ui>Activity log</Ui>, <Ui>Ask Xtend chats</Ui>,{' '}
                 <Ui>Teams and store allocations</Ui>, <Ui>Stores (outlets)</Ui>, <Ui>Staff accounts</Ui> or{' '}
                 <Ui>Audit log</Ui> — or <Ui>Select everything (start completely fresh)</Ui>. Some bring others

@@ -19,8 +19,10 @@ export default async function UsersPage({
   searchParams: Promise<{ q?: string; new?: string }>
 }) {
   const { q, new: startNew } = await searchParams
-  const session = await requireSession(['admin', 'supervisor'])
+  const session = await requireSession(['admin', 'supervisor', 'hr'])
   const isAdmin = session.profile.role === 'admin'
+  // HR (0072) staffs the whole company: any store and supervisor, field roles only.
+  const isHr = session.profile.role === 'hr'
   const supabase = await createServerSupabase()
 
   // my_staff() is the whole list for an admin and the supervisor's own
@@ -32,7 +34,7 @@ export default async function UsersPage({
       // Empty for a supervisor: only an admin assigns a reporting line.
       supabase.rpc('available_supervisors'),
       // A supervisor adds staff to their own stores only.
-      isAdmin
+      isAdmin || isHr
         ? Promise.resolve({ data: null })
         : supabase.rpc('outlets_for_user', { target: session.userId }),
     ])
@@ -68,7 +70,7 @@ export default async function UsersPage({
         <div>
           <h1 className="text-xl font-semibold">Staff</h1>
           <p className="text-sm text-muted-foreground">
-            {isAdmin
+            {isAdmin || isHr
               ? 'Accounts are created here. Deactivation is a soft delete: attendance history is never destroyed.'
               : 'Your team. People you add here report to you, and you can reset a password or deactivate an account.'}
           </p>
@@ -95,9 +97,10 @@ export default async function UsersPage({
         staff={(staff ?? []) as Profile[]}
         outlets={(outlets ?? []) as Outlet[]}
         newStaffOutletIds={
-          isAdmin ? undefined : ((ownOutlets ?? []) as { outlet_id: string }[]).map((o) => o.outlet_id)
+          isAdmin || isHr ? undefined : ((ownOutlets ?? []) as { outlet_id: string }[]).map((o) => o.outlet_id)
         }
         isAdmin={isAdmin}
+        isHr={isHr}
         notified={notified}
         supervisors={(supervisors ?? []) as { id: string; full_name: string; role: string }[]}
         initialSearch={typeof q === 'string' ? q.slice(0, 80) : ''}

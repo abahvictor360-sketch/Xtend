@@ -87,6 +87,7 @@ Policies:
 | time_detail | jsonb(jsonb) | yes |  |
 
 Policies:
+- `attendance_hr_select` SELECT to public: using `hr_sees(user_id)`
 - `attendance_insert_own` INSERT to public; check `((auth.uid() IS NOT NULL) AND (EXISTS ( SELECT 1`
 - `   FROM profiles p` undefined to undefined
 - `  WHERE ((p.id = auth.uid()) AND p.is_active))))` undefined to undefined
@@ -305,6 +306,7 @@ Policies:
 | created_at | timestamp with time zone(timestamptz) |  | now() |
 
 Policies:
+- `leave_requests_hr_read` SELECT to public: using `hr_sees(user_id)`
 - `leave_requests_read` SELECT to authenticated: using `((user_id = auth.uid()) OR is_admin() OR supervises_user(user_id))`
 
 ### `location_alerts`
@@ -347,6 +349,45 @@ Policies:
 - `pings_insert_own` INSERT to public; check `(auth.uid() IS NOT NULL)`
 - `pings_select` SELECT to public: using `((user_id = auth.uid()) OR is_admin())`
 - `pings_supervisor_select` SELECT to public: using `supervises_user(user_id)`
+
+### `message_reads`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| thread_id | uuid(uuid) |  |  |
+| user_id | uuid(uuid) |  |  |
+| read_at | timestamp with time zone(timestamptz) |  | now() |
+
+Policies:
+- `message_reads_own` SELECT to public: using `(user_id = auth.uid())`
+
+### `message_threads`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| id | uuid(uuid) |  | gen_random_uuid() |
+| staff_id | uuid(uuid) |  |  |
+| created_at | timestamp with time zone(timestamptz) |  | now() |
+| last_message_at | timestamp with time zone(timestamptz) |  | now() |
+| last_sender_id | uuid(uuid) | yes |  |
+
+Policies:
+- `message_threads_read` SELECT to public: using `can_message(staff_id)`
+
+### `messages`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| id | uuid(uuid) |  | gen_random_uuid() |
+| thread_id | uuid(uuid) |  |  |
+| sender_id | uuid(uuid) | yes |  |
+| body | text(text) |  |  |
+| created_at | timestamp with time zone(timestamptz) |  | clock_timestamp() |
+
+Policies:
+- `messages_read` SELECT to public: using `(EXISTS ( SELECT 1`
+- `   FROM message_threads t` undefined to undefined
+- `  WHERE ((t.id = messages.thread_id) AND can_message(t.staff_id))))` undefined to undefined
 
 ### `notification_deliveries`
 
@@ -541,6 +582,7 @@ Policies:
 
 Policies:
 - `profiles_admin_all` ALL to public: using `is_admin()`; check `is_admin()`
+- `profiles_hr_select` SELECT to public: using `hr_sees(id)`
 - `profiles_self_select` SELECT to public: using `((id = auth.uid()) OR is_admin())`
 - `profiles_self_update` UPDATE to public: using `(id = auth.uid())`; check `((id = auth.uid()) AND (role = current_user_role()))`
 - `profiles_supervisor_select` SELECT to public: using `supervises_user(id)`
@@ -648,6 +690,7 @@ Policies:
 | created_at | timestamp with time zone(timestamptz) |  | now() |
 
 Policies:
+- `schedule_overrides_hr_read` SELECT to public: using `hr_sees(user_id)`
 - `schedule_overrides_read` SELECT to authenticated: using `((user_id = auth.uid()) OR is_admin() OR supervises_user(user_id))`
 
 ### `scheduled_notifications`
@@ -685,6 +728,7 @@ Policies:
 | created_at | timestamp with time zone(timestamptz) |  | now() |
 
 Policies:
+- `staff_outlets_hr_select` SELECT to public: using `hr_sees(user_id)`
 - `staff_outlets_select` SELECT to public: using `((user_id = auth.uid()) OR is_admin() OR supervises_user(user_id))`
 
 ### `staff_roles`
@@ -915,6 +959,7 @@ Policies:
 | updated_at | timestamp with time zone(timestamptz) |  | now() |
 
 Policies:
+- `work_patterns_hr_read` SELECT to public: using `hr_sees(user_id)`
 - `work_patterns_read` SELECT to authenticated: using `((user_id = auth.uid()) OR is_admin() OR supervises_user(user_id))`
 
 ### `xm_count_lines`
@@ -1234,7 +1279,7 @@ Policies:
 - `notification_audience`: everyone, role, outlet, users
 - `support_sender`: staff, ai, admin, supervisor
 - `support_status`: open, ai_answered, escalated, resolved
-- `user_role`: merchandiser, supervisor, admin, marketer
+- `user_role`: merchandiser, supervisor, admin, marketer, hr
 - `visit_status`: open, closed, abandoned
 
 ## Functions
@@ -1265,7 +1310,7 @@ Policies:
 - `attendance_timing_flag()` → trigger · definer · 0026_phone_evidence.sql
 - `audit_context_columns(p jsonb)` → TABLE(ip text, user_agent text, device jsonb, lat double precision, lng double precision, accuracy_m double precision, location_source text, place text, country text, vpn boolean) · definer · 0049_audit_context.sql
 - `audit_fill_context()` → trigger · definer · 0049_audit_context.sql
-- `available_supervisors()` → TABLE(id uuid, full_name text, role user_role, outlet_id uuid) · definer · 0018_reporting_line_upkeep.sql
+- `available_supervisors()` → TABLE(id uuid, full_name text, role user_role, outlet_id uuid) · definer · 0072_hr_role.sql
 - `business_date()` → date · 0002_logic.sql
 - `can_allocate_outlets(target uuid)` → boolean · definer · 0011_store_allocation.sql
 - `can_count_stock()` → boolean · definer · 0046_role_store_counts.sql
@@ -1273,7 +1318,8 @@ Policies:
 - `can_edit_staff(target uuid)` → boolean · definer · 0017_supervisor_manages_staff.sql
 - `can_file_report()` → boolean · definer · 0005_marketer_role.sql
 - `can_hear_follow(p_topic text)` → boolean · definer · 0070_follow_live.sql
-- `can_manage_schedule(p_user uuid)` → boolean · definer · 0059_schedules_leave.sql
+- `can_manage_schedule(p_user uuid)` → boolean · definer · 0072_hr_role.sql
+- `can_message(p_staff uuid)` → boolean · definer · 0073_messages.sql
 - `can_see_count_request(p_id uuid)` → boolean · definer · 0020_count_requests.sql
 - `can_send_notifications()` → boolean · definer · 0006_push_notifications.sql
 - `can_visit_stores()` → boolean · definer · 0016_visits_without_allocation.sql
@@ -1292,6 +1338,7 @@ Policies:
 - `clock_timing(p_user uuid, p_captured timestamp with time zone, p_device jsonb, p_now timestamp with time zone)` → jsonb · definer · 0029_offline_positions.sql
 - `close_abandoned_visits()` → integer · definer · 0010_store_visits.sql
 - `close_count_request(p_request_id uuid)` → void · definer · 0020_count_requests.sql
+- `conversation(p_staff uuid)` → TABLE(id uuid, body text, created_at timestamp with time zone, sender_name text, from_staff boolean, mine boolean) · definer · 0073_messages.sql
 - `count_place_lookups(p_sources text[])` → void · definer · 0068_place_lookups.sql
 - `counted_product_names()` → TABLE(name text) · definer · 0021_counted_product_names.sql
 - `coverage_today()` → TABLE(user_id uuid, full_name text, outlet_name text, ping_count integer, coverage_pct integer, last_ping_at timestamp with time zone) · definer · 0005_marketer_role.sql
@@ -1299,7 +1346,7 @@ Policies:
 - `current_user_role()` → user_role · definer · 0001_init.sql
 - `day_kind(p_user uuid, p_day date)` → text · definer · 0059_schedules_leave.sql
 - `dearmor(text)` → bytea
-- `decide_leave(p_id uuid, p_approve boolean, p_note text)` → jsonb · definer · 0059_schedules_leave.sql
+- `decide_leave(p_id uuid, p_approve boolean, p_note text)` → jsonb · definer · 0072_hr_role.sql
 - `decrypt(bytea, bytea, text)` → bytea
 - `decrypt_iv(bytea, bytea, bytea, text)` → bytea
 - `default_work_days()` → smallint[] · 0059_schedules_leave.sql
@@ -1343,10 +1390,12 @@ Policies:
 - `has_live_push(p_user uuid)` → boolean · definer · 0033_native_push.sql
 - `hmac(bytea, bytea, text)` → bytea
 - `hmac(text, text, text)` → bytea
+- `hr_sees(target uuid)` → boolean · definer · 0072_hr_role.sql
 - `is_admin()` → boolean · definer · 0001_init.sql
 - `is_field_role(r user_role)` → boolean · 0013_harden_triggers.sql
+- `is_hr()` → boolean · definer · 0072_hr_role.sql
 - `is_month_end_window(d date)` → boolean · 0020_count_requests.sql
-- `is_working_day(p_user uuid, p_day date)` → boolean · definer · 0059_schedules_leave.sql
+- `is_working_day(p_user uuid, p_day date)` → boolean · definer · 0072_hr_role.sql
 - `issue_tracking_token(p_platform text)` → jsonb · definer · 0050_background_tracking.sql
 - `known_place_at(p_lat double precision, p_lng double precision)` → TABLE(id uuid, name text, address text, source text, verified boolean, distance_m double precision) · definer · 0025_place_safeguards.sql
 - `lagos_hm(t timestamp with time zone)` → text · 0026_phone_evidence.sql
@@ -1355,6 +1404,7 @@ Policies:
 - `live_locations()` → TABLE(user_id uuid, full_name text, phone text, outlet_name text, outlet_lat double precision, outlet_lng double precision, outlet_radius_m integer, clocked_in_at timestamp with time zone, clock_in_label text, clock_in_status attendance_status, last_ping_at timestamp with time zone, minutes_since_ping integer, last_lat double precision, last_lng double precision, last_place_name text, distance_from_outlet_m double precision, inside_geofence boolean) · definer · 0009_live_locations.sql
 - `log_location_block(p_reason text, p_accuracy_m double precision)` → uuid · definer · 0002_logic.sql
 - `mark_notifications_read()` → integer · definer · 0006_push_notifications.sql
+- `message_inbox()` → TABLE(staff_id uuid, full_name text, role user_role, outlet_name text, supervisor_name text, last_message_at timestamp with time zone, last_body text, last_from_staff boolean, unread integer) · definer · 0073_messages.sql
 - `minutes_label(p_minutes integer)` → text · 0036_supervisor_alerts.sql
 - `month_end_count_days()` → integer · 0020_count_requests.sql
 - `movement_trail(p_user uuid, p_date date)` → jsonb · definer · 0029_offline_positions.sql
@@ -1365,8 +1415,9 @@ Policies:
 - `my_open_count_request()` → TABLE(id uuid, due_date date, note text, requested_by_name text) · definer · 0020_count_requests.sql
 - `my_outlets()` → SETOF outlets · definer · 0011_store_allocation.sql
 - `my_place_due()` → TABLE(id uuid, lat double precision, lng double precision, source_kind text, created_at timestamp with time zone) · definer · 0045_mandatory_place_naming.sql
-- `my_staff()` → SETOF profiles · definer · 0017_supervisor_manages_staff.sql
+- `my_staff()` → SETOF profiles · definer · 0072_hr_role.sql
 - `my_store_visits()` → SETOF store_visit_detail · definer · 0016_visits_without_allocation.sql
+- `my_supervisor_name()` → text · definer · 0073_messages.sql
 - `my_visit_stores()` → TABLE(id uuid, name text, address text, lat double precision, lng double precision, geofence_radius_m integer) · definer · 0060_marketer_visits_reports.sql
 - `name_place(p_due uuid, p_name text, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_storefront_path text, p_selfie_path text, p_evidence jsonb)` → uuid · definer · 0045_mandatory_place_naming.sql
 - `names_overlap(a text, b text)` → boolean · 0025_place_safeguards.sql
@@ -1421,7 +1472,9 @@ Policies:
 - `punctuality_grace_minutes()` → integer · 0036_supervisor_alerts.sql
 - `purge_user_activity(p_days integer)` → integer · definer · 0062_user_activity.sql
 - `raise_place_due(p_user uuid, p_lat double precision, p_lng double precision, p_accuracy double precision, p_kind text, p_source uuid, p_position jsonb)` → void · definer · 0045_mandatory_place_naming.sql
+- `read_messages(p_staff uuid)` → void · definer · 0073_messages.sql
 - `realtime_notify_field_owner()` → trigger · definer · 0058_realtime_broadcast.sql
+- `realtime_notify_message()` → trigger · definer · 0073_messages.sql
 - `realtime_notify_support_message()` → trigger · definer · 0058_realtime_broadcast.sql
 - `record_activity(p_user uuid, p_kind text, p_ip text, p_platform text, p_app_build integer, p_user_agent text, p_device jsonb, p_detail jsonb, p_at timestamp with time zone)` → boolean · definer · 0062_user_activity.sql
 - `record_background_pings(p_token text, p_points jsonb, p_sent_at timestamp with time zone)` → jsonb · definer · 0055_reject_post_clockout_tracking.sql
@@ -1451,7 +1504,7 @@ Policies:
 - `request_phone_check(p_user uuid)` → uuid · definer · 0026_phone_evidence.sql
 - `request_store_count(p_user_ids uuid[], p_due_date date, p_note text)` → uuid · definer · 0046_role_store_counts.sql
 - `reset_category_keys()` → text[] · 0066_test_mode_reset.sql
-- `reset_category_tables()` → TABLE(category text, table_name text, step integer) · 0070_follow_live.sql
+- `reset_category_tables()` → TABLE(category text, table_name text, step integer) · 0073_messages.sql
 - `reset_files_done(p_bucket text, p_names text[])` → integer · definer · 0066_test_mode_reset.sql
 - `reset_files_next(p_limit integer)` → TABLE(bucket text, name text) · definer · 0066_test_mode_reset.sql
 - `reset_files_pending()` → integer · definer · 0066_test_mode_reset.sql
@@ -1472,10 +1525,11 @@ Policies:
 - `revoke_tracking_tokens()` → void · definer · 0050_background_tracking.sql
 - `safe_ts(p text)` → timestamp with time zone · 0026_phone_evidence.sql
 - `safe_uuid(p text)` → uuid · 0026_phone_evidence.sql
-- `schedule_guard(p_user uuid)` → void · definer · 0059_schedules_leave.sql
+- `schedule_guard(p_user uuid)` → void · definer · 0072_hr_role.sql
 - `schedule_notification(p_title text, p_body text, p_url text, p_audience notification_audience, p_detail jsonb, p_send_at timestamp with time zone)` → uuid · definer · 0053_support_notifications.sql
 - `selfie_check()` → trigger · definer · 0023_photo_checks.sql
 - `selfie_retention_status()` → jsonb · definer · 0067_report_photos_offline.sql
+- `send_message(p_staff uuid, p_body text)` → jsonb · definer · 0073_messages.sql
 - `set_count_sheet_template(p_path text, p_file_name text)` → uuid · definer · 0035_store_count_sheets.sql
 - `set_my_avatar(p_path text)` → void · definer · 0062_user_activity.sql
 - `set_schedule_override(p_user uuid, p_day date, p_working boolean, p_note text)` → uuid · definer · 0059_schedules_leave.sql
@@ -1483,7 +1537,7 @@ Policies:
 - `set_work_pattern(p_users uuid[], p_days smallint[])` → integer · definer · 0059_schedules_leave.sql
 - `shift_end_for(p_user uuid)` → time without time zone · definer · 0061_clock_out_reminders.sql
 - `shift_start_for(p_user uuid)` → time without time zone · definer · 0069_shift_soon_reminders.sql
-- `staff_analytics(p_from date, p_to date)` → TABLE(user_id uuid, full_name text, outlet_name text, days_present integer, days_late integer, days_off_site integer, avg_distance_m double precision) · definer · 0005_marketer_role.sql
+- `staff_analytics(p_from date, p_to date)` → TABLE(user_id uuid, full_name text, outlet_name text, days_present integer, days_late integer, days_off_site integer, avg_distance_m double precision) · definer · 0072_hr_role.sql
 - `staff_day(p_date date)` → TABLE(user_id uuid, staff_name text, role user_role, clocked_in_at timestamp with time zone, clocked_in_at_place text, clocked_out_at timestamp with time zone, clocked_out_at_place text, stores_visited integer, minutes_in_store integer, still_in_store text) · definer · 0016_visits_without_allocation.sql
 - `staff_no_show(p_grace_minutes integer)` → TABLE(user_id uuid, full_name text, phone text, outlet_id uuid, outlet_name text, shift_start time without time zone, minutes_late integer) · definer · 0059_schedules_leave.sql
 - `store_count_status()` → jsonb · definer · 0020_count_requests.sql
@@ -1501,8 +1555,9 @@ Policies:
 - `text_is_clean(p_text text)` → boolean · 0039_field_rules.sql
 - `touch_updated_at()` → trigger · 0002_logic.sql
 - `tracking_coverage(p_user uuid, p_date date)` → jsonb · definer · 0004_tracking_coverage.sql
+- `unread_messages()` → integer · definer · 0073_messages.sql
 - `visit_place_due()` → trigger · definer · 0045_mandatory_place_naming.sql
-- `write_audit(p_action text, p_target_table text, p_target_id uuid, p_meta jsonb, p_context jsonb)` → uuid · definer · 0049_audit_context.sql
+- `write_audit(p_action text, p_target_table text, p_target_id uuid, p_meta jsonb, p_context jsonb)` → uuid · definer · 0072_hr_role.sql
 - `xm_acknowledge_expiry(p_alert uuid, p_note text)` → void · definer · 0043_x_metrics.sql
 - `xm_can_submit()` → boolean · definer · 0046_role_store_counts.sql
 - `xm_check_field_submission(p_outlet uuid, p_captured_at timestamp with time zone)` → void · definer · 0046_role_store_counts.sql
@@ -1552,6 +1607,7 @@ Policies:
 - `location_pings`: `trg_ping_alert` — AFTER INSERT ON public.location_pings FOR EACH ROW EXECUTE FUNCTION ping_alert()
 - `location_pings`: `trg_ping_enforce` — BEFORE INSERT ON public.location_pings FOR EACH ROW EXECUTE FUNCTION ping_enforce()
 - `location_pings`: `trg_ping_integrity` — AFTER INSERT ON public.location_pings FOR EACH ROW EXECUTE FUNCTION ping_integrity()
+- `messages`: `realtime_broadcast` — AFTER INSERT ON public.messages FOR EACH ROW EXECUTE FUNCTION realtime_notify_message()
 - `notification_deliveries`: `realtime_broadcast` — AFTER INSERT OR DELETE OR UPDATE ON public.notification_deliveries FOR EACH ROW EXECUTE FUNCTION realtime_notify_field_owner()
 - `profiles`: `trg_profiles_clear_temp_password` — AFTER UPDATE OF must_change_password ON public.profiles FOR EACH ROW EXECUTE FUNCTION clear_temp_password()
 - `profiles`: `trg_profiles_self_guard` — BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION profiles_self_guard()

@@ -27,7 +27,7 @@ const TABLE_MAX = 1500
 type Search = Record<string, string | string[] | undefined>
 
 export default async function AttendancePage({ searchParams }: { searchParams: Promise<Search> }) {
-  await requireSession(['admin', 'supervisor'])
+  await requireSession(['admin', 'supervisor', 'hr'])
   const filter = parseReportFilter(await searchParams, 1)
   const supabase = await createServerSupabase()
 

@@ -3,6 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { FieldHome } from '@/components/field/field-home'
 import { DashboardRetry } from '@/components/field/dashboard-retry'
 import { CountDueBanner } from '@/components/field/count-due-banner'
+import { MessagesBanner } from '@/components/field/messages-banner'
 import { getCountStatus } from '@/lib/store-count-status'
 import { profileAvatarUrl } from '@/lib/avatars'
 import type { DayState } from '@/lib/types'
@@ -31,6 +32,7 @@ export default async function FieldPage() {
     countStatus,
     photo,
     { data: calendar },
+    { data: unread },
   ] = await Promise.all([
     supabase.rpc('my_day'),
     supabase.rpc('my_store_visits'),
@@ -40,6 +42,8 @@ export default async function FieldPage() {
     profileAvatarUrl(supabase, session.profile.avatar_path),
     // The week row: worked, missed, day off or leave (migration 059).
     supabase.rpc('my_calendar', { p_from: addDays(lagosDateString(), -6), p_to: lagosDateString() }),
+    // Unread messages from their supervisor (0073).
+    supabase.rpc('unread_messages'),
   ])
 
   if (error || !data) {
@@ -53,6 +57,7 @@ export default async function FieldPage() {
 
   return (
     <>
+      {((unread as number | null) ?? 0) > 0 && <MessagesBanner unread={unread as number} />}
       {countStatus.open && <CountDueBanner status={countStatus} />}
       <FieldHome
         day={data as DayState}

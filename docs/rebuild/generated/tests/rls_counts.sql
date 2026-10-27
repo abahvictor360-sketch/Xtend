@@ -678,4 +678,48 @@ reset role;
 delete from public.follow_sessions where id in (:'fs_boss', :'fs_tunde');
 
 reset role;
+
+-- HR (0072) and messages (0073).
+insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000a7', 'hr.rls@xpel.ng');
+insert into public.profiles (id, full_name, email, role)
+values ('00000000-0000-0000-0000-0000000000a7', 'HR Tester', 'hr.rls@xpel.ng', 'hr');
+grant execute on function public.send_message(uuid, text) to authenticated;
+set role authenticated;
+
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a7', false);
+select assert(exists (select 1 from public.profiles where id = :'ada')
+                and not exists (select 1 from public.profiles where id = :'boss'),
+  'rls: HR sees staff, not admins');
+select assert(exists (select 1 from public.attendance where user_id = :'ada'),
+  'rls: HR sees attendance');
+select assert((select count(*) from public.location_pings) = 0
+                and (select count(*) from public.integrity_flags) = 0
+                and (select count(*) from public.location_alerts) = 0,
+  'rls: HR sees no locations, integrity flags or alerts');
+select assert(exists (select 1 from public.messages),
+  'rls: HR reads conversations');
+
+select set_config('request.jwt.claim.sub', :'ada', false);
+select assert(exists (select 1 from public.message_threads where staff_id = :'ada')
+                and exists (select 1 from public.messages),
+  'rls: staff read their own conversation');
+select set_config('request.jwt.claim.sub', :'bala', false);
+select assert(not exists (select 1 from public.message_threads)
+                and not exists (select 1 from public.messages)
+                and not exists (select 1 from public.message_reads),
+  'rls: and nobody else''s');
+do $$
+begin
+  insert into public.messages (thread_id, sender_id, body)
+  select id, auth.uid(), 'forged' from public.message_threads limit 1;
+  perform assert(false, 'rls: messages cannot be written directly');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: messages cannot be written directly');
+end $$;
+
+reset role;
+delete from public.profiles where id = '00000000-0000-0000-0000-0000000000a7';
+delete from auth.users where id = '00000000-0000-0000-0000-0000000000a7';
+
+reset role;
 select 'ALL RLS CHECKS PASSED';

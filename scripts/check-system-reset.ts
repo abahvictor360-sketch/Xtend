@@ -39,7 +39,7 @@ const throws = (f: () => unknown) => {
 }
 
 // Every table in the database (docs/rebuild/generated/database.md, plus
-// 0066's two, 0068's two and 0070's one), as the owner classified them.
+// 0066's two, 0068's two, 0070's one and 0073's three), as the owner classified them.
 const FIXTURE: Record<string, 'wipe' | 'admins-kept' | 'keep'> = {
   app_installs: 'admins-kept', app_releases: 'keep', assistant_conversations: 'wipe', attendance: 'wipe',
   audit_log: 'wipe', clock_out_reminders: 'wipe', count_request_targets: 'wipe', count_requests: 'wipe',
@@ -60,6 +60,8 @@ const FIXTURE: Record<string, 'wipe' | 'admins-kept' | 'keep'> = {
   place_addresses: 'keep', place_lookup_stats: 'keep',
   // 0070: who followed whom live, cleared with clock-ins and locations.
   follow_sessions: 'wipe',
+  // 0073: messages between staff and their supervisor, cleared with support.
+  message_threads: 'wipe', messages: 'wipe', message_reads: 'wipe',
 }
 
 // --- Typed confirmations.
@@ -85,8 +87,8 @@ check(kept.every((t) => FIXTURE[t] === 'keep'), 'the kept tables are kept')
 check(RESET_CATEGORIES.every((c) => c.tables.length > 0), 'every category clears something')
 
 const sql = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '0066_test_mode_reset.sql'), 'utf8').replace(/\r\n/g, '\n')
-// The table list as last redefined (0070 added follow_sessions).
-const tablesSql = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '0070_follow_live.sql'), 'utf8')
+// The table list as last redefined (0073 added the three messages tables).
+const tablesSql = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '0073_messages.sql'), 'utf8')
   .replace(/\r\n/g, '\n')
   .split('create or replace function public.reset_category_tables()')[1]
 const fromSql = new Map<string, string>()

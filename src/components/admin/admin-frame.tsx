@@ -41,6 +41,7 @@ export function AdminFrame({
   xmEnabled = true,
   testMode = false,
   isAdmin = false,
+  hr = false,
   children,
 }: {
   name: string
@@ -54,9 +55,11 @@ export function AdminFrame({
   testMode?: boolean
   /** Only an admin gets the "view as" role switch. */
   isAdmin?: boolean
+  /** HR (0072): a shorter menu, people only. */
+  hr?: boolean
   children: React.ReactNode
 }) {
-  const bell = (
+  const bell = hr ? null : (
     <Link
       href="/admin/alerts"
       aria-label={`Alerts${openAlerts ? `, ${openAlerts} open` : ''}`}
@@ -81,7 +84,7 @@ export function AdminFrame({
             <Brand />
           </div>
           <div className="flex-1 overflow-y-auto px-4 pb-4">
-            <AdminSidebarNav readOnly={readOnly} xmEnabled={xmEnabled} />
+            <AdminSidebarNav readOnly={readOnly} xmEnabled={xmEnabled} hr={hr} />
           </div>
 
           {isAdmin && (
@@ -152,7 +155,7 @@ export function AdminFrame({
                 <SignOutButton className="h-11 px-3 text-xs" />
               </div>
             </div>
-            <AdminNav readOnly={readOnly} xmEnabled={xmEnabled} />
+            <AdminNav readOnly={readOnly} xmEnabled={xmEnabled} hr={hr} />
             {isAdmin && (
               <div className="px-4 pb-3">
                 <RoleSwitch current="admin" />

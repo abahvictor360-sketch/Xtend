@@ -575,6 +575,14 @@ Every date and time is Africa/Lagos.
 
 Exports: `ReportKind`, `ReportPerson`, `SourceClock`, `SourceVisit`, `SourceReport`, `SourceReportFile`, `SourceCount`, `SourceSale`, `ReportSource`, `VisitLine`, `ClockLine`, `ReportField`, `DayDetail`, `StoreLine`, `Tile`, `MarketerReport`, `ARRIVAL_LABEL`, `arrivalText`, `REPORT_FIELDS`, `minutesText`, `shortDate`, `monthName`, `isMonth`, `lastDayOfMonth`, `ReportRequest`, `parseReportRequest`, `reportQuery`, `visitLines`, `reportFieldsWithDocuments`, `visitTotals`, `buildDay`, `storeLines`, `buildMarketerReport`, `SnapshotVisit`, `snapshotText`
 
+## `src/lib/messages.ts`
+
+Messages between a merchandiser or marketer and their supervisor
+(migration 0073). Admins and HR can read and reply in any conversation.
+Who may write where is decided in Postgres (can_message, send_message).
+
+Exports: `ChatMessage`, `InboxRow`, `MESSAGE_MAX`, `sendMessageSchema`, `readMessagesSchema`, `preview`
+
 ## `src/lib/metrics/admin-route.ts`
 
 The shape of every X Metrics admin action: admins only, the body checked
@@ -1583,6 +1591,12 @@ them having to find their way back and press anything.
 
 Exports: `PermissionState`, `useLocationPermission`, `LocationHelp`
 
+## `src/components/field/messages-banner.tsx`
+
+A reminder on the home screen while there are unread messages (0073).
+
+Exports: `MessagesBanner`
+
 ## `src/components/field/name-place.tsx`
 
 Shown on every screen after a clock-in or store check-in at a spot Xtend
@@ -1795,6 +1809,16 @@ Exports: `PolicyReadButton`, `XmMyScore`
 Jump links to each section, as chips that wrap.
 
 Exports: `GuideTopic`, `GuideContents`, `GuideSection`, `Steps`, `Tip`, `Questions`, `Ui`, `GuideShot`
+
+## `src/components/messages/conversation.tsx`
+
+One conversation between a staff member and the office (0073), for both
+sides. Staff pass no staffId: they always write in their own. New
+messages arrive live: staff hear their own private topic (0058), the
+office follows the messages table through RLS. A slow poll covers a
+dropped socket.
+
+Exports: `Conversation`
 
 ## `src/components/metrics/policy.tsx`
 

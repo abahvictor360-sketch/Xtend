@@ -51,6 +51,7 @@ export function StaffManager({
   staff,
   outlets,
   isAdmin = true,
+  isHr = false,
   supervisors = [],
   notified = [],
   initialSearch = '',
@@ -67,6 +68,8 @@ export function StaffManager({
   newStaffOutletIds?: string[]
   /** Supervisors staff their own team but never hand out roles or stores. */
   isAdmin?: boolean
+  /** HR (0072): places field staff in any store and team, but hands out no roles. */
+  isHr?: boolean
   /** Who an admin may name as somebody's supervisor. */
   supervisors?: SupervisorOption[]
   /** Who has notifications on, which clocking in needs (migration 027). */
@@ -462,9 +465,9 @@ export function StaffManager({
                 <Select
                   value={draft.supervisor_id}
                   onChange={(e) => setDraft({ ...draft, supervisor_id: e.target.value })}
-                  disabled={!isAdmin}
+                  disabled={!isAdmin && !isHr}
                 >
-                  <option value="">{isAdmin ? 'Nobody' : 'You'}</option>
+                  <option value="">{isAdmin || isHr ? 'Nobody' : 'You'}</option>
                   {supervisors.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.full_name}
@@ -524,7 +527,7 @@ export function StaffManager({
                   )}
                 </TableCell>
                 <TableCell>
-                  {isAdmin ? (
+                  {isAdmin || (isHr && isField(person.role)) ? (
 <Select
                     className="h-9 w-44"
                     value={person.outlet_id ?? ''}
@@ -542,7 +545,7 @@ export function StaffManager({
                   )}
                 </TableCell>
                 <TableCell>
-                  {isAdmin && supervisors.length > 0 ? (
+                  {(isAdmin || (isHr && isField(person.role))) && supervisors.length > 0 ? (
                     <Select
                       className="h-9 w-40"
                       value={person.supervisor_id ?? ''}
@@ -680,7 +683,7 @@ export function StaffManager({
                 </div>
                 <div className="space-y-1">
                   <Label className="field-label">Outlet</Label>
-                  {isAdmin ? (
+                  {isAdmin || (isHr && isField(person.role)) ? (
 <Select
                     className="h-10"
                     value={person.outlet_id ?? ''}
@@ -699,7 +702,7 @@ export function StaffManager({
                 </div>
                 <div className="col-span-2 space-y-1">
                   <Label className="field-label">Reports to</Label>
-                  {isAdmin && supervisors.length > 0 ? (
+                  {(isAdmin || (isHr && isField(person.role))) && supervisors.length > 0 ? (
                     <Select
                       className="h-10"
                       value={person.supervisor_id ?? ''}
