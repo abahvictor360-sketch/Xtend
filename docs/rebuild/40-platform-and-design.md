@@ -279,8 +279,11 @@ sub-daily crons (deploys fail with `cron_jobs_limits_reached`), so it runs from
 `.github/workflows/alerts-cron.yml` instead (a GitHub Actions schedule that
 curls `/api/cron/alerts` with `CRON_SECRET`). On Vercel Pro, or a VPS crontab,
 schedule it the normal way and drop the workflow. That job also sends the
-clock-out reminders (migration 0061), so it must run every 5 minutes for
-them to arrive on time.
+clock-out reminders (migration 0061) and the five-minute heads-ups before
+the shift starts and ends (migration 0069), so it must run every 5 minutes
+for them to arrive on time. The heads-ups are only sent inside their five
+minutes, so a late run misses them: a VPS crontab is reliable, GitHub's
+schedule is often late.
 
 The absence sweep runs **every day**, Sundays included (it was `1-6` before
 migration 0059): `staff_no_show()` now skips anyone on a day off or on

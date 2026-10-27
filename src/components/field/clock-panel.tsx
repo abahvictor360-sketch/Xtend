@@ -320,6 +320,7 @@ export function ClockPanel({
         <NotificationGate push={push} />
       ) : nextType ? (
         <button
+          id="clock-button"
           type="button"
           disabled={Boolean(busyStep)}
           onClick={() => void start(nextType)}

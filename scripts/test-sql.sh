@@ -86,5 +86,6 @@ run supabase/migrations/0064_count_sheets_any_time_report_files.sql
 run supabase/migrations/0065_report_files_offline.sql
 run supabase/migrations/0066_test_mode_reset.sql
 run supabase/migrations/0067_report_photos_offline.sql
+run supabase/migrations/0069_shift_soon_reminders.sql
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rules.sql 2>&1 | grep -E 'NOTICE|ERROR' | sed 's/^psql:[^ ]*: //'
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_counts.sql 2>&1 | grep -E 'NOTICE|ERROR|PASSED' | sed 's/^psql:[^ ]*: //'

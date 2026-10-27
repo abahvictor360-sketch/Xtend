@@ -1762,7 +1762,7 @@ If the log view is missing: warning "The history, templates and scheduling need 
 
 | Param | Values | Default |
 |---|---|---|
-| `kind` | `message` (Messages), `support` (Support replies), `alert` (Automatic alerts: no sender, or `audience_detail.system = true`; the clock-out reminders "Time to clock out" / "You have not clocked out yet" of migration 0061 land here), `all` | `message` |
+| `kind` | `message` (Messages), `support` (Support replies), `alert` (Automatic alerts: no sender, or `audience_detail.system = true`; the clock-out reminders "Time to clock out" / "You have not clocked out yet" of migration 0061 and the heads-ups "Time to clock in" / "Your shift ends soon" of 0069, kinds `clock_in_reminder` / `clock_out_soon`, land here), `all` | `message` |
 | `q` | search words (≤ 80) in title, message, sender | none |
 | `days` | 7, 30, 90 | 30 |
 | `n` | id of the history item opened | none |

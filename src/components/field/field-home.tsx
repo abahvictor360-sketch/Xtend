@@ -16,6 +16,7 @@ import { usePlace } from '@/components/field/use-place'
 import { OutboxBanner } from '@/components/field/outbox-banner'
 import { ClockPanel } from '@/components/field/clock-panel'
 import { ClockOutPrompt } from '@/components/field/clock-out-prompt'
+import { ShiftSoonPrompt } from '@/components/field/shift-soon-prompt'
 import type { VisitOutlet, VisitRow } from '@/components/field/store-visits'
 import { SectionHeader } from '@/components/field/screen'
 import { Chip } from '@/components/ui/chip'
@@ -107,6 +108,17 @@ export function FieldHome({
         onCheckOutFirst={() => {
           setTab('stores')
           window.setTimeout(() => document.getElementById('stores')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+        }}
+      />
+
+      <ShiftSoonPrompt
+        state={{
+          date: day.date,
+          shiftStart: day.outlet?.shift_start ?? null,
+          shiftEnd: day.outlet?.shift_end ?? null,
+          clockedIn: Boolean(day.opening),
+          clockedOut: Boolean(day.closing),
+          workingDay: todayKind === 'working',
         }}
       />
 

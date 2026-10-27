@@ -3564,6 +3564,144 @@ begin
       update public.outlets set shift_end = '17:00' where id = shop;
     end;
 
+    -- Five-minute heads-ups before the shift starts and ends (069).
+    declare
+      today date := public.business_date();
+      shop  uuid;
+      shop2 uuid;
+      sa1 uuid := gen_random_uuid();  -- merchandiser, store 09:00-17:30, working
+      sa2 uuid := gen_random_uuid();  -- marketer, no store: 08:00-18:00
+      sa3 uuid := gen_random_uuid();  -- day off today
+      sa4 uuid := gen_random_uuid();  -- on approved leave today
+      sa5 uuid := gen_random_uuid();  -- already clocked in
+      sa6 uuid := gen_random_uuid();  -- supervisor
+      sa7 uuid := gen_random_uuid();  -- admin
+      sa8 uuid := gen_random_uuid();  -- deactivated
+      sa9 uuid := gen_random_uuid();  -- store 10:00-18:00, the job ran late
+      mine uuid[];
+      got  record;
+      n    integer;
+      at   timestamptz;
+    begin
+      insert into auth.users (id, email) values
+        (sa1, 'sa1@xpel.ng'), (sa2, 'sa2@xpel.ng'), (sa3, 'sa3@xpel.ng'), (sa4, 'sa4@xpel.ng'),
+        (sa5, 'sa5@xpel.ng'), (sa6, 'sa6@xpel.ng'), (sa7, 'sa7@xpel.ng'), (sa8, 'sa8@xpel.ng'),
+        (sa9, 'sa9@xpel.ng');
+      insert into public.outlets (name, lat, lng, geofence_radius_m, shift_start, shift_end)
+      values ('Ikeja Shop', 6.6000, 3.3500, 150, '09:00', '17:30') returning id into shop;
+      insert into public.outlets (name, lat, lng, geofence_radius_m, shift_start, shift_end)
+      values ('Yaba Shop', 6.5100, 3.3700, 150, '10:00', '18:00') returning id into shop2;
+      insert into public.profiles (id, full_name, email, role, outlet_id, is_active) values
+        (sa1, 'Sade One',   'sa1@xpel.ng', 'merchandiser', shop,  true),
+        (sa2, 'Sani Two',   'sa2@xpel.ng', 'marketer',     null,  true),
+        (sa3, 'Sola Three', 'sa3@xpel.ng', 'merchandiser', shop,  true),
+        (sa4, 'Seun Four',  'sa4@xpel.ng', 'merchandiser', shop,  true),
+        (sa5, 'Segun Five', 'sa5@xpel.ng', 'merchandiser', shop,  true),
+        (sa6, 'Simi Six',   'sa6@xpel.ng', 'supervisor',   shop,  true),
+        (sa7, 'Shola Seven','sa7@xpel.ng', 'admin',        shop,  true),
+        (sa8, 'Sam Eight',  'sa8@xpel.ng', 'merchandiser', shop,  false),
+        (sa9, 'Sule Nine',  'sa9@xpel.ng', 'merchandiser', shop2, true);
+      mine := array[sa1, sa2, sa3, sa4, sa5, sa6, sa7, sa8, sa9];
+
+      -- Today is a working day for everyone but sa3 (whatever weekday the
+      -- tests run on); sa4 is on approved leave. Written straight in.
+      perform set_config('session_replication_role', 'replica', true);
+      insert into public.schedule_overrides (user_id, day, working)
+      select u, today, u <> sa3 from unnest(mine) u;
+      insert into public.leave_requests (user_id, kind, from_date, to_date, reason, status)
+      values (sa4, 'annual', today, today, 'Family visit', 'approved');
+      insert into public.attendance (user_id, type, lat, lng, accuracy_m, selfie_path, client_captured_at, attendance_date)
+      values (sa5, 'opening', 6.6, 3.35, 10, 'x', now(), today);
+      perform set_config('session_replication_role', 'origin', true);
+
+      perform assert(public.shift_start_for(sa1) = time '09:00' and public.shift_start_for(sa2) = time '08:00',
+        'shift heads-ups: the shift start is the home store''s, or 08:00 with no store');
+
+      select count(*) into n from public.claim_shift_soon_reminders((today + time '08:54') at time zone 'Africa/Lagos') c
+      where c.user_id = any(mine) and c.user_id <> sa2;
+      perform assert(n = 0, 'shift heads-ups: nothing more than five minutes before the shift starts');
+
+      create temp table sa_claim on commit drop as
+        select * from public.claim_shift_soon_reminders((today + time '08:55') at time zone 'Africa/Lagos') c
+        where c.user_id = any(mine);
+      perform assert(exists (select 1 from sa_claim c where c.user_id = sa1 and c.stage = 'clock_in_soon'
+                             and c.shift_time = '09:00' and c.store = 'Ikeja Shop'),
+        'shift heads-ups: "time to clock in" goes five minutes before the start, with the time and the store');
+      perform assert(not exists (select 1 from sa_claim c where c.user_id in (sa3, sa4)),
+        'shift heads-ups: nobody on a day off or on leave is asked to clock in');
+      perform assert(not exists (select 1 from sa_claim c where c.user_id = sa5),
+        'shift heads-ups: nobody already clocked in is asked to clock in');
+      perform assert(not exists (select 1 from sa_claim c where c.user_id in (sa6, sa7)),
+        'shift heads-ups: never admins or supervisors');
+      perform assert(not exists (select 1 from sa_claim c where c.user_id = sa8),
+        'shift heads-ups: never a deactivated account');
+
+      select count(*) into n from public.claim_shift_soon_reminders((today + time '08:59') at time zone 'Africa/Lagos') c
+      where c.user_id = sa1;
+      perform assert(n = 0, 'shift heads-ups: the clock-in reminder goes only once');
+
+      select * into got from public.claim_shift_soon_reminders((today + time '07:57') at time zone 'Africa/Lagos') c
+      where c.user_id = sa2;
+      perform assert(got.stage = 'clock_in_soon' and got.shift_time = '08:00' and got.store is null,
+        'shift heads-ups: somebody with no store is asked at 07:55-08:00, with no store named');
+
+      -- sa9's job ran late: at 10:00 the start has passed, so nothing.
+      select count(*) into n from public.claim_shift_soon_reminders((today + time '10:00') at time zone 'Africa/Lagos') c
+      where c.user_id = sa9;
+      perform assert(n = 0 and not exists (select 1 from public.clock_out_reminders r where r.user_id = sa9),
+        'shift heads-ups: a late job does not send a clock-in reminder after the start has passed');
+
+      -- sa1 and sa9 clock in.
+      perform set_config('session_replication_role', 'replica', true);
+      insert into public.attendance (user_id, type, lat, lng, accuracy_m, selfie_path, client_captured_at, attendance_date)
+      values (sa1, 'opening', 6.6, 3.35, 10, 'x', now(), today),
+             (sa9, 'opening', 6.6, 3.35, 10, 'x', now(), today);
+      perform set_config('session_replication_role', 'origin', true);
+
+      select count(*) into n from public.claim_shift_soon_reminders((today + time '17:24') at time zone 'Africa/Lagos') c
+      where c.user_id in (sa1, sa5);
+      perform assert(n = 0, 'shift heads-ups: no clock-out heads-up more than five minutes before the end');
+
+      drop table sa_claim;
+      create temp table sa_claim on commit drop as
+        select * from public.claim_shift_soon_reminders((today + time '17:25') at time zone 'Africa/Lagos') c
+        where c.user_id = any(mine);
+      perform assert((select count(*) from sa_claim c where c.stage = 'clock_out_soon' and c.shift_time = '17:30'
+                      and c.user_id in (sa1, sa5)) = 2,
+        'shift heads-ups: "get ready to clock out" goes five minutes before the end to those clocked in');
+      perform assert(not exists (select 1 from sa_claim c where c.user_id not in (sa1, sa5)),
+        'shift heads-ups: not to anyone not clocked in, nor to admins or supervisors');
+      perform assert((select array_agg(r.stage_name order by r.stage) from public.clock_out_reminders r where r.user_id = sa1)
+                     = array['clock_in_soon', 'clock_out_soon'],
+        'shift heads-ups: the clock-in and clock-out heads-ups are separate stages, one of each');
+
+      select count(*) into n from public.claim_shift_soon_reminders((today + time '17:29') at time zone 'Africa/Lagos') c
+      where c.user_id in (sa1, sa5);
+      perform assert(n = 0, 'shift heads-ups: the clock-out heads-up goes only once');
+
+      select count(*) into n from public.claim_clock_out_reminders((today + time '17:30') at time zone 'Africa/Lagos') c
+      where c.user_id in (sa1, sa5) and c.stage = 1;
+      perform assert(n = 2, 'shift heads-ups: the heads-up does not stop the reminder at the shift end');
+
+      -- sa9's job ran late again: at 18:00 the heads-up is skipped, the
+      -- at-end reminder goes.
+      select count(*) into n from public.claim_shift_soon_reminders((today + time '18:00') at time zone 'Africa/Lagos') c
+      where c.user_id = sa9;
+      perform assert(n = 0, 'shift heads-ups: a late job does not send a stale clock-out heads-up');
+      select count(*) into n from public.claim_clock_out_reminders((today + time '18:00') at time zone 'Africa/Lagos') c
+      where c.user_id = sa9 and c.stage = 1;
+      perform assert(n = 1, 'shift heads-ups: the at-end reminder covers a missed heads-up');
+
+      perform assert((select count(*) from public.claim_shift_soon_reminders(((today + 1) + time '00:01') at time zone 'Africa/Lagos') c
+                      where c.user_id = any(mine)) = 0,
+        'shift heads-ups: nothing after midnight Lagos');
+      delete from public.clock_out_reminders r where r.user_id = any(mine);
+      perform set_config('session_replication_role', 'replica', true);
+      delete from public.attendance a where a.user_id = any(mine);
+      perform set_config('session_replication_role', 'origin', true);
+      update public.profiles set is_active = false where id = any(mine);
+    end;
+
     -- Work schedules and leave (059).
     declare
       kemi  uuid := gen_random_uuid();  -- on Sola's team

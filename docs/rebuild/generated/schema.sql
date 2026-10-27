@@ -9,8 +9,8 @@
 
 
 
--- Dumped from database version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
--- Dumped by pg_dump version 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)
+-- Dumped from database version 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)
+-- Dumped by pg_dump version 16.15 (Ubuntu 16.15-0ubuntu0.24.04.1)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -1621,7 +1621,8 @@ begin
       where s.st is not null
         -- Stage 1 is never sent once stage 2 has gone.
         and not exists (select 1 from public.clock_out_reminders x
-                        where x.user_id = s.uid and x.reminder_date = today and x.stage >= s.st)
+                        where x.user_id = s.uid and x.reminder_date = today
+                          and x.stage >= s.st and x.stage <= 2)
       on conflict do nothing
       returning r.user_id, r.reminder_date, r.stage, r.shift_end
     )
@@ -1769,6 +1770,62 @@ begin
     and last_run_at < now() - make_interval(mins => greatest(1, p_min_minutes));
 
   return found;
+end;
+$$;
+
+
+--
+-- Name: claim_shift_soon_reminders(timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.claim_shift_soon_reminders(p_now timestamp with time zone DEFAULT now()) RETURNS TABLE(user_id uuid, reminder_date date, stage text, shift_time text, store text)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+#variable_conflict use_column
+declare
+  at_now timestamptz := coalesce(p_now, now());
+  today date := (at_now at time zone 'Africa/Lagos')::date;
+begin
+  return query
+    with staff as (
+      select p.id as uid,
+             exists (select 1 from public.attendance a
+                     where a.user_id = p.id and a.attendance_date = today and a.type = 'opening') as is_in,
+             exists (select 1 from public.attendance a
+                     where a.user_id = p.id and a.attendance_date = today and a.type = 'closing') as is_out
+      from public.profiles p
+      where p.is_active
+        and p.role in ('merchandiser'::user_role, 'marketer'::user_role)
+    ),
+    due as (
+      -- Clock in: a working day, not clocked in, start five minutes away.
+      select s.uid, 3::smallint as st, public.shift_start_for(s.uid) as at_time
+      from staff s
+      where not s.is_in
+        and public.day_kind(s.uid, today) = 'working'
+        and at_now >= ((today + public.shift_start_for(s.uid)) at time zone 'Africa/Lagos') - interval '5 minutes'
+        and at_now <  ((today + public.shift_start_for(s.uid)) at time zone 'Africa/Lagos')
+      union all
+      -- Clock out: clocked in and not out, end five minutes away.
+      select s.uid, 4::smallint, public.shift_end_for(s.uid)
+      from staff s
+      where s.is_in and not s.is_out
+        and at_now >= ((today + public.shift_end_for(s.uid)) at time zone 'Africa/Lagos') - interval '5 minutes'
+        and at_now <  ((today + public.shift_end_for(s.uid)) at time zone 'Africa/Lagos')
+    ),
+    claimed as (
+      insert into public.clock_out_reminders as r (user_id, reminder_date, stage, shift_end, claimed_at)
+      select d.uid, today, d.st, d.at_time, at_now
+      from due d
+      on conflict do nothing
+      returning r.user_id, r.reminder_date, r.stage, r.shift_end
+    )
+    select c.user_id, c.reminder_date,
+           case c.stage when 3 then 'clock_in_soon' else 'clock_out_soon' end,
+           to_char(c.shift_end, 'HH24:MI'),
+           (select o.name from public.profiles p join public.outlets o on o.id = p.outlet_id where p.id = c.user_id)
+    from claimed c;
 end;
 $$;
 
@@ -5857,6 +5914,22 @@ $$;
 
 
 --
+-- Name: shift_start_for(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.shift_start_for(p_user uuid) RETURNS time without time zone
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select coalesce(
+    (select o.shift_start from public.profiles p
+     join public.outlets o on o.id = p.outlet_id
+     where p.id = p_user),
+    time '08:00');
+$$;
+
+
+--
 -- Name: staff_analytics(date, date); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -7895,7 +7968,15 @@ CREATE TABLE public.clock_out_reminders (
     stage smallint NOT NULL,
     shift_end time without time zone NOT NULL,
     claimed_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT clock_out_reminders_stage_check CHECK ((stage = ANY (ARRAY[1, 2])))
+    stage_name text GENERATED ALWAYS AS (
+CASE stage
+    WHEN 1 THEN 'clock_out'::text
+    WHEN 2 THEN 'clock_out_late'::text
+    WHEN 3 THEN 'clock_in_soon'::text
+    WHEN 4 THEN 'clock_out_soon'::text
+    ELSE NULL::text
+END) STORED,
+    CONSTRAINT clock_out_reminders_stage_check CHECK ((stage = ANY (ARRAY[1, 2, 3, 4])))
 );
 
 
@@ -13285,6 +13366,14 @@ GRANT ALL ON FUNCTION public.claim_selfie_sweep(p_min_minutes integer) TO servic
 
 
 --
+-- Name: FUNCTION claim_shift_soon_reminders(p_now timestamp with time zone); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.claim_shift_soon_reminders(p_now timestamp with time zone) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.claim_shift_soon_reminders(p_now timestamp with time zone) TO service_role;
+
+
+--
 -- Name: FUNCTION clear_temp_password(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -14253,6 +14342,15 @@ GRANT ALL ON FUNCTION public.set_work_pattern(p_users uuid[], p_days smallint[])
 REVOKE ALL ON FUNCTION public.shift_end_for(p_user uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.shift_end_for(p_user uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.shift_end_for(p_user uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION shift_start_for(p_user uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.shift_start_for(p_user uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.shift_start_for(p_user uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.shift_start_for(p_user uuid) TO service_role;
 
 
 --

@@ -21,7 +21,8 @@ rules. Schedules and leave come from migration 0059, allocated-store visits
 and visits in the report from 0060, the clock-out reminder from 0061, the
 stock count sheet on the You page and documents on the daily report from
 0064, documents that survive a bad connection (no second upload on a
-retry, removals queued offline) from 0065.
+retry, removals queued offline) from 0065, the five-minute heads-ups before
+the shift starts and ends from 0069.
 
 ---
 
@@ -840,6 +841,54 @@ shiftEnd: day.outlet?.shift_end ?? null, clockedIn, clockedOut }`):
   (`msUntilClockOutDue` + 500 ms) and again at midnight to remove it; it
   re-checks when the page becomes visible (phones pause timers).
 
+### 5.10 Five-minute heads-ups (migration 0069)
+
+Timing and wording in `src/lib/shift-reminder.ts` (plain functions, shared
+by the phone, the server and `scripts/check-shift-reminders.ts`; it reuses
+`shiftEndAt`, `shiftEndLabel` and `dayEndAt` from `clock-out-reminder.ts`):
+
+- Shift start = the home outlet's `shift_start` (`day.outlet.shift_start`),
+  else **08:00** (`DEFAULT_SHIFT_START`; anything unusable → 08:00), shown as
+  `HH:MM` (`shiftStartLabel`). Shift end as in §5.9 (18:00 default).
+- `HEADS_UP_MIN` = 5. A heads-up shows inside **[time − 5 min, time)** on
+  that Lagos business date, never at or after the time, never after
+  midnight.
+- `clockInSoon(state, now)`: not clocked in, a working day (`workingDay`:
+  today's calendar kind is `working`, not `off` or `leave`), inside the five
+  minutes before the start.
+- `clockOutSoon(state, now)`: clocked in and not out, inside the five
+  minutes before the end.
+- `soonDue(state, now, sent)`: which one the job would send
+  (`'clock_in_soon' | 'clock_out_soon'`), none already sent, none once the
+  time has passed (a late job sends nothing stale).
+- `msUntilSoonChange(state, now)`: ms until a heads-up appears or goes;
+  null when nothing more changes today.
+- Pushes (sent by the five-minute job, `30-rules.md` §2.9), both opening
+  `/field`:
+  - clock in: **"Time to clock in"** / "Your shift at <store> starts at
+    HH:MM. Clock in with a selfie when you arrive." (no store: "Your shift
+    starts at HH:MM. …").
+  - clock out: **"Your shift ends soon"** / "Your shift ends at HH:MM. Get
+    ready to clock out with a selfie."
+
+**On the home screen** (`src/components/field/shift-soon-prompt.tsx`,
+`ShiftSoonPrompt`, placed first, before the greeting; state = `{ date:
+day.date, shiftStart: day.outlet?.shift_start ?? null, shiftEnd:
+day.outlet?.shift_end ?? null, clockedIn, clockedOut, workingDay:
+todayKind === 'working' }`):
+
+- While `clockInSoon`: a gentle card (`role="status"`, soft tint
+  background, thin brand border, round alarm-clock tile) with bold "Your
+  shift starts at HH:MM." and "Clock in when you arrive.", and a brand pill
+  button **"Clock in"** (log-in icon) that scrolls to `#clock` and focuses
+  the clock panel's button (`id="clock-button"`), without starting the
+  camera.
+- While `clockOutSoon`: one tint line (alarm-clock icon) "**Your shift ends
+  at HH:MM.** Get ready to clock out." At the end itself §5.9's prompt
+  takes over.
+- A timer wakes at each change (`msUntilSoonChange` + 500 ms) and it
+  re-checks when the page becomes visible.
+
 ### Acceptance checks
 
 - The camera only opens after a fix ≤ 100 m is in hand, and its subtitle
@@ -862,6 +911,12 @@ shiftEnd: day.outlet?.shift_end ?? null, clockedIn, clockedOut }`):
   camera after the location step. With no store the time is 18:00.
 - A marketer still checked in at a store is first offered "Check out of
   <store>"; after clocking out, or after midnight Lagos, the prompt is gone.
+- A store starting 09:00, not clocked in, a working day: with the app open,
+  at 08:55 "Your shift starts at 09:00. Clock in when you arrive." appears
+  without a reload, its **Clock in** button scrolls to the clock panel, and
+  at 09:00 the card is gone. On a day off or leave it never shows. Clocked
+  in at a store ending 17:30: from 17:25 "Your shift ends at 17:30. Get
+  ready to clock out." shows, replaced at 17:30 by the clock-out prompt.
 
 ---
 
@@ -1853,7 +1908,7 @@ What this means in practice:
 - Do tell staff the plain result of their own action, honestly: on site /
   off site with the distance, "Not confirmed", a refused photo with what to
   fix.
-- Schedules, leave and the clock-out reminder are told as the person's own
+- Schedules, leave, the heads-ups and the clock-out reminder are told as the person's own
   plan ("Day off today", "Missed", "Your shift ended at 17:00. Clock out
   now."), never as being watched: nothing says the office is told about a
   missed day, that a no-show is reported, or that a reminder was logged.

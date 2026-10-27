@@ -9,7 +9,7 @@ policy described here. Use this file to write route handlers and screens
 that call those database objects correctly, and to understand what the
 database will refuse and why.
 
-Migration numbers (`0001` to `0061`, no `0051`) say where a rule came
+Migration numbers (`0001` to `0069`, no `0051`) say where a rule came
 from. Where a function was redefined, the latest migration named is the one
 in force.
 
@@ -579,6 +579,56 @@ their shift, their phone is told to clock out.
 - The phone shows the same thing on screen from the shift end to midnight
   (`clockOutDue`, the home screen prompt, `10-field-app.md` §5.9). Staff
   are only asked to clock out; nothing says the reminder is recorded.
+- Since 0069 the table also holds the five-minute heads-ups (stages 3 and
+  4, section 2.9) and `claim_clock_out_reminders` only lets a stage 1 or 2
+  row stop stage 1 (`x.stage >= s.st and x.stage <= 2`), so a heads-up never
+  holds back the at-end reminder.
+
+### 2.9 Five-minute heads-ups (0069)
+
+Five minutes before the shift starts, field staff who have not clocked in
+are told it is time to clock in; five minutes before it ends, those clocked
+in are told to get ready to clock out.
+
+- **Shift start** (`shift_start_for(user)`, readable by anyone signed in,
+  like `shift_end_for`): the `shift_start` of the home outlet, else
+  **08:00** Lagos (the outlet default, which lateness is measured from).
+- **Stored in `clock_out_reminders`** (so the reset and the read rules of
+  0061/0066 cover them): the stage check becomes `stage in (1, 2, 3, 4)`;
+  **3** = `clock_in_soon` (its `shift_end` column holds the shift **start**),
+  **4** = `clock_out_soon`; a generated column `stage_name` (`clock_out`,
+  `clock_out_late`, `clock_in_soon`, `clock_out_soon`).
+- **`claim_shift_soon_reminders(p_now default now())`**, **service role
+  only**: returns `{user_id, reminder_date, stage 'clock_in_soon' |
+  'clock_out_soon', shift_time 'HH:MM', store (home outlet name or null)}`
+  and records each in the same statement (`on conflict do nothing`), so
+  each goes **at most once per person per Lagos day**. Only active
+  profiles with role `merchandiser` or `marketer` (custom roles carry their
+  base role): never admins or supervisors, never deactivated accounts.
+  - clock in: no `opening` today, `day_kind(user, today) = 'working'` (not
+    a day off, not approved leave), and `now` in **[start − 5 min,
+    start)**;
+  - clock out: an `opening` and no `closing` today, and `now` in **[end − 5
+    min, end)**.
+  Only inside those five minutes: a job that runs at or after the time
+  sends nothing for it (no stale heads-up; the at-end reminder of 2.8
+  covers clock-out). The day is read from the moment the job runs, so
+  nothing goes after midnight Lagos. The heads-ups depend on the
+  five-minute job running on time (a server crontab is; GitHub's schedule
+  can be late).
+- **Sending** (`flushShiftSoonReminders`, `src/lib/shift-reminders.ts`,
+  called first by `/api/cron/alerts`): groups by stage, time, date (and
+  store for clock-in) and sends with `notifyUsers`, wording from
+  `soonMessage()` (`src/lib/shift-reminder.ts`): "Time to clock in" / "Your
+  shift at <store> starts at HH:MM. Clock in with a selfie when you
+  arrive."; "Your shift ends soon" / "Your shift ends at HH:MM. Get ready to
+  clock out with a selfie."; both open `/field`; detail `{kind:
+  'clock_in_reminder' | 'clock_out_soon', system: true, stage, shift_time,
+  date}` (automatic alerts in the history). Never throws; before 0069 the
+  missing function is ignored. The job's reply carries `shift_heads_ups:
+  {claimed, delivered}`.
+- The phone shows the same on screen (`10-field-app.md` §5.10). Nothing
+  says anything is recorded or watched.
 
 ---
 
@@ -1344,7 +1394,8 @@ All need `Authorization: Bearer $CRON_SECRET` (`vercel.json`):
 - `/api/cron/alerts` — every 5 minutes, run by
   `.github/workflows/alerts-cron.yml` (Vercel Hobby allows only daily
   crons; on Pro it can move back to `vercel.json`): unsent flag alerts, due
-  scheduled notifications, clock-out reminders (section 2.8, 0061), and in
+  scheduled notifications, the five-minute heads-ups (section 2.9, 0069,
+  sent first), clock-out reminders (section 2.8, 0061), and in
   the first 5 minutes of each hour the X Metrics sweep (`runMetricsSweep`:
   reconcile, expiry scan, push expiry alerts).
 - `/api/cron/metrics` — optional hourly X Metrics sweep on its own.
@@ -1962,6 +2013,15 @@ Testable statements, grouped by area. They mirror the assertions in
 - Nobody is reminded before their shift ends; the first goes at the shift end, not to anyone not clocked in or already out, and to everyone else whose shift has ended; claiming again hands back nothing the second time.
 - The second does not go before an hour has passed and goes an hour after the shift end; never more than two a day; none after they clock out; somebody with no store is not reminded at 17:00 but is at 18:00.
 - A late job sends one reminder, the second, not both at once, and the first is not sent after it.
+
+### Five-minute heads-ups (0069)
+- The shift start is the home store's, or 08:00 with no store.
+- Nothing more than five minutes before the start; "time to clock in" goes five minutes before, with the time and the store; somebody with no store at 07:55–08:00 with no store named.
+- Nobody on a day off or on leave, nobody already clocked in, never admins or supervisors, never a deactivated account.
+- Each goes only once; a late job sends no clock-in reminder after the start has passed and no stale clock-out heads-up after the end.
+- "Get ready to clock out" goes five minutes before the end to those clocked in, not to anyone not clocked in; clock-in and clock-out heads-ups are separate stages, one of each.
+- A heads-up does not stop the reminder at the shift end, which covers a missed heads-up; nothing after midnight Lagos.
+- Only the scheduled job claims them (RLS check).
 
 ### Activity log (0062)
 - `user_activity` holds sign-ins, sign-outs, app opens, password and profile photo changes; the kind is checked (`sign_in`, `sign_out`, `app_open`, `password_changed`, `photo_changed`), platform is `web`/`android`/`ios` or null. Append-only: nobody (not even an admin or the service role) inserts, updates or deletes directly.

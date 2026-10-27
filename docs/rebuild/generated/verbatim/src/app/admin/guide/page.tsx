@@ -76,7 +76,7 @@ export default async function AdminGuidePage() {
         <GuideSection topic={T.news} intro="The latest changes, where to find them, and the one-off steps they need.">
           <p>
             <Ui>First, run the new database updates</Ui> in Supabase (SQL editor), in this order, if they
-            have not been run yet: 0059, 0060, 0061, 0062, 0063, 0064, 0065, 0066, 0067. A page that needs
+            have not been run yet: 0059, 0060, 0061, 0062, 0063, 0064, 0065, 0066, 0067, 0069. A page that needs
             one it does not have says which number to run.
           </p>
           <ul className="list-disc space-y-1.5 pl-5">
@@ -92,7 +92,8 @@ export default async function AdminGuidePage() {
             </li>
             <li>
               <Ui>Clock-out reminders</Ui>: staff still clocked in at the end of their shift get a reminder,
-              and another an hour later.
+              and another an hour later. Since 0069 they also get one 5 minutes before their shift
+              starts (on a working day, if not clocked in) and 5 minutes before it ends.
             </li>
             <li>
               <Ui>Activity log</Ui> (Setup menu): everyone&apos;s sign-ins, app opens and actions, with
@@ -634,6 +635,15 @@ export default async function AdminGuidePage() {
             (18:00 without a store) gets a push, and a second one an hour later if they still have not
             clocked out; never more than two a day and none after midnight. They show in Notifications
             history.
+          </p>
+          <p>
+            <Ui>Five-minute reminders</Ui> (0069): 5 minutes before the shift starts, merchandisers and
+            marketers with a working day (not a day off, not leave) who have not clocked in get &quot;Time to
+            clock in&quot;; 5 minutes before it ends, those clocked in get &quot;Your shift ends at
+            HH:MM&quot;. Each goes once a day, only inside those 5 minutes, using the home store&apos;s
+            times (08:00 to 18:00 without a store); never to admins or supervisors. They rely on the
+            five-minute job running on time: the server&apos;s own schedule is reliable, GitHub&apos;s can
+            be late and miss them.
           </p>
         </GuideSection>
 
