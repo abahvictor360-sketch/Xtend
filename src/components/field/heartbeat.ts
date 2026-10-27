@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { HEARTBEAT_INTERVAL_MS } from '@/lib/geo'
 import { countOutbox, enqueue } from '@/lib/offline/db'
 import { flushOutbox } from '@/lib/offline/sync'
-import { hasShiftTracker, nativePostJson, watchBackgroundLocation } from '@/lib/native'
+import { followFast, hasShiftTracker, nativePostJson, watchBackgroundLocation } from '@/lib/native'
+import { nextInterval } from '@/lib/follow-live'
 
 /** Absent entirely on older Android WebViews, so it is read defensively. */
 type MaybeWakeLock = { request: (type: 'screen') => Promise<WakeLockSentinel> } | undefined
@@ -54,6 +55,58 @@ export function useHeartbeat(active: boolean): HeartbeatStatus {
   const [savedOffline, setSavedOffline] = useState<string | null>(null)
   const [sending, setSending] = useState(false)
 
+  // Quick positions (0070). The server's answers say when to send them;
+  // nothing here is shown on screen.
+  const liveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const liveInFlight = useRef(false)
+  const liveSendRef = useRef<() => void>(() => {})
+
+  const obeyInterval = useCallback(async (reply: unknown) => {
+    const ms = nextInterval(reply as { interval_ms?: unknown } | null, 0)
+    if (liveTimer.current) clearTimeout(liveTimer.current)
+    liveTimer.current = null
+    if (!ms) return
+    // In the app, the native tracker sends them (also with the screen off);
+    // an older app build, or a browser, sends them from this page.
+    if (await followFast(ms)) return
+    liveTimer.current = setTimeout(() => liveSendRef.current(), ms)
+  }, [])
+
+  const liveSend = useCallback(() => {
+    if (!navigator.geolocation || liveInFlight.current) return
+    if (document.visibilityState !== 'visible' || navigator.onLine === false) return
+    liveInFlight.current = true
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const res = await fetch('/api/pings/live', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+              accuracy_m: pos.coords.accuracy,
+              heading: pos.coords.heading ?? null,
+              speed: pos.coords.speed ?? null,
+              captured_at: new Date(pos.timestamp || Date.now()).toISOString(),
+            }),
+          })
+          await obeyInterval(res.ok ? await res.json() : null)
+        } catch {
+          await obeyInterval(null)
+        } finally {
+          liveInFlight.current = false
+        }
+      },
+      () => {
+        liveInFlight.current = false
+        void obeyInterval(null)
+      },
+      { enableHighAccuracy: true, timeout: 7000, maximumAge: 2000 },
+    )
+  }, [obeyInterval])
+  liveSendRef.current = liveSend
+
   const send = useCallback(() => {
     if (!navigator.geolocation || inFlight.current) return
     if (document.visibilityState !== 'visible') return
@@ -102,9 +155,12 @@ export function useHeartbeat(active: boolean): HeartbeatStatus {
             keepalive: true,
           })
           if (!res.ok) throw new Error(`Ping rejected (${res.status})`)
-          const { ping } = (await res.json()) as {
+          const reply = (await res.json()) as {
             ping: { distance_m: number | null; created_at: string }
+            interval_ms?: number
           }
+          const { ping } = reply
+          void obeyInterval(reply)
           setLastPingAt(ping.created_at)
           setLastDistanceM(ping.distance_m)
           setLastError(null)
@@ -136,7 +192,7 @@ export function useHeartbeat(active: boolean): HeartbeatStatus {
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 },
     )
-  }, [])
+  }, [obeyInterval])
 
   // The heartbeat itself.
   useEffect(() => {
@@ -151,12 +207,19 @@ export function useHeartbeat(active: boolean): HeartbeatStatus {
       if (document.visibilityState === 'visible') send()
     }
     document.addEventListener('visibilitychange', onVisible)
+    // A silent nudge on the person's own realtime topic (0070): send a
+    // quick position now; the answer says whether to keep going.
+    const onSync = () => liveSend()
+    window.addEventListener('xtend:sync', onSync)
 
     return () => {
       if (timer.current) clearInterval(timer.current)
+      if (liveTimer.current) clearTimeout(liveTimer.current)
+      liveTimer.current = null
       document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('xtend:sync', onSync)
     }
-  }, [active, send])
+  }, [active, send, liveSend])
 
   // In the Xtend app: positions keep coming with the screen off. One is
   // sent at most every 2.5 minutes, sooner after a move of 150 m or more;

@@ -68,6 +68,33 @@ public class ShiftTracker extends Plugin {
         call.resolve(state());
     }
 
+    /**
+     * Follow live (0070): send quick positions now rather than at the next
+     * answer from the server. The server's answers keep it going and end
+     * it. ok is false when no shift is being tracked.
+     */
+    @PluginMethod
+    public void follow(PluginCall call) {
+        Context context = getContext();
+        Integer ms = call.getInt("intervalMs");
+        JSObject o = new JSObject();
+        if (ms == null || ms < 2000 || ms > 60000 || !ShiftTrackerService.configured(context)) {
+            o.put("ok", false);
+            call.resolve(o);
+            return;
+        }
+        ShiftTrackerService.setFast(context, ms);
+        try {
+            ShiftTrackerService.start(context);
+        } catch (Exception e) {
+            o.put("ok", false);
+            call.resolve(o);
+            return;
+        }
+        o.put("ok", true);
+        call.resolve(o);
+    }
+
     /** "Allow all the time", so tracking also comes back after a restart. */
     @PluginMethod
     public void requestBackground(PluginCall call) {

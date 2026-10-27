@@ -39,7 +39,7 @@ const throws = (f: () => unknown) => {
 }
 
 // Every table in the database (docs/rebuild/generated/database.md, plus
-// 0066's two and 0068's two), as the owner classified them.
+// 0066's two, 0068's two and 0070's one), as the owner classified them.
 const FIXTURE: Record<string, 'wipe' | 'admins-kept' | 'keep'> = {
   app_installs: 'admins-kept', app_releases: 'keep', assistant_conversations: 'wipe', attendance: 'wipe',
   audit_log: 'wipe', clock_out_reminders: 'wipe', count_request_targets: 'wipe', count_requests: 'wipe',
@@ -58,6 +58,8 @@ const FIXTURE: Record<string, 'wipe' | 'admins-kept' | 'keep'> = {
   xm_supplies: 'wipe', xm_supply_imports: 'wipe', xm_targets: 'wipe',
   // 0068: map answers and counts, not anybody's records.
   place_addresses: 'keep', place_lookup_stats: 'keep',
+  // 0070: who followed whom live, cleared with clock-ins and locations.
+  follow_sessions: 'wipe',
 }
 
 // --- Typed confirmations.
@@ -83,8 +85,12 @@ check(kept.every((t) => FIXTURE[t] === 'keep'), 'the kept tables are kept')
 check(RESET_CATEGORIES.every((c) => c.tables.length > 0), 'every category clears something')
 
 const sql = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '0066_test_mode_reset.sql'), 'utf8').replace(/\r\n/g, '\n')
+// The table list as last redefined (0070 added follow_sessions).
+const tablesSql = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '0070_follow_live.sql'), 'utf8')
+  .replace(/\r\n/g, '\n')
+  .split('create or replace function public.reset_category_tables()')[1]
 const fromSql = new Map<string, string>()
-for (const m of sql.matchAll(/'([a-z_]+):([a-z_]+)'/g)) fromSql.set(m[2], m[1])
+for (const m of tablesSql.matchAll(/'([a-z_]+):([a-z_]+)'/g)) fromSql.set(m[2], m[1])
 check(fromSql.size === wipeTables.length, 'the database lists the same number of tables', fromSql.size)
 check(RESET_CATEGORIES.filter((c) => c.key !== 'staff').every((c) => c.tables.every((t) => fromSql.get(t) === c.key)),
   'and puts each in the same category as this page',

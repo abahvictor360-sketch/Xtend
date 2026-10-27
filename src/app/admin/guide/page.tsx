@@ -76,7 +76,7 @@ export default async function AdminGuidePage() {
         <GuideSection topic={T.news} intro="The latest changes, where to find them, and the one-off steps they need.">
           <p>
             <Ui>First, run the new database updates</Ui> in Supabase (SQL editor), in this order, if they
-            have not been run yet: 0059, 0060, 0061, 0062, 0063, 0064, 0065, 0066, 0067, 0068, 0069. A page that needs
+            have not been run yet: 0059, 0060, 0061, 0062, 0063, 0064, 0065, 0066, 0067, 0068, 0069, 0070. A page that needs
             one it does not have says which number to run.
           </p>
           <ul className="list-disc space-y-1.5 pl-5">
@@ -111,6 +111,11 @@ export default async function AdminGuidePage() {
             <li>
               <Ui>Movement map</Ui>: opens on the whole of Nigeria with everyone on shift as their photo;
               click a photo to follow that person.
+            </li>
+            <li>
+              <Ui>Follow live</Ui> (migration 0070): on Movement, <Ui>Follow live</Ui> next to someone on shift
+              shows them moving on the map a few seconds behind, like a delivery app. Phones need the new
+              app version for this to work with the app closed.
             </li>
             <li>
               <Ui>Google map and Satellite</Ui> (migration 0068): once the Google map key is set, Movement and
@@ -258,6 +263,30 @@ export default async function AdminGuidePage() {
             (linked to Check an excuse) and long stays away.
           </p>
           <p>
+            <Ui>Follow live</Ui>: next to each name under <Ui>On shift now</Ui>, and at the top of a
+            person&apos;s journey while they are on shift, <Ui>Follow live</Ui> opens a full map of that
+            person moving, a few seconds behind, like a delivery app shows its rider. Their photo glides
+            along the road with an arrow the way they are going, a short line of the last few minutes, the
+            circle of how accurate the reading is and their store&apos;s circle. It shows how long ago the
+            position came, their speed when moving, the last place Xtend named and how far they are from
+            their store. <Ui>Follow on map</Ui> keeps them in the middle; drag the map to look around (it
+            stops following until you press it again). <Ui>Call</Ui> rings them when their number is on
+            file; <Ui>Stop</Ui> ends it.
+          </p>
+          <ul className="list-disc space-y-1.5 pl-5">
+            <li>Only people clocked in and not clocked out can be followed. Admins can follow anyone; supervisors only their team.</li>
+            <li>
+              Following lasts 30 minutes; in the last 5 minutes <Ui>Keep following</Ui> adds another 30. It
+              stops by itself when they clock out (the page says when), or about a minute after you close
+              the page.
+            </li>
+            <li>
+              At most 20 people can be followed at once across Xtend (others are asked to try again in a
+              few minutes). The limit is the <Ui>follow_max_sessions</Ui> setting in the database.
+            </li>
+            <li>Every start, extension and stop is in the Audit log.</li>
+          </ul>
+          <p>
             <Ui>Which map</Ui>: when the Google map key is set, the maps show Google&apos;s map, and{' '}
             <Ui>Map</Ui> / <Ui>Satellite</Ui> at the top right switch between streets and the aerial view
             with street names. If Google cannot be reached or refuses the key, the map changes to
@@ -288,6 +317,15 @@ export default async function AdminGuidePage() {
             <li>
               Without network, positions are kept on the phone and sent later, at the time they were
               taken. A position sent after clock-out is refused.
+            </li>
+            <li>
+              While someone is followed live, only their phone sends a quick position about every 8
+              seconds; these go straight to the person following and are not kept (the usual positions
+              are still kept every few minutes). The phone goes back to normal when following stops. With
+              the Xtend app open, it starts within seconds; otherwise within about 2½ minutes. An iPhone
+              with the app closed only sends when it has moved about 500 m. Phones on an older app version
+              send quick positions only while the Xtend home screen is open. Staff are not told they are
+              being followed.
             </li>
             <li>
               In a browser instead of the app, Xtend must stay open on screen. Some Android phones stop

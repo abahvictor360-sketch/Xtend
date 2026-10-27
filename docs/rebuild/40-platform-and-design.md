@@ -738,6 +738,22 @@ Receipt is limited by the policy "Field members read their own topic" on
   the safety poll then carries the updates (the release valve when the
   concurrent-connection cap is the bottleneck).
 
+**Follow live (migration 0070): one private topic per session.**
+`follow_live_position_for` sends `realtime.send({lat, lng, accuracy_m,
+heading, speed_mps, at}, 'position', 'follow:<session id>', true)` for each
+quick position, and the clock-out trigger sends `'ended'`
+`{reason: 'clocked_out', at}`. The policy "Followers read their own follow
+topic" (`can_hear_follow(realtime.topic())`, SECURITY DEFINER) lets only
+the session's watcher receive it. `follow-live.tsx` subscribes with
+`supabase().channel('follow:' + id, { config: { private: true } })`; when it
+is not subscribed within 10 s (or `NEXT_PUBLIC_REALTIME_DISABLED=1`) the page
+checks in every 8 s instead and reads the latest position from the session
+row. Starting or extending also sends an empty `'sync'` event on the
+subject's `field:<uid>` topic; `use-dashboard-refresh.ts` turns it into the
+window event `xtend:sync` (the heartbeat sends a quick position at once) and
+does not refresh. Load: one message and one row update every 8 s per
+followed phone, at most `system_settings.follow_max_sessions` (20) at once.
+
 **Dashboard:** `live-alert-feed.tsx` still subscribes to `postgres_changes`
 INSERTs on `location_alerts` (channel `alerts-feed`); office users are few, so
 the per-subscriber RLS cost is small. Migration 0056 adds the field tables to
@@ -991,7 +1007,9 @@ Native classes (`android/app/src/main/java/ng/xpelbeauty/xtend/`):
   stores them in SharedPreferences `xtend_shift_tracker` and starts the service; `stop` clears;
   `status`; `requestBackground` (Android 11+: opens app settings; Android 10: requests
   `ACCESS_BACKGROUND_LOCATION` with request code 7302); `openBatterySettings`
-  (`ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS`, falling back to app details).
+  (`ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS`, falling back to app details);
+  `follow({ intervalMs })` (0070): when configured and 2000–60000, stores prefs `fast_ms` and
+  `fast_until = now + 60 000` and starts the service again → `{ ok: true }`, else `{ ok: false }`.
   State: `{ platform: 'android', active, running, location, always, batteryUnrestricted, queued, lastSentAt?, lastError }`.
 - **`ShiftTrackerService`** (foreground, notification channel `xtend_on_shift` "On shift", importance LOW,
   notification id 7301, ongoing, title/text from prefs, tap opens `MainActivity`).
@@ -1005,6 +1023,14 @@ Native classes (`android/app/src/main/java/ng/xpelbeauty/xtend/`):
   `POST <endpoint>` `Authorization: Bearer <token>`, body `{ sent_at, points }`, connect timeout 20 000,
   read 30 000; wake lock held up to 60 000 ms. 401 → clear queue and stop; non-2xx → `last_error = "server <status>"`;
   2xx → drop the sent points; answer `{ stop: true }` → clear; exactly 500 sent → send again.
+  **Follow live (0070)**: each 2xx answer's `interval_ms` (2000–60000) sets `fast_ms` and
+  `fast_until = now + 60 000`; an answer without it clears them (as does `clear`). While fast
+  (`fastMs()` > 0) the location updates are re-registered at `fast_ms` (normally 60 000; done on
+  the tracker thread by `applyMode`, also run by the tick and when the service is started again),
+  a `liveTick` every `fast_ms` flushes (using the best last-known fix if the latest is older than
+  2 intervals), each new fix becomes `liveLoc` and flushes when an interval has passed, and the
+  body gains `live: { lat, lng, accuracy_m, captured_at, is_mock, heading? (bearing), speed? }`
+  for a `liveLoc` under 60 s old. Stored points are unchanged. Notification text unchanged.
   `START_STICKY`; `onTaskRemoved` flushes. Returns `START_NOT_STICKY` and stops when not configured
   (no token or `expires_at` past).
 - **`ShiftTrackerBoot`** receiver: on the three actions, if configured, starts the service (ignores refusals).
@@ -1032,7 +1058,14 @@ Native classes (`android/app/src/main/java/ng/xpelbeauty/xtend/`):
   background updates and indicator on when `UIBackgroundModes` has `location`; also
   `startMonitoringSignificantLocationChanges()`. Asks for Always after When-In-Use. Queue capped at 2000.
   Flush: up to 500 points, `URLRequest` timeout 25 s, inside a background task `xtend-positions`;
-  retry gap 60 s; same 401 / non-2xx / `stop` handling as Android. Plugin methods identical to Android;
+  retry gap 60 s; same 401 / non-2xx / `stop` handling as Android. **Follow live (0070)**: keys
+  `xtend.tracker.fastMs`, `.fastUntil` (answer `interval_ms` → now + 60 s; none → cleared); while
+  fast, `desiredAccuracy = kCLLocationAccuracyBest` and `distanceFilter = kCLDistanceFilterNone`
+  (`applyAccuracy`, main thread), the latest fix is sent as `live` (`heading` = course ≥ 0,
+  `speed` ≥ 0, `is_mock` false) at most once per interval; a flush also goes with an empty queue
+  when there is a live point or 150 s have passed since the last request (so a follow is
+  noticed). With the app closed only significant-change wake-ups arrive. Plugin method
+  `follow({ intervalMs })` → `{ ok }`. Plugin methods otherwise identical to Android;
   `openBatterySettings` is a no-op and `batteryUnrestricted` always true; `running` = `configured`.
 
 `Info.plist` keys of note:
@@ -1061,6 +1094,7 @@ Talks to `window.Capacitor` directly (no `@capacitor/*` import in the web app):
 | `hasShiftTracker()` | in app and plugin `ShiftTracker` present |
 | `startShiftTracker()` | `POST /api/track/token { platform }` → `{ token, endpoint, expires_at }` → `ShiftTracker.start({ token, endpoint, expiresAt: Date.parse(expires_at), title: 'Xtend', text: 'On shift' })` |
 | `stopShiftTracker()` | `ShiftTracker.stop` then `POST /api/track/stop` |
+| `followFast(intervalMs)` | 0070: `ShiftTracker.follow({ intervalMs })` → true only when it answers `{ ok: true }`; false in a browser, on a build without the method, or with no shift tracked |
 | `shiftTrackerState()`, `askAlwaysLocation()`, `openBatterySettings()` | wrap `status`, `requestBackground`, `openBatterySettings` |
 | `nativePostJson(path, body)` | Android with `CapacitorHttp`: native POST (WebView fetches are throttled in background); else `fetch` with `keepalive: true` |
 | `nativePushPermission(request)` | `PushNotifications.checkPermissions` / `requestPermissions` → `'granted' \| 'denied' \| 'prompt'` |

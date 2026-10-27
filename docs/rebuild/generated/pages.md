@@ -2,7 +2,7 @@
 
 # Pages
 
-56 pages. "Who" is what `requireSession` admits (field pages are also guarded by their layout).
+57 pages. "Who" is what `requireSession` admits (field pages are also guarded by their layout).
 
 ## `/admin/activity` — Activity log — Xtend
 
@@ -75,6 +75,18 @@ On screen: Every change an admin or supervisor makes, newest first: who, what, w
 How often each excuse came up, and how often it did not hold.
 
 On screen: Someone says their network was bad, their phone was off, their location would not work, they were at the store all along, or the app would not let them clock in? Pick who, when, and what they said. Xtend lays out everything their phone did in that time, on a timeline, and says whether it fits. Keep the check on their record to see a pattern. Staff are not told any of
+
+## `/admin/follow/[userId]` — Follow live — Xtend
+
+- File: `src/app/admin/follow/[userId]/page.tsx`
+- Who: ['admin', 'supervisor']
+- Components: `ui/alert`, `ui/button`, `admin/follow-live`, `admin/live-locations`
+
+Follow live (migration 0070): one person who is clocked in, moving on the
+map. Opened from Movement. live_locations() runs through the caller's
+rights, so a supervisor only finds their own team here, and only people
+clocked in and not clocked out today; the database checks both again
+when following starts.
 
 ## `/admin/guide` — Admin guide — Xtend
 

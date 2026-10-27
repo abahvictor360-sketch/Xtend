@@ -144,13 +144,15 @@ Build in this order. Finish each stage's checks before starting the next.
 
 ### Stage 5 — Where people are
 
-- Heartbeat, live locations, Movement, Store visits (allocated stores only),
+- Heartbeat, live locations, Movement and Follow live (0070, `30-rules.md`
+  §3.6a; its native half comes with Stage 8), Store visits (allocated stores only),
   Marketer reports, places and place naming, Alerts, absence sweep,
   clock-out reminders and the five-minute heads-ups before the shift starts
   and ends, scheduled jobs (`10-field-app.md`,
   `20-admin-dashboard.md`, `30-rules.md`, `../BUILD_GUIDE.md` §8).
 - **Checks:** the acceptance checks for those sections; each scheduled job
-  refuses a request without `Authorization: Bearer $CRON_SECRET`.
+  refuses a request without `Authorization: Bearer $CRON_SECRET`; only the
+  followed phone gets `interval_ms`, and quick positions never become pings.
 
 ### Stage 6 — Stock
 

@@ -1226,6 +1226,20 @@ $$;
 
 
 --
+-- Name: can_hear_follow(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.can_hear_follow(p_topic text) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select p_topic like 'follow:%' and exists (
+    select 1 from public.follow_sessions s
+    where public.follow_topic(s.id) = p_topic and s.watcher_id = auth.uid());
+$$;
+
+
+--
 -- Name: can_manage_schedule(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2435,6 +2449,436 @@ begin
   values (uid, p_kind, p_severity, left(p_summary, 300), coalesce(p_detail, '{}'::jsonb), p_outlet);
 end;
 $$;
+
+
+--
+-- Name: follow_active_count(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.follow_active_count() RETURNS integer
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select count(*)::integer from public.follow_sessions s
+  where s.ended_at is null and public.follow_session_live(s);
+$$;
+
+
+--
+-- Name: follow_end_at_clock_out(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.follow_end_at_clock_out() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'realtime'
+    AS $$
+declare s record;
+begin
+  if new.type = 'closing' then
+    for s in
+      update public.follow_sessions
+         set ended_at = now(), end_reason = 'clocked_out'
+       where subject_id = new.user_id and ended_at is null
+      returning id
+    loop
+      perform realtime.send(jsonb_build_object('reason', 'clocked_out', 'at', new.created_at),
+                            'ended', public.follow_topic(s.id), true);
+    end loop;
+  end if;
+  return null;
+end;
+$$;
+
+
+--
+-- Name: follow_extend(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.follow_extend(p_session uuid) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'realtime'
+    AS $$
+declare
+  s public.follow_sessions := public.follow_mine(p_session);
+  cap integer;
+begin
+  perform public.follow_tidy();
+  select * into s from public.follow_sessions where id = s.id;
+  if not public.follow_on_shift(s.subject_id) then
+    raise exception 'They have clocked out, so they cannot be followed live' using hint = 'not_on_shift';
+  end if;
+  if s.ended_at is not null and s.end_reason <> 'expired' then
+    raise exception 'This live view has ended. Start following again.' using hint = 'follow_ended';
+  end if;
+  if s.ended_at is not null then
+    select follow_max_sessions into cap from public.system_settings limit 1;
+    if public.follow_active_count() >= coalesce(cap, 20) then
+      raise exception 'Too many people are being followed live right now (% at most). Try again in a few minutes.',
+        coalesce(cap, 20) using hint = 'follow_cap';
+    end if;
+  end if;
+  update public.follow_sessions
+     set expires_at = now() + public.follow_window(), last_seen_at = now(),
+         ended_at = null, end_reason = null, extended = extended + 1
+   where id = s.id
+  returning * into s;
+  insert into public.audit_log (actor_id, action, target_table, target_id, meta)
+  values (auth.uid(), 'follow.extend', 'profiles', s.subject_id,
+          jsonb_build_object('session_id', s.id, 'until', s.expires_at, 'times', s.extended));
+  perform realtime.send('{}'::jsonb, 'sync', public.field_topic(s.subject_id), true);
+  return public.follow_state(s.id);
+end;
+$$;
+
+
+--
+-- Name: follow_fast_interval_ms(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.follow_fast_interval_ms() RETURNS integer
+    LANGUAGE sql IMMUTABLE
+    AS $$ select 8000 $$;
+
+
+--
+-- Name: follow_heartbeat(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.follow_heartbeat(p_session uuid) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare s public.follow_sessions := public.follow_mine(p_session);
+begin
+  perform public.follow_tidy();
+  update public.follow_sessions set last_seen_at = now()
+  where id = s.id and ended_at is null;
+  return public.follow_state(s.id);
+end;
+$$;
+
+
+--
+-- Name: follow_heartbeat_grace(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.follow_heartbeat_grace() RETURNS interval
+    LANGUAGE sql IMMUTABLE
+    AS $$ select interval '60 seconds' $$;
+
+
+--
+-- Name: follow_interval_for(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.follow_interval_for(p_user uuid) RETURNS integer
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select case when exists (
+    select 1 from public.follow_sessions s
+    where s.subject_id = p_user and s.ended_at is null and public.follow_session_live(s)
+  ) then public.follow_fast_interval_ms() end;
+$$;
+
+
+--
+-- Name: follow_live_position_for(uuid, double precision, double precision, double precision, double precision, double precision, timestamp with time zone, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.follow_live_position_for(p_user uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_heading double precision DEFAULT NULL::double precision, p_speed_mps double precision DEFAULT NULL::double precision, p_captured_at timestamp with time zone DEFAULT NULL::timestamp with time zone, p_is_mock boolean DEFAULT false) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'realtime'
+    AS $$
+declare
+  fast integer := public.follow_interval_for(p_user);
+  taken timestamptz := least(coalesce(p_captured_at, now()), now());
+  s record;
+  msg jsonb;
+begin
+  if fast is null then return null; end if;
+  -- A fake-location reading, a nonsense one or an old one is not shown.
+  if coalesce(p_is_mock, false)
+     or p_lat is null or p_lng is null or abs(p_lat) > 90 or abs(p_lng) > 180
+     or p_accuracy_m is null or p_accuracy_m < 0
+     or taken < now() - interval '2 minutes' then
+    return fast;
+  end if;
+  -- Two senders on one phone (the open page and the native tracker):
+  -- one position every few seconds is plenty.
+  if exists (select 1 from public.follow_sessions x
+             where x.subject_id = p_user and x.ended_at is null
+               and x.last_at > now() - interval '3 seconds') then
+    return fast;
+  end if;
+  msg := jsonb_build_object(
+    'lat', p_lat, 'lng', p_lng, 'accuracy_m', p_accuracy_m,
+    'heading', case when p_heading between 0 and 360 then p_heading end,
+    'speed_mps', case when p_speed_mps >= 0 and p_speed_mps < 100 then p_speed_mps end,
+    'at', taken);
+  for s in
+    update public.follow_sessions x
+       set last_lat = p_lat, last_lng = p_lng, last_accuracy_m = p_accuracy_m,
+           last_heading = (msg->>'heading')::float8, last_speed_mps = (msg->>'speed_mps')::float8,
+           last_at = taken
+     where x.subject_id = p_user and x.ended_at is null and public.follow_session_live(x)
+    returning x.id
+  loop
+    perform realtime.send(msg, 'position', public.follow_topic(s.id), true);
+  end loop;
+  return fast;
+end;
+$$;
+
+
+--
+-- Name: follow_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.follow_sessions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    watcher_id uuid NOT NULL,
+    subject_id uuid NOT NULL,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    last_seen_at timestamp with time zone DEFAULT now() NOT NULL,
+    ended_at timestamp with time zone,
+    end_reason text,
+    extended integer DEFAULT 0 NOT NULL,
+    last_lat double precision,
+    last_lng double precision,
+    last_accuracy_m double precision,
+    last_heading double precision,
+    last_speed_mps double precision,
+    last_at timestamp with time zone,
+    CONSTRAINT follow_sessions_check CHECK ((watcher_id <> subject_id)),
+    CONSTRAINT follow_sessions_check1 CHECK (((ended_at IS NULL) = (end_reason IS NULL))),
+    CONSTRAINT follow_sessions_end_reason_check CHECK ((end_reason = ANY (ARRAY['stopped'::text, 'closed'::text, 'expired'::text, 'clocked_out'::text]))),
+    CONSTRAINT follow_sessions_last_accuracy_m_check CHECK (((last_accuracy_m IS NULL) OR (last_accuracy_m >= (0)::double precision))),
+    CONSTRAINT follow_sessions_last_lat_check CHECK (((last_lat IS NULL) OR ((last_lat >= ('-90'::integer)::double precision) AND (last_lat <= (90)::double precision)))),
+    CONSTRAINT follow_sessions_last_lng_check CHECK (((last_lng IS NULL) OR ((last_lng >= ('-180'::integer)::double precision) AND (last_lng <= (180)::double precision))))
+);
+
+
+--
+-- Name: follow_mine(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.follow_mine(p_session uuid) RETURNS public.follow_sessions
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare s public.follow_sessions;
+begin
+  select * into s from public.follow_sessions where id = p_session and watcher_id = auth.uid();
+  if s.id is null then
+    raise exception 'This live view is not yours, or no longer exists' using hint = 'follow_not_found';
+  end if;
+  return s;
+end;
+$$;
+
+
+--
+-- Name: follow_on_shift(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.follow_on_shift(p_user uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select exists (
+           select 1 from public.profiles p
+           where p.id = p_user and p.is_active and public.is_field_role(p.role))
+     and exists (
+           select 1 from public.attendance a
+           where a.user_id = p_user and a.attendance_date = public.business_date() and a.type = 'opening')
+     and not exists (
+           select 1 from public.attendance a
+           where a.user_id = p_user and a.attendance_date = public.business_date() and a.type = 'closing');
+$$;
+
+
+--
+-- Name: follow_session_live(public.follow_sessions); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.follow_session_live(s public.follow_sessions) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select s.ended_at is null
+     and s.expires_at > now()
+     and s.last_seen_at > now() - public.follow_heartbeat_grace()
+     and public.follow_on_shift(s.subject_id);
+$$;
+
+
+--
+-- Name: follow_start(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.follow_start(p_subject uuid) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'realtime'
+    AS $$
+declare
+  me uuid := auth.uid();
+  s public.follow_sessions;
+  cap integer;
+  who text;
+begin
+  if me is null or not exists (
+       select 1 from public.profiles where id = me and is_active and role in ('admin', 'supervisor')) then
+    raise exception 'Only admins and supervisors can follow someone live' using hint = 'follow_forbidden';
+  end if;
+  if not (public.is_admin() or public.supervises_user(p_subject)) then
+    raise exception 'You can only follow people on your own team' using hint = 'follow_forbidden';
+  end if;
+  perform public.follow_tidy();
+  if not public.follow_on_shift(p_subject) then
+    raise exception 'They are not clocked in, so they cannot be followed live' using hint = 'not_on_shift';
+  end if;
+
+  -- The same person already followed from this account: carry on with it.
+  select * into s from public.follow_sessions
+  where watcher_id = me and subject_id = p_subject and ended_at is null
+  order by started_at desc limit 1;
+  if s.id is not null then
+    update public.follow_sessions set last_seen_at = now() where id = s.id;
+    return public.follow_state(s.id) || jsonb_build_object('resumed', true);
+  end if;
+
+  select follow_max_sessions into cap from public.system_settings limit 1;
+  cap := coalesce(cap, 20);
+  if public.follow_active_count() >= cap then
+    raise exception 'Too many people are being followed live right now (% at most). Try again in a few minutes.', cap
+      using hint = 'follow_cap';
+  end if;
+
+  insert into public.follow_sessions (watcher_id, subject_id, expires_at)
+  values (me, p_subject, now() + public.follow_window())
+  returning * into s;
+
+  select full_name into who from public.profiles where id = p_subject;
+  insert into public.audit_log (actor_id, action, target_table, target_id, meta)
+  values (me, 'follow.start', 'profiles', p_subject,
+          jsonb_build_object('session_id', s.id, 'name', who, 'until', s.expires_at));
+
+  -- Nudge their phone, if the app is open, to send a position now. The
+  -- event carries nothing.
+  perform realtime.send('{}'::jsonb, 'sync', public.field_topic(p_subject), true);
+
+  return public.follow_state(s.id) || jsonb_build_object('resumed', false);
+end;
+$$;
+
+
+--
+-- Name: follow_state(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.follow_state(p_session uuid) RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select jsonb_build_object(
+    'id', s.id,
+    'subject_id', s.subject_id,
+    'active', public.follow_session_live(s),
+    'started_at', s.started_at,
+    'expires_at', s.expires_at,
+    'ended_at', s.ended_at,
+    'end_reason', s.end_reason,
+    'extended', s.extended,
+    'interval_ms', public.follow_fast_interval_ms(),
+    'topic', public.follow_topic(s.id),
+    'server_now', now(),
+    'clocked_out_at', (select a.created_at from public.attendance a
+                       where a.user_id = s.subject_id and a.attendance_date = public.business_date()
+                         and a.type = 'closing' order by a.created_at limit 1),
+    'live', case when s.last_at is null then null else jsonb_build_object(
+      'lat', s.last_lat, 'lng', s.last_lng, 'accuracy_m', s.last_accuracy_m,
+      'heading', s.last_heading, 'speed_mps', s.last_speed_mps, 'at', s.last_at) end,
+    'last_ping', (select jsonb_build_object('lat', p.lat, 'lng', p.lng, 'accuracy_m', p.accuracy_m,
+                                            'at', p.created_at, 'place_name', p.place_name)
+                  from public.location_pings p
+                  where p.user_id = s.subject_id
+                    and p.created_at >= (public.business_date()::timestamp at time zone 'Africa/Lagos')
+                  order by p.created_at desc limit 1),
+    'last_place', (select p.place_name from public.location_pings p
+                   where p.user_id = s.subject_id and p.place_name is not null
+                     and p.created_at >= (public.business_date()::timestamp at time zone 'Africa/Lagos')
+                   order by p.created_at desc limit 1)
+  )
+  from public.follow_sessions s where s.id = p_session;
+$$;
+
+
+--
+-- Name: follow_stop(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.follow_stop(p_session uuid, p_reason text DEFAULT 'stopped'::text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  s public.follow_sessions := public.follow_mine(p_session);
+  why text := case when p_reason = 'closed' then 'closed' else 'stopped' end;
+begin
+  if s.ended_at is null then
+    update public.follow_sessions set ended_at = now(), end_reason = why where id = s.id;
+    insert into public.audit_log (actor_id, action, target_table, target_id, meta)
+    values (auth.uid(), 'follow.stop', 'profiles', s.subject_id,
+            jsonb_build_object('session_id', s.id, 'reason', why,
+                               'minutes', round(extract(epoch from (now() - s.started_at)) / 60.0, 1)));
+  end if;
+  return public.follow_state(s.id);
+end;
+$$;
+
+
+--
+-- Name: follow_tidy(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.follow_tidy() RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare n integer;
+begin
+  update public.follow_sessions s
+     set ended_at = now(),
+         end_reason = case
+           when not public.follow_on_shift(s.subject_id) then 'clocked_out'
+           when s.expires_at <= now() then 'expired'
+           else 'closed' end
+   where s.ended_at is null
+     and not public.follow_session_live(s);
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+
+
+--
+-- Name: follow_topic(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.follow_topic(p_session uuid) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    AS $$ select 'follow:' || p_session::text $$;
+
+
+--
+-- Name: follow_window(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.follow_window() RETURNS interval
+    LANGUAGE sql IMMUTABLE
+    AS $$ select interval '30 minutes' $$;
 
 
 --
@@ -5092,7 +5536,8 @@ CREATE FUNCTION public.reset_category_tables() RETURNS TABLE(category text, tabl
     'stock_counts:store_count_sheets', 'stock_counts:store_counts',
     'stock_counts:count_request_targets', 'stock_counts:count_requests', 'reports:report_files',
     'reports:report_photos', 'reports:reports', 'visits_places:place_naming_due',
-    'visits_places:store_visits', 'visits_places:known_places', 'clock_ins:location_alerts',
+    'visits_places:store_visits', 'visits_places:known_places', 'clock_ins:follow_sessions',
+    'clock_ins:location_alerts',
     'clock_ins:location_pings', 'clock_ins:excuse_checks', 'clock_ins:phone_checks',
     'clock_ins:photo_checks', 'clock_ins:device_beacons', 'clock_ins:clock_out_reminders',
     'clock_ins:tracking_tokens', 'clock_ins:integrity_flags', 'clock_ins:attendance',
@@ -9241,6 +9686,8 @@ CREATE TABLE public.system_settings (
     last_reset_by uuid,
     last_reset jsonb,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    follow_max_sessions integer DEFAULT 20 NOT NULL,
+    CONSTRAINT system_settings_follow_max_sessions_check CHECK (((follow_max_sessions >= 1) AND (follow_max_sessions <= 200))),
     CONSTRAINT system_settings_id_check CHECK (id)
 );
 
@@ -9925,6 +10372,14 @@ ALTER TABLE ONLY public.excuse_checks
 
 
 --
+-- Name: follow_sessions follow_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.follow_sessions
+    ADD CONSTRAINT follow_sessions_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: integrity_flags integrity_flags_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -10600,6 +11055,20 @@ CREATE INDEX excuse_checks_by_user ON public.excuse_checks USING btree (user_id,
 
 
 --
+-- Name: follow_sessions_by_watcher; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX follow_sessions_by_watcher ON public.follow_sessions USING btree (watcher_id, started_at DESC);
+
+
+--
+-- Name: follow_sessions_open_by_subject; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX follow_sessions_open_by_subject ON public.follow_sessions USING btree (subject_id) WHERE (ended_at IS NULL);
+
+
+--
 -- Name: integrity_flags_by_user; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11125,6 +11594,13 @@ CREATE TRIGGER trg_audit_fill_context BEFORE INSERT ON public.audit_log FOR EACH
 
 
 --
+-- Name: attendance trg_follow_end_at_clock_out; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_follow_end_at_clock_out AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION public.follow_end_at_clock_out();
+
+
+--
 -- Name: location_pings trg_ping_alert; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -11465,6 +11941,22 @@ ALTER TABLE ONLY public.excuse_checks
 
 ALTER TABLE ONLY public.excuse_checks
     ADD CONSTRAINT excuse_checks_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: follow_sessions follow_sessions_subject_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.follow_sessions
+    ADD CONSTRAINT follow_sessions_subject_id_fkey FOREIGN KEY (subject_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: follow_sessions follow_sessions_watcher_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.follow_sessions
+    ADD CONSTRAINT follow_sessions_watcher_id_fkey FOREIGN KEY (watcher_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 
 
 --
@@ -12473,6 +12965,19 @@ ALTER TABLE public.excuse_checks ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY excuse_checks_read ON public.excuse_checks FOR SELECT USING ((public.is_admin() OR public.supervises_user(user_id)));
+
+
+--
+-- Name: follow_sessions; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.follow_sessions ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: follow_sessions follow_sessions_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY follow_sessions_read ON public.follow_sessions FOR SELECT TO authenticated USING ((public.is_admin() OR public.supervises_user(subject_id)));
 
 
 --
@@ -13527,6 +14032,14 @@ GRANT ALL ON FUNCTION public.can_file_report() TO service_role;
 
 
 --
+-- Name: FUNCTION can_hear_follow(p_topic text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.can_hear_follow(p_topic text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.can_hear_follow(p_topic text) TO authenticated;
+
+
+--
 -- Name: FUNCTION can_manage_schedule(p_user uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -13800,6 +14313,96 @@ REVOKE ALL ON FUNCTION public.flag_location(p_user uuid, p_lat double precision,
 REVOKE ALL ON FUNCTION public.flag_own_integrity(p_kind text, p_severity text, p_summary text, p_detail jsonb, p_outlet uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.flag_own_integrity(p_kind text, p_severity text, p_summary text, p_detail jsonb, p_outlet uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.flag_own_integrity(p_kind text, p_severity text, p_summary text, p_detail jsonb, p_outlet uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION follow_active_count(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.follow_active_count() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION follow_extend(p_session uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.follow_extend(p_session uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.follow_extend(p_session uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION follow_heartbeat(p_session uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.follow_heartbeat(p_session uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.follow_heartbeat(p_session uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION follow_interval_for(p_user uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.follow_interval_for(p_user uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.follow_interval_for(p_user uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION follow_live_position_for(p_user uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_heading double precision, p_speed_mps double precision, p_captured_at timestamp with time zone, p_is_mock boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.follow_live_position_for(p_user uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_heading double precision, p_speed_mps double precision, p_captured_at timestamp with time zone, p_is_mock boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.follow_live_position_for(p_user uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_heading double precision, p_speed_mps double precision, p_captured_at timestamp with time zone, p_is_mock boolean) TO service_role;
+
+
+--
+-- Name: FUNCTION follow_mine(p_session uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.follow_mine(p_session uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION follow_on_shift(p_user uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.follow_on_shift(p_user uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION follow_session_live(s public.follow_sessions); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.follow_session_live(s public.follow_sessions) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION follow_start(p_subject uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.follow_start(p_subject uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.follow_start(p_subject uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION follow_state(p_session uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.follow_state(p_session uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION follow_stop(p_session uuid, p_reason text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.follow_stop(p_session uuid, p_reason text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.follow_stop(p_session uuid, p_reason text) TO authenticated;
+
+
+--
+-- Name: FUNCTION follow_tidy(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.follow_tidy() FROM PUBLIC;
 
 
 --

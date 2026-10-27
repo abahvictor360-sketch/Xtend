@@ -6,6 +6,7 @@ import { notifyWatchers } from '@/lib/notify'
 import { resolvePlace } from '@/lib/geocode'
 import { HEARTBEAT_GEOFENCE_M } from '@/lib/geo'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
+import { liveInterval } from '@/lib/follow-live-server'
 
 const schema = z.object({
   lat: z.number().min(-90).max(90),
@@ -73,7 +74,11 @@ export async function POST(request: Request) {
     // Any flag this raised goes to the person's admins and supervisor now.
     await flushFlagAlerts()
 
-    return Response.json({ ping: data }, { status: 201 })
+    // While someone follows them live (0070), the answer carries the fast
+    // interval and the app sends quick positions to /api/pings/live.
+    const interval = await liveInterval(createAdminSupabase(), session.userId)
+
+    return Response.json({ ping: data, ...(interval ? { interval_ms: interval } : {}) }, { status: 201 })
   } catch (error) {
     return apiError(error)
   }

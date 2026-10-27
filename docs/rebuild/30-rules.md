@@ -9,7 +9,7 @@ policy described here. Use this file to write route handlers and screens
 that call those database objects correctly, and to understand what the
 database will refuse and why.
 
-Migration numbers (`0001` to `0069`, no `0051`) say where a rule came
+Migration numbers (`0001` to `0070`, no `0051`) say where a rule came
 from. Where a function was redefined, the latest migration named is the one
 in force.
 
@@ -744,6 +744,77 @@ minutes**, so retry loops do not flood the queue.
   readings within **150 m** (`STOP_RADIUS_M`) for **8 minutes**
   (`STOP_MINUTES`); faster than **150 km/h** (`JUMP_KMH`) is not a real
   journey. The Movement page covers at most **7** days.
+
+### 3.6a Follow live (0070)
+
+An admin or supervisor watches one clocked-in person move on the map, a few
+seconds behind (`/admin/follow/<person>`). Only that person's phone speeds
+up, and only for as long as someone is watching.
+
+- **`follow_sessions`**: `watcher_id`, `subject_id`, `started_at`,
+  `expires_at`, `last_seen_at` (the page's last check-in), `ended_at` with
+  `end_reason` (`stopped`, `closed`, `expired`, `clocked_out`; both null or
+  both set), `extended`, and the latest live position (`last_lat`,
+  `last_lng`, `last_accuracy_m`, `last_heading`, `last_speed_mps`,
+  `last_at`; one row updated, never a history). RLS: admins read all,
+  supervisors their team's (`supervises_user(subject_id)`), staff nothing;
+  no direct writes.
+- **On shift** (`follow_on_shift`): an active merchandiser or marketer with
+  an opening today (Lagos) and no closing today.
+- **Live** (`follow_session_live`): not ended, `expires_at` in the future,
+  checked in within **60 s** (`follow_heartbeat_grace`), subject on shift.
+  `follow_tidy()` closes the rest with the reason (clocked_out first, then
+  expired, else closed); it runs at every start, check-in and extension.
+- **`follow_start(subject)`** (signed in): only active admins and
+  supervisors ("Only admins and supervisors can follow someone live");
+  admins anyone, supervisors their team ("You can only follow people on
+  your own team"); subject on shift ("They are not clocked in, so they
+  cannot be followed live", hint `not_on_shift`); the same watcher and
+  subject with a session still open → that session (`resumed: true`);
+  otherwise at most `system_settings.follow_max_sessions` (default **20**,
+  1–200) live sessions system-wide ("Too many people are being followed
+  live right now (N at most). Try again in a few minutes.", hint
+  `follow_cap`). A new session lasts **30 minutes** (`follow_window`).
+  Audited `follow.start` (target the subject, meta `session_id`, `name`,
+  `until`). Sends `realtime.send('{}', 'sync', field:<subject>)`.
+- **`follow_heartbeat(session)`**, **`follow_extend(session)`**,
+  **`follow_stop(session, reason)`**: the watcher only ("This live view is
+  not yours, or no longer exists", hint `follow_not_found`). Extend: refused
+  after clock-out (`not_on_shift`) and after a stop or closed page ("This
+  live view has ended. Start following again.", `follow_ended`); allowed
+  while live or once expired (the cap applies again then); sets
+  `expires_at = now() + 30 min`, `extended + 1`, audited `follow.extend`,
+  sends `sync`. Stop: `stopped`, or `closed` when the page was closed;
+  audited `follow.stop` once (meta `reason`, `minutes`).
+- **`follow_state(session)`** (what all four return): `id`, `subject_id`,
+  `active`, `started_at`, `expires_at`, `ended_at`, `end_reason`,
+  `extended`, `interval_ms` (8000), `topic` (`follow:<id>`), `server_now`,
+  `clocked_out_at` (today's closing), `live` (the latest live position),
+  `last_ping` (today's latest stored ping with `place_name`), `last_place`
+  (today's latest named ping).
+- **`follow_interval_for(user)`** (service role only): **8000**
+  (`follow_fast_interval_ms`) while any live session follows the user, else
+  null. `/api/pings` and `/api/track/device` add it to their answer as
+  `interval_ms`.
+- **`follow_live_position_for(user, lat, lng, accuracy_m, heading, speed_mps,
+  captured_at, is_mock)`** (service role only): returns the interval, or
+  null when nobody follows (nothing done). Not shown: a fake-location
+  reading, impossible coordinates, negative accuracy, or one taken more than
+  **2 minutes** ago; a position within **3 s** of the last one (two senders
+  on one phone) is ignored. Otherwise it updates the live sessions' latest
+  position and `realtime.send(position, 'position', follow:<id>)` for each
+  (heading kept only 0–360, speed only 0–100 m/s). **Never** a
+  `location_pings` row; stored pings keep their pace and rules (0055 still
+  refuses positions after clock-out).
+- **Clock-out** (`trg_follow_end_at_clock_out`, after insert on
+  attendance): a closing ends every open session of the person
+  (`clocked_out`) and sends `ended` `{reason: 'clocked_out', at}` on each
+  session's topic.
+- **Realtime**: policy "Followers read their own follow topic" on
+  `realtime.messages` (`can_hear_follow(realtime.topic())`): only the
+  session's watcher hears `follow:<id>` (not the person followed, not
+  another admin).
+- Reset (0066): `follow_sessions` is cleared with clock-ins and locations.
 
 ### 3.7 Phone beacons (`record_beacon`, 0026)
 
@@ -1944,7 +2015,7 @@ calculation.
 
 | Key | Label | Tables emptied | Stored files queued |
 |---|---|---|---|
-| `clock_ins` | Clock-ins and locations | attendance, location_pings, location_alerts, integrity_flags, excuse_checks, phone_checks, photo_checks, device_beacons, clock_out_reminders, tracking_tokens | attendance selfie/thumb |
+| `clock_ins` | Clock-ins and locations | attendance, location_pings, location_alerts, integrity_flags, excuse_checks, phone_checks, photo_checks, device_beacons, clock_out_reminders, tracking_tokens, follow_sessions (0070) | attendance selfie/thumb |
 | `visits_places` | Store visits and places | store_visits, known_places, place_naming_due | visit selfie/thumb, place photo/selfie |
 | `reports` | Daily reports | reports, report_photos, report_files | report photos, report documents |
 | `stock_counts` | Stock counts and count sheets | store_counts, count_requests, count_request_targets, store_count_sheets | count photos, count sheets |

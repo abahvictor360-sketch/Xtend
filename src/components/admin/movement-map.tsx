@@ -133,7 +133,7 @@ export function LiveMap({ rows, date }: { rows: LiveLocation[]; date: string }) 
               (r.distance_from_outlet_m != null
                 ? `<br/>${metres(r.distance_from_outlet_m)} from ${escape(r.outlet_name ?? 'their store')}`
                 : '') +
-              `<br/><em>Click to see their movement</em>`,
+              `<br/><em>Click to see their movement, or to follow them live</em>`,
             { direction: 'top', offset: [0, -24] },
           )
           .on('click', () => router.push(href))

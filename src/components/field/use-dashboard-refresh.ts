@@ -96,6 +96,9 @@ export function useDashboardRefresh(activeShift: boolean, userId: string) {
         channel = supabase()
           .channel(`field:${userId}`, { config: { private: true } })
           .on('broadcast', { event: 'change' }, nudge)
+          // 0070: "send a position now" for the location heartbeat. The
+          // event carries nothing and nothing is shown.
+          .on('broadcast', { event: 'sync' }, () => window.dispatchEvent(new Event('xtend:sync')))
           .subscribe((status) => {
             // SUBSCRIBED => realtime is live, fall back to the slow poll.
             // CHANNEL_ERROR / TIMED_OUT / CLOSED => the socket is not carrying
