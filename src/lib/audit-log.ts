@@ -67,6 +67,7 @@ export const ACTION_GROUPS: Record<string, string> = {
   xm: 'X Metrics',
   app: 'Updates',
   system: 'System',
+  follow: 'Movement',
 }
 
 const LABELS: Record<string, string> = {
@@ -121,6 +122,9 @@ const LABELS: Record<string, string> = {
   'system.reset': 'Reset test records',
   'system.reset.files': 'Removed stored files left from a reset',
   'system.go_live': 'Turned off test mode (went live)',
+  'follow.start': 'Started following someone live',
+  'follow.extend': 'Kept following someone live',
+  'follow.stop': 'Stopped following someone live',
 }
 
 export function actionGroup(action: string) {

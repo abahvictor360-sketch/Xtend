@@ -1772,6 +1772,20 @@ reached from the home week row, History ("Your month") and You.
   (`BackgroundGeolocation` plugin, `distanceFilter` **25 m**, notification
   "Xtend" / "On shift") posts via the native HTTP client at most every
   **150 s** unless moved ≥ **150 m**; a non-400 failure is queued.
+- **Follow live (migration 0070), silent.** The `/api/pings` answer may
+  carry `interval_ms` (8000) while someone in the office follows this
+  person (`nextInterval` in `src/lib/follow-live.ts` accepts 2–60 s). The
+  page then first asks the native tracker (`followFast(ms)` →
+  `ShiftTracker.follow({ intervalMs })`, resolves `{ ok }`); if that is not
+  available (browser, app build before 0070, tracker not running) it sends
+  quick positions itself: `getCurrentPosition` (high accuracy, timeout
+  **7000 ms**, maximumAge **2000 ms**) → `POST /api/pings/live { lat, lng,
+  accuracy_m, heading, speed, captured_at }` (never stored as a ping; the
+  answer's `interval_ms` schedules the next one, its absence stops the
+  loop). Only while visible and online; stops when the hook is inactive. A
+  `sync` broadcast on the member's own topic (see 13.3) dispatches the
+  window event `xtend:sync`, on which the heartbeat sends one quick
+  position at once. Nothing is shown and no text mentions it.
 
 ### 13.2 Phone beacon (`phone-beacon.tsx`, `src/lib/phone-report.ts`)
 
@@ -1797,7 +1811,10 @@ reached from the home week row, History ("Your month") and You.
   member read only their own topic. Broadcast replaces Postgres Changes so
   the realtime server does not run RLS per subscriber per change, which is
   what lets the connection count scale to thousands.
-- Any event → debounce **400 ms** → `router.refresh()` (which re-fetches
+- A `sync` event (migration 0070, empty payload, sent when someone starts
+  or extends following this member live) does not refresh: it dispatches
+  `window` event `xtend:sync` for the heartbeat (13.1).
+- Any `change` event → debounce **400 ms** → `router.refresh()` (which re-fetches
   through RLS; the socket never carries row data); refreshes are skipped
   while hidden or offline and are locked for **1500 ms** after one.
 - Only **on-shift** members open a socket; a clocked-out member with the app
@@ -1831,6 +1848,19 @@ reached from the home week row, History ("Your month") and You.
   queue up to **2000** points, sent in batches of up to **500**; continues
   with the app closed and after reboot (Android boot receiver). The server's
   answer says when the shift is over.
+- **Follow live (0070)**: the `/api/track/device` answer may carry
+  `interval_ms`. While it does (held **60 s** after each such answer; an
+  answer without it ends it at once), Android re-registers GPS and network
+  updates at that interval (normally 60 s) with a timer that sends even if
+  GPS is quiet, and iOS asks for best accuracy with no distance filter; each
+  request then also carries `live: { lat, lng, accuracy_m, captured_at,
+  heading?, speed?, is_mock }` (the latest reading, at most once per
+  interval). Stored points keep their usual cadence. iOS also sends an
+  empty request at most every **150 s** on a location update so it notices
+  a follow; with the app closed iOS only wakes on significant changes. New
+  plugin method `follow({ intervalMs })` → `{ ok }` (false when no shift is
+  tracked or the interval is outside 2–60 s) starts it at once; the
+  notification text stays "On shift".
 - **Neutral setup prompt** (only when needed, never explaining why):
   heading **"Finish setting up Xtend"**;
   - location not "always": iOS "Set Location to “Always” for Xtend." with

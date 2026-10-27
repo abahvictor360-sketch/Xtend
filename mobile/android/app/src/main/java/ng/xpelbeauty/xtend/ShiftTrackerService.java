@@ -48,6 +48,14 @@ import org.json.JSONObject;
  * with the phone's tracking token, so nothing depends on the web page.
  * The server's answer says when the shift is over; the service then stops
  * by itself.
+ *
+ * Follow live (migration 0070): while someone in the office follows this
+ * person, the server's answer carries interval_ms (a few seconds). The
+ * service then asks Android for positions that often and sends the latest
+ * one with each request as "live" (shown to the follower, never stored as
+ * a ping); the stored positions keep their usual pace. When an answer comes
+ * without interval_ms, or none comes for a minute, it goes back to normal.
+ * Nothing on the phone changes: the notification stays "On shift".
  */
 public class ShiftTrackerService extends Service implements LocationListener {
 
@@ -72,6 +80,11 @@ public class ShiftTrackerService extends Service implements LocationListener {
     private PowerManager.WakeLock wakeLock;
     private long lastFailureAt = 0;
     private volatile boolean sending = false;
+    /** Follow live: the latest position, and when one was last sent. */
+    private volatile Location liveLoc = null;
+    private volatile long lastLiveAt = 0;
+    /** How often Android is asked for positions now (handler thread only). */
+    private long appliedMinTime = -1;
 
     // ------------------------------------------------------------------
     // Starting and stopping, from the plugin, the boot receiver or Android.
@@ -91,9 +104,25 @@ public class ShiftTrackerService extends Service implements LocationListener {
         ContextCompat.startForegroundService(context, intent);
     }
 
+    /** Follow live: the fast interval while it holds, else 0. */
+    static long fastMs(Context context) {
+        SharedPreferences p = prefs(context);
+        if (p.getLong("fast_until", 0) <= System.currentTimeMillis()) return 0;
+        return p.getLong("fast_ms", 0);
+    }
+
+    /** Follow live: send every `ms` for the next minute (0: back to normal). */
+    static void setFast(Context context, long ms) {
+        if (ms >= 2_000 && ms <= 60_000) {
+            prefs(context).edit().putLong("fast_ms", ms).putLong("fast_until", System.currentTimeMillis() + 60_000).apply();
+        } else {
+            prefs(context).edit().remove("fast_ms").remove("fast_until").apply();
+        }
+    }
+
     /** Forgets the token (positions not yet sent are kept until a new shift sends them). */
     static void clear(Context context) {
-        prefs(context).edit().remove("token").remove("endpoint").remove("expires_at").putBoolean("running", false).apply();
+        prefs(context).edit().remove("token").remove("endpoint").remove("expires_at").remove("fast_ms").remove("fast_until").putBoolean("running", false).apply();
         context.stopService(new Intent(context, ShiftTrackerService.class));
     }
 
@@ -119,7 +148,14 @@ public class ShiftTrackerService extends Service implements LocationListener {
             return START_NOT_STICKY;
         }
         prefs(this).edit().putBoolean("running", true).apply();
-        if (thread == null) begin();
+        if (thread == null) {
+            begin();
+        } else if (handler != null) {
+            // Started again while running: the follow-live instruction may
+            // have changed (ShiftTracker.follow).
+            handler.post(this::applyMode);
+            flush();
+        }
         return START_STICKY;
     }
 
@@ -141,16 +177,7 @@ public class ShiftTrackerService extends Service implements LocationListener {
             stopSelf();
             return;
         }
-        try {
-            for (String provider : new String[] { LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER }) {
-                if (locations.getAllProviders().contains(provider)) {
-                    locations.requestLocationUpdates(provider, 60_000, 0f, this, thread.getLooper());
-                }
-            }
-        } catch (SecurityException e) {
-            stopSelf();
-            return;
-        }
+        handler.post(this::applyMode);
         // Standing still indoors, GPS may say nothing for a long time: every
         // few minutes take the best recent reading Android has, and retry
         // sending whatever is waiting.
@@ -170,7 +197,53 @@ public class ShiftTrackerService extends Service implements LocationListener {
                 if (best != null && System.currentTimeMillis() - best.getTime() < 10 * 60_000) keep(best, true);
             }
             flush();
+            applyMode();
             handler.postDelayed(this, EVERY_MS);
+        }
+    };
+
+    /**
+     * Asks Android for positions every minute, or every few seconds while
+     * someone follows live. Runs on the tracker's own thread.
+     */
+    private void applyMode() {
+        if (locations == null || thread == null) return;
+        long fast = fastMs(this);
+        long want = fast > 0 ? fast : 60_000;
+        if (want != appliedMinTime) {
+            try {
+                locations.removeUpdates(this);
+                for (String provider : new String[] { LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER }) {
+                    if (locations.getAllProviders().contains(provider)) {
+                        locations.requestLocationUpdates(provider, want, 0f, this, thread.getLooper());
+                    }
+                }
+                appliedMinTime = want;
+            } catch (SecurityException e) {
+                stopSelf();
+                return;
+            }
+        }
+        handler.removeCallbacks(liveTick);
+        if (fast > 0) handler.postDelayed(liveTick, fast);
+    }
+
+    /** While following live: send the latest position even if GPS is quiet. */
+    private final Runnable liveTick = new Runnable() {
+        @Override
+        public void run() {
+            long fast = fastMs(ShiftTrackerService.this);
+            if (fast <= 0) {
+                applyMode();
+                return;
+            }
+            Location l = liveLoc;
+            if (l == null || System.currentTimeMillis() - l.getTime() > 2 * fast) {
+                Location best = bestLastKnown();
+                if (best != null) liveLoc = best;
+            }
+            if (System.currentTimeMillis() - lastLiveAt >= fast - 500) flush();
+            handler.postDelayed(this, fast);
         }
     };
 
@@ -187,7 +260,15 @@ public class ShiftTrackerService extends Service implements LocationListener {
 
     @Override
     public void onLocationChanged(@NonNull Location location) {
+        long fast = fastMs(this);
+        if (fast > 0) liveLoc = location;
         keep(location, false);
+        if (fast > 0 && System.currentTimeMillis() - lastLiveAt >= fast - 500) flush();
+    }
+
+    private static boolean isMock(Location l) {
+        if (Build.VERSION.SDK_INT >= 31) return l.isMock();
+        return l.isFromMockProvider();
     }
 
     // Older Android versions call these; nothing to do.
@@ -213,9 +294,7 @@ public class ShiftTrackerService extends Service implements LocationListener {
         if (!due) return;
         if (l.getAccuracy() > ROUGH_M && now - lastAt < 2 * EVERY_MS && !forced) return;
 
-        boolean mock;
-        if (Build.VERSION.SDK_INT >= 31) mock = l.isMock();
-        else mock = l.isFromMockProvider();
+        boolean mock = isMock(l);
 
         try {
             JSONObject point = new JSONObject();
@@ -274,6 +353,21 @@ public class ShiftTrackerService extends Service implements LocationListener {
             JSONObject body = new JSONObject();
             body.put("sent_at", iso(System.currentTimeMillis()));
             body.put("points", batch);
+            // Follow live: the latest position, shown to the follower only.
+            Location live = liveLoc;
+            long liveNow = System.currentTimeMillis();
+            if (fastMs(this) > 0 && live != null && liveNow - live.getTime() < 60_000) {
+                JSONObject lv = new JSONObject();
+                lv.put("lat", live.getLatitude());
+                lv.put("lng", live.getLongitude());
+                lv.put("accuracy_m", live.hasAccuracy() ? live.getAccuracy() : 999);
+                lv.put("captured_at", iso(Math.min(live.getTime(), liveNow)));
+                lv.put("is_mock", isMock(live));
+                if (live.hasBearing()) lv.put("heading", live.getBearing());
+                if (live.hasSpeed()) lv.put("speed", live.getSpeed());
+                body.put("live", lv);
+                lastLiveAt = liveNow;
+            }
 
             c = (HttpURLConnection) new URL(endpoint).openConnection();
             c.setRequestMethod("POST");
@@ -316,6 +410,10 @@ public class ShiftTrackerService extends Service implements LocationListener {
                     .apply();
             }
             lastFailureAt = 0;
+            // Follow live: faster while the server asks, normal otherwise.
+            long before = fastMs(this);
+            setFast(this, answer.optLong("interval_ms", 0));
+            if (fastMs(this) != before && handler != null) handler.post(this::applyMode);
             if (answer.optBoolean("stop", false)) {
                 clear(this);
             } else if (count == 500) {
@@ -373,7 +471,10 @@ public class ShiftTrackerService extends Service implements LocationListener {
 
     @Override
     public void onDestroy() {
-        if (handler != null) handler.removeCallbacks(tick);
+        if (handler != null) {
+            handler.removeCallbacks(tick);
+            handler.removeCallbacks(liveTick);
+        }
         if (locations != null) {
             try {
                 locations.removeUpdates(this);

@@ -12,6 +12,10 @@ drop policy if exists "Field members read their own topic" on realtime.messages;
 create policy "Field members read their own topic" on realtime.messages as PERMISSIVE for SELECT to authenticated
   using ((realtime.topic() = field_topic(( SELECT auth.uid() AS uid))));
 
+drop policy if exists "Followers read their own follow topic" on realtime.messages;
+create policy "Followers read their own follow topic" on realtime.messages as PERMISSIVE for SELECT to authenticated
+  using (can_hear_follow(realtime.topic()));
+
 drop policy if exists avatars_insert_own on storage.objects;
 create policy avatars_insert_own on storage.objects as PERMISSIVE for INSERT to public
   with check (((bucket_id = 'avatars'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text)));

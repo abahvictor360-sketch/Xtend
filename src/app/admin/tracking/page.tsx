@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { Radio } from 'lucide-react'
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { Alert } from '@/components/ui/alert'
@@ -174,7 +175,8 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
           <div className="surface p-5">
             <h2 className="text-lg font-bold">On shift now ({onShift.length})</h2>
             <p className="mb-3 text-sm text-muted-foreground">
-              Click a photo on the map, or a name here, to see their route today.
+              Click a photo on the map, or a name here, to see their route today. <strong>Follow live</strong>{' '}
+              shows them moving on the map, a few seconds behind.
             </p>
             {onShift.length === 0 ? (
               <p className="text-sm text-muted-foreground">Nobody is on shift right now.</p>
@@ -183,10 +185,10 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
                 {onShift.map((r) => {
                   const stale = (r.minutes_since_ping ?? 999) > 15
                   return (
-                    <li key={r.user_id}>
+                    <li key={r.user_id} className="flex items-center gap-1">
                       <Link
                         href={`/admin/tracking?person=${r.user_id}&date=${today}`}
-                        className="flex items-center gap-3 rounded-xl px-2 py-2.5 hover:bg-tint"
+                        className="flex min-w-0 flex-1 items-center gap-3 rounded-xl px-2 py-2.5 hover:bg-tint"
                       >
                         <span
                           className={cn(
@@ -212,6 +214,14 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
                               ? 'In store'
                               : ''}
                         </span>
+                      </Link>
+                      <Link
+                        href={`/admin/follow/${r.user_id}`}
+                        className="flex min-h-11 shrink-0 items-center gap-1 rounded-xl px-2.5 text-xs font-semibold text-brand hover:bg-tint"
+                        aria-label={`Follow ${r.full_name} live`}
+                      >
+                        <Radio className="h-4 w-4" />
+                        <span className="hidden sm:inline">Follow live</span>
                       </Link>
                     </li>
                   )
@@ -241,12 +251,17 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
                   .join('')}
               </span>
             )}
-            <div>
+            <div className="min-w-0 flex-1">
               <p className="text-lg font-bold leading-tight">{person.full_name}</p>
               <p className="text-xs text-muted-foreground">
                 {days.length === 1 ? longDate(date) : `${longDate(date)} to ${longDate(until)} · ${days.length} days`}
               </p>
             </div>
+            {onShift.some((r) => r.user_id === person.id) && (
+              <Link href={`/admin/follow/${person.id}`} className={buttonVariants({ size: 'sm' })}>
+                <Radio className="h-4 w-4" /> Follow live
+              </Link>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-8">

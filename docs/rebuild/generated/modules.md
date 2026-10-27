@@ -436,6 +436,27 @@ A headline a supervisor can act on from the lock screen.
 
 Exports: `FLAG_HEADLINE`, `flagHeadline`
 
+## `src/lib/follow-live-server.ts`
+
+The location routes' side of follow live (migration 0070), with the
+service-role client. Both answer null when nobody follows the person,
+and also when 0070 has not been run yet: the phone then simply carries
+on at its normal pace.
+
+Exports: `liveInterval`, `LivePosition`, `sendLivePosition`
+
+## `src/lib/follow-live.ts`
+
+Follow live (migration 0070): the pure parts, shared by the follow page,
+the web heartbeat and the check script (scripts/check-follow-live.ts).
+
+The phone sends a position every FAST_INTERVAL_MS while someone follows
+it; the page moves the photo pin smoothly from where it is drawn to the
+new position over about one interval, so it glides like a delivery
+rider instead of jumping.
+
+Exports: `FAST_INTERVAL_MS`, `FOLLOW_MINUTES`, `FOLLOW_HEARTBEAT_MS`, `FOLLOW_GRACE_MS`, `OFFER_EXTEND_MS`, `TRAIL_MINUTES`, `MOVING_KMH`, `FAST_HOLD_MS`, `LivePoint`, `distanceM`, `bearing`, `interpolate`, `glideMs`, `glideProgress`, `speedKmh`, `isMoving`, `headingFor`, `trimTrail`, `updatedAgo`, `timeLeft`, `FollowEnd`, `FollowTiming`, `followTiming`, `nextInterval`, `fastHoldUntil`, `endedText`
+
 ## `src/lib/geo.ts`
 
 A fix worse than this is not evidence of anything.
@@ -658,7 +679,7 @@ location while the screen is off or the app is in the background, and
 native push. In an ordinary browser none of this exists and every helper
 here is a no-op, so the site behaves exactly as before.
 
-Exports: `NativePlatform`, `nativePlatform`, `isNativeApp`, `hasPlugin`, `callNative`, `listenNative`, `NativeLocation`, `watchBackgroundLocation`, `ShiftTrackerState`, `hasShiftTracker`, `startShiftTracker`, `stopShiftTracker`, `shiftTrackerState`, `askAlwaysLocation`, `openBatterySettings`, `nativePostJson`, `NativePushPermission`, `nativePushPermission`, `registerNativePush`, `NativeFix`, `getNativeFix`, `nativeDeviceSignals`
+Exports: `NativePlatform`, `nativePlatform`, `isNativeApp`, `hasPlugin`, `callNative`, `listenNative`, `NativeLocation`, `watchBackgroundLocation`, `ShiftTrackerState`, `hasShiftTracker`, `startShiftTracker`, `stopShiftTracker`, `followFast`, `shiftTrackerState`, `askAlwaysLocation`, `openBatterySettings`, `nativePostJson`, `NativePushPermission`, `nativePushPermission`, `registerNativePush`, `NativeFix`, `getNativeFix`, `nativeDeviceSignals`
 
 ## `src/lib/notification-log.ts`
 
@@ -1179,6 +1200,12 @@ Exports: `CsvImporter`
 ## `src/components/admin/excuse-timeline.tsx`
 
 Exports: `ExcuseTimeline`
+
+## `src/components/admin/follow-live.tsx`
+
+What the server says about the session (follow_state, migration 0070).
+
+Exports: `FollowPerson`, `FollowStore`, `FollowLive`
 
 ## `src/components/admin/integrity-flags.tsx`
 

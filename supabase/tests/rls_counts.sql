@@ -609,5 +609,73 @@ reset role;
 delete from public.place_addresses where address = '1 RLS Street, Lagos';
 delete from public.place_lookup_stats;
 
+-- ---------------------------------------------------------------
+-- Follow live (0070): admins see every live view, supervisors their
+-- team's, staff none; nobody writes them directly; only the person
+-- following hears the session's realtime topic.
+-- ---------------------------------------------------------------
+reset role;
+grant insert, update, delete on public.follow_sessions to authenticated;
+revoke insert, update, delete, truncate on public.follow_sessions from anon, authenticated;
+insert into public.follow_sessions (watcher_id, subject_id, expires_at)
+values (:'boss', :'ada', now() + interval '30 minutes') returning id as fs_boss \gset
+insert into public.follow_sessions (watcher_id, subject_id, expires_at)
+values (:'tunde', :'funke', now() + interval '30 minutes') returning id as fs_tunde \gset
+select count(*) as fs_total from public.follow_sessions \gset
+select realtime.send('{"lat":6.5}'::jsonb, 'position', public.follow_topic(:'fs_boss'), true);
+select realtime.send('{"lat":6.6}'::jsonb, 'position', public.follow_topic(:'fs_tunde'), true);
+set role authenticated;
+
+select set_config('request.jwt.claim.sub', :'boss', false);
+select assert((select count(*) from public.follow_sessions) = :fs_total and :fs_total >= 2, 'rls: an admin sees every live view');
+select set_config('request.jwt.claim.sub', :'tunde', false);
+select assert(exists (select 1 from public.follow_sessions where subject_id = :'funke')
+                and not exists (select 1 from public.follow_sessions where not public.supervises_user(subject_id)),
+  'rls: a supervisor sees only live views of their own team');
+select set_config('request.jwt.claim.sub', :'ada', false);
+select assert((select count(*) from public.follow_sessions) = 0, 'rls: staff see no live views, not even of themselves');
+do $$
+begin
+  insert into public.follow_sessions (watcher_id, subject_id, expires_at) values (auth.uid(), auth.uid(), now());
+  perform assert(false, 'rls: no live view written directly');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: live views cannot be written directly');
+end $$;
+do $$
+begin
+  perform public.follow_interval_for(auth.uid());
+  perform assert(false, 'rls: the fast interval is for the server');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: nobody signed in asks for the fast interval');
+end $$;
+do $$
+begin
+  perform public.follow_live_position_for(auth.uid(), 6.5, 3.3, 5);
+  perform assert(false, 'rls: live positions go through the server');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: nor sends a live position straight to the database');
+end $$;
+
+-- Realtime topics.
+select set_config('realtime.topic', 'follow:' || :'fs_boss', false);
+select assert((select count(*) from realtime.messages) = 0,
+  'rls: the person followed cannot hear their own live view');
+select set_config('request.jwt.claim.sub', :'tunde', false);
+select assert((select count(*) from realtime.messages) = 0,
+  'rls: a supervisor cannot hear an admin''s live view');
+select set_config('request.jwt.claim.sub', :'boss', false);
+select assert((select count(*) from realtime.messages) > 0,
+  'rls: the admin following hears their own live view''s topic');
+select set_config('realtime.topic', 'follow:' || :'fs_tunde', false);
+select assert((select count(*) from realtime.messages) = 0,
+  'rls: but not anybody else''s, admin or not');
+select set_config('request.jwt.claim.sub', :'tunde', false);
+select assert((select count(*) from realtime.messages) > 0,
+  'rls: the supervisor following hears theirs');
+select set_config('realtime.topic', '', false);
+
+reset role;
+delete from public.follow_sessions where id in (:'fs_boss', :'fs_tunde');
+
 reset role;
 select 'ALL RLS CHECKS PASSED';

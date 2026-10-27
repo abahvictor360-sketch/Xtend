@@ -28,6 +28,16 @@ flags positions Android marks as coming from a fake-location app, and
 answers `stop` once the person has clocked out; the token also expires
 after 18 hours and is retired at clock-out.
 
+**Follow live** (migration `0070`): while someone in the office follows
+the person on the map, the server's answer carries `interval_ms` (8000).
+The tracker then asks for positions that often and sends the latest one
+with each request as `live` (shown to the follower, never stored); it goes
+back to normal when an answer comes without `interval_ms`, or a minute
+after the last one that had it. The open page can start it at once with
+the plugin's `follow({ intervalMs })` method. On iPhone this works while
+Xtend is open or in the background; with the app closed only the ~500 m
+wake-ups below arrive. The notification text does not change.
+
 What each phone allows:
 
 - **Android**: the service keeps running after the app is swiped away. It

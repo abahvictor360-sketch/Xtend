@@ -210,6 +210,29 @@ Policies:
 Policies:
 - `excuse_checks_read` SELECT to public: using `(is_admin() OR supervises_user(user_id))`
 
+### `follow_sessions`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| id | uuid(uuid) |  | gen_random_uuid() |
+| watcher_id | uuid(uuid) |  |  |
+| subject_id | uuid(uuid) |  |  |
+| started_at | timestamp with time zone(timestamptz) |  | now() |
+| expires_at | timestamp with time zone(timestamptz) |  |  |
+| last_seen_at | timestamp with time zone(timestamptz) |  | now() |
+| ended_at | timestamp with time zone(timestamptz) | yes |  |
+| end_reason | text(text) | yes |  |
+| extended | integer(int4) |  | 0 |
+| last_lat | double precision(float8) | yes |  |
+| last_lng | double precision(float8) | yes |  |
+| last_accuracy_m | double precision(float8) | yes |  |
+| last_heading | double precision(float8) | yes |  |
+| last_speed_mps | double precision(float8) | yes |  |
+| last_at | timestamp with time zone(timestamptz) | yes |  |
+
+Policies:
+- `follow_sessions_read` SELECT to authenticated: using `(is_admin() OR supervises_user(subject_id))`
+
 ### `integrity_flags`
 
 | Column | Type | Null | Default |
@@ -845,6 +868,7 @@ Policies:
 | last_reset_by | uuid(uuid) | yes |  |
 | last_reset | jsonb(jsonb) | yes |  |
 | updated_at | timestamp with time zone(timestamptz) |  | now() |
+| follow_max_sessions | integer(int4) |  | 20 |
 
 Policies:
 - `system_settings_admin_read` SELECT to authenticated: using `is_admin()`
@@ -1248,6 +1272,7 @@ Policies:
 - `can_create_staff(p_role user_role)` → boolean · definer · 0017_supervisor_manages_staff.sql
 - `can_edit_staff(target uuid)` → boolean · definer · 0017_supervisor_manages_staff.sql
 - `can_file_report()` → boolean · definer · 0005_marketer_role.sql
+- `can_hear_follow(p_topic text)` → boolean · definer · 0070_follow_live.sql
 - `can_manage_schedule(p_user uuid)` → boolean · definer · 0059_schedules_leave.sql
 - `can_see_count_request(p_id uuid)` → boolean · definer · 0020_count_requests.sql
 - `can_send_notifications()` → boolean · definer · 0006_push_notifications.sql
@@ -1290,6 +1315,23 @@ Policies:
 - `finish_onboarding()` → void · definer · 0037_profile_photos.sql
 - `flag_location(p_user uuid, p_lat double precision, p_lng double precision, p_accuracy double precision, p_at timestamp with time zone, p_source text, p_check_repeat boolean, p_outlet uuid)` → void · definer · 0022_integrity_checks.sql
 - `flag_own_integrity(p_kind text, p_severity text, p_summary text, p_detail jsonb, p_outlet uuid)` → void · definer · 0032_native_integrity.sql
+- `follow_active_count()` → integer · definer · 0070_follow_live.sql
+- `follow_end_at_clock_out()` → trigger · definer · 0070_follow_live.sql
+- `follow_extend(p_session uuid)` → jsonb · definer · 0070_follow_live.sql
+- `follow_fast_interval_ms()` → integer · 0070_follow_live.sql
+- `follow_heartbeat(p_session uuid)` → jsonb · definer · 0070_follow_live.sql
+- `follow_heartbeat_grace()` → interval · 0070_follow_live.sql
+- `follow_interval_for(p_user uuid)` → integer · definer · 0070_follow_live.sql
+- `follow_live_position_for(p_user uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_heading double precision, p_speed_mps double precision, p_captured_at timestamp with time zone, p_is_mock boolean)` → integer · definer · 0070_follow_live.sql
+- `follow_mine(p_session uuid)` → follow_sessions · definer · 0070_follow_live.sql
+- `follow_on_shift(p_user uuid)` → boolean · definer · 0070_follow_live.sql
+- `follow_session_live(s follow_sessions)` → boolean · definer · 0070_follow_live.sql
+- `follow_start(p_subject uuid)` → jsonb · definer · 0070_follow_live.sql
+- `follow_state(p_session uuid)` → jsonb · definer · 0070_follow_live.sql
+- `follow_stop(p_session uuid, p_reason text)` → jsonb · definer · 0070_follow_live.sql
+- `follow_tidy()` → integer · definer · 0070_follow_live.sql
+- `follow_topic(p_session uuid)` → text · 0070_follow_live.sql
+- `follow_window()` → interval · 0070_follow_live.sql
 - `forget_expired_selfies(p_hours integer)` → integer · definer · 0067_report_photos_offline.sql
 - `forget_selfie_paths(p_paths text[])` → integer · definer · 0067_report_photos_offline.sql
 - `gen_random_bytes(integer)` → bytea
@@ -1409,7 +1451,7 @@ Policies:
 - `request_phone_check(p_user uuid)` → uuid · definer · 0026_phone_evidence.sql
 - `request_store_count(p_user_ids uuid[], p_due_date date, p_note text)` → uuid · definer · 0046_role_store_counts.sql
 - `reset_category_keys()` → text[] · 0066_test_mode_reset.sql
-- `reset_category_tables()` → TABLE(category text, table_name text, step integer) · 0066_test_mode_reset.sql
+- `reset_category_tables()` → TABLE(category text, table_name text, step integer) · 0070_follow_live.sql
 - `reset_files_done(p_bucket text, p_names text[])` → integer · definer · 0066_test_mode_reset.sql
 - `reset_files_next(p_limit integer)` → TABLE(bucket text, name text) · definer · 0066_test_mode_reset.sql
 - `reset_files_pending()` → integer · definer · 0066_test_mode_reset.sql
@@ -1505,6 +1547,7 @@ Policies:
 - `attendance`: `trg_attendance_timing` — BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_timing()
 - `attendance`: `trg_attendance_timing_flag` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_timing_flag()
 - `attendance`: `trg_attendance_zz_place_due` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_place_due()
+- `attendance`: `trg_follow_end_at_clock_out` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION follow_end_at_clock_out()
 - `audit_log`: `trg_audit_fill_context` — BEFORE INSERT ON public.audit_log FOR EACH ROW EXECUTE FUNCTION audit_fill_context()
 - `location_pings`: `trg_ping_alert` — AFTER INSERT ON public.location_pings FOR EACH ROW EXECUTE FUNCTION ping_alert()
 - `location_pings`: `trg_ping_enforce` — BEFORE INSERT ON public.location_pings FOR EACH ROW EXECUTE FUNCTION ping_enforce()

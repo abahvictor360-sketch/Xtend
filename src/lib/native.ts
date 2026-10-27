@@ -166,6 +166,23 @@ export async function stopShiftTracker() {
   await fetch('/api/track/stop', { method: 'POST' }).catch(() => {})
 }
 
+/**
+ * Asks the native tracker to send quick positions for a while (0070). True
+ * when it took the instruction and is running for a shift; false in a
+ * browser, an app build from before 0070 (no `follow` method) or with the
+ * tracker stopped, and the page then sends them itself while it is open.
+ * The tracker drops back by itself once the server stops asking.
+ */
+export async function followFast(intervalMs: number): Promise<boolean> {
+  if (!hasShiftTracker()) return false
+  try {
+    const got = await callNative<{ ok?: boolean }>('ShiftTracker', 'follow', { intervalMs })
+    return got?.ok === true
+  } catch {
+    return false
+  }
+}
+
 export async function shiftTrackerState(): Promise<ShiftTrackerState | null> {
   if (!hasShiftTracker()) return null
   return await callNative<ShiftTrackerState>('ShiftTracker', 'status').catch(() => null)

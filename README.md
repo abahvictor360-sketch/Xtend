@@ -88,6 +88,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0067_report_photos_offline.sql       # report photos sent once on a retry; files kept 14 days, announced to admins/supervisors the day before
    supabase/migrations/0068_place_lookups.sql               # Google only for new spots: the tracker learns places, addresses kept, monthly lookup counter
    supabase/migrations/0069_shift_soon_reminders.sql        # reminders 5 minutes before the shift starts (clock in) and ends (clock out)
+   supabase/migrations/0070_follow_live.sql                 # Follow live: watch one clocked-in person move on the map; only their phone speeds up
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

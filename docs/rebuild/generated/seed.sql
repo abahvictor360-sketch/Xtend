@@ -105,6 +105,12 @@ SET row_security = off;
 
 
 --
+-- Data for Name: follow_sessions; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
 -- Data for Name: integrity_flags; Type: TABLE DATA; Schema: public; Owner: -
 --
 
@@ -538,7 +544,7 @@ INSERT INTO public.support_quick_replies VALUES ('00000000-0000-4000-8000-000000
 -- Data for Name: system_settings; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.system_settings VALUES (true, true, NULL, NULL, NULL, NULL, NULL, '2026-01-01 00:00:00+00');
+INSERT INTO public.system_settings VALUES (true, true, NULL, NULL, NULL, NULL, NULL, '2026-01-01 00:00:00+00', 20);
 
 
 --

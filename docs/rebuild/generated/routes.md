@@ -2,7 +2,7 @@
 
 # API routes
 
-116 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+119 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
 
 ## `POST /api/activity`
 
@@ -292,6 +292,38 @@ One person's journey, as on the Movement page: stops, travel and silences.
 Store visits as Excel, Word, PDF or CSV. The file is generated here, from
 whatever filter is on screen, so an admin never has to assemble one. On
 the store coverage view, the file is that list of stores instead.
+
+## `POST /api/admin/follow/[id]`
+
+- File: `src/app/api/admin/follow/[id]/route.ts`
+- Who: ['admin', 'supervisor']
+
+The follow page's check-in (every ~20 s), "Keep following", Stop, and
+the page being closed (sent with navigator.sendBeacon, so the body may
+arrive as plain text). Only the person following may act on a session;
+the database checks that and audits extend and stop.
+
+```ts
+const schema = z.object({ action: z.enum(['heartbeat', 'extend', 'stop', 'close']) })
+```
+
+- Database functions: `follow_heartbeat`, `follow_extend`, `follow_stop`
+
+## `POST /api/admin/follow`
+
+- File: `src/app/api/admin/follow/route.ts`
+- Who: ['admin', 'supervisor']
+
+Starts following someone live (migration 0070). The database decides:
+admins anyone, supervisors their own team, only people clocked in and
+not clocked out, at most follow_max_sessions at once. follow_start
+writes the follow.start audit row (with this request's context).
+
+```ts
+const schema = z.object({ user_id: z.string().uuid() })
+```
+
+- Database functions: `follow_start`
 
 ## `POST /api/admin/integrity/[id]/review`
 
@@ -1479,6 +1511,29 @@ const schema = z.object({
 ```
 - Tables and views: `photo_checks`, `integrity_flags`
 
+## `POST /api/pings/live`
+
+- File: `src/app/api/pings/live/route.ts`
+- Who: FIELD_ROLES
+
+A quick position from the open app (migration 0070). It is never stored
+as a location ping: while someone follows this person it goes to them
+over Realtime (follow_live_position_for keeps only the latest, on the
+session), and the answer says how soon to send the next one. With
+nobody following, it does nothing and `interval_ms` is null. The usual
+stored pings still go to /api/pings at their usual times.
+
+```ts
+const schema = z.object({
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  accuracy_m: z.number().nonnegative(),
+  heading: z.number().nullable().optional(),
+  speed: z.number().nullable().optional(),
+  captured_at: z.string().datetime({ offset: true }).optional(),
+})
+```
+
 ## `POST /api/pings/offline`
 
 - File: `src/app/api/pings/offline/route.ts`
@@ -1795,6 +1850,21 @@ const schema = z.object({
       }),
     )
     .max(500),
+  /**
+   * The latest position, sent every few seconds while someone follows this
+   * person live (0070). Shown to the follower, never stored as a ping.
+   */
+  live: z
+    .object({
+      lat: z.number().min(-90).max(90),
+      lng: z.number().min(-180).max(180),
+      accuracy_m: z.number().nonnegative(),
+      captured_at: z.string().datetime({ offset: true }),
+      heading: z.number().nullable().optional(),
+      speed: z.number().nullable().optional(),
+      is_mock: z.boolean().optional(),
+    })
+    .optional(),
 })
 ```
 

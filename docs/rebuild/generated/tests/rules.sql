@@ -4970,6 +4970,219 @@ begin
     perform assert(public.retention_days() = 14, 'retention 0067: the rule is 14 days');
   end;
 
+  -- Follow live (0070). Rolled back at the end, like 0068's.
+  begin
+    declare
+      today date := public.business_date();
+      f_admin uuid := gen_random_uuid();
+      f_sup   uuid := gen_random_uuid();
+      f_on    uuid := gen_random_uuid();  -- on f_sup's team, clocked in
+      f_other uuid := gen_random_uuid();  -- not on the team, clocked in
+      f_off   uuid := gen_random_uuid();  -- on the team, not clocked in
+      f_done  uuid := gen_random_uuid();  -- on the team, clocked in and out
+      f_x     uuid := gen_random_uuid();  -- extra people for the cap
+      f_y     uuid := gen_random_uuid();
+      got jsonb;
+      sid uuid;
+      sid2 uuid;
+      n integer;
+    begin
+      insert into auth.users (id, email) values
+        (f_admin, 'f.admin@xpel.ng'), (f_sup, 'f.sup@xpel.ng'), (f_on, 'f.on@xpel.ng'),
+        (f_other, 'f.other@xpel.ng'), (f_off, 'f.off@xpel.ng'), (f_done, 'f.done@xpel.ng'),
+        (f_x, 'f.x@xpel.ng'), (f_y, 'f.y@xpel.ng');
+      insert into public.profiles (id, full_name, email, role, is_active) values
+        (f_admin, 'Fola Admin', 'f.admin@xpel.ng', 'admin', true),
+        (f_sup,   'Femi Lead',  'f.sup@xpel.ng',   'supervisor', true),
+        (f_other, 'Fatima Other', 'f.other@xpel.ng', 'merchandiser', true),
+        (f_x,     'Felix X',    'f.x@xpel.ng',     'merchandiser', true),
+        (f_y,     'Funmi Y',    'f.y@xpel.ng',     'marketer', true);
+      insert into public.profiles (id, full_name, email, role, is_active, supervisor_id) values
+        (f_on,   'Fela On',   'f.on@xpel.ng',   'marketer', true, f_sup),
+        (f_off,  'Fisayo Off','f.off@xpel.ng',  'merchandiser', true, f_sup),
+        (f_done, 'Fikayo Done','f.done@xpel.ng','merchandiser', true, f_sup);
+      perform set_config('session_replication_role', 'replica', true);
+      insert into public.attendance (user_id, type, lat, lng, accuracy_m, selfie_path, client_captured_at, attendance_date)
+      select u, 'opening', 6.6, 3.35, 10, 'x', now(), today from unnest(array[f_on, f_other, f_done, f_x, f_y]) u;
+      insert into public.attendance (user_id, type, lat, lng, accuracy_m, selfie_path, client_captured_at, attendance_date)
+      values (f_done, 'closing', 6.6, 3.35, 10, 'x', now(), today);
+      perform set_config('session_replication_role', 'origin', true);
+
+      perform assert(public.follow_on_shift(f_on) and not public.follow_on_shift(f_off) and not public.follow_on_shift(f_done),
+        'follow 0070: on shift means clocked in today and not clocked out');
+
+      -- Who may follow whom.
+      perform act_as(f_on);
+      begin
+        perform public.follow_start(f_other);
+        perform assert(false, 'follow 0070: staff cannot follow anyone');
+      exception when others then
+        perform assert(sqlerrm like 'Only admins and supervisors%', 'follow 0070: staff cannot follow anyone');
+      end;
+      perform act_as(f_sup);
+      begin
+        perform public.follow_start(f_other);
+        perform assert(false, 'follow 0070: a supervisor follows only their team');
+      exception when others then
+        perform assert(sqlerrm like 'You can only follow people on your own team%', 'follow 0070: a supervisor cannot follow someone outside their team');
+      end;
+      begin
+        perform public.follow_start(f_off);
+        perform assert(false, 'follow 0070: only people clocked in');
+      exception when others then
+        perform assert(sqlerrm like 'They are not clocked in%', 'follow 0070: nobody who has not clocked in can be followed');
+      end;
+      begin
+        perform public.follow_start(f_done);
+        perform assert(false, 'follow 0070: not after clock-out');
+      exception when others then
+        perform assert(sqlerrm like 'They are not clocked in%', 'follow 0070: nobody who has clocked out can be followed');
+      end;
+      perform assert(public.follow_interval_for(f_on) is null, 'follow 0070: nobody followed, no fast interval');
+
+      got := public.follow_start(f_on);
+      sid := (got->>'id')::uuid;
+      perform assert((got->>'active')::boolean and (got->>'interval_ms')::int = 8000
+                     and (got->>'expires_at')::timestamptz between now() + interval '29 minutes' and now() + interval '31 minutes'
+                     and got->>'topic' = 'follow:' || sid,
+        'follow 0070: a supervisor follows someone on their team who is clocked in, for 30 minutes');
+      perform assert(exists (select 1 from public.audit_log where action = 'follow.start' and actor_id = f_sup
+                             and target_id = f_on and meta->>'session_id' = sid::text),
+        'follow 0070: starting is audited (follow.start)');
+      perform assert(exists (select 1 from realtime.messages m where m.topic = 'field:' || f_on and m.event = 'sync' and m.payload = '{}'::jsonb),
+        'follow 0070: their open app is nudged on their own topic, with nothing in the message');
+      perform assert(((public.follow_start(f_on))->>'id')::uuid = sid,
+        'follow 0070: following the same person again carries on with the same session');
+      perform assert(public.follow_interval_for(f_on) = 8000 and public.follow_interval_for(f_other) is null,
+        'follow 0070: only the followed phone is told to speed up');
+
+      -- Fast positions: broadcast, never stored as pings.
+      n := (select count(*) from public.location_pings where user_id = f_on);
+      perform assert(public.follow_live_position_for(f_on, 6.601, 3.351, 8, 90, 4.2, now(), false) = 8000,
+        'follow 0070: a live position gets the fast interval back');
+      perform assert(exists (select 1 from realtime.messages m where m.topic = 'follow:' || sid and m.event = 'position'
+                             and (m.payload->>'lat')::float8 = 6.601 and (m.payload->>'speed_mps')::float8 = 4.2),
+        'follow 0070: and is broadcast on the session''s own topic');
+      perform assert((select count(*) from public.location_pings where user_id = f_on) = n,
+        'follow 0070: but not stored as a location ping');
+      perform assert((select last_lat from public.follow_sessions where id = sid) = 6.601,
+        'follow 0070: only the latest is kept, on the session');
+      perform public.follow_live_position_for(f_on, 6.700, 3.351, 8, null, null, now(), false);
+      perform assert((select last_lat from public.follow_sessions where id = sid) = 6.601,
+        'follow 0070: a second sender within 3 seconds is ignored');
+      update public.follow_sessions set last_at = now() - interval '5 seconds' where id = sid;
+      perform public.follow_live_position_for(f_on, 6.602, 3.351, 400, null, null, now(), true);
+      perform assert((select last_lat from public.follow_sessions where id = sid) = 6.601,
+        'follow 0070: a fake-location reading is not shown');
+      perform public.follow_live_position_for(f_on, 6.602, 3.351, 8, null, null, now() - interval '5 minutes', false);
+      perform assert((select last_lat from public.follow_sessions where id = sid) = 6.601,
+        'follow 0070: nor an old one');
+      perform assert(public.follow_live_position_for(f_other, 6.6, 3.3, 8, null, null, now(), false) is null,
+        'follow 0070: someone not followed is told nothing');
+
+      -- Checking in, running out, keeping on.
+      perform act_as(f_admin);
+      begin
+        perform public.follow_heartbeat(sid);
+        perform assert(false, 'follow 0070: only the follower checks in');
+      exception when others then
+        perform assert(sqlerrm like 'This live view is not yours%', 'follow 0070: only the person following can check in on a session');
+      end;
+      perform act_as(f_sup);
+      got := public.follow_heartbeat(sid);
+      perform assert((got->>'active')::boolean and (got->'live'->>'lat')::float8 = 6.601,
+        'follow 0070: the page''s check-in returns the latest live position');
+      update public.follow_sessions set expires_at = now() - interval '1 second' where id = sid;
+      perform assert(public.follow_interval_for(f_on) is null, 'follow 0070: after 30 minutes the phone goes back to normal');
+      got := public.follow_heartbeat(sid);
+      perform assert(not (got->>'active')::boolean and got->>'end_reason' = 'expired',
+        'follow 0070: and the session ends as run out');
+      got := public.follow_extend(sid);
+      perform assert((got->>'active')::boolean and (got->>'extended')::int = 1
+                     and (got->>'expires_at')::timestamptz > now() + interval '29 minutes',
+        'follow 0070: "Keep following" gives another 30 minutes');
+      perform assert(exists (select 1 from public.audit_log where action = 'follow.extend' and meta->>'session_id' = sid::text),
+        'follow 0070: keeping on is audited (follow.extend)');
+      update public.follow_sessions set last_seen_at = now() - interval '61 seconds' where id = sid;
+      perform assert(public.follow_interval_for(f_on) is null, 'follow 0070: no check-in from the page for 60 s: back to normal');
+      perform public.follow_tidy();
+      perform assert((select end_reason from public.follow_sessions where id = sid) = 'closed',
+        'follow 0070: and the session ends as closed');
+      begin
+        perform public.follow_extend(sid);
+        perform assert(false, 'follow 0070: a closed view cannot be extended');
+      exception when others then
+        perform assert(sqlerrm like 'This live view has ended%', 'follow 0070: a closed view is not extended (start again)');
+      end;
+
+      -- Stop.
+      got := public.follow_start(f_on);
+      sid := (got->>'id')::uuid;
+      got := public.follow_stop(sid);
+      perform assert(got->>'end_reason' = 'stopped' and not (got->>'active')::boolean
+                     and public.follow_interval_for(f_on) is null,
+        'follow 0070: Stop ends it at once');
+      perform assert(exists (select 1 from public.audit_log where action = 'follow.stop' and meta->>'session_id' = sid::text
+                             and meta->>'reason' = 'stopped'),
+        'follow 0070: stopping is audited (follow.stop)');
+      perform public.follow_stop(sid);
+      perform assert((select count(*) from public.audit_log where action = 'follow.stop' and meta->>'session_id' = sid::text) = 1,
+        'follow 0070: stopping twice is audited once');
+
+      -- Clock-out ends it, and tells the page.
+      perform act_as(f_admin);
+      got := public.follow_start(f_on);
+      sid := (got->>'id')::uuid;
+      perform act_as(f_sup);
+      sid2 := ((public.follow_start(f_on))->>'id')::uuid;
+      perform assert(sid2 <> sid and public.follow_active_count() >= 2,
+        'follow 0070: an admin and the supervisor can each follow the same person');
+      alter table public.attendance enable always trigger trg_follow_end_at_clock_out;
+      perform set_config('session_replication_role', 'replica', true);
+      insert into public.attendance (user_id, type, lat, lng, accuracy_m, selfie_path, client_captured_at, attendance_date)
+      values (f_on, 'closing', 6.6, 3.35, 10, 'x', now(), today);
+      perform set_config('session_replication_role', 'origin', true);
+      perform assert((select count(*) from public.follow_sessions where id in (sid, sid2) and end_reason = 'clocked_out') = 2,
+        'follow 0070: clocking out ends every live view of them');
+      perform assert(exists (select 1 from realtime.messages m where m.topic = 'follow:' || sid and m.event = 'ended'
+                             and m.payload->>'reason' = 'clocked_out'),
+        'follow 0070: and the page is told on its topic');
+      perform assert(public.follow_interval_for(f_on) is null
+                     and public.follow_live_position_for(f_on, 6.6, 3.3, 8, null, null, now(), false) is null,
+        'follow 0070: no fast positions after clock-out');
+      got := public.follow_heartbeat(sid2);
+      perform assert(got->>'clocked_out_at' is not null and not (got->>'active')::boolean,
+        'follow 0070: the page reads when they clocked out');
+
+      -- The cap.
+      update public.system_settings set follow_max_sessions = 1;
+      perform act_as(f_admin);
+      perform public.follow_start(f_x);
+      begin
+        perform public.follow_start(f_y);
+        perform assert(false, 'follow 0070: the cap holds');
+      exception when others then
+        perform assert(sqlerrm like 'Too many people are being followed live right now (1 at most)%',
+          'follow 0070: no more than the system-wide limit at once, with a plain message');
+      end;
+      update public.system_settings set follow_max_sessions = 20;
+
+      -- Service role only for the phone's side.
+      perform assert(
+        not has_function_privilege('authenticated', 'public.follow_interval_for(uuid)', 'execute')
+        and not has_function_privilege('authenticated', 'public.follow_live_position_for(uuid, double precision, double precision, double precision, double precision, double precision, timestamp with time zone, boolean)', 'execute')
+        and has_function_privilege('service_role', 'public.follow_interval_for(uuid)', 'execute')
+        and has_function_privilege('authenticated', 'public.follow_start(uuid)', 'execute')
+        and not has_function_privilege('anon', 'public.follow_start(uuid)', 'execute'),
+        'follow 0070: the fast interval and live positions are for the server alone');
+      perform set_config('request.jwt.claim.sub', '', false);
+      raise exception 'follow-0070-done';
+    end;
+  exception when others then
+    if sqlerrm <> 'follow-0070-done' then raise; end if;
+  end;
+  perform assert(not exists (select 1 from public.follow_sessions), 'follow 0070: (the tests above rolled back)');
+
   -- Test mode and resetting the test run (066). Every case runs in its
   -- own block that is rolled back, so the data stays for the RLS tests.
   -- ---------------------------------------------------------------
@@ -4992,6 +5205,8 @@ begin
     perform set_config('request.jwt.claim.sub', '', false);
     -- Rows for the two tables the earlier tests leave empty.
     insert into public.assistant_conversations (user_id, title) values (boss, 'Test run questions');
+    insert into public.follow_sessions (watcher_id, subject_id, expires_at, ended_at, end_reason)
+    values (boss, ada, now(), now(), 'stopped');
     alter table public.xm_monthly_grades disable trigger trg_xm_monthly_grades_feature_guard;
     insert into public.xm_monthly_grades (month, user_id, grade, score, band)
     values (date_trunc('month', now())::date, ada, '{}', 70, 'Strong');

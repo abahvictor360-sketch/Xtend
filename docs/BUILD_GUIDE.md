@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-27, after Google's map on Movement and Google used only for new places (migration 0068), merged with the five-minute shift heads-ups (0069)._
+_Last updated: 2026-10-27, after Follow live on Movement (migration 0070), following Google's map on Movement (0068) and the five-minute shift heads-ups (0069)._
 
 ---
 
@@ -472,6 +472,45 @@ the code lives.
   in place, keeps the zoom, and costs no new Google map load; Satellite
   reuses the same Google map.
 
+- **Follow live** (0070, admins and supervisors, `/admin/follow/<person>`):
+  like a delivery app's rider, one person who is clocked in moves on the
+  map a few seconds behind. Opened from Movement: **Follow live** beside each
+  name in "On shift now" and on the person's header (only while they are
+  clocked in and not clocked out). Admins follow anyone, supervisors their
+  own team; the database refuses anyone else, anyone not on shift, and more
+  than `system_settings.follow_max_sessions` (20) live views at once
+  ("Too many people are being followed live right now…"). A session
+  (`follow_sessions`) lasts 30 minutes (**Keep following** adds 30 more,
+  offered in the last 5), ends at clock-out (trigger; the page says "Clocked
+  out at HH:MM"), at **Stop**, or when the page closes (`sendBeacon`; or no
+  check-in for 60 s; the page checks in every 20 s). Audited `follow.start`,
+  `follow.extend`, `follow.stop`. **Only the followed phone speeds up**:
+  `follow_interval_for(user)` gives 8 s while a session is live, and the
+  location routes add it to their answer as `interval_ms` (`POST /api/pings`,
+  `POST /api/track/device`); the phone then sends a quick position every 8 s
+  (`POST /api/pings/live` from the open app page, or a `live` field on the
+  native tracker's `/api/track/device` request) and drops back when the
+  answer stops carrying it. Quick positions are **never stored as pings**:
+  `follow_live_position_for` keeps only the latest on the session row and
+  broadcasts it on the private Realtime topic `follow:<session>`, which only
+  the follower may read (RLS on `realtime.messages`, `can_hear_follow`);
+  fake-location, nonsense or stale (over 2 minutes) readings are not shown;
+  a second sender within 3 s is ignored. Stored pings keep their usual pace
+  and every integrity check; nothing is accepted after clock-out (0055).
+  Starting sends a silent `sync` event (no payload) on the person's own
+  `field:<uid>` topic so an open app sends a position at once. The page
+  (`src/components/admin/follow-live.tsx`, shared base map) glides the photo
+  pin between positions over one interval, points an arrow the way they are
+  going, draws the accuracy circle, a 5-minute breadcrumb line and their
+  store's circle, ticks "Updated N s ago", shows km/h while moving, the last
+  named place and the distance from their store, a **Follow on map** /
+  free-pan toggle (dragging the map turns it off), a **Call** button when a
+  phone number is on file, and **Stop**. Without Realtime it checks every 8 s
+  (the check-in returns the latest quick and stored positions) and says so.
+  Staff are never told; the Android "On shift" notification is unchanged
+  (`src/lib/follow-live.ts`, `follow-live-server.ts`,
+  `src/app/api/admin/follow/*`).
+
 ## 6. The database: every migration
 
 Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
@@ -546,6 +585,7 @@ Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
 | 0067 | Report photos offline and the 14-day rule: `add_report_photo(path)` (idempotent by path on today's report, own folder, uploaded within 24 h, image, on no other report; the 5-photo trigger still applies) and an index on `report_photos.storage_path`; `retention_days()` (14), `retention_delete_before`, `retention_cutoff`, `retention_announce` (job_runs `retention_notice`), `report_photo_orphans(hours, limit)` / `report_photo_orphans_before`, `report_file_orphans` (now 14 days and announced) / `report_file_orphans_before`, `expired_selfie_paths` and `forget_expired_selfies` on the same rule, `forget_selfie_paths(paths)`, `supervisor_covers`, `retention_notice_due(through)`, `record_retention_purge(result)` (job_runs `retention_purge`, audit `retention.purge`), `selfie_retention_status` (14 days); all service role only except `add_report_photo` and `retention_days` |
 | 0066 | Test mode and reset: `system_settings` (one row, `test_mode` on, one-way off by trigger, admins read), `system_reset_files` (files a reset queued), `reset_category_keys/tables`, `reset_resolve_categories`, `reset_test_data(actor, categories)` (service role), `system_go_live(actor)`, `reset_files_next/done/pending`. WIPE: attendance, location_pings, location_alerts, integrity_flags, excuse_checks, phone_checks, photo_checks, device_beacons, clock_out_reminders, tracking_tokens, store_visits, known_places, place_naming_due, reports, report_photos, report_files, store_counts, count_requests, count_request_targets, store_count_sheets, all xm_ record tables (counts, count lines, sales, sale lines, supplies, supply imports, reconciliations, monthly grades, expiry alerts, targets, policy reads), leave_requests, schedule_overrides, work_patterns, support_threads, support_messages, notifications, notification_deliveries, scheduled_notifications, user_activity, assistant_conversations, staff_outlets, outlets, xm_stores, audit_log. Admins kept: profiles, push_subscriptions, app_installs, staff_temp_passwords. KEEP: products, staff_roles, role_store_counts, count_sheet_templates, notification_templates, support_quick_replies, xm_settings, xm_settings_history, xm_policy_versions, app_releases, job_runs, system_settings, system_reset_files. |
 | 0068 | Google only for new spots: `learn_place_for(person, …)` and `note_place_visit_for(person, place)` (service role only; map names only, same name rules, nothing inside a store; `note_place_visit` now calls the latter for the signed-in caller), `place_addresses` with `address_at` / `remember_address` (service role; admins read; 40 m; nothing saved inside a store or learned place), `place_lookup_stats` (month, source, lookups; admins read) with `place_lookup_sources()`, `count_place_lookups(sources)` and `google_calls_this_month()` (service role). Both tables are kept by a test-mode reset |
+| 0070 | Follow live: `system_settings.follow_max_sessions` (20); `follow_sessions` (watcher, subject, started/expires/last seen/ended with `end_reason` stopped, closed, expired or clocked_out, `extended`, the latest live position; RLS: admins all, supervisors their team's, staff none, no direct writes); `follow_start(subject)`, `follow_heartbeat(session)`, `follow_extend(session)`, `follow_stop(session, reason)` (the follower only; audited `follow.start` / `follow.extend` / `follow.stop`); `follow_interval_for(user)` and `follow_live_position_for(user, …)` (service role only; 8 s while live; broadcast on `follow:<session>`, never a ping row); `follow_on_shift`, `follow_tidy`, `follow_state`; trigger `trg_follow_end_at_clock_out` on attendance; realtime policy "Followers read their own follow topic" (`can_hear_follow`); `reset_category_tables()` redefined with `follow_sessions` under clock-ins and locations |
 | 0069 | Five-minute heads-ups: `clock_out_reminders` takes stages 3 (`clock_in_soon`) and 4 (`clock_out_soon`) with a generated `stage_name`; `shift_start_for(user)` (home store's start, else 08:00); `claim_shift_soon_reminders(p_now)` (service role only: Lagos time, working days only for clock-in, merchandisers and marketers, active accounts, only inside [time − 5 min, time), once per stage per day); `claim_clock_out_reminders` redefined so the new stages never block the at-end reminder |
 
 ## 7. Environment variables
@@ -651,6 +691,21 @@ in `mobile/` changes.
   App Manager), every production build archives with automatic signing and
   uploads to TestFlight, no Mac needed (steps in `mobile/README.md`). Then set
   `IOS_APP_URL` (TestFlight public link) and `IOS_LATEST_BUILD` in Vercel.
+- **Follow live** (0070): when the server's answer to the native tracker
+  carries `interval_ms`, the tracker asks for positions that often (Android:
+  the foreground service re-registers its location updates at 8 s; iPhone:
+  best accuracy, every movement, while the app is open or in the background)
+  and sends the latest with each request as `live`; it drops back to normal
+  when an answer comes without it, or a minute after the last one that had
+  it. The plugin's new `follow({ intervalMs })` method lets the open page
+  start it at once. With the app **closed**, iOS only wakes Xtend on
+  significant changes (about 500 m), so following an iPhone is coarse then;
+  Android keeps sending every 8 s. A tracker not yet told catches up at its
+  next check-in (Android: within 2½ minutes; iPhone: its next
+  movement-triggered request, at least 2½ minutes apart when nothing else is
+  sent). App builds from before 0070 ignore `interval_ms`: the open app page
+  then sends the quick positions itself, and with the app closed they stay
+  on the normal pace. Needs a new app build to reach phones.
 - Full details: `mobile/README.md`.
 
 ## 10. Testing and checks
@@ -698,7 +753,7 @@ for s in check-allocate check-assistant-actions check-attendance check-audit \
          check-support-notifications check-updates check-visits-alerts check-xm-exports \
          check-schedules-leave check-marketer-reports check-clock-out-reminder check-activity \
          check-xm-features check-report-files check-system-reset check-report-photos check-retention \
-         check-places-usage check-shift-reminders; do
+         check-places-usage check-shift-reminders check-follow-live; do
   npx tsx --tsconfig tsconfig.scripts.json scripts/$s.ts | tail -1
 done
 ```
@@ -783,7 +838,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
-         check-places-usage check-shift-reminders; do
+| 2026-10-27 | **Follow live**: from Movement, admins (anyone) and supervisors (their team) follow one clocked-in person moving on the map like a delivery rider (`/admin/follow/<person>`): smooth photo pin, heading arrow, accuracy circle, 5-minute trail, store circle, "Updated N s ago", km/h, last named place, Follow on map / free pan, Call, Stop. Only the followed phone speeds up (8 s, told through `interval_ms` on the location answers; web heartbeat and both native trackers obey); quick positions go over private Realtime (`follow:<session>`) and are never stored as pings; sessions end at clock-out, after 30 minutes (Keep following) or when the page closes; at most 20 at once; audited. New `POST /api/admin/follow`, `/api/admin/follow/<id>`, `/api/pings/live`; check script `check-follow-live`; native `ShiftTracker.follow` (new app build). Also removed a stray line that broke this table | 0070 |
 | 2026-10-23 | Redesigned office overview around Start here, four linked metrics, attendance follow-up and expandable coverage; alerts use compact copy and expandable filters/notification settings; staff Home shows Your next step before clock controls, with progress/week under My day; normalise SQL line endings in the system reset check for Windows | — |
 | 2026-10-23 | Admin guide: new “What’s new (October 2026)” section (migrations 0059–0067 to run in order and where each new feature lives), X Metrics on/off step by step, the Movement map held to Nigeria, and the iPhone app through TestFlight | — |
 | 2026-10-23 | **Report photos survive a bad connection, and files are kept 14 days**: a report sent again does not upload its photos again (an id per photo when taken or picked, `<uid>/report-photo-<id>.jpg`, progress kept in the outbox, "already exists" counts as done, old queued jobs get ids on their first try) and `add_report_photo` answers a repeat with the same row (no duplicates, the five-photo limit still holds). Nothing is deleted automatically before 14 days (was 24 hours for clock photos and unused report documents) or without the day-before notice to admins (all) and supervisors (their team); reports and anything on them are never deleted; unused report photos are now cleaned up too; each night's deletions audited `retention.purge`. The ping-driven selfie sweep is removed. New `src/lib/report-photo-queue.ts`, `scripts/check-report-photos.ts`, `scripts/check-retention.ts`; admin and supervisor guides updated | 0067 |
@@ -907,5 +962,15 @@ Newest first. Dates are when the work landed on the main branch.
   when each answer was fetched). Place learning by staff's own client
   (`learn_place` with a map source) is still open to any signed-in caller, as
   before 0068.
+- **Follow live** (0070): with the iPhone app closed, iOS only wakes Xtend
+  on significant moves (about 500 m), so an iPhone is followed coarsely
+  then; Android keeps the 8-second pace. Phones with an app build from
+  before 0070 send quick positions only while the Xtend home screen is open.
+  A phone not using the app at that moment learns it is followed at its next
+  check-in (about 2½ minutes on Android). Quick positions add a Realtime
+  message and a one-row update every 8 s per followed phone; the cap
+  (`system_settings.follow_max_sessions`, 20; change it with SQL) keeps that
+  to a handful. The follow page relies on the browser running its timers:
+  a page left in a background tab may be ended as "closed" after 60 s.
 - Migrations to run in production after each merge: check the change log
   above against what has been run in Supabase.

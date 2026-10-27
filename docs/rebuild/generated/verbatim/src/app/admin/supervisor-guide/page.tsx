@@ -170,6 +170,14 @@ export default async function SupervisorGuidePage() {
             <Ui> Worth a look</Ui> points out what needs a question.
           </p>
           <p>
+            <Ui>Follow live</Ui> (next to each name under <Ui>On shift now</Ui>, or at the top of their
+            journey) shows one person on your team moving on the map a few seconds behind, like a delivery
+            app. You can only follow someone who is clocked in. It lasts 30 minutes (press{' '}
+            <Ui>Keep following</Ui> for 30 more), and stops when they clock out, when you press{' '}
+            <Ui>Stop</Ui> or when you close the page. <Ui>Call</Ui> rings them. Only a few people can be
+            followed at once across Xtend; if it says to try again, wait a few minutes.
+          </p>
+          <p>
             <Ui>Store visits</Ui> shows your marketers&apos; rounds: which stores, when and for how long,
             with the check-in photo. <Ui>Store coverage</Ui> shows stores nobody has visited for a while.
           </p>

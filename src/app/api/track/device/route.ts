@@ -3,6 +3,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { notifyWatchers } from '@/lib/notify'
 import { resolvePlace } from '@/lib/geocode'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
+import { liveInterval, sendLivePosition } from '@/lib/follow-live-server'
 
 export const maxDuration = 30
 
@@ -20,6 +21,21 @@ const schema = z.object({
       }),
     )
     .max(500),
+  /**
+   * The latest position, sent every few seconds while someone follows this
+   * person live (0070). Shown to the follower, never stored as a ping.
+   */
+  live: z
+    .object({
+      lat: z.number().min(-90).max(90),
+      lng: z.number().min(-180).max(180),
+      accuracy_m: z.number().nonnegative(),
+      captured_at: z.string().datetime({ offset: true }),
+      heading: z.number().nullable().optional(),
+      speed: z.number().nullable().optional(),
+      is_mock: z.boolean().optional(),
+    })
+    .optional(),
 })
 
 interface Recorded {
@@ -84,7 +100,33 @@ export async function POST(request: Request) {
     }
     await flushFlagAlerts()
 
-    return Response.json({ kept: got.kept ?? 0, shift_open: got.shift_open ?? false, stop: !got.shift_open })
+    // Follow live (0070): pass the quick position on, and tell the phone to
+    // send every few seconds while someone follows (interval_ms), or to go
+    // back to its normal pace (no interval_ms). Its clock may be wrong, so
+    // the position's time is corrected the same way as the stored ones.
+    let interval: number | null = null
+    if (got.user_id && got.shift_open) {
+      const live = parsed.data.live
+      const offset = Date.parse(parsed.data.sent_at) - Date.now()
+      interval = live
+        ? await sendLivePosition(admin, got.user_id, {
+            lat: live.lat,
+            lng: live.lng,
+            accuracy_m: live.accuracy_m,
+            heading: live.heading ?? null,
+            speed_mps: live.speed ?? null,
+            captured_at: new Date(Date.parse(live.captured_at) - (Number.isFinite(offset) ? offset : 0)).toISOString(),
+            is_mock: live.is_mock ?? false,
+          })
+        : await liveInterval(admin, got.user_id)
+    }
+
+    return Response.json({
+      kept: got.kept ?? 0,
+      shift_open: got.shift_open ?? false,
+      stop: !got.shift_open,
+      ...(interval ? { interval_ms: interval } : {}),
+    })
   } catch (error) {
     console.error('background positions failed', error)
     return Response.json({ error: 'Try again later' }, { status: 503 })
