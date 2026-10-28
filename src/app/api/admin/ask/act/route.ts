@@ -9,6 +9,7 @@ import { POST as setTarget } from '@/app/api/admin/metrics/targets/route'
 import { POST as setXmStore } from '@/app/api/admin/metrics/stores/route'
 import { PATCH as updateOutlet } from '@/app/api/admin/outlets/[id]/route'
 import { PATCH as updateUser } from '@/app/api/admin/users/[id]/route'
+import { POST as setSchedule } from '@/app/api/admin/schedules/route'
 
 export const maxDuration = 60
 
@@ -105,6 +106,17 @@ export async function POST(request: Request) {
         )
         result = r.ok
           ? { ok: true, detail: `Clock-in ${action.payload.shift_start}, clock-out ${action.payload.shift_end}.` }
+          : { ok: false, detail: r.error }
+        break
+      }
+      case 'work_pattern': {
+        const r = await call(setSchedule as Handler, '/api/admin/schedules', {
+          user_ids: action.payload.user_ids,
+          days: action.payload.days,
+        })
+        const n = (r.json.updated as number | undefined) ?? action.payload.user_ids.length
+        result = r.ok
+          ? { ok: true, detail: `Schedule set for ${n} ${n === 1 ? 'person' : 'people'}.` }
           : { ok: false, detail: r.error }
         break
       }

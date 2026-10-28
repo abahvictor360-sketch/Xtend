@@ -274,6 +274,46 @@ export class ActionBuilder {
     }
   }
 
+  async workPattern(input: Input): Promise<ProposedAction> {
+    await this.people.load()
+    const group = input.group as string
+    let people
+    if (group === 'people' || (!group && list(input.people).length)) {
+      people = await Promise.all(list(input.people).map((r) => this.person(r)))
+    } else {
+      const role = group === 'all_merchandisers' ? 'merchandiser' : group === 'all_marketers' ? 'marketer' : null
+      people = this.people.people.filter((p) =>
+        role ? p.role === role : p.role === 'merchandiser' || p.role === 'marketer',
+      )
+    }
+    people = [...new Map(people.map((p) => [p.id, p])).values()].filter(
+      (p) => p.role === 'merchandiser' || p.role === 'marketer',
+    )
+    if (!people.length) throw new Error('Schedules are for merchandisers and marketers. Name at least one.')
+
+    const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    const days = [...new Set(list(input.days).map((d) => Number(d)))]
+      .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6)
+      .sort((a, b) => a - b)
+    if (!days.length) throw new Error('Say which days they work, like Monday to Friday.')
+
+    const off = [0, 1, 2, 3, 4, 5, 6].filter((d) => !days.includes(d))
+    return {
+      key: key('schedule'),
+      kind: 'work_pattern',
+      title: `Set the work schedule for ${people.length} ${people.length === 1 ? 'person' : 'people'}`,
+      lines: [
+        `Who: ${names(people.map((p) => p.name))}`,
+        `Working days: ${days.map((d) => DOW[d]).join(', ')}`,
+        `Days off: ${off.length ? off.map((d) => DOW[d]).join(', ') : 'none'}`,
+        'On a day off they are not counted absent and get no clock-in reminder.',
+      ],
+      warning: null,
+      verb: 'Set schedule',
+      payload: { user_ids: people.map((p) => p.id), days },
+    }
+  }
+
   async xmStore(input: Input): Promise<ProposedAction> {
     this.adminOnly('change which stores X Metrics scores')
     const store = await this.store(input.store)

@@ -107,6 +107,7 @@ Doing things on the dashboard: when the user asks you to do something rather tha
 - propose_flag_review: mark integrity flags as reviewed, with a note (F… references from integrity_flags).
 - propose_sales_target (admins): set a person's or store's X Metrics sales target for a month.
 - propose_outlet_hours (admins): set a store's clock-in and clock-out times. The store (S…) comes from match_names. Convert any time the user says to 24-hour HH:MM (9am is 09:00, 6pm is 18:00). The clock-in time is what decides who counts as late.
+- propose_schedule: set the weekly work schedule (the days worked) for merchandisers or marketers, by name (P…) or as a group. Days are weekday numbers, Sunday 0 to Saturday 6, so "Monday to Friday" is [1,2,3,4,5] and "Monday to Saturday" is [1,2,3,4,5,6]. Days not listed are days off, when they are not counted absent.
 - propose_xmetrics_store (admins): add a store to X Metrics or take it out.
 - propose_deactivate: stop someone signing in (their records are kept).
 - open_page: give the user a button to a dashboard page, filtered to the person and dates (for "show me", "take me to", "open"). Opening a page changes nothing, so no Apply is needed.
@@ -114,7 +115,7 @@ People and stores always come from match_names first (P… and S… references);
 
 More you can read: integrity_risk (who to look at first among the integrity flags, and why, in one sentence each), location_alerts (someone left their store on shift, clocked in away from it, or switched location off), support_threads (issues staff raised in the app; "escalated" ones are waiting for an office reply), notifications_sent (what the office sent and how many phones it reached), x_metrics (a month's units sold against target per enrolled store and person, stock counts that did not add up, and open expiry alerts) and store_coverage (which allocated stores each person visited in a range, and which no one visited). For "who should I worry about" or "who is cheating", start with integrity_risk and give each person's reason. When an answer names a person and a day, offer an open_page button to their movement or the excuse check when it would help.
 
-Everyone has a work schedule (days on and days off; Monday to Saturday unless changed) and may have approved leave. Never call someone absent, or say they did not come, on a day off or a day of approved leave: say it was their day off or that they were on leave. Only a working day with no clock-in is an absence.
+Everyone has a work schedule (days on and days off; Monday to Saturday unless changed) and may have approved leave. Never call someone absent, or say they did not come, on a day off or a day of approved leave: say it was their day off or that they were on leave. Only a working day with no clock-in is an absence. You can set or change a merchandiser's or marketer's schedule with propose_schedule.
 
 Resolve relative dates ("today", "yesterday", "last Monday", "this week", "last month") against today's date, given below, and pass them as YYYY-MM-DD. A week runs Monday to Sunday.
 
@@ -535,6 +536,30 @@ const tools: Anthropic.Beta.BetaTool[] = [
     },
   },
   {
+    name: 'propose_schedule',
+    description:
+      "Proposes a weekly work schedule (the days worked) for merchandisers or marketers. Give either people (P… references from match_names) or a group, and days as weekday numbers: 0 = Sunday, 1 = Monday … 6 = Saturday. So Monday to Friday is [1,2,3,4,5] and Monday to Saturday (the default) is [1,2,3,4,5,6]. Days not listed are days off: on them the person is not counted absent and gets no clock-in reminder.",
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        group: {
+          type: 'string',
+          enum: ['people', 'all_merchandisers', 'all_marketers', 'all_field'],
+          description: "'people' with the people list, or a whole group.",
+        },
+        people: { ...nameList, description: 'P… references, for group "people". Otherwise empty.' },
+        days: {
+          type: 'array',
+          items: { type: 'integer', minimum: 0, maximum: 6 },
+          description: 'Weekdays worked: 0 = Sunday … 6 = Saturday.',
+        },
+      },
+      required: ['group', 'people', 'days'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'propose_deactivate',
     description: 'Proposes deactivating a person (P…): they can no longer sign in; their records are kept.',
     strict: true,
@@ -588,6 +613,7 @@ const PROPOSE: Record<string, keyof ActionBuilder> = {
   propose_sales_target: 'salesTarget',
   propose_xmetrics_store: 'xmStore',
   propose_outlet_hours: 'outletHours',
+  propose_schedule: 'workPattern',
   propose_deactivate: 'deactivate',
 }
 

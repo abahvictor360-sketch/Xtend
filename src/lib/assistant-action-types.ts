@@ -18,6 +18,7 @@ export const ACTION_KINDS = [
   'sales_target',
   'xm_store',
   'outlet_hours',
+  'work_pattern',
   'deactivate',
 ] as const
 export type ActionKind = (typeof ACTION_KINDS)[number]
@@ -89,6 +90,14 @@ export const actionSchema = z.discriminatedUnion('kind', [
       outlet_id: uuid,
       shift_start: z.string().regex(/^\d{2}:\d{2}$/),
       shift_end: z.string().regex(/^\d{2}:\d{2}$/),
+    }),
+  }),
+  z.object({
+    kind: z.literal('work_pattern'),
+    payload: z.object({
+      user_ids: z.array(uuid).min(1).max(500),
+      // Weekdays worked, 0 = Sunday … 6 = Saturday.
+      days: z.array(z.number().int().min(0).max(6)).min(1).max(7),
     }),
   }),
   z.object({ kind: z.literal('deactivate'), payload: z.object({ user_id: uuid }) }),
