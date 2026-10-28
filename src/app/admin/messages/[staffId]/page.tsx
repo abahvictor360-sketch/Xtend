@@ -35,13 +35,23 @@ export default async function AdminConversationPage({ params }: { params: Promis
         >
           <ArrowLeft className="h-4 w-4" /> All messages
         </Link>
-        <div>
-          <h1 className="text-xl font-semibold">{person.full_name}</h1>
-          <p className="text-sm text-muted-foreground">
-            {BASE_LABEL[person.role]}
-            {person.outlet_name ? ` · ${person.outlet_name}` : ''}
-            {person.supervisor_name ? ` · reports to ${person.supervisor_name}` : ' · no supervisor'}
-          </p>
+        <div className="flex items-center gap-3">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-tint text-sm font-bold text-tint-foreground">
+            {person.full_name
+              .split(/\s+/)
+              .filter(Boolean)
+              .slice(0, 2)
+              .map((w) => w[0]?.toUpperCase())
+              .join('')}
+          </span>
+          <div className="min-w-0">
+            <h1 className="truncate text-xl font-semibold">{person.full_name}</h1>
+            <p className="truncate text-sm text-muted-foreground">
+              {BASE_LABEL[person.role]}
+              {person.outlet_name ? ` · ${person.outlet_name}` : ''}
+              {person.supervisor_name ? ` · reports to ${person.supervisor_name}` : ' · no supervisor'}
+            </p>
+          </div>
         </div>
       </div>
       <Conversation
