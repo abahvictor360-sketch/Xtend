@@ -1744,8 +1744,16 @@ reached from the home week row, History ("Your month") and You.
   new message marks it read (`POST /api/messages/read`). New messages appear
   live (the private `field:<uid>` topic hears `messages`), with a 60 s
   refresh while visible as a fallback.
-- Push: a reply from the office arrives as "Message from <name>" and opens
-  `/field/messages`.
+- Attachments (0075): a paperclip in the compose bar takes one picture
+  (JPEG/PNG/WebP/HEIC) or one PDF, up to 10 MB; a chosen file shows as a
+  chip above the box with its size and an X. On send the file is uploaded
+  to the private `message-files` bucket under the sender's own folder, then
+  `POST /api/messages` carries `{staff_id, body, attachment}`; a message may
+  be an attachment with no words. Pictures render inline in the bubble, PDFs
+  as a file card; both open at `GET /api/message-files/<id>` (a 5-minute
+  signed link, gated by the message's RLS).
+- Push: a reply from the office arrives as "Message from <name>" (or "Sent a
+  photo" / "Sent a PDF" when there are no words) and opens `/field/messages`.
 
 ### Acceptance checks
 

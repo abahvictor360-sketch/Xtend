@@ -22,9 +22,15 @@ export async function POST(request: Request) {
     const { data, error } = await supabase.rpc('send_message', {
       p_staff: parsed.data.staff_id ?? null,
       p_body: parsed.data.body,
+      p_attachment: parsed.data.attachment ?? null,
     })
     if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
-    const sent = data as { staff_id: string; from_staff: boolean; supervisor_id: string | null }
+    const sent = data as {
+      staff_id: string
+      from_staff: boolean
+      supervisor_id: string | null
+      attachment_kind: 'image' | 'pdf' | null
+    }
 
     let to: string[]
     if (sent.from_staff) {
@@ -43,9 +49,12 @@ export async function POST(request: Request) {
     }
     to = to.filter((id) => id !== session.userId)
 
+    const pushBody =
+      parsed.data.body ||
+      (sent.attachment_kind === 'pdf' ? 'Sent a PDF' : sent.attachment_kind ? 'Sent a photo' : '')
     await notifyUsers(to, {
       title: `Message from ${session.profile.full_name}`,
-      body: preview(parsed.data.body),
+      body: preview(pushBody),
       url: sent.from_staff ? `/admin/messages/${sent.staff_id}` : '/field/messages',
       senderId: session.userId,
       detail: { kind: 'message', staff_id: sent.staff_id },

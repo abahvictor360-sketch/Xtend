@@ -2,11 +2,20 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Check, Send } from 'lucide-react'
+import { Check, FileText, Paperclip, Send, X } from 'lucide-react'
 import { supabase } from '@/lib/supabase/client'
 import { Alert } from '@/components/ui/alert'
 import { addDays, cn, formatLagos, lagosDateString, longDate } from '@/lib/utils'
-import { MESSAGE_MAX, type ChatMessage } from '@/lib/messages'
+import { fileSizeLabel } from '@/lib/report-files'
+import {
+  MAX_MESSAGE_FILE_BYTES,
+  MESSAGE_FILE_ACCEPT,
+  MESSAGE_FILE_BUCKET,
+  MESSAGE_MAX,
+  messageAttachmentType,
+  messageFilePath,
+  type ChatMessage,
+} from '@/lib/messages'
 
 const REALTIME_DISABLED = process.env.NEXT_PUBLIC_REALTIME_DISABLED === '1'
 
@@ -65,9 +74,11 @@ export function Conversation({
 }) {
   const router = useRouter()
   const [body, setBody] = useState('')
+  const [file, setFile] = useState<File | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const end = useRef<HTMLDivElement | null>(null)
+  const fileInput = useRef<HTMLInputElement | null>(null)
   const latest = messages[messages.length - 1]?.id
   const groups = useMemo(() => byDay(messages), [messages])
 
@@ -111,21 +122,45 @@ export function Conversation({
     }
   }, [router, staffId, userId])
 
+  function pick(event: React.ChangeEvent<HTMLInputElement>) {
+    const chosen = event.target.files?.[0]
+    event.target.value = ''
+    if (!chosen) return
+    setError(null)
+    if (!messageAttachmentType(chosen)) return setError('Attach a picture or a PDF.')
+    if (chosen.size <= 0) return setError('That file is empty.')
+    if (chosen.size > MAX_MESSAGE_FILE_BYTES) return setError('Each attachment must be 10 MB or smaller.')
+    setFile(chosen)
+  }
+
   async function send(event: React.FormEvent) {
     event.preventDefault()
     const text = body.trim()
-    if (!text) return setError('Write your message first.')
+    if (!text && !file) return setError('Write your message first.')
     setBusy(true)
     setError(null)
     try {
+      let attachment: { path: string; name: string; mime: string; size: number } | null = null
+      if (file) {
+        const mime = messageAttachmentType(file)
+        if (!mime) throw new Error('Attach a picture or a PDF.')
+        // Uploaded to the sender's own folder first; send_message then records it.
+        const path = messageFilePath(userId, mime, crypto.randomUUID())
+        const { error: upErr } = await supabase()
+          .storage.from(MESSAGE_FILE_BUCKET)
+          .upload(path, file, { contentType: mime, upsert: false })
+        if (upErr) throw new Error('That attachment could not be uploaded. Try again.')
+        attachment = { path, name: file.name, mime, size: file.size }
+      }
       const res = await fetch('/api/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ staff_id: staffId, body: text }),
+        body: JSON.stringify({ staff_id: staffId, body: text, attachment }),
       })
       const json = (await res.json().catch(() => ({}))) as { error?: string }
       if (!res.ok) throw new Error(json.error ?? 'Your message was not sent. Try again.')
       setBody('')
+      setFile(null)
       router.refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Your message was not sent. Try again.')
@@ -175,7 +210,7 @@ export function Conversation({
                       )}
                       <div
                         className={cn(
-                          'px-3.5 py-2 text-sm leading-snug shadow-soft',
+                          'overflow-hidden px-3.5 py-2 text-sm leading-snug shadow-soft',
                           m.mine
                             ? 'rounded-2xl bg-brand text-white'
                             : 'rounded-2xl bg-card text-foreground',
@@ -183,7 +218,43 @@ export function Conversation({
                           endsRun && (m.mine ? 'rounded-br-md' : 'rounded-bl-md'),
                         )}
                       >
-                        <p className="whitespace-pre-wrap break-words">{m.body}</p>
+                        {m.attachment_kind === 'image' ? (
+                          <a
+                            href={`/api/message-files/${m.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={cn('block overflow-hidden rounded-xl', m.body ? 'mb-1.5' : '')}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={`/api/message-files/${m.id}`}
+                              alt={m.attachment_name ?? 'Picture'}
+                              className="max-h-64 w-full max-w-[16rem] object-cover"
+                            />
+                          </a>
+                        ) : m.attachment_kind === 'pdf' ? (
+                          <a
+                            href={`/api/message-files/${m.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className={cn(
+                              'flex items-center gap-2 rounded-xl px-2.5 py-2 font-medium',
+                              m.body ? 'mb-1.5' : '',
+                              m.mine ? 'bg-white/15 text-white' : 'bg-tint text-foreground',
+                            )}
+                          >
+                            <FileText className="h-5 w-5 shrink-0" aria-hidden />
+                            <span className="min-w-0">
+                              <span className="line-clamp-1 [overflow-wrap:anywhere]">
+                                {m.attachment_name ?? 'Document.pdf'}
+                              </span>
+                              <span className={cn('text-[11px]', m.mine ? 'text-white/75' : 'text-muted-foreground')}>
+                                PDF · {fileSizeLabel(m.attachment_size_bytes)}
+                              </span>
+                            </span>
+                          </a>
+                        ) : null}
+                        {m.body && <p className="whitespace-pre-wrap break-words">{m.body}</p>}
                       </div>
                       {endsRun && (
                         <p
@@ -208,8 +279,51 @@ export function Conversation({
 
       {error && <Alert variant="destructive" className="mt-3">{error}</Alert>}
 
+      {file && (
+        <div className="mt-3 flex items-center gap-2 rounded-2xl border border-border bg-muted/40 px-3 py-2">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-tint text-brand">
+            {messageAttachmentType(file) === 'application/pdf' ? (
+              <FileText className="h-4 w-4" />
+            ) : (
+              <Paperclip className="h-4 w-4" />
+            )}
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="line-clamp-1 text-sm font-semibold [overflow-wrap:anywhere]">{file.name}</p>
+            <p className="text-[11px] text-muted-foreground">
+              {messageAttachmentType(file) === 'application/pdf' ? 'PDF' : 'Picture'} · {fileSizeLabel(file.size)}
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Remove attachment"
+            disabled={busy}
+            onClick={() => setFile(null)}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-tint hover:text-brand disabled:opacity-50"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       <form onSubmit={send} className="mt-3 flex items-end gap-2">
-        <div className="flex flex-1 items-end rounded-2xl border border-border bg-card px-1.5 focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/20">
+        <div className="flex flex-1 items-end rounded-2xl border border-border bg-card pl-1 pr-1.5 focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/20">
+          <button
+            type="button"
+            aria-label="Attach a picture or PDF"
+            disabled={busy || !!file}
+            onClick={() => fileInput.current?.click()}
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-tint hover:text-brand disabled:opacity-40"
+          >
+            <Paperclip className="h-5 w-5" />
+          </button>
+          <input
+            ref={fileInput}
+            type="file"
+            accept={MESSAGE_FILE_ACCEPT}
+            className="hidden"
+            onChange={pick}
+          />
           <textarea
             aria-label="Your message"
             rows={1}
@@ -220,15 +334,15 @@ export function Conversation({
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
-                if (body.trim() && !busy) void send(e as unknown as React.FormEvent)
+                if ((body.trim() || file) && !busy) void send(e as unknown as React.FormEvent)
               }
             }}
-            className="max-h-36 min-h-[44px] flex-1 resize-none bg-transparent px-2.5 py-3 text-sm leading-snug outline-none placeholder:text-muted-foreground"
+            className="max-h-36 min-h-[44px] flex-1 resize-none bg-transparent px-1.5 py-3 text-sm leading-snug outline-none placeholder:text-muted-foreground"
           />
         </div>
         <button
           type="submit"
-          disabled={busy || !body.trim()}
+          disabled={busy || (!body.trim() && !file)}
           aria-label={busy ? 'Sending' : 'Send'}
           className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-brand text-white transition-opacity hover:opacity-90 disabled:opacity-40"
         >
