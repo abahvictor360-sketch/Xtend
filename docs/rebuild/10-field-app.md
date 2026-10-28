@@ -1731,10 +1731,13 @@ reached from the home week row, History ("Your month") and You.
   **Home**, above everything, an orange banner "You have a new message" /
   "You have N new messages", "Tap to read and reply", while unread > 0
   (`messages-banner.tsx`).
-- Page: `SheetScreen` "Messages", back to `/field/account`. Line: "Talk to
-  <supervisor name or 'the office'> about your work: stock, the store, your
-  shift or anything you need." Data `conversation(null)` and
-  `my_supervisor_name()`.
+- Page: `SheetScreen` "Messages", back to `/field/account`. A header at the
+  top shows who they write to: the supervisor's photo (signed from
+  `avatar_path`, or their initials on a tint circle) with their name and
+  "Your supervisor"; with no supervisor, an "XO" tile, "The office" and
+  "Xtend office". Then the line: "Talk to <supervisor name or 'the office'>
+  about your work: stock, the store, your shift or anything you need." Data
+  `conversation(null)` and `my_supervisor()` (0076: id, name, avatar_path).
 - `Conversation` (`src/components/messages/conversation.tsx`, shared with
   the dashboard): bubbles oldest first, own on the right in brand orange,
   others on the left in grey with the sender's name; Lagos time under each.

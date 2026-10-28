@@ -94,6 +94,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0073_messages.sql                    # Messages: each merchandiser or marketer talks to their supervisor in the app
    supabase/migrations/0074_office_stock_count.sql          # Office stock counts: admins record a count (or delivery) from a prompt or document via Ask Xtend
    supabase/migrations/0075_message_attachments.sql         # Message attachments: one picture or PDF per message, private message-files bucket
+   supabase/migrations/0076_my_supervisor.sql               # my_supervisor(): supervisor name + photo for the staff Messages page header
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
