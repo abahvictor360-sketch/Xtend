@@ -568,6 +568,15 @@ Component: `src/components/field/clock-panel.tsx`.
 - Done for the day: success alert "Shift complete. One clock-in and one
   clock-out per day."
 - Under it, always: "You do not have to choose a store."
+- Location gate (both clock-in and clock-out): `useLocationPermission()` is
+  watched; when it is `denied` the button is replaced by a destructive-bordered
+  card, `MapPinOff` tile, **"Turn on location to clock in/out"** and "Xtend
+  records where you clock in/out, so location has to be on. Turn it on and
+  this will clear itself.", then the shared `LocationHelp` (`permission="denied"`,
+  so it shows the per-phone steps and a "Try again" that re-reads the fix).
+  `granted`, `prompt`, `unknown` and Safari show the button as normal; the tap
+  (`requireFix`) still asks and blocks on its own. The gate takes precedence
+  over the notifications gate.
 
 ### 5.2 Step 1: location first (`requireFix` → `bestFix`, `src/lib/geo.ts`)
 

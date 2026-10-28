@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { AlertTriangle, Camera, CheckCircle2, CloudUpload, LogIn, LogOut } from 'lucide-react'
+import { AlertTriangle, Camera, CheckCircle2, CloudUpload, LogIn, LogOut, MapPinOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent } from '@/components/ui/card'
 import { NotificationGate } from '@/components/field/notification-gate'
 import { usePush } from '@/components/field/use-push'
 import { CameraCapture } from '@/components/field/camera-capture'
 import { CLOCK_OUT_EVENT } from '@/components/field/clock-out-prompt'
+import { LocationHelp, useLocationPermission } from '@/components/field/location-help'
 import { Alert } from '@/components/ui/alert'
 import { processSelfie } from '@/lib/image'
 import { deviceInfo } from '@/lib/device'
@@ -57,6 +59,9 @@ export function ClockPanel({
 }) {
   const router = useRouter()
   const push = usePush()
+  // The browser's own record of the location permission, watched live so the
+  // gate below clears itself the moment the user turns location on.
+  const locationPermission = useLocationPermission()
   // Set once the location is in hand; that is what opens the camera.
   const [pending, setPending] = useState<{
     type: AttendanceType
@@ -76,6 +81,12 @@ export function ClockPanel({
     nextType === 'opening' &&
     notificationsRequired &&
     (push.state === 'off' || push.state === 'denied' || push.state === 'unsupported' || push.state === 'working')
+
+  // Location must be on before anyone can clock in or out. The browser only
+  // tells us for certain when it is explicitly denied; 'prompt', 'unknown'
+  // and Safari (which cannot be queried) fall through to the button, where
+  // the tap itself asks for location and blocks if it is refused.
+  const locationOff = locationPermission === 'denied'
 
   /**
    * Location first, camera second.
@@ -100,6 +111,21 @@ export function ClockPanel({
     } catch (err) {
       if (err instanceof GeoBlocked) setError(err.message)
       else setError(err instanceof Error ? err.message : 'Could not read your location.')
+    } finally {
+      setBusyStep(null)
+    }
+  }, [])
+
+  // "Try again" on the location gate. Asking for a fix re-prompts when the
+  // browser is still willing; either way the live permission watcher clears
+  // the gate the instant location is turned on.
+  const retryLocation = useCallback(async () => {
+    setError(null)
+    setBusyStep('Getting your location')
+    try {
+      await requireFix()
+    } catch {
+      // Still off: the gate stays, and the permission watcher updates it.
     } finally {
       setBusyStep(null)
     }
@@ -316,7 +342,27 @@ export function ClockPanel({
         locate
       />
 
-      {needsNotifications ? (
+      {nextType && locationOff ? (
+        <Card className="animate-fade-up border border-destructive/20">
+          <CardContent className="space-y-4 pt-5">
+            <div className="flex items-start gap-3">
+              <span className="icon-tile bg-destructive/10 text-destructive">
+                <MapPinOff className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-sm font-bold">
+                  Turn on location to clock {nextType === 'opening' ? 'in' : 'out'}
+                </p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Xtend records where you clock {nextType === 'opening' ? 'in' : 'out'}, so location
+                  has to be on. Turn it on and this will clear itself.
+                </p>
+              </div>
+            </div>
+            <LocationHelp permission="denied" onRetry={() => void retryLocation()} busy={Boolean(busyStep)} />
+          </CardContent>
+        </Card>
+      ) : needsNotifications ? (
         <NotificationGate push={push} />
       ) : nextType ? (
         <button
