@@ -568,15 +568,20 @@ Component: `src/components/field/clock-panel.tsx`.
 - Done for the day: success alert "Shift complete. One clock-in and one
   clock-out per day."
 - Under it, always: "You do not have to choose a store."
-- Location gate (both clock-in and clock-out): `useLocationPermission()` is
-  watched; when it is `denied` the button is replaced by a destructive-bordered
-  card, `MapPinOff` tile, **"Turn on location to clock in/out"** and "Xtend
-  records where you clock in/out, so location has to be on. Turn it on and
-  this will clear itself.", then the shared `LocationHelp` (`permission="denied"`,
-  so it shows the per-phone steps and a "Try again" that re-reads the fix).
-  `granted`, `prompt`, `unknown` and Safari show the button as normal; the tap
-  (`requireFix`) still asks and blocks on its own. The gate takes precedence
-  over the notifications gate.
+- Location gate (both clock-in and clock-out), `useClockLocationGate()`
+  rendered through the shared `LocationGate`, takes precedence over the
+  notifications gate. Two signals: `useLocationPermission()` (watched, so a
+  `denied` → `permission_denied` block clears itself the instant location is
+  allowed) and, when permission is `granted`, a coarse one-shot
+  `probeLocation()` (`lib/geo.ts`, `enableHighAccuracy:false`,
+  `maximumAge:0`) that catches the phone's own location service being off —
+  code 2 → `position_unavailable` block — which the Permissions API cannot
+  see. Probe `ok` and `timeout` (slow signal) do not block; the probe never
+  runs while permission is `prompt`/`unknown` (Safari included), so it never
+  prompts early and those states show the button, where the tap (`requireFix`)
+  asks and blocks on its own. The blocked card is `LocationGate`'s: "Location
+  required", the reason's help line, and the per-phone `LocationHelp` with a
+  "Try again" that re-probes.
 
 ### 5.2 Step 1: location first (`requireFix` → `bestFix`, `src/lib/geo.ts`)
 

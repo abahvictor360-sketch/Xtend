@@ -64,6 +64,31 @@ export function readPosition(timeoutMs = 20000): Promise<GeolocationPosition> {
   })
 }
 
+export type LocationProbe = 'ok' | 'denied' | 'off' | 'timeout' | 'unsupported'
+
+/**
+ * A quick, coarse check of whether the phone can give a location at all, for
+ * the gate on the clock screen. Unlike bestFix it does not need an accurate
+ * fix: it only tells apart permission off (`denied`, error code 1), the
+ * phone's own location service off (`off`, code 2 — the case the Permissions
+ * API cannot see), a slow signal (`timeout`, code 3) and a working one
+ * (`ok`). One coarse reading, so it is cheap and quick. The caller should
+ * only run it once permission is already granted, so it never prompts early.
+ */
+export function probeLocation(timeoutMs = 10000): Promise<LocationProbe> {
+  return new Promise((resolve) => {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return resolve('unsupported')
+    navigator.geolocation.getCurrentPosition(
+      () => resolve('ok'),
+      (err) =>
+        resolve(
+          err.code === err.PERMISSION_DENIED ? 'denied' : err.code === err.TIMEOUT ? 'timeout' : 'off',
+        ),
+      { enableHighAccuracy: false, maximumAge: 0, timeout: timeoutMs },
+    )
+  })
+}
+
 export interface FixOptions {
   /** Stop as soon as a reading is at least this good, in metres. */
   targetAccuracyM?: number
