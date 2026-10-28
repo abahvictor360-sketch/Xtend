@@ -19,6 +19,8 @@ export const ACTION_KINDS = [
   'xm_store',
   'outlet_hours',
   'work_pattern',
+  'xm_count',
+  'xm_supply',
   'deactivate',
 ] as const
 export type ActionKind = (typeof ACTION_KINDS)[number]
@@ -98,6 +100,42 @@ export const actionSchema = z.discriminatedUnion('kind', [
       user_ids: z.array(uuid).min(1).max(500),
       // Weekdays worked, 0 = Sunday … 6 = Saturday.
       days: z.array(z.number().int().min(0).max(6)).min(1).max(7),
+    }),
+  }),
+  z.object({
+    kind: z.literal('xm_count'),
+    payload: z.object({
+      outlet_id: uuid,
+      lines: z
+        .array(
+          z.object({
+            product_id: uuid,
+            on_shelf: z.number().int().min(0).max(1_000_000),
+            in_backroom: z.number().int().min(0).max(1_000_000),
+            batch: z.string().max(60),
+            expiry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+          }),
+        )
+        .min(1)
+        .max(500),
+    }),
+  }),
+  z.object({
+    kind: z.literal('xm_supply'),
+    payload: z.object({
+      outlet_id: uuid,
+      supplied_on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      lines: z
+        .array(
+          z.object({
+            product_id: uuid,
+            quantity: z.number().int().min(1).max(1_000_000),
+            batch: z.string().max(60),
+            expiry_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+          }),
+        )
+        .min(1)
+        .max(200),
     }),
   }),
   z.object({ kind: z.literal('deactivate'), payload: z.object({ user_id: uuid }) }),

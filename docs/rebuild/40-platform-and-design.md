@@ -482,7 +482,11 @@ export route and `ask/act`, `ask/apply`, `ask/report` 60 s.
   (nothing happens until the user presses the card's button) `propose_changes`,
   `propose_notification`, `propose_count_request`, `propose_close_count_request`,
   `propose_phone_check`, `propose_flag_review`, `propose_sales_target`,
-  `propose_xmetrics_store`, `propose_outlet_hours`, `propose_deactivate`.
+  `propose_xmetrics_store`, `propose_outlet_hours`, `propose_schedule`,
+  `propose_stock_count`, `propose_supply`, `propose_deactivate`.
+  `propose_stock_count` and `propose_supply` read a typed count/delivery or an
+  attached count sheet, delivery note or invoice; the office count RPC
+  `xm_office_count` records it with no GPS or photo under the admin.
   Strict schemas express optional values as `type: ['string','null']` with "Null for …" descriptions.
 - Reply shape: `{ answer, reports: ReportSpec[], plans: ChangePlan[], actions: ProposedAction[], links: PageLink[] }`.
 - No key: the admin page shows a setup notice; the sidebar card shows "Your account / Change password" instead of "Ask Xtend".

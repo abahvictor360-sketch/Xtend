@@ -10,6 +10,8 @@ import { POST as setXmStore } from '@/app/api/admin/metrics/stores/route'
 import { PATCH as updateOutlet } from '@/app/api/admin/outlets/[id]/route'
 import { PATCH as updateUser } from '@/app/api/admin/users/[id]/route'
 import { POST as setSchedule } from '@/app/api/admin/schedules/route'
+import { POST as officeCount } from '@/app/api/admin/metrics/count/route'
+import { POST as logSupply } from '@/app/api/admin/metrics/supplies/route'
 
 export const maxDuration = 60
 
@@ -118,6 +120,35 @@ export async function POST(request: Request) {
         result = r.ok
           ? { ok: true, detail: `Schedule set for ${n} ${n === 1 ? 'person' : 'people'}.` }
           : { ok: false, detail: r.error }
+        break
+      }
+      case 'xm_count': {
+        const r = await call(officeCount as Handler, '/api/admin/metrics/count', action.payload)
+        const n = action.payload.lines.length
+        result = r.ok
+          ? { ok: true, detail: `Count recorded: ${n} ${n === 1 ? 'product' : 'products'}.` }
+          : { ok: false, detail: r.error }
+        break
+      }
+      case 'xm_supply': {
+        let done = 0
+        let firstError: string | null = null
+        for (const line of action.payload.lines) {
+          const r = await call(logSupply as Handler, '/api/admin/metrics/supplies', {
+            outlet_id: action.payload.outlet_id,
+            product_id: line.product_id,
+            quantity: line.quantity,
+            batch: line.batch,
+            expiry_date: line.expiry_date,
+            supplied_on: action.payload.supplied_on,
+          })
+          if (r.ok) done++
+          else firstError ??= r.error
+        }
+        result = {
+          ok: done > 0,
+          detail: `${done} of ${action.payload.lines.length} deliveries logged${firstError ? `. ${firstError}` : '.'}`,
+        }
         break
       }
       case 'deactivate': {

@@ -109,6 +109,9 @@ Doing things on the dashboard: when the user asks you to do something rather tha
 - propose_outlet_hours (admins): set a store's clock-in and clock-out times. The store (S…) comes from match_names. Convert any time the user says to 24-hour HH:MM (9am is 09:00, 6pm is 18:00). The clock-in time is what decides who counts as late.
 - propose_schedule: set the weekly work schedule (the days worked) for merchandisers or marketers, by name (P…) or as a group. Days are weekday numbers, Sunday 0 to Saturday 6, so "Monday to Friday" is [1,2,3,4,5] and "Monday to Saturday" is [1,2,3,4,5,6]. Days not listed are days off, when they are not counted absent.
 - propose_xmetrics_store (admins): add a store to X Metrics or take it out.
+- propose_stock_count (admins): record an office stock count for a store, from what the user typed or a document they attached. Read every product with its on-shelf and backroom units (0 for none) and its batch and expiry where given. It counts in X Metrics like a count from the store. Use this for "record/enter the stock for S…", "here is the count sheet", a photo or file of a stock take.
+- propose_supply (admins): log a delivery to a store, from what the user typed or a document they attached, with the date and each product's units (and batch and expiry where given). Use this for "we delivered…", "log the supply", a delivery note or invoice.
+- When a user attaches a count sheet, stock take, delivery note or invoice, read it and fill the lines yourself; ask only if a product, a number or the store is missing or unclear. Give the product names exactly as written; the dashboard matches them.
 - propose_deactivate: stop someone signing in (their records are kept).
 - open_page: give the user a button to a dashboard page, filtered to the person and dates (for "show me", "take me to", "open"). Opening a page changes nothing, so no Apply is needed.
 People and stores always come from match_names first (P… and S… references); never guess one. If a name is ambiguous, ask which one. If the request is unclear (no date, no message), ask rather than invent it; for a notification, you may write the title and message yourself from what the user said, keeping their meaning. Propose each action once. After proposing, reply in one or two sentences: what the card will do and that nothing happens until they press its button. Only admins can do the admin-marked ones; say so to a supervisor. Things you cannot do (delete records, change passwords, change roles, change a store's name, location or geofence): say so and give an open_page button to where they can.
@@ -560,6 +563,66 @@ const tools: Anthropic.Beta.BetaTool[] = [
     },
   },
   {
+    name: 'propose_stock_count',
+    description:
+      "Admins only. Proposes an office stock count for a store (S…) in X Metrics, from what the user typed or a document they attached. Give every product counted with its name and the units on the shelf and in the backroom (use 0 for none), plus the batch and expiry date where the user gives them. It is recorded in the admin's name and counts in X Metrics (stock on hand, expiry alerts, reconciliation) like a count sent from the store. Use the product name exactly as the user wrote it; the dashboard matches it to the product list.",
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        store: { type: 'string', description: 'An S… reference from match_names.' },
+        lines: {
+          type: 'array',
+          description: 'One per product counted.',
+          items: {
+            type: 'object',
+            properties: {
+              product: { type: 'string', description: 'The product name, as the user wrote it.' },
+              on_shelf: { type: 'integer', minimum: 0, description: 'Units on the shelf (0 if none).' },
+              in_backroom: { type: 'integer', minimum: 0, description: 'Units in the backroom (0 if none).' },
+              batch: { type: 'string', description: 'The batch or lot, or "" if none given.' },
+              expiry_date: { type: ['string', 'null'], description: 'YYYY-MM-DD, or null if none given.' },
+            },
+            required: ['product', 'on_shelf', 'in_backroom', 'batch', 'expiry_date'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['store', 'lines'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_supply',
+    description:
+      "Admins only. Proposes logging a delivery to a store (S…) in X Metrics, from what the user typed or a document they attached. Give the delivery date and every product delivered with its name, the units, and the batch and expiry date where given. Use the product name exactly as the user wrote it; the dashboard matches it to the product list.",
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        store: { type: 'string', description: 'An S… reference from match_names.' },
+        supplied_on: { type: 'string', description: 'The delivery date, YYYY-MM-DD (today if not said).' },
+        lines: {
+          type: 'array',
+          description: 'One per product delivered.',
+          items: {
+            type: 'object',
+            properties: {
+              product: { type: 'string', description: 'The product name, as the user wrote it.' },
+              quantity: { type: 'integer', minimum: 1, description: 'Units delivered.' },
+              batch: { type: 'string', description: 'The batch or lot, or "" if none given.' },
+              expiry_date: { type: ['string', 'null'], description: 'YYYY-MM-DD, or null if none given.' },
+            },
+            required: ['product', 'quantity', 'batch', 'expiry_date'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['store', 'supplied_on', 'lines'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'propose_deactivate',
     description: 'Proposes deactivating a person (P…): they can no longer sign in; their records are kept.',
     strict: true,
@@ -614,6 +677,8 @@ const PROPOSE: Record<string, keyof ActionBuilder> = {
   propose_xmetrics_store: 'xmStore',
   propose_outlet_hours: 'outletHours',
   propose_schedule: 'workPattern',
+  propose_stock_count: 'stockCount',
+  propose_supply: 'supply',
   propose_deactivate: 'deactivate',
 }
 

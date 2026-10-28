@@ -314,6 +314,126 @@ export class ActionBuilder {
     }
   }
 
+  /** The active products, loaded once, for matching names the model gives. */
+  private productList: { id: string; name: string }[] | null = null
+  private async products() {
+    if (this.productList) return this.productList
+    const { data, error } = await this.supabase.from('products').select('id, name').eq('is_active', true)
+    if (error) throw new Error(error.message)
+    this.productList = (data ?? []) as { id: string; name: string }[]
+    return this.productList
+  }
+
+  /** Match a product name the model gave to one active product, or null. */
+  private matchProduct(all: { id: string; name: string }[], raw: unknown) {
+    const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()
+    const q = norm(str(raw, 120))
+    if (!q) return null
+    const exact = all.filter((p) => norm(p.name) === q)
+    if (exact.length === 1) return exact[0]
+    const edge = all.filter((p) => norm(p.name).startsWith(q) || q.startsWith(norm(p.name)))
+    if (edge.length === 1) return edge[0]
+    const incl = all.filter((p) => norm(p.name).includes(q) || q.includes(norm(p.name)))
+    if (incl.length === 1) return incl[0]
+    return null
+  }
+
+  /**
+   * Reads the model's product lines (each with a name) into matched products,
+   * failing with the names it could not place so the person can correct them.
+   */
+  private async resolveLines(rawLines: unknown) {
+    const products = await this.products()
+    const rows = list(rawLines)
+    if (!rows.length) throw new Error('List at least one product.')
+    const unmatched: string[] = []
+    const out = rows.map((r) => {
+      const line = (r ?? {}) as Input
+      const p = this.matchProduct(products, line.product)
+      if (!p) unmatched.push(str(line.product, 60) || '(no name)')
+      return { line, product: p }
+    })
+    if (unmatched.length) {
+      throw new Error(
+        `These products are not in the list (add them under Products first, or check the spelling): ${names(unmatched, 10)}.`,
+      )
+    }
+    return out as { line: Input; product: { id: string; name: string } }[]
+  }
+
+  async stockCount(input: Input): Promise<ProposedAction> {
+    this.adminOnly('record a stock count')
+    const store = await this.store(input.store)
+    const resolved = await this.resolveLines(input.lines)
+    const seen = new Set<string>()
+    const lines = resolved.map(({ line, product }) => {
+      const onShelf = Math.round(Number(line.on_shelf ?? 0))
+      const inBack = Math.round(Number(line.in_backroom ?? line.backroom ?? 0))
+      if (![onShelf, inBack].every((n) => Number.isInteger(n) && n >= 0 && n <= 1_000_000)) {
+        throw new Error(`Give whole counts from 0 up for ${product.name}.`)
+      }
+      const batch = str(line.batch, 60)
+      const expiry = isDate(line.expiry_date) ? line.expiry_date : isDate(line.expiry) ? (line.expiry as string) : null
+      const dedupe = `${product.id}|${batch.toLowerCase()}`
+      if (seen.has(dedupe)) throw new Error(`${product.name}${batch ? ` (batch ${batch})` : ''} is counted twice.`)
+      seen.add(dedupe)
+      return { product_id: product.id, on_shelf: onShelf, in_backroom: inBack, batch, expiry_date: expiry, _name: product.name }
+    })
+    const shown = lines
+      .slice(0, 8)
+      .map((l) => `${l._name}: ${l.on_shelf + l.in_backroom} on hand${l.expiry_date ? `, expires ${longDate(l.expiry_date)}` : ''}`)
+    return {
+      key: key('xmcount'),
+      kind: 'xm_count',
+      title: `Record a stock count at ${store.name}`,
+      lines: [
+        `Store: ${store.name}`,
+        `Products: ${lines.length}`,
+        ...shown,
+        ...(lines.length > 8 ? [`and ${lines.length - 8} more`] : []),
+        'Recorded in your name, it counts in X Metrics like a count from the store.',
+      ],
+      warning: null,
+      verb: 'Record count',
+      payload: { outlet_id: store.id, lines: lines.map(({ _name, ...l }) => l) },
+    }
+  }
+
+  async supply(input: Input): Promise<ProposedAction> {
+    this.adminOnly('log a delivery')
+    const store = await this.store(input.store)
+    const today = lagosDateString()
+    const suppliedOn = isDate(input.supplied_on) && input.supplied_on <= today ? input.supplied_on : today
+    const resolved = await this.resolveLines(input.lines)
+    const lines = resolved.map(({ line, product }) => {
+      const quantity = Math.round(Number(line.quantity ?? line.units ?? 0))
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > 1_000_000) {
+        throw new Error(`Give a whole number of units for ${product.name}.`)
+      }
+      const batch = str(line.batch, 60)
+      const expiry = isDate(line.expiry_date) ? line.expiry_date : isDate(line.expiry) ? (line.expiry as string) : null
+      if (expiry && expiry < suppliedOn) throw new Error(`The expiry for ${product.name} is before the delivery date.`)
+      return { product_id: product.id, quantity, batch, expiry_date: expiry, _name: product.name }
+    })
+    const shown = lines
+      .slice(0, 8)
+      .map((l) => `${l._name}: ${l.quantity} units${l.expiry_date ? `, expires ${longDate(l.expiry_date)}` : ''}`)
+    return {
+      key: key('xmsupply'),
+      kind: 'xm_supply',
+      title: `Log a delivery to ${store.name}`,
+      lines: [
+        `Store: ${store.name}`,
+        `Delivered: ${longDate(suppliedOn)}`,
+        ...shown,
+        ...(lines.length > 8 ? [`and ${lines.length - 8} more`] : []),
+      ],
+      warning: null,
+      verb: 'Log delivery',
+      payload: { outlet_id: store.id, supplied_on: suppliedOn, lines: lines.map(({ _name, ...l }) => l) },
+    }
+  }
+
   async xmStore(input: Input): Promise<ProposedAction> {
     this.adminOnly('change which stores X Metrics scores')
     const store = await this.store(input.store)

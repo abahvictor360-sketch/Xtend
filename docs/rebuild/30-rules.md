@@ -1991,7 +1991,8 @@ calculation.
   team changes as a plan), `propose_notification`,
   `propose_count_request`, `propose_close_count_request`,
   `propose_phone_check`, `propose_flag_review`, `propose_sales_target`,
-  `propose_xmetrics_store`, `propose_outlet_hours`, `propose_deactivate`.
+  `propose_xmetrics_store`, `propose_outlet_hours`, `propose_schedule`,
+  `propose_stock_count`, `propose_supply`, `propose_deactivate`.
   The person sees the card and presses **Apply**. `/api/admin/ask/act`
   re-validates the payload (`actionSchema`) and calls **the same route the
   dashboard button uses**, in the same request with the same session: same

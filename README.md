@@ -92,6 +92,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0071_hr_role_value.sql               # the 'hr' role value (run alone, before 0072)
    supabase/migrations/0072_hr_role.sql                     # HR: every staff member's details, attendance, leave and schedules; adds field staff
    supabase/migrations/0073_messages.sql                    # Messages: each merchandiser or marketer talks to their supervisor in the app
+   supabase/migrations/0074_office_stock_count.sql          # Office stock counts: admins record a count (or delivery) from a prompt or document via Ask Xtend
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
