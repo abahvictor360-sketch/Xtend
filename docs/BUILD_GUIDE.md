@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-11-03, after renaming the main branch to `main`._
+_Last updated: 2026-11-03, after the Docker image for Dokploy or Coolify, security headers, Next.js 15.5.28 and Zod 4, closing signed-out access to database helpers (0078), and the sign-in lockout that pauses the guessing device (0077)._
 
 ---
 
@@ -868,7 +868,7 @@ docker/run-job.mjs        Runs a scheduled job inside the container
 
 ## 12. Making a change
 
-1. **Branch** from the main branch (`main`).
+1. **Branch** from the main branch (`claude/new-session-sgmxdg`).
 2. **Database change?** Add the next numbered file in `supabase/migrations/`
    (never edit one that has run in production), register it in
    `scripts/test-sql.sh`, add assertions to `supabase/tests/rules.sql`
@@ -917,7 +917,6 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
-| 2026-11-03 | The main branch is renamed from `claude/new-session-sgmxdg` to `main` (GitHub redirects the old name); deploy scripts, the VPS deploy workflow and the guides now name `main` | — |
 | 2026-10-28 | Ask Xtend can set a work schedule: a new `propose_schedule` tool proposes the weekly days worked (0 = Sunday … 6 = Saturday) for named merchandisers/marketers or a group; the Apply card runs it through `POST /api/admin/schedules` (`set_work_pattern`, 059), with the same team checks and audit as the Schedules page. No new migration | — |
 | 2026-10-28 | **Location required to clock in or out** (+ services-off probe): the clock button on Home shows only when location is on, for clock-out as well as clock-in, gated by the shared `LocationGate`. Permission denied is caught instantly by the permission watcher; the phone's own location service being off (which the Permissions API cannot see) is caught up front by a new coarse one-shot probe, `probeLocation()` in `lib/geo.ts`, that tells apart denied (code 1) / service off (code 2) / slow signal (code 3, not blocked) / ok. The probe runs only once permission is granted, so it never prompts early; `prompt`, `unknown` and Safari fall through to the button, where the tap asks and blocks on its own. Client-only (`clock-panel.tsx`, `geo.ts`); no migration | — |
 | 2026-11-03 | **Quieter response headers**: `poweredByHeader: false` (no `X-Powered-By: Next.js`); new `deploy/nginx/xtend-quiet.conf` in `/etc/nginx/conf.d/` (`server_tokens off`, hides `X-Powered-By`, `X-Nextjs-Cache`, `X-Nextjs-Matched-Path`), installed by `setup-server.sh`; existing servers copy it once (`deploy/README.md`). The router's own `x-nextjs-*` and `Vary` headers stay | — |

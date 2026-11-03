@@ -15,7 +15,7 @@ set -euo pipefail
 DOMAIN="${1:?usage: setup-server.sh <domain> <email for HTTPS notices> <git ssh url>}"
 EMAIL="${2:?usage: setup-server.sh <domain> <email> <git ssh url>}"
 REPO_URL="${3:?usage: setup-server.sh <domain> <email> <git ssh url>}"
-BRANCH="${XTEND_BRANCH:-main}"
+BRANCH="${XTEND_BRANCH:-claude/new-session-sgmxdg}"
 APP_DIR=/var/www/xtend
 APP_USER=xtend
 say() { echo; echo "==> $*"; }

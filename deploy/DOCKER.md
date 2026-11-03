@@ -33,7 +33,7 @@ Do these on the fresh VPS before installing the panel.
 ## 3. Create the app
 
 - Source: GitHub, repository `abahvictor360-sketch/Xtend`, branch
-  `main`. Turn on auto-deploy on push.
+  `claude/new-session-sgmxdg` (the main branch). Turn on auto-deploy on push.
 - Build type: **Dockerfile** (`Dockerfile` at the root). Port **3000**.
 - Domain: e.g. `app.example.com`, HTTPS on (Let's Encrypt). Point the
   domain's A record at the VPS first.
