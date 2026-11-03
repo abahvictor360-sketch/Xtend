@@ -13,7 +13,7 @@
 set -euo pipefail
 
 APP_DIR="${XTEND_APP_DIR:-/var/www/xtend}"
-BRANCH="${XTEND_BRANCH:-claude/new-session-sgmxdg}"
+BRANCH="${XTEND_BRANCH:-main}"
 KEEP=5
 log() { echo "[deploy $(date -u +%H:%M:%S)] $*"; }
 

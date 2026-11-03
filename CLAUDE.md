@@ -47,7 +47,7 @@ supervisors (`src/app/admin/supervisor-guide/page.tsx`) or admins
 The owner has asked for every change to be merged and pushed without
 waiting to be asked. For each change: commit on the working branch, run the
 checks below, push, open a PR into the default branch
-(`claude/new-session-sgmxdg`), merge it, then bring the working branch level
+(`main`), merge it, then bring the working branch level
 with the default branch and push. Only merge when the checks pass; if they
 fail, fix first. Remind the owner of any migration to run in Supabase.
 

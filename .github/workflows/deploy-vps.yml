@@ -10,7 +10,7 @@ name: Deploy to VPS
 
 on:
   push:
-    branches: [claude/new-session-sgmxdg]
+    branches: [main]
     paths-ignore:
       - 'docs/**'
       - '**/*.md'
