@@ -115,6 +115,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    | `ANTHROPIC_API_KEY` | Optional: turns on **Ask Xtend**, the attendance assistant |
    | `TRUSTED_PROXY_HOPS` | Optional: proxies in front of the app (default 1: Nginx, Caddy or Vercel; 2 with Cloudflare in front). Used to read the real caller IP |
    | `IP_API_KEY` | Optional: ip-api.com key, so the VPN check looks IPs up over HTTPS instead of plain HTTP |
+   | `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | Optional: Cloudflare Turnstile human check on sign-in, against password-guessing bots. On only when both are set |
 
 3. **Bootstrap the first admin.** There is no public signup:
 

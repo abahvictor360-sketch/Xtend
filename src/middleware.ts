@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { BOT_BLOCKED_BODY, botDecision } from '@/lib/bot-guard'
 
 const PUBLIC_PATHS = ['/login', '/deactivated', '/offline', '/download', '/guide']
 
@@ -12,6 +13,24 @@ const PUBLIC_PATHS = ['/login', '/deactivated', '/offline', '/download', '/guide
  * the project root when the app is under src/.
  */
 export async function middleware(request: NextRequest) {
+  // Crawlers, scrapers, AI bots and scripts are turned away before anything
+  // else (lib/bot-guard.ts). Scheduled jobs, the phone's tracker, health
+  // checks and static files are never refused. Off under `next dev`, so
+  // local screenshots with a headless browser keep working.
+  if (process.env.NODE_ENV === 'production') {
+    const verdict = botDecision(request.nextUrl.pathname, request.headers.get('user-agent'))
+    if (verdict.block) {
+      return new NextResponse(BOT_BLOCKED_BODY, {
+        status: 403,
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8',
+          'Cache-Control': 'no-store',
+          'X-Robots-Tag': 'noindex, nofollow, noarchive',
+        },
+      })
+    }
+  }
+
   let response = NextResponse.next({ request })
 
   const supabase = createServerClient(
@@ -64,7 +83,8 @@ export async function middleware(request: NextRequest) {
 export const config = {
   matcher: [
     // Everything except static assets, the service worker, the manifest and
-    // the logo the signed-out login page shows.
-    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|icons/|brand/|api/cron).*)',
+    // the logo the signed-out login page shows, and robots.txt (which tells
+    // every crawler to stay out, so it must reach them).
+    '/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|robots.txt|icons/|brand/|api/cron).*)',
   ],
 }

@@ -64,7 +64,10 @@ the shift starts and ends from 0069.
 ### 1.1 Middleware (`src/middleware.ts`)
 
 - Runs on every path except `_next/static`, `_next/image`, `favicon.ico`,
-  `manifest.webmanifest`, `sw.js`, `icons/`, `brand/`, `api/cron`.
+  `manifest.webmanifest`, `sw.js`, `robots.txt`, `icons/`, `brand/`, `api/cron`.
+- In production it first refuses bots (empty or bot user agents) with a
+  plain 403; the apps, browsers, `/api/cron`, `/api/track`, `/api/health`,
+  `/api/version` and static files are never refused (40 §1.8a).
 - Refreshes the Supabase session cookie on every navigation so staff are not
   logged out mid-shift.
 - Public paths: `/login`, `/deactivated`, `/offline`, `/download`, `/guide`
@@ -131,6 +134,14 @@ sheet overlapping it (`-mt-10`, `rounded-t-[2rem]`).
   no autocapitalise), placeholder `you@xpelbeauty.ng or 08012345678`.
 - Field **"Password"** with an eye toggle (aria "Show password"/"Hide
   password").
+- Human check (only when both Turnstile keys are set; the page passes
+  `humanCheckKey = turnstileSiteKey()` to `LoginForm`): `HumanCheck` above
+  the button (40 §1.8a), invisible for most people. Submitting with no token
+  yet shows "Please confirm you are not a robot and try again." without
+  calling the server; the token goes in the body as `turnstile`, and the
+  widget is reset after every attempt (a token works once). If the widget
+  cannot load: "The sign-in check did not load. Check your data, then try
+  again." with **Try again**.
 - Button **"Sign in"** with arrow; while busy **"Signing in…"**.
 - Errors: server message, else "Those details are not correct."; network
   failure "No connection. Check your data and try again."
@@ -148,6 +159,11 @@ sheet overlapping it (`-mt-10`, `rounded-t-[2rem]`).
 - Rate limits (in-memory, per server instance, `src/lib/rate-limit.ts`):
   30 attempts per IP and 10 per identifier (lower-cased) and IP per **15 minutes**;
   over → 429 "Too many attempts. Wait 15 minutes, then try again."
+- Body may also carry `turnstile` (≤ 2048). When `turnstileEnabled()`, right
+  after the rate limits and before anything touches the password or the
+  lockout, `verifyTurnstile(turnstile, address)`; not ok → **400**
+  `{ error: 'Please confirm you are not a robot and try again.', human_check: true }`.
+  Without both keys this step is skipped.
 - **Sign-in lockout (0077)**, kept in Postgres. Wrong passwords pause the **phone or computer making them, not the
   account**. A device that has signed in to the account before carries a
   random `xt_dev` cookie (httpOnly, path `/api/auth`, 180 days, a new token

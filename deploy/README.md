@@ -66,6 +66,12 @@ of `docs/BUILD_GUIDE.md`: the Supabase keys, `CRON_SECRET`, the VAPID keys,
 and the push and AI keys you use. Notes:
 
 - Keep `TRUSTED_PROXY_HOPS=1`. Use 2 if Cloudflare is in front of the server.
+- Bots are refused by the app itself (`docs/BUILD_GUIDE.md` §4.8). For more,
+  put Cloudflare's proxy in front and turn on **Bot Fight Mode** (then
+  `TRUSTED_PROXY_HOPS=2`). The crontab jobs call `127.0.0.1`, so Cloudflare
+  never sees them. Optional human check on sign-in: set
+  `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` (Cloudflare →
+  Turnstile), then deploy.
 - `NEXT_PUBLIC_…` values are built into the pages, so a change to one needs a
   deploy, not just a restart.
 

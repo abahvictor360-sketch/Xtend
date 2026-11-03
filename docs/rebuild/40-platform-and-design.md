@@ -152,7 +152,8 @@ const nextConfig: NextConfig = {
     // Content-Security-Policy "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
     // Referrer-Policy strict-origin-when-cross-origin,
     // Permissions-Policy camera=(self), geolocation=(self), microphone=(), payment=(), usb=(), interest-cohort=(),
-    // Cross-Origin-Opener-Policy same-origin. Then:
+    // Cross-Origin-Opener-Policy same-origin,
+    // X-Robots-Tag noindex, nofollow, noarchive (no page or answer is ever indexed). Then:
     return [{
       source: '/sw.js',
       headers: [
@@ -231,6 +232,13 @@ Tailwind's default `rounded-xl` (0.75rem), `rounded-2xl` (1rem), `rounded-3xl`
 
 ### 1.8 Middleware (`src/middleware.ts`)
 
+- **First, bots** (only when `NODE_ENV === 'production'`, so `next dev`
+  screenshots with a headless browser keep working):
+  `botDecision(pathname, user-agent)` from `src/lib/bot-guard.ts` (section
+  1.8a); when it blocks, answer **403**, `text/plain; charset=utf-8`,
+  `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow, noarchive`,
+  body `Xtend is a private staff app. Automated access is not allowed.`
+  Nothing else runs (no Supabase call).
 - `PUBLIC_PATHS = ['/login', '/deactivated', '/offline', '/download', '/guide']`
   (a path is public if it equals one or starts with `<p>/`).
 - Builds a `createServerClient` from `@supabase/ssr` with the anon key, whose
@@ -245,8 +253,85 @@ Tailwind's default `rounded-xl` (0.75rem), `rounded-2xl` (1rem), `rounded-3xl`
 Matcher:
 
 ```ts
-matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|icons/|brand/|api/cron).*)']
+matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|robots.txt|icons/|brand/|api/cron).*)']
 ```
+
+### 1.8a Bots (`src/lib/bot-guard.ts`, `src/app/robots.ts`, `src/lib/turnstile.ts`)
+
+Xtend is private: no bot may use it, nothing may be indexed.
+
+- `src/app/robots.ts`: `{ rules: [{ userAgent: '*', disallow: '/' }] }`
+  (`/robots.txt` is `User-Agent: *` / `Disallow: /`), outside the middleware
+  so every crawler can read it.
+- Root layout metadata `robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } }`;
+  `X-Robots-Tag` on every response (1.5).
+- `botDecision(path, ua)` → `{ block: false, reason: 'open-path' | 'app' | 'vercel' | 'browser' }`
+  or `{ block: true, reason: 'empty' | 'bot' }`, in this order:
+  1. **Open path** (any agent, even none): prefixes `/api/cron`,
+     `/api/track`, `/api/health`, `/api/version`, `/_next/static`,
+     `/_next/image`, `/icons`, `/brand` (equal or `<p>/…`, so `/api/cronjob`
+     is not open); files `/robots.txt`, `/sw.js`, `/manifest.webmanifest`,
+     `/favicon.ico`; any path ending in a static extension (png, jpg, jpeg,
+     gif, webp, avif, svg, ico, css, js, map, woff, woff2, ttf, txt,
+     webmanifest). Cron needs CRON_SECRET; track needs the device token, and
+     old app builds' native trackers send Java's (`Dalvik/…`) and iOS's
+     (`…CFNetwork…Darwin…`) default agents; health and version serve
+     Docker's HEALTHCHECK (Node fetch), `deploy.sh` (curl) and monitors.
+  2. Empty (after trim) → block `empty`.
+  3. Contains `XtendApp` → allow `app` (Android WebView, iPhone).
+  4. Starts with `vercel-` (case-insensitive) → allow `vercel`.
+  5. Exactly a bare runtime name (`node`, `deno`, `bun`, `python`, `java`,
+     `go`, `ruby`, `php`, `dart`, `Mozilla` or `Mozilla/x.y`) → block `bot`.
+  6. Contains (case-insensitive) any of `BOT_AGENT_PATTERNS`: search
+     engines (googlebot, google-inspectiontool, googleother, google-extended,
+     mediapartners-google, adsbot, storebot, bingbot, bingpreview, msnbot,
+     slurp, yandex, baidu, duckduckbot, duckassistbot, sogou, exabot,
+     seznambot, yeti, qwantify, applebot, petalbot, mojeek); SEO (ahrefs,
+     semrush, mj12, dotbot, rogerbot, screaming frog, serpstat, dataforseo,
+     blexbot, megaindex, seokicks, linkdex, barkrowler); AI (gptbot,
+     chatgpt-user, oai-searchbot, ccbot, claudebot, claude-web, claude-user,
+     claude-searchbot, anthropic-ai, perplexitybot, perplexity-user,
+     bytespider, amazonbot, cohere-ai, diffbot, youbot, meta-externalagent,
+     meta-externalfetcher, imagesiftbot, omgili, timpibot, ai2bot,
+     friendlycrawler, img2dataset); link previews (facebookexternalhit,
+     facebot, whatsapp, telegrambot, twitterbot, slackbot, discordbot,
+     linkedinbot, skypeuripreview, embedly, pinterestbot); tools
+     (python-requests, python-urllib, python-httpx, aiohttp, httpx, scrapy,
+     curl, wget, go-http-client, java/, java-http-client, okhttp, libwww,
+     lwp-, httpclient, axios, node-fetch, undici, postman, insomnia, httpie,
+     guzzle, ruby, php/, perl, restsharp, powershell, winhttp, mechanize,
+     httrack, nutch, heritrix); automation (headlesschrome, headless,
+     phantomjs, puppeteer, playwright, selenium, webdriver, electron,
+     slimerjs, cypress); generic (crawler, crawl, spider, scraper, scrape)
+     → block `bot`.
+  7. After removing `cubot` (a phone brand), `/bot(?![a-z])/i` (Googlebot,
+     "AdsBot-Google", "SomeNewBot/1.0") → block `bot`.
+  8. Else allow `browser`.
+- **Human check on sign-in** (Cloudflare Turnstile, optional):
+  `turnstileEnabled(env)` is true only when both
+  `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` are non-blank;
+  `turnstileSiteKey(env)` returns the trimmed site key then, else undefined
+  (read at request time, so form and server agree). `verifyTurnstile(token,
+  ip)`: no secret → fail `no-secret`; missing token or over 2048 chars →
+  fail `missing-token` without calling Cloudflare; else POST form
+  `secret`, `response`, `remoteip` (left out when unknown) to
+  `https://challenges.cloudflare.com/turnstile/v0/siteverify`, 8 s timeout;
+  non-2xx → `http-<status>`; network error → `unreachable`; body
+  `success === true` → ok, else fail with the joined `error-codes` or
+  `not-confirmed`. Error text `Please confirm you are not a robot and try again.`
+  The CSP has no `script-src`, so nothing to add; a future one must allow
+  `https://challenges.cloudflare.com` in `script-src` and `frame-src`.
+- `src/components/human-check.tsx` (`HumanCheck`, forwardRef with
+  `reset()`): loads `…/turnstile/v0/api.js?render=explicit` once (a failed
+  load can be retried), renders with `sitekey`, `action: 'sign-in'`,
+  `appearance: 'interaction-only'`, `theme: 'light'`; `callback` hands the
+  token up, `expired-callback` clears it, `error-callback` clears it and
+  shows the tinted box "The sign-in check did not load. Check your data,
+  then try again." with a **Try again** button (re-renders the widget).
+- Platform (docs only): Vercel Firewall → Bot Management (Bot Protection,
+  AI bots block; Attack Challenge Mode); Cloudflare proxy with Bot Fight
+  Mode in front of the VPS, then `TRUSTED_PROXY_HOPS=2`.
+- Logic check: `scripts/check-bot-guard.ts` → `ALL BOT GUARD CHECKS PASSED`.
 
 ### 1.9 `vercel.json` (and the VPS)
 
@@ -334,6 +419,8 @@ VAPID_SUBJECT=mailto:ops@xpelbeauty.ng
 ANTHROPIC_API_KEY=
 TRUSTED_PROXY_HOPS=1
 IP_API_KEY=
+NEXT_PUBLIC_TURNSTILE_SITE_KEY=
+TURNSTILE_SECRET_KEY=
 ```
 
 Each variable has a comment block in the file (copy them: they explain the
@@ -354,7 +441,8 @@ meanings is BUILD_GUIDE section 7.
 - `metadata`: title `Xtend — Xpel Beauty field attendance`, applicationName `Xtend`,
   description `Clock in, clock out and report from the field.`, manifest
   `/manifest.webmanifest`, `appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Xtend' }`,
-  extra meta `apple-mobile-web-app-capable: yes`, icons 64 and 192 PNG, apple icon `/icons/apple-touch-icon.png`.
+  extra meta `apple-mobile-web-app-capable: yes`, icons 64 and 192 PNG, apple icon `/icons/apple-touch-icon.png`,
+  `robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } }` (1.8a).
 - `viewport`: `width: 'device-width'`, `initialScale: 1`, `viewportFit: 'cover'`,
   `themeColor: '#d1531b'`. Deliberately no `maximumScale` (pinch zoom stays; WCAG 1.4.4).
 - `<html lang="en"><body className="min-h-dvh">{children}<ServiceWorker /><UpdateManager /></body>`.

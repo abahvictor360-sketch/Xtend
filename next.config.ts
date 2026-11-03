@@ -51,6 +51,10 @@ const nextConfig: NextConfig = {
             value: 'camera=(self), geolocation=(self), microphone=(), payment=(), usb=(), interest-cohort=()',
           },
           { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+          // A private staff app: no search engine may index, follow or
+          // cache any page, file or answer (with robots.txt and the
+          // middleware's bot check, lib/bot-guard.ts).
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive' },
         ],
       },
       {

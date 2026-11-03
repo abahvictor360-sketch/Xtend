@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-11-03, after the Docker image for Dokploy or Coolify, security headers, Next.js 15.5.28 and Zod 4, closing signed-out access to database helpers (0078), and the sign-in lockout that pauses the guessing device (0077)._
+_Last updated: 2026-11-03, after blocking bots (robots.txt, `X-Robots-Tag`, bot user agents refused, optional Cloudflare Turnstile on sign-in), the Docker image for Dokploy or Coolify, security headers, Next.js 15.5.28 and Zod 4, closing signed-out access to database helpers (0078), and the sign-in lockout that pauses the guessing device (0077)._
 
 ---
 
@@ -14,7 +14,7 @@ _Last updated: 2026-11-03, after the Docker image for Dokploy or Coolify, securi
 1. [What Xtend is](#1-what-xtend-is)
 2. [The rules everything follows](#2-the-rules-everything-follows)
 3. [What you need](#3-what-you-need)
-4. [Set up from zero](#4-set-up-from-zero)
+4. [Set up from zero](#4-set-up-from-zero) (bots: [4.8](#48-bots))
 5. [How it was built, stage by stage](#5-how-it-was-built-stage-by-stage)
 6. [The database: every migration](#6-the-database-every-migration)
 7. [Environment variables](#7-environment-variables)
@@ -202,6 +202,53 @@ product list and the set-up tables (see 0066 in section 6 and
 See [section 9](#9-the-phone-apps). The short version: set the Android
 signing secrets and `GOOGLE_SERVICES_JSON` in GitHub, and every push to
 `mobile/` builds the APK and publishes it for `/download`.
+
+### 4.8 Bots
+
+Xtend is a private staff app, so no bot may use it. In layers:
+
+1. **Never indexed**: `/robots.txt` (`src/app/robots.ts`) disallows
+   everything for every agent; every response carries
+   `X-Robots-Tag: noindex, nofollow, noarchive` (`next.config.ts`); every
+   page has `<meta name="robots" content="noindex, nofollow">` (root layout).
+   `/download` still opens for people, it is just never listed.
+2. **Bot user agents refused** (`src/lib/bot-guard.ts`, run first in
+   `src/middleware.ts`, production only so `next dev` screenshots keep
+   working): an empty user agent, search engines, SEO and AI crawlers, link
+   previewers (WhatsApp, Facebook…), scripting tools (curl, wget,
+   python-requests, Go, Java, okhttp, axios, Postman…) and browser
+   automation (HeadlessChrome, Puppeteer, Playwright, Selenium), plus
+   anything calling itself a bot, crawler, spider or scraper, get a 403
+   with a one-line plain-text answer. **Always allowed**: real browsers, the
+   Xtend apps (`XtendApp` in the agent, Android WebView and iPhone),
+   Vercel's own `vercel-*` requests, and, whatever the agent,
+   `/api/cron/*` (CRON_SECRET), `/api/track/*` (the background tracker's
+   token; old app builds send Java's and iOS's default agents),
+   `/api/health`, `/api/version` (Docker HEALTHCHECK, `deploy.sh`,
+   monitors: point uptime monitors at `/api/health`), `robots.txt`, the
+   service worker, manifest and static files. "Cubot" (a phone brand) is not
+   mistaken for a bot. A user agent can be faked, so this only stops the
+   honest and the lazy; the rest is below.
+3. **Human check on sign-in** (optional): with `NEXT_PUBLIC_TURNSTILE_SITE_KEY`
+   and `TURNSTILE_SECRET_KEY` set, `/login` shows Cloudflare Turnstile
+   (managed mode, interaction only: most people see nothing) and
+   `/api/auth/sign-in` confirms the token with Cloudflare
+   (`src/lib/turnstile.ts`) before the password is checked; a missing or bad
+   token gets "Please confirm you are not a robot and try again." If the
+   widget cannot load, the form shows **Try again**. Without both keys
+   sign-in works as before. The sign-in lockout (0077) still applies.
+   Get the keys free at Cloudflare → Turnstile → Add site (the site's
+   domain, Managed); on Docker the site key is also a build argument.
+   Change-password needs a session already, so it has no check.
+4. **At the platform** (settings, no code): on Vercel, Firewall → Bot
+   Management: turn on **Bot Protection** and **AI Bots** (block); during an
+   attack, **Attack Challenge Mode**. On the Hostinger VPS, put Cloudflare's
+   proxy (orange cloud) in front and turn on **Security → Bots → Bot Fight
+   Mode**; then set `TRUSTED_PROXY_HOPS=2` (and on Traefik, trust
+   Cloudflare's addresses first, `deploy/DOCKER.md`). Bot Fight Mode may
+   challenge the scheduled jobs' curl calls from GitHub Actions: if a job
+   starts failing with 403, add a Cloudflare WAF skip rule for
+   `/api/cron/` and `/api/track/` (or run the jobs on the server).
 
 ## 5. How it was built, stage by stage
 
@@ -689,6 +736,8 @@ Set in `.env.local` for development, and for production in Vercel or, on the VPS
 | `TRUSTED_PROXY_HOPS` | Optional | 1 behind Vercel, Nginx or Traefik (Dokploy, Coolify); 2 with Cloudflare's proxy in front (behind Traefik only once Traefik trusts Cloudflare's addresses, `deploy/DOCKER.md`) |
 | `IP_API_KEY`, `IP_GEO_URL`, `IP_GEO_DISABLED` | Optional | IP lookup for VPN checks and the audit log |
 | `XTEND_BUILD_ID` | Optional | Build id outside Vercel (Vercel sets `VERCEL_DEPLOYMENT_ID`); `deploy/deploy.sh` sets it to the commit's first 12 characters |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Optional | Cloudflare Turnstile site key: the human check on `/login` (section 4.8). On only together with `TURNSTILE_SECRET_KEY`. A Docker build argument too |
+| `TURNSTILE_SECRET_KEY` | Optional | Cloudflare Turnstile secret key (server only): `/api/auth/sign-in` confirms the check with Cloudflare before the password. Without both keys sign-in has no human check |
 | `NEXT_PUBLIC_REALTIME_DISABLED` | Optional | Set `1` to turn the client realtime sockets off fleet-wide and ride the safety poll instead — the release valve when Supabase's concurrent-connection cap is the bottleneck under heavy load |
 
 ## 8. Scheduled jobs
@@ -829,7 +878,7 @@ for s in check-allocate check-assistant-actions check-attendance check-audit \
          check-support-notifications check-updates check-visits-alerts check-xm-exports \
          check-schedules-leave check-marketer-reports check-clock-out-reminder check-activity \
          check-xm-features check-report-files check-system-reset check-report-photos check-retention \
-         check-places-usage check-shift-reminders check-follow-live; do
+         check-places-usage check-shift-reminders check-follow-live check-bot-guard; do
   npx tsx --tsconfig tsconfig.scripts.json scripts/$s.ts | tail -1
 done
 ```
@@ -917,6 +966,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-11-03 | **Bots blocked** (section 4.8): `src/app/robots.ts` disallows everything; `X-Robots-Tag: noindex, nofollow, noarchive` on every response and a robots meta tag on every page; the middleware refuses empty and bot user agents (crawlers, AI bots, link previewers, curl/wget/scripting libraries, headless browsers) with a 403 via `src/lib/bot-guard.ts`, never the apps, browsers, `/api/cron/*`, `/api/track/*`, `/api/health`, `/api/version` or static files. Optional Cloudflare Turnstile on `/login` (`NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`; `src/lib/turnstile.ts`, `src/components/human-check.tsx`), confirmed in `/api/auth/sign-in` before the password. Docker build argument for the site key. New check `scripts/check-bot-guard.ts` | — |
 | 2026-10-28 | Ask Xtend can set a work schedule: a new `propose_schedule` tool proposes the weekly days worked (0 = Sunday … 6 = Saturday) for named merchandisers/marketers or a group; the Apply card runs it through `POST /api/admin/schedules` (`set_work_pattern`, 059), with the same team checks and audit as the Schedules page. No new migration | — |
 | 2026-10-28 | **Location required to clock in or out** (+ services-off probe): the clock button on Home shows only when location is on, for clock-out as well as clock-in, gated by the shared `LocationGate`. Permission denied is caught instantly by the permission watcher; the phone's own location service being off (which the Permissions API cannot see) is caught up front by a new coarse one-shot probe, `probeLocation()` in `lib/geo.ts`, that tells apart denied (code 1) / service off (code 2) / slow signal (code 3, not blocked) / ok. The probe runs only once permission is granted, so it never prompts early; `prompt`, `unknown` and Safari fall through to the button, where the tap asks and blocks on its own. Client-only (`clock-panel.tsx`, `geo.ts`); no migration | — |
 | 2026-11-03 | **Quieter response headers**: `poweredByHeader: false` (no `X-Powered-By: Next.js`); new `deploy/nginx/xtend-quiet.conf` in `/etc/nginx/conf.d/` (`server_tokens off`, hides `X-Powered-By`, `X-Nextjs-Cache`, `X-Nextjs-Matched-Path`), installed by `setup-server.sh`; existing servers copy it once (`deploy/README.md`). The router's own `x-nextjs-*` and `Vary` headers stay | — |
@@ -1001,7 +1051,17 @@ Newest first. Dates are when the work landed on the main branch.
   Server-side, used to write spreadsheets from Xtend's own data.
 - **Content-Security-Policy**: only the framing, base and form rules are
   set. A full script/connect policy needs nonces for Next.js and the
-  Supabase, Google Maps and push hosts listed; worth doing with care.
+  Supabase, Google Maps and push hosts listed; worth doing with care. If
+  one is added, allow `https://challenges.cloudflare.com` in `script-src`
+  and `frame-src` for the sign-in check.
+- **Bots** (4.8): the user-agent check is easy to fake; the real defence
+  against password guessing is the lockout (0077), the optional Turnstile
+  check and the platform's bot protection (Vercel Bot Management or
+  Cloudflare Bot Fight Mode), which the owner switches on. Turnstile was
+  checked with Cloudflare's test keys (the build machine cannot load the
+  widget); confirm sign-in on the live site, in a browser and in both apps,
+  right after setting the keys. Link previews (WhatsApp, Facebook) of Xtend
+  links no longer show a title or picture.
 
 - **What still shows the stack**: the browser must load `/_next/static/…`
   files and read the `Vary: rsc, next-router-…` and router `x-nextjs-*`
