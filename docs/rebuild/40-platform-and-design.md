@@ -139,6 +139,7 @@ const BUILD_ID =
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  poweredByHeader: false, // no "X-Powered-By: Next.js"
   env: { NEXT_PUBLIC_BUILD_ID: BUILD_ID },
   generateBuildId: async () => BUILD_ID.replace(/[^a-zA-Z0-9_-]/g, '-'),
   serverExternalPackages: ['exceljs'],
@@ -260,7 +261,11 @@ repository; steps in `deploy/README.md`):
 - **Nginx:** proxies to it with `X-Forwarded-For` (so `TRUSTED_PROXY_HOPS=1`),
   allows 25 MB uploads, and serves `/_next/static` with a one-year
   immutable cache. It has no per-address rate limit, because mobile
-  networks share addresses.
+  networks share addresses. `deploy/nginx/xtend-quiet.conf` (in
+  `/etc/nginx/conf.d/`) sets `server_tokens off` and hides `X-Powered-By`,
+  `X-Nextjs-Cache` and `X-Nextjs-Matched-Path`; the `x-nextjs-*` headers the
+  client router reads (prerender, stale-time, rewritten-path, postponed)
+  and the `Vary: rsc, next-router-…` header must stay.
 - **Crontab:** runs the three jobs through `deploy/cron.sh` against
   `127.0.0.1:3000`.
 - **Deploys:** `deploy/deploy.sh` builds each commit in `releases/<sha12>`

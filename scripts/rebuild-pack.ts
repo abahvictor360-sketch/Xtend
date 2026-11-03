@@ -127,6 +127,7 @@ const VERBATIM = [
   'deploy/ecosystem.config.cjs',
   'deploy/nginx/xtend.conf',
   'deploy/nginx/xtend-proxy.conf',
+  'deploy/nginx/xtend-quiet.conf',
   'deploy/crontab',
   'deploy/cron.sh',
   '.github/workflows/deploy-vps.yml',

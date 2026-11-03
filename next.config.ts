@@ -11,6 +11,9 @@ const BUILD_ID =
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  // No "X-Powered-By: Next.js" on responses: no need to tell anyone what
+  // Xtend is built with.
+  poweredByHeader: false,
   env: { NEXT_PUBLIC_BUILD_ID: BUILD_ID },
   generateBuildId: async () => BUILD_ID.replace(/[^a-zA-Z0-9_-]/g, '-'),
   serverExternalPackages: ['exceljs'],

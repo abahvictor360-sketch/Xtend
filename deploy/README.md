@@ -11,6 +11,7 @@ branch deploys itself through GitHub Actions.
 | `deploy.sh` | Builds a commit beside the live one, switches over when healthy, rolls back if not |
 | `ecosystem.config.cjs` | PM2: cluster mode, one process per core, restarts, logs |
 | `nginx/xtend.conf`, `nginx/xtend-proxy.conf` | The Nginx site and its proxy headers |
+| `nginx/xtend-quiet.conf` | Hides the Nginx version and the app's informational headers (in `conf.d`) |
 | `crontab`, `cron.sh` | The scheduled jobs, called on `127.0.0.1` |
 | `../.github/workflows/deploy-vps.yml` | Deploys on every push to the main branch |
 
@@ -113,6 +114,20 @@ The Android and iPhone apps open `APP_URL`. After setting it, the next app
 build points at the server, and staff get it as an app update. Keep the old
 address working (Vercel, or a redirect) until everyone has updated. Then turn
 the old one off.
+
+## Hiding what Xtend runs on (servers set up before November 2026)
+
+`setup-server.sh` now also installs `nginx/xtend-quiet.conf`. On a server
+set up earlier, add it once (the deploy does not touch Nginx):
+
+```bash
+cp /var/www/xtend/repo/deploy/nginx/xtend-quiet.conf /etc/nginx/conf.d/xtend-quiet.conf
+nginx -t && systemctl reload nginx
+curl -sI https://app.example.com | grep -iE '^server|powered|x-nextjs-cache'
+```
+
+The last line should show only `server: nginx` (no version) and nothing
+else.
 
 ## Day to day
 

@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-11-03, after account lockout after 5 wrong passwords (0077), following the location gate at clock-in and out, the supervisor profile on Messages (0076) and message attachments (0075)._
+_Last updated: 2026-11-03, after hiding what Xtend runs on from response headers (no migration) and account lockout after 5 wrong passwords (0077)._
 
 ---
 
@@ -902,6 +902,7 @@ Newest first. Dates are when the work landed on the main branch.
 |---|---|---|
 | 2026-10-28 | Ask Xtend can set a work schedule: a new `propose_schedule` tool proposes the weekly days worked (0 = Sunday … 6 = Saturday) for named merchandisers/marketers or a group; the Apply card runs it through `POST /api/admin/schedules` (`set_work_pattern`, 059), with the same team checks and audit as the Schedules page. No new migration | — |
 | 2026-10-28 | **Location required to clock in or out** (+ services-off probe): the clock button on Home shows only when location is on, for clock-out as well as clock-in, gated by the shared `LocationGate`. Permission denied is caught instantly by the permission watcher; the phone's own location service being off (which the Permissions API cannot see) is caught up front by a new coarse one-shot probe, `probeLocation()` in `lib/geo.ts`, that tells apart denied (code 1) / service off (code 2) / slow signal (code 3, not blocked) / ok. The probe runs only once permission is granted, so it never prompts early; `prompt`, `unknown` and Safari fall through to the button, where the tap asks and blocks on its own. Client-only (`clock-panel.tsx`, `geo.ts`); no migration | — |
+| 2026-11-03 | **Quieter response headers**: `poweredByHeader: false` (no `X-Powered-By: Next.js`); new `deploy/nginx/xtend-quiet.conf` in `/etc/nginx/conf.d/` (`server_tokens off`, hides `X-Powered-By`, `X-Nextjs-Cache`, `X-Nextjs-Matched-Path`), installed by `setup-server.sh`; existing servers copy it once (`deploy/README.md`). The router's own `x-nextjs-*` and `Vary` headers stay | — |
 | 2026-11-03 | **Account lockout**: five wrong passwords in a row (within 15 minutes) lock the account for 15 minutes, even against the right password; an unknown phone or email locks the same way so nothing shows whether an account exists. The login form says "Too many wrong passwords, so this account is locked until HH:MM. Ask your supervisor to unlock it sooner." (HTTP 423). Staff shows **Locked until HH:MM** and an **Unlock** button (admins, the person's supervisor, HR); **Reset password** unlocks too. Kept in Postgres, so it holds across server instances (the older in-memory limits stay as a second net). Also fixed the RLS test's grant on `send_message` after 0075 | 0077 |
 | 2026-10-28 | **Supervisor on the Messages page**: the staff Messages page (`/field/messages`) now opens with a header showing who they are writing to — their supervisor's photo (or initials) and name, "Your supervisor", or an "Xtend office" tile when they have none. New `my_supervisor()` (name + photo only, SECURITY DEFINER, since staff cannot read the office's profiles) | 0076 |
 | 2026-10-28 | **Message attachments**: a message (0073) can carry one picture (JPEG/PNG/WebP/HEIC) or one PDF, up to 10 MB, on both the staff and office sides. The paperclip sits in the chat compose bar; the sender uploads to the private `message-files` bucket under their own folder, then `send_message` records it; a message may be an attachment with no words. Pictures show inline in the bubble, PDFs as a file card, both opened through `GET /api/message-files/<id>` (a 5-minute signed link, gated by the message's `can_message` RLS). Push says "Sent a photo"/"Sent a PDF" when there are no words; the inbox preview reads "Attachment". New columns on `messages`; `send_message` gains `p_attachment`; `conversation` returns the attachment. (Test-reset does not yet purge message-attachment blobs — see section 15.) | 0075 |
@@ -967,6 +968,14 @@ Newest first. Dates are when the work landed on the main branch.
 | 2026-09-09 | First build: clock in and out, dashboard, marketer role, push, no-show alerts, place names | 0001–0008 |
 
 ## 15. Open items
+
+- **What still shows the stack**: the browser must load `/_next/static/…`
+  files and read the `Vary: rsc, next-router-…` and router `x-nextjs-*`
+  headers, so a determined visitor can still tell it is Next.js; Supabase
+  calls from the browser show the Supabase project address; on Vercel
+  previews `server: Vercel` and `x-vercel-*` are added by Vercel and cannot
+  be removed. Hiding headers only slows casual probing; the real defences
+  are RLS, the lockout (0077) and keeping packages updated.
 
 - **Message attachments and test-reset**: a test reset (0066) clears the
   `messages` rows but does not yet queue the `message-files` bucket for the

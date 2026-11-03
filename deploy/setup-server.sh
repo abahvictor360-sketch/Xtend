@@ -83,6 +83,7 @@ chmod 600 "$APP_DIR/shared/.env.production"
 say "Nginx"
 sed "s/__DOMAIN__/$DOMAIN/g" "$APP_DIR/repo/deploy/nginx/xtend.conf" > /etc/nginx/sites-available/xtend
 cp "$APP_DIR/repo/deploy/nginx/xtend-proxy.conf" /etc/nginx/snippets/xtend-proxy.conf
+cp "$APP_DIR/repo/deploy/nginx/xtend-quiet.conf" /etc/nginx/conf.d/xtend-quiet.conf
 ln -sfn /etc/nginx/sites-available/xtend /etc/nginx/sites-enabled/xtend
 rm -f /etc/nginx/sites-enabled/default
 nginx -t
