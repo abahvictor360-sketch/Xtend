@@ -6,10 +6,13 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { allowAttempt, clientAddress } from '@/lib/rate-limit'
 import { recordActivity } from '@/lib/activity-server'
 import { formatLagos } from '@/lib/utils'
+import { TURNSTILE_ERROR, turnstileEnabled, verifyTurnstile } from '@/lib/turnstile'
 
 const schema = z.object({
   identifier: z.string().trim().min(3).max(120),
   password: z.string().min(1).max(200),
+  // Cloudflare Turnstile's token, when the human check is switched on.
+  turnstile: z.string().max(2048).optional(),
 })
 
 const WRONG = 'Those details are not correct.'
@@ -28,11 +31,15 @@ const DEVICE_COOKIE = 'xt_dev'
  * (0077): a device that has signed in to the account before is counted on
  * its own, anything else by its address, and unknown devices together are
  * capped per account. Postgres keeps the counts and decides.
+ *
+ * With the Turnstile keys set, the form's human-check token is confirmed
+ * with Cloudflare before the password is even looked at, so a bot without
+ * one never reaches the password check.
  */
 export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return Response.json({ error: WRONG }, { status: 400 })
-  const { identifier, password } = parsed.data
+  const { identifier, password, turnstile } = parsed.data
   const address = clientAddress(request)
 
   const tooMany = Response.json(
@@ -41,6 +48,11 @@ export async function POST(request: Request) {
   )
   if (!allowAttempt(`sign-in:ip:${address}`, 30, WINDOW_MS)) return tooMany
   if (!allowAttempt(`sign-in:id:${identifier.toLowerCase()}:${address}`, 10, WINDOW_MS)) return tooMany
+
+  if (turnstileEnabled()) {
+    const human = await verifyTurnstile(turnstile, address)
+    if (!human.ok) return Response.json({ error: TURNSTILE_ERROR, human_check: true }, { status: 400 })
+  }
 
   const email = identifier.includes('@') ? identifier.toLowerCase() : await emailForPhone(identifier)
 

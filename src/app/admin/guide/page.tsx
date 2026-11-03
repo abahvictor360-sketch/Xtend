@@ -81,6 +81,16 @@ export default async function AdminGuidePage() {
           </p>
           <ul className="list-disc space-y-1.5 pl-5">
             <li>
+              <Ui>Bots are blocked</Ui>: search engines, AI crawlers, link previews and scripts are refused
+              and nothing in Xtend is listed on Google. Staff, the apps and the scheduled jobs are not
+              affected. To add a &ldquo;not a robot&rdquo; check to sign-in (most people see nothing), create
+              a free widget at Cloudflare → Turnstile and set <Ui>NEXT_PUBLIC_TURNSTILE_SITE_KEY</Ui> and{' '}
+              <Ui>TURNSTILE_SECRET_KEY</Ui>, then deploy. On Vercel also turn on Firewall → Bot Management
+              (Bot Protection, block AI bots; Attack Challenge Mode during an attack); on the Hostinger
+              server, put Cloudflare in front with Bot Fight Mode and set <Ui>TRUSTED_PROXY_HOPS</Ui> to 2.
+              Point any uptime monitor at <Ui>/api/health</Ui>.
+            </li>
+            <li>
               <Ui>Sign-in lockout</Ui> (0077): five wrong passwords pause the phone or computer making
               them for 15 minutes, never the person&apos;s own phone. Staff shows who is paused;{' '}
               <Ui>Unlock</Ui> or <Ui>Reset password</Ui> lets them back in.

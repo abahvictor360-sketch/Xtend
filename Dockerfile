@@ -17,6 +17,9 @@ ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
 ARG NEXT_PUBLIC_VAPID_PUBLIC_KEY
 ARG NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY
 ARG NEXT_PUBLIC_REALTIME_DISABLED
+# Cloudflare Turnstile on the sign-in form (optional; TURNSTILE_SECRET_KEY
+# is runtime only). The check is on only when both keys are set.
+ARG NEXT_PUBLIC_TURNSTILE_SITE_KEY
 # Coolify passes the commit as SOURCE_COMMIT; the update banner uses it.
 ARG SOURCE_COMMIT
 ENV NEXT_TELEMETRY_DISABLED=1 \

@@ -8,6 +8,9 @@ export const metadata: Metadata = {
   applicationName: 'Xtend',
   description: 'Clock in, clock out and report from the field.',
   manifest: '/manifest.webmanifest',
+  // A private staff app: never indexed, followed or cached by search
+  // engines (with robots.txt and the X-Robots-Tag header, next.config.ts).
+  robots: { index: false, follow: false, nocache: true, googleBot: { index: false, follow: false } },
   appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Xtend' },
   other: { 'apple-mobile-web-app-capable': 'yes' },
   icons: {

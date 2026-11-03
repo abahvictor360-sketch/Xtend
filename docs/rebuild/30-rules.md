@@ -107,6 +107,12 @@ in force.
   yourself ("You can only unlock your own team"), lifts every pause on the
   account, audited `user.unlock`. A password reset by the office calls
   `sign_in_clear`. The `sign_in_*` functions are service-role only.
+- **Bots.** No bot may use Xtend and nothing is indexed: robots.txt
+  disallows all, `X-Robots-Tag: noindex, nofollow, noarchive` everywhere,
+  and the middleware answers 403 to empty and bot user agents, never to the
+  apps, browsers, `/api/cron`, `/api/track`, `/api/health`, `/api/version`
+  or static files. With both Turnstile keys set, sign-in needs Cloudflare
+  Turnstile's token, confirmed before the password (40 §1.8a).
 
 ### 1.2 Roles
 

@@ -64,7 +64,7 @@ export function StaffGuide() {
             </>,
             <>
               Sign in with the <Ui>email or phone number</Ui> your admin registered, and the
-              password you were given.
+              password you were given. If the page asks you to tick a box first, tick it.
             </>,
             <>
               The first time, Xtend asks you to <Ui>choose your own password</Ui>. Pick
