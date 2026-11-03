@@ -23,6 +23,8 @@ const patchSchema = z.object({
   /** Admin only: may clock in without notifications on (migration 027). */
   push_exempt: z.boolean().optional(),
   reset_password: z.boolean().optional(),
+  /** Lift a sign-in lock (0077) early. */
+  unlock: z.boolean().optional(),
 })
 
 export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -111,6 +113,14 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       }
     }
 
+    // A sign-in lock (0077): Postgres checks who may lift it and audits it.
+    if (input.unlock) {
+      const supabase = await createServerSupabase()
+      const { error } = await supabase.rpc('unlock_sign_in', { p_user: id })
+      if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 403 })
+      return Response.json({ ok: true })
+    }
+
     const changes: Record<string, unknown> = {}
     for (const key of [
       'full_name',
@@ -173,6 +183,9 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       if (error) return Response.json({ error: error.message }, { status: 400 })
       changes.must_change_password = true
       await rememberTempPassword(admin, id, temp_password)
+      // A new password also lifts a sign-in lock (0077).
+      const { data: who } = await admin.from('profiles').select('email').eq('id', id).maybeSingle<{ email: string | null }>()
+      if (who?.email) await admin.rpc('sign_in_succeeded', { p_key: who.email })
     }
 
     if (Object.keys(changes).length) {

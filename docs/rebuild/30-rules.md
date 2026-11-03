@@ -82,6 +82,17 @@ in force.
   email is never returned. Every failure says "Those details are not
   correct." Rate limits per 15 minutes: **30 attempts per IP** and **10
   per identifier**, then HTTP 429 "Wait 15 minutes".
+- **Account lockout (0077).** Five wrong passwords in a row within 15
+  minutes lock the sign-in address for 15 minutes (`sign_in_lockouts`,
+  keyed by lower-case email, or the identifier as typed when it matches
+  nobody, so unknown accounts behave the same). While locked the right
+  password is refused too (HTTP 423, "…locked until HH:MM. Ask your
+  supervisor to unlock it sooner."); tries while locked do not extend it.
+  A right password clears the count; a run of tries with a gap over 15
+  minutes starts again. `unlock_sign_in(user)`: admins anyone, the
+  person's supervisor, HR anyone but admins, never yourself ("You can only
+  unlock your own team"), audited `user.unlock`. A password reset by the
+  office clears the lock. The lock functions are service-role only.
 
 ### 1.2 Roles
 

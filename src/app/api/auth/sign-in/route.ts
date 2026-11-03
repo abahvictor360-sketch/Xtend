@@ -3,6 +3,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { allowAttempt, clientAddress } from '@/lib/rate-limit'
 import { recordActivity } from '@/lib/activity-server'
+import { formatLagos } from '@/lib/utils'
 
 const schema = z.object({
   identifier: z.string().trim().min(3).max(120),
@@ -17,8 +18,9 @@ const WINDOW_MS = 15 * 60 * 1000
  * email, so a phone is turned into the email here, on the server, and the
  * sign-in happens here too: the email never goes back to the browser, so
  * nobody can use this to find out a staff member's email from their phone
- * number. Every failure gives the same answer, and attempts are limited
- * per address and per account.
+ * number. Every failure gives the same answer, attempts are limited per
+ * address and per account, and five wrong passwords lock the account for
+ * 15 minutes (0077).
  */
 export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null))
@@ -33,17 +35,45 @@ export async function POST(request: Request) {
   if (!allowAttempt(`sign-in:id:${identifier.toLowerCase()}`, 10, WINDOW_MS)) return tooMany
 
   const email = identifier.includes('@') ? identifier.toLowerCase() : await emailForPhone(identifier)
-  if (!email) return Response.json({ error: WRONG }, { status: 401 })
+
+  // Five wrong passwords lock the account for 15 minutes (0077). An
+  // address that matches nobody locks the same way, so the answer never
+  // says whether an account exists.
+  const lockKey = email ?? identifier.toLowerCase()
+  const service = createAdminSupabase()
+  const { data: lockedUntil } = await service.rpc('sign_in_lock_status', { p_key: lockKey })
+  if (lockedUntil) return locked(lockedUntil as string)
+
+  if (!email) return wrongPassword(service, lockKey)
 
   // The user-scoped client writes the session cookies onto this response.
   const supabase = await createServerSupabase()
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-  if (error) return Response.json({ error: WRONG }, { status: 401 })
+  if (error) return wrongPassword(service, lockKey)
+  await service.rpc('sign_in_succeeded', { p_key: lockKey })
 
   // For the office's activity log (062); never holds up the sign-in.
   if (data.user) await recordActivity(data.user.id, 'sign_in', request.headers)
 
   return Response.json({ ok: true })
+}
+
+type Service = ReturnType<typeof createAdminSupabase>
+
+async function wrongPassword(service: Service, lockKey: string) {
+  const { data: lockedUntil } = await service.rpc('sign_in_failed', { p_key: lockKey })
+  if (lockedUntil) return locked(lockedUntil as string)
+  return Response.json({ error: WRONG }, { status: 401 })
+}
+
+function locked(until: string) {
+  return Response.json(
+    {
+      error: `Too many wrong passwords, so this account is locked until ${formatLagos(until, false)}. Ask your supervisor to unlock it sooner.`,
+      locked_until: until,
+    },
+    { status: 423 },
+  )
 }
 
 async function emailForPhone(identifier: string): Promise<string | null> {

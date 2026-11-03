@@ -95,5 +95,6 @@ run supabase/migrations/0073_messages.sql
 run supabase/migrations/0074_office_stock_count.sql
 run supabase/migrations/0075_message_attachments.sql
 run supabase/migrations/0076_my_supervisor.sql
+run supabase/migrations/0077_sign_in_lockout.sql
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rules.sql 2>&1 | grep -E 'NOTICE|ERROR' | sed 's/^psql:[^ ]*: //'
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_counts.sql 2>&1 | grep -E 'NOTICE|ERROR|PASSED' | sed 's/^psql:[^ ]*: //'

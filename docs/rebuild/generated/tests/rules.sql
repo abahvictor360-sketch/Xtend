@@ -5300,6 +5300,60 @@ begin
   perform public.send_message(null, 'Good morning, I am at the store.');
   perform set_config('request.jwt.claim.sub', '', false);
 
+  -- Sign-in lockout (0077): five wrong passwords lock the account for 15
+  -- minutes; the office lifts it for people it manages.
+  declare
+    t timestamptz;
+  begin
+    perform assert(public.sign_in_lock_status('nobody@example.com') is null, 'lockout 0077: nobody starts locked');
+    for i in 1..4 loop
+      t := public.sign_in_failed('Nobody@Example.com ');
+      perform assert(t is null, 'lockout 0077: four wrong passwords do not lock');
+    end loop;
+    t := public.sign_in_failed('nobody@example.com');
+    perform assert(t > now() + interval '14 minutes' and t <= now() + interval '15 minutes',
+      'lockout 0077: the fifth locks it for 15 minutes');
+    perform assert(public.sign_in_lock_status('NOBODY@example.com') = t, 'lockout 0077: case does not matter');
+    perform assert(public.sign_in_failed('nobody@example.com') = t, 'lockout 0077: tries while locked do not extend it');
+
+    -- A right password before the fifth clears the count.
+    for i in 1..4 loop perform public.sign_in_failed('someone@example.com'); end loop;
+    perform public.sign_in_succeeded('someone@example.com');
+    perform assert(public.sign_in_failed('someone@example.com') is null, 'lockout 0077: a right password starts the count again');
+
+    -- Old tries do not count: a run 16 minutes back starts over.
+    update public.sign_in_lockouts set failed_count = 4, first_failed_at = now() - interval '16 minutes'
+     where lock_key = 'someone@example.com';
+    perform assert(public.sign_in_failed('someone@example.com') is null, 'lockout 0077: tries 15 minutes apart do not add up');
+
+    -- A lock that ran out starts a fresh count.
+    update public.sign_in_lockouts set locked_until = now() - interval '1 second' where lock_key = 'nobody@example.com';
+    perform assert(public.sign_in_lock_status('nobody@example.com') is null, 'lockout 0077: the lock runs out');
+    perform assert(public.sign_in_failed('nobody@example.com') is null, 'lockout 0077: and the count starts again');
+
+    -- The office unlocks; staff cannot; it is audited.
+    for i in 1..5 loop perform public.sign_in_failed((select email from public.profiles where id = ada)); end loop;
+    perform act_as(boss);
+    perform assert(exists (select 1 from public.locked_accounts() where user_id = ada), 'lockout 0077: the office sees the lock');
+    perform act_as(bala);
+    begin
+      perform public.unlock_sign_in(ada);
+      perform assert(false, 'lockout 0077: staff cannot unlock');
+    exception when others then
+      perform assert(sqlerrm like '%own team%', 'lockout 0077: staff cannot unlock');
+    end;
+    perform assert(not exists (select 1 from public.locked_accounts()), 'lockout 0077: staff see no locks');
+    perform act_as(boss);
+    perform assert(public.unlock_sign_in(ada), 'lockout 0077: an admin unlocks');
+    perform assert(public.sign_in_lock_status((select email from public.profiles where id = ada)) is null,
+      'lockout 0077: and the account signs in again');
+    perform assert(exists (select 1 from public.audit_log where action = 'user.unlock' and target_id = ada),
+      'lockout 0077: unlocking is audited');
+    perform set_config('request.jwt.claim.sub', '', false);
+    delete from public.sign_in_lockouts;
+    delete from public.audit_log where action = 'user.unlock';
+  end;
+
   -- Test mode and resetting the test run (066). Every case runs in its
   -- own block that is rolled back, so the data stays for the RLS tests.
   -- ---------------------------------------------------------------
@@ -5307,7 +5361,9 @@ begin
     keep_tables text[] := array['products', 'staff_roles', 'role_store_counts', 'count_sheet_templates',
                                 'notification_templates', 'support_quick_replies', 'xm_settings',
                                 'xm_settings_history', 'xm_policy_versions', 'app_releases', 'job_runs',
-                                'system_settings', 'place_addresses', 'place_lookup_stats'];
+                                'system_settings', 'place_addresses', 'place_lookup_stats',
+                                -- 0077: sign-in locks run out by themselves.
+                                'sign_in_lockouts'];
     all_keys text[] := public.reset_category_keys();
     k text;
     cats text[];

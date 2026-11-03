@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import type { Outlet, Profile, UserRole } from '@/lib/types'
-import { cn } from '@/lib/utils'
+import { cn, formatLagos } from '@/lib/utils'
 import { RoleSelect } from '@/components/admin/role-select'
 import { BUILT_IN_ROLES, parseRoleValue, roleLabel, roleValue, type StaffRole } from '@/lib/staff-roles'
 import { emailAddress, personName, phoneNumber } from '@/lib/fields'
@@ -54,6 +54,7 @@ export function StaffManager({
   isHr = false,
   supervisors = [],
   notified = [],
+  locked = {},
   initialSearch = '',
   startCreating = false,
   photos = {},
@@ -74,6 +75,8 @@ export function StaffManager({
   supervisors?: SupervisorOption[]
   /** Who has notifications on, which clocking in needs (migration 027). */
   notified?: string[]
+  /** Accounts locked after five wrong passwords (0077): until when, by person. */
+  locked?: Record<string, string>
   /** From the dashboard's search box (?q=). */
   initialSearch?: string
   /** From the dashboard's "Add staff" button (?new=1). */
@@ -579,6 +582,11 @@ export function StaffManager({
                       Temp password
                     </Badge>
                   )}
+                  {locked[person.id] && (
+                    <Badge variant="destructive" className="ml-1">
+                      Locked until {formatLagos(locked[person.id], false)}
+                    </Badge>
+                  )}
                   {isField(person.role) && (
                     <NotificationBadge
                       on={hasPush.has(person.id)}
@@ -604,6 +612,16 @@ export function StaffManager({
                   >
                     Reset password
                   </Button>
+                  {locked[person.id] && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => void patch(person.id, { unlock: true })}
+                    >
+                      Unlock
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"
@@ -660,6 +678,9 @@ export function StaffManager({
                     <Badge variant="outline">Deactivated</Badge>
                   )}
                   {person.must_change_password && <Badge variant="warning">Temp password</Badge>}
+                  {locked[person.id] && (
+                    <Badge variant="destructive">Locked until {formatLagos(locked[person.id], false)}</Badge>
+                  )}
                   {isField(person.role) && (
                     <NotificationBadge on={hasPush.has(person.id)} exempt={Boolean(person.push_exempt)} />
                   )}
@@ -744,6 +765,16 @@ export function StaffManager({
                 >
                   Reset password
                 </Button>
+                {locked[person.id] && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => void patch(person.id, { unlock: true })}
+                  >
+                    Unlock
+                  </Button>
+                )}
                 <Button
                   size="sm"
                   variant="ghost"

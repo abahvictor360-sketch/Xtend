@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-10-28, after the clock-in/out location gate and its services-off probe (no migration), the supervisor profile on the staff Messages page (0076) and message attachments (0075)._
+_Last updated: 2026-11-03, after account lockout after 5 wrong passwords (0077), following the location gate at clock-in and out, the supervisor profile on Messages (0076) and message attachments (0075)._
 
 ---
 
@@ -547,6 +547,24 @@ the code lives.
   office pages follow the table; a minute's poll covers a dropped
   connection. Support (020) stays for problems with the app.
 
+- **Account lockout** (0077): `/api/auth/sign-in` asks
+  `sign_in_lock_status` before trying the password and refuses a locked
+  account with HTTP 423 "Too many wrong passwords, so this account is locked
+  until HH:MM. Ask your supervisor to unlock it sooner." A wrong password
+  calls `sign_in_failed`; the fifth in a row within 15 minutes locks the
+  account for 15 minutes (the answer to that fifth try is already the lock
+  message). A right password calls `sign_in_succeeded` and clears the count.
+  The key is the account's lower-case email (a phone is turned into it
+  first), so every way of typing the number counts together; an identifier
+  that matches nobody is keyed as typed and locks the same way, so the
+  message never shows whether an account exists. Staff
+  (`/admin/users`) shows a red **Locked until HH:MM** badge from
+  `locked_accounts()` and an **Unlock** button (PATCH `{unlock: true}` →
+  `unlock_sign_in`, audited `user.unlock`); **Reset password** also clears
+  the lock. The in-memory limits (30 per IP, 10 per identifier per 15
+  minutes) still apply on top. A test reset keeps the table: locks run out
+  by themselves.
+
 ## 6. The database: every migration
 
 Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
@@ -625,6 +643,7 @@ Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
 | 0071 | HR role value: `alter type user_role add value 'hr'` (alone, so it is committed before 0072) |
 | 0072 | HR role: `is_hr()`, `hr_sees(target)`; read policies `profiles_hr_select`, `attendance_hr_select`, `leave_requests_hr_read`, `work_patterns_hr_read`, `schedule_overrides_hr_read`, `staff_outlets_hr_select`; `my_staff`, `available_supervisors`, `staff_analytics`, `can_manage_schedule`, `schedule_guard`, `is_working_day`, `decide_leave` and `write_audit` replaced to let HR in ("Only admins, HR and supervisors …", "Admins, HR and supervisors only") |
 | 0076 | `my_supervisor()` (id, full_name, avatar_path): the staff member's own supervisor, name and photo only, for the Messages page header (SECURITY DEFINER; staff cannot read the office's profiles) |
+| 0077 | Sign-in lockout: `sign_in_lockouts` (lock_key = lower-case email, or the typed identifier when it matches nobody; failed_count, first/last failed, locked_until, lock_count; RLS on, no grants); `sign_in_lock_status(key)`, `sign_in_failed(key)` (5 within 15 minutes → locked 15 minutes; tries while locked do not extend; rows a day old cleared), `sign_in_succeeded(key)` — service role only; `can_unlock_sign_in(user)`, `unlock_sign_in(user)` (admins anyone, supervisors their team, HR anyone but admins; audited `user.unlock`); `locked_accounts()` for the Staff page |
 | 0075 | Message attachments: `messages.attachment_path/name/mime/size_bytes/kind`; `messages_body_check` relaxed (words **or** an attachment); `messages_attachment_check` (all five columns together, picture or PDF ≤ 10 MB); private `message-files` bucket with `message_files_insert_own` + `message_files_read`; `send_message(uuid, text, jsonb)` (drops the 2-arg form, validates and stores the attachment); `conversation` returns the attachment columns; `message_inbox` preview shows "Attachment" for a file-only message |
 | 0074 | Office stock count: `xm_counts.source` (`'field'`/`'office'`, default `'field'`); `lat`, `lng`, `accuracy_m`, `photo_path` made nullable; the `photo_path` UNIQUE constraint replaced by a partial unique index (`xm_counts_photo_path_uniq`, where not null); check `xm_counts_source_shape_check` (field counts keep GPS + photo, office counts carry neither); `xm_office_count(outlet, lines)` (admin only, no GPS/photo, same line checks as `xm_submit_count`, recorded under `auth.uid()`) |
 | 0073 | Messages: `message_threads` (one per staff member), `messages` (never edited, `clock_timestamp()`), `message_reads`; RLS through `can_message(staff)` (the person, their supervisor, admins, HR), no direct writes; `send_message(staff, body)`, `read_messages(staff)`, `unread_messages()`, `conversation(staff)`, `my_supervisor_name()`, `message_inbox()`; trigger `realtime_broadcast` on messages (staff topic); `messages` in the `supabase_realtime` publication; `reset_category_tables()` redefined with the three tables under support |
@@ -883,6 +902,7 @@ Newest first. Dates are when the work landed on the main branch.
 |---|---|---|
 | 2026-10-28 | Ask Xtend can set a work schedule: a new `propose_schedule` tool proposes the weekly days worked (0 = Sunday … 6 = Saturday) for named merchandisers/marketers or a group; the Apply card runs it through `POST /api/admin/schedules` (`set_work_pattern`, 059), with the same team checks and audit as the Schedules page. No new migration | — |
 | 2026-10-28 | **Location required to clock in or out** (+ services-off probe): the clock button on Home shows only when location is on, for clock-out as well as clock-in, gated by the shared `LocationGate`. Permission denied is caught instantly by the permission watcher; the phone's own location service being off (which the Permissions API cannot see) is caught up front by a new coarse one-shot probe, `probeLocation()` in `lib/geo.ts`, that tells apart denied (code 1) / service off (code 2) / slow signal (code 3, not blocked) / ok. The probe runs only once permission is granted, so it never prompts early; `prompt`, `unknown` and Safari fall through to the button, where the tap asks and blocks on its own. Client-only (`clock-panel.tsx`, `geo.ts`); no migration | — |
+| 2026-11-03 | **Account lockout**: five wrong passwords in a row (within 15 minutes) lock the account for 15 minutes, even against the right password; an unknown phone or email locks the same way so nothing shows whether an account exists. The login form says "Too many wrong passwords, so this account is locked until HH:MM. Ask your supervisor to unlock it sooner." (HTTP 423). Staff shows **Locked until HH:MM** and an **Unlock** button (admins, the person's supervisor, HR); **Reset password** unlocks too. Kept in Postgres, so it holds across server instances (the older in-memory limits stay as a second net). Also fixed the RLS test's grant on `send_message` after 0075 | 0077 |
 | 2026-10-28 | **Supervisor on the Messages page**: the staff Messages page (`/field/messages`) now opens with a header showing who they are writing to — their supervisor's photo (or initials) and name, "Your supervisor", or an "Xtend office" tile when they have none. New `my_supervisor()` (name + photo only, SECURITY DEFINER, since staff cannot read the office's profiles) | 0076 |
 | 2026-10-28 | **Message attachments**: a message (0073) can carry one picture (JPEG/PNG/WebP/HEIC) or one PDF, up to 10 MB, on both the staff and office sides. The paperclip sits in the chat compose bar; the sender uploads to the private `message-files` bucket under their own folder, then `send_message` records it; a message may be an attachment with no words. Pictures show inline in the bubble, PDFs as a file card, both opened through `GET /api/message-files/<id>` (a 5-minute signed link, gated by the message's `can_message` RLS). Push says "Sent a photo"/"Sent a PDF" when there are no words; the inbox preview reads "Attachment". New columns on `messages`; `send_message` gains `p_attachment`; `conversation` returns the attachment. (Test-reset does not yet purge message-attachment blobs — see section 15.) | 0075 |
 | 2026-10-28 | **Office stock counts and supplies through Ask Xtend**: an admin can record a stock count (with expiries) or log a delivery by typing it or attaching a count sheet, delivery note or invoice. Ask Xtend reads it and proposes `propose_stock_count` or `propose_supply`; Apply goes through the same X Metrics routes as the dashboard. Office counts have no GPS or shelf photo (new `xm_counts.source`, `'field'`/`'office'`; location/photo now optional, kept required for field counts by a check) and are recorded in the admin's name, so they feed stock-on-hand, expiry alerts and reconciliation but never a merchandiser's grade. New RPC `xm_office_count`, route `POST /api/admin/metrics/count`; supplies reuse `POST /api/admin/metrics/supplies` | 0074 |

@@ -148,6 +148,15 @@ sheet overlapping it (`-mt-10`, `rounded-t-[2rem]`).
 - Rate limits (in-memory, per server instance, `src/lib/rate-limit.ts`):
   30 attempts per IP and 10 per identifier (lower-cased) per **15 minutes**;
   over → 429 "Too many attempts. Wait 15 minutes, then try again."
+- **Account lockout (0077)**, kept in Postgres: before the password is
+  tried, `sign_in_lock_status(key)`; locked → **423** "Too many wrong
+  passwords, so this account is locked until HH:MM. Ask your supervisor to
+  unlock it sooner." (HH:MM Lagos, 24-hour) with `locked_until`. A wrong
+  password (or an identifier matching nobody) → `sign_in_failed(key)`; when
+  that returns a time the answer is the same 423, otherwise the usual 401.
+  A right password → `sign_in_succeeded(key)`. The key is the resolved
+  lower-case email, else the typed identifier lower-cased. The login form
+  shows the server's message as it is.
 - If the identifier contains `@` it is the email (lower-cased). Otherwise it
   is a phone: strip to digits and `+`; under 7 characters → wrong. Try the
   number plus variants: `0…` ↔ `+234…`, `234…` → `0…`. Look up an **active**
@@ -185,6 +194,9 @@ administrator if you think this is a mistake.", and a **"Sign out"** button
 - Typing `08012345678` or `+2348012345678` signs in the same account.
 - A wrong phone and a wrong password give the identical message.
 - The 11th attempt for one identifier within 15 minutes gets the 429 text.
+- The 5th wrong password in a row gets the 423 lock message; the right
+  password is then refused too until the time shown, or until the office
+  presses **Unlock**. A made-up phone number locks after 5 tries the same way.
 - A merchandiser who signed in yesterday is sent to the login page with "A
   new day has started…" on the first navigation today.
 - After clocking out, any page or API call ends the session with the

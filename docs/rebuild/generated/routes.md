@@ -2,7 +2,7 @@
 
 # API routes
 
-121 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+123 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
 
 ## `POST /api/activity`
 
@@ -374,6 +374,36 @@ const schema = z.object({
 ```
 
 - Database functions: `decide_leave`
+
+## `POST /api/admin/metrics/count`
+
+- File: `src/app/api/admin/metrics/count/route.ts`
+- Who: public / own check
+
+Records an office stock count: an admin enters a count (and expiries) from a
+prompt or a document, without the field GPS and photo gate. It is a real X
+Metrics count (stock on hand, expiry alerts, reconciliation), recorded in
+the admin's name. The database (xm_office_count) checks the store and lines.
+
+```ts
+const schema = z.object({
+  outlet_id: z.string().uuid({ message: 'Choose the store' }),
+  lines: z
+    .array(
+      z.object({
+        product_id: z.string().uuid({ message: 'Choose the product' }),
+        on_shelf: z.number().int('Whole units only').min(0).max(1_000_000),
+        in_backroom: z.number().int('Whole units only').min(0).max(1_000_000),
+        batch: z.string().max(60).transform((v) => v?.trim() ?? ''),
+        expiry_date: date.nullable().optional(),
+      }),
+    )
+    .min(1, 'Count at least one product')
+    .max(500, 'Too many lines in one count'),
+})
+```
+
+- Database functions: `xm_office_count`
 
 ## `POST /api/admin/metrics/expiry/[id]`
 
@@ -1130,8 +1160,12 @@ const patchSchema = z.object({
   /** Admin only: may clock in without notifications on (migration 027). */
   push_exempt: z.boolean().optional(),
   reset_password: z.boolean().optional(),
+  /** Lift a sign-in lock (0077) early. */
+  unlock: z.boolean().optional(),
 })
 ```
+
+- Database functions: `unlock_sign_in`, `sign_in_succeeded`
 - Tables and views: `profiles`, `staff_roles`, `audit_log`, `attendance`
 
 ## `POST /api/admin/users/import`
@@ -1247,8 +1281,9 @@ Staff sign in with an email or a phone number. Supabase signs in on
 email, so a phone is turned into the email here, on the server, and the
 sign-in happens here too: the email never goes back to the browser, so
 nobody can use this to find out a staff member's email from their phone
-number. Every failure gives the same answer, and attempts are limited
-per address and per account.
+number. Every failure gives the same answer, attempts are limited per
+address and per account, and five wrong passwords lock the account for
+15 minutes (0077).
 
 ```ts
 const schema = z.object({
@@ -1256,6 +1291,8 @@ const schema = z.object({
   password: z.string().min(1).max(200),
 })
 ```
+
+- Database functions: `sign_in_lock_status`, `sign_in_succeeded`, `sign_in_failed`
 - Tables and views: `profiles`
 
 ## `POST /api/beacon`
@@ -1400,6 +1437,17 @@ const schema = z.object({
 ```
 
 - Database functions: `log_location_block`
+
+## `GET /api/message-files/[id]`
+
+- File: `src/app/api/message-files/[id]/route.ts`
+- Who: ['merchandiser', 'marketer', 'supervisor', 'admin', 'hr']
+
+Opens a message's attachment (0075) through a link that lasts five
+minutes, shown inline so pictures load in the chat. Read as the caller,
+so the message's own RLS (can_message) decides who may; anyone else gets
+"not found". The <id> is the message id: one attachment per message.
+- Tables and views: `messages`
 
 ## `POST /api/messages/read`
 

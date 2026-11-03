@@ -1303,6 +1303,19 @@ $$;
 
 
 --
+-- Name: can_unlock_sign_in(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.can_unlock_sign_in(p_user uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select p_user <> auth.uid()
+     and (public.is_admin() or public.supervises_user(p_user) or public.hr_sees(p_user));
+$$;
+
+
+--
 -- Name: can_visit_stores(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2045,7 +2058,7 @@ $$;
 -- Name: conversation(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.conversation(p_staff uuid) RETURNS TABLE(id uuid, body text, created_at timestamp with time zone, sender_name text, from_staff boolean, mine boolean)
+CREATE FUNCTION public.conversation(p_staff uuid) RETURNS TABLE(id uuid, body text, created_at timestamp with time zone, sender_name text, from_staff boolean, mine boolean, attachment_mime text, attachment_name text, attachment_size_bytes integer, attachment_kind text)
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -2053,7 +2066,8 @@ CREATE FUNCTION public.conversation(p_staff uuid) RETURNS TABLE(id uuid, body te
     select case when public.is_field_role(public.current_user_role()) then auth.uid() else p_staff end as staff
   )
   select m.id, m.body, m.created_at, coalesce(s.full_name, 'Former staff'),
-         m.sender_id = t.staff_id, m.sender_id = auth.uid()
+         m.sender_id = t.staff_id, m.sender_id = auth.uid(),
+         m.attachment_mime, m.attachment_name, m.attachment_size_bytes, m.attachment_kind
   from who
   join public.message_threads t on t.staff_id = who.staff
   join public.messages m on m.thread_id = t.id
@@ -3372,6 +3386,22 @@ $$;
 
 
 --
+-- Name: locked_accounts(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.locked_accounts() RETURNS TABLE(user_id uuid, locked_until timestamp with time zone)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select p.id, l.locked_until
+  from public.sign_in_lockouts l
+  join public.profiles p on lower(p.email) = l.lock_key
+  where l.locked_until > now()
+    and (public.is_admin() or public.supervises_user(p.id) or public.hr_sees(p.id));
+$$;
+
+
+--
 -- Name: log_location_block(text, double precision); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3442,7 +3472,8 @@ CREATE FUNCTION public.message_inbox() RETURNS TABLE(staff_id uuid, full_name te
     AS $$
   select p.id, p.full_name, p.role, o.name, sup.full_name,
          t.last_message_at,
-         (select m.body from public.messages m where m.thread_id = t.id order by m.created_at desc limit 1),
+         (select coalesce(nullif(btrim(m.body), ''), 'Attachment')
+          from public.messages m where m.thread_id = t.id order by m.created_at desc limit 1),
          t.last_sender_id = p.id,
          coalesce((select count(*)::integer from public.messages m
                    left join public.message_reads r on r.thread_id = t.id and r.user_id = auth.uid()
@@ -3875,6 +3906,21 @@ CREATE FUNCTION public.my_store_visits() RETURNS SETOF public.store_visit_detail
   select * from public.store_visit_detail
   where user_id = auth.uid() and visit_date = public.business_date()
   order by arrived_at desc;
+$$;
+
+
+--
+-- Name: my_supervisor(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_supervisor() RETURNS TABLE(id uuid, full_name text, avatar_path text)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select s.id, s.full_name, s.avatar_path
+  from public.profiles me
+  join public.profiles s on s.id = me.supervisor_id and s.is_active
+  where me.id = auth.uid();
 $$;
 
 
@@ -6466,12 +6512,12 @@ $$;
 
 
 --
--- Name: send_message(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: send_message(uuid, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.send_message(p_staff uuid, p_body text) RETURNS jsonb
+CREATE FUNCTION public.send_message(p_staff uuid, p_body text, p_attachment jsonb DEFAULT NULL::jsonb) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO 'public', 'storage'
     AS $$
 declare
   me public.profiles;
@@ -6479,6 +6525,11 @@ declare
   clean text := btrim(coalesce(p_body, ''));
   t uuid;
   m uuid;
+  a_path text;
+  a_name text;
+  a_mime text;
+  a_size integer;
+  a_kind text;
 begin
   select * into me from public.profiles where id = auth.uid();
   if me.id is null or not me.is_active then
@@ -6491,7 +6542,34 @@ begin
   if not exists (select 1 from public.profiles where id = staff and is_active) then
     raise exception 'That person''s account is not active';
   end if;
-  if length(clean) < 1 then
+
+  if p_attachment is not null and jsonb_typeof(p_attachment) = 'object' then
+    a_path := p_attachment->>'path';
+    a_name := left(btrim(coalesce(p_attachment->>'name', '')), 200);
+    a_mime := lower(btrim(coalesce(p_attachment->>'mime', '')));
+    a_size := nullif(p_attachment->>'size', '')::integer;
+    if a_mime = 'application/pdf' then
+      a_kind := 'pdf';
+    elsif a_mime in ('image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif') then
+      a_kind := 'image';
+    else
+      raise exception 'Attach a picture or a PDF';
+    end if;
+    if a_path is null or a_path not like (me.id::text || '/%') then
+      raise exception 'That attachment is not yours';
+    end if;
+    if a_size is null or a_size < 1 or a_size > 10485760 then
+      raise exception 'Each attachment must be 10 MB or smaller';
+    end if;
+    if not exists (select 1 from storage.objects where bucket_id = 'message-files' and name = a_path) then
+      raise exception 'Upload the attachment before sending';
+    end if;
+    if a_name = '' then
+      a_name := case when a_kind = 'pdf' then 'document.pdf' else 'picture' end;
+    end if;
+  end if;
+
+  if length(clean) < 1 and a_path is null then
     raise exception 'Write your message first';
   end if;
   if length(clean) > 2000 then
@@ -6502,14 +6580,18 @@ begin
   on conflict (staff_id) do nothing;
   select id into t from public.message_threads where staff_id = staff;
 
-  insert into public.messages (thread_id, sender_id, body) values (t, me.id, clean)
+  insert into public.messages
+    (thread_id, sender_id, body, attachment_path, attachment_name, attachment_mime,
+     attachment_size_bytes, attachment_kind)
+  values (t, me.id, clean, a_path, a_name, a_mime, a_size, a_kind)
   returning id into m;
   update public.message_threads set last_message_at = now(), last_sender_id = me.id where id = t;
   insert into public.message_reads (thread_id, user_id, read_at) values (t, me.id, clock_timestamp())
   on conflict (thread_id, user_id) do update set read_at = excluded.read_at;
 
   return jsonb_build_object('message_id', m, 'thread_id', t, 'staff_id', staff,
-                            'from_staff', staff = me.id,
+                            'from_staff', staff = me.id, 'has_attachment', a_path is not null,
+                            'attachment_kind', a_kind,
                             'supervisor_id', (select supervisor_id from public.profiles where id = staff));
 end;
 $$;
@@ -6763,6 +6845,77 @@ CREATE FUNCTION public.shift_start_for(p_user uuid) RETURNS time without time zo
      join public.outlets o on o.id = p.outlet_id
      where p.id = p_user),
     time '08:00');
+$$;
+
+
+--
+-- Name: sign_in_failed(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sign_in_failed(p_key text) RETURNS timestamp with time zone
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  k text := lower(btrim(coalesce(p_key, '')));
+  r public.sign_in_lockouts;
+begin
+  if k = '' then
+    return null;
+  end if;
+  delete from public.sign_in_lockouts
+  where last_failed_at < now() - interval '1 day' and coalesce(locked_until, now()) <= now();
+
+  insert into public.sign_in_lockouts (lock_key) values (k)
+  on conflict (lock_key) do nothing;
+  select * into r from public.sign_in_lockouts where lock_key = k for update;
+
+  if r.locked_until > now() then
+    return r.locked_until;
+  end if;
+  -- A fresh run of tries after 15 quiet minutes, or after a lock ran out.
+  if r.first_failed_at < now() - interval '15 minutes' or r.locked_until is not null then
+    r.failed_count := 0;
+    r.first_failed_at := now();
+    r.locked_until := null;
+  end if;
+  r.failed_count := r.failed_count + 1;
+  if r.failed_count >= 5 then
+    r.locked_until := now() + interval '15 minutes';
+    r.lock_count := r.lock_count + 1;
+  end if;
+
+  update public.sign_in_lockouts
+     set failed_count = r.failed_count, first_failed_at = r.first_failed_at,
+         last_failed_at = now(), locked_until = r.locked_until, lock_count = r.lock_count
+   where lock_key = k;
+  return r.locked_until;
+end;
+$$;
+
+
+--
+-- Name: sign_in_lock_status(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sign_in_lock_status(p_key text) RETURNS timestamp with time zone
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select locked_until from public.sign_in_lockouts
+  where lock_key = lower(btrim(p_key)) and locked_until > now();
+$$;
+
+
+--
+-- Name: sign_in_succeeded(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sign_in_succeeded(p_key text) RETURNS void
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  delete from public.sign_in_lockouts where lock_key = lower(btrim(p_key));
 $$;
 
 
@@ -7488,6 +7641,31 @@ $$;
 
 
 --
+-- Name: unlock_sign_in(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.unlock_sign_in(p_user uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  addr text;
+  removed integer;
+begin
+  if not public.can_unlock_sign_in(p_user) then
+    raise exception 'You can only unlock your own team';
+  end if;
+  select lower(email) into addr from public.profiles where id = p_user;
+  delete from public.sign_in_lockouts where lock_key = addr;
+  get diagnostics removed = row_count;
+  insert into public.audit_log (actor_id, action, target_table, target_id, meta)
+  values (auth.uid(), 'user.unlock', 'profiles', p_user, jsonb_build_object('was_locked', removed > 0));
+  return removed > 0;
+end;
+$$;
+
+
+--
 -- Name: unread_messages(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8089,6 +8267,65 @@ CREATE FUNCTION public.xm_my_store_batches() RETURNS TABLE(outlet_id uuid, produ
   from public.xm_stock_on_hand h
   where h.units > 0
     and h.outlet_id in (select o.outlet_id from public.outlets_for_user(auth.uid()) o);
+$$;
+
+
+--
+-- Name: xm_office_count(uuid, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.xm_office_count(p_outlet uuid, p_lines jsonb) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  now_ts timestamptz := now();
+  new_id uuid;
+begin
+  perform public.xm_require_admin();
+  if not exists (select 1 from public.xm_stores where outlet_id = p_outlet and is_active) then
+    raise exception 'That store is not in X Metrics yet';
+  end if;
+
+  if p_lines is null or jsonb_typeof(p_lines) <> 'array' or jsonb_array_length(p_lines) = 0 then
+    raise exception 'Count at least one product';
+  end if;
+  if jsonb_array_length(p_lines) > 500 then
+    raise exception 'Too many lines in one count';
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(p_lines) l
+    where not exists (select 1 from public.products p
+                      where p.id::text = l->>'product_id' and p.is_active)
+       or jsonb_typeof(l->'on_shelf') <> 'number' or jsonb_typeof(l->'in_backroom') <> 'number'
+       or (l->>'on_shelf')::numeric <> trunc((l->>'on_shelf')::numeric)
+       or (l->>'in_backroom')::numeric <> trunc((l->>'in_backroom')::numeric)
+       or (l->>'on_shelf')::numeric not between 0 and 1000000
+       or (l->>'in_backroom')::numeric not between 0 and 1000000
+       or length(coalesce(l->>'batch', '')) > 60
+  ) then
+    raise exception 'Every line needs a product, and whole numbers from 0 up';
+  end if;
+  if (select count(distinct (l->>'product_id') || '|' || lower(btrim(coalesce(l->>'batch', ''))))
+      from jsonb_array_elements(p_lines) l) <> jsonb_array_length(p_lines) then
+    raise exception 'A product and batch appears twice in the count';
+  end if;
+
+  insert into public.xm_counts
+    (outlet_id, user_id, count_date, captured_at, source, is_opening)
+  values
+    (p_outlet, auth.uid(), (now_ts at time zone 'Africa/Lagos')::date, now_ts, 'office',
+     not exists (select 1 from public.xm_counts c where c.outlet_id = p_outlet and c.voided_at is null))
+  returning id into new_id;
+
+  insert into public.xm_count_lines (count_id, product_id, batch, expiry_date, on_shelf, in_backroom)
+  select new_id, (l->>'product_id')::uuid, btrim(coalesce(l->>'batch', '')),
+         nullif(l->>'expiry_date', '')::date,
+         (l->>'on_shelf')::integer, (l->>'in_backroom')::integer
+  from jsonb_array_elements(p_lines) l;
+
+  return new_id;
+end;
 $$;
 
 
@@ -9281,7 +9518,13 @@ CREATE TABLE public.messages (
     sender_id uuid,
     body text NOT NULL,
     created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
-    CONSTRAINT messages_body_check CHECK (((length(btrim(body)) >= 1) AND (length(btrim(body)) <= 2000)))
+    attachment_path text,
+    attachment_name text,
+    attachment_mime text,
+    attachment_size_bytes integer,
+    attachment_kind text,
+    CONSTRAINT messages_attachment_check CHECK ((((attachment_path IS NULL) AND (attachment_name IS NULL) AND (attachment_mime IS NULL) AND (attachment_size_bytes IS NULL) AND (attachment_kind IS NULL)) OR ((attachment_path IS NOT NULL) AND (attachment_name IS NOT NULL) AND (attachment_mime IS NOT NULL) AND ((attachment_size_bytes >= 1) AND (attachment_size_bytes <= 10485760)) AND (attachment_kind = ANY (ARRAY['image'::text, 'pdf'::text]))))),
+    CONSTRAINT messages_body_check CHECK (((length(btrim(body)) <= 2000) AND ((length(btrim(body)) >= 1) OR (attachment_path IS NOT NULL))))
 );
 
 
@@ -9640,6 +9883,20 @@ CREATE TABLE public.schedule_overrides (
     created_by uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     CONSTRAINT schedule_overrides_note_check CHECK ((length(note) <= 300))
+);
+
+
+--
+-- Name: sign_in_lockouts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.sign_in_lockouts (
+    lock_key text NOT NULL,
+    failed_count integer DEFAULT 0 NOT NULL,
+    first_failed_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_failed_at timestamp with time zone DEFAULT now() NOT NULL,
+    locked_until timestamp with time zone,
+    lock_count integer DEFAULT 0 NOT NULL
 );
 
 
@@ -10048,16 +10305,24 @@ CREATE TABLE public.xm_counts (
     count_date date NOT NULL,
     captured_at timestamp with time zone NOT NULL,
     created_at timestamp with time zone DEFAULT clock_timestamp() NOT NULL,
-    lat double precision NOT NULL,
-    lng double precision NOT NULL,
-    accuracy_m double precision NOT NULL,
+    lat double precision,
+    lng double precision,
+    accuracy_m double precision,
     distance_m double precision,
-    photo_path text NOT NULL,
+    photo_path text,
     is_opening boolean DEFAULT false NOT NULL,
     reconciled_at timestamp with time zone,
     voided_at timestamp with time zone,
     voided_by uuid,
     void_reason text,
+    source text DEFAULT 'field'::text NOT NULL,
+    CONSTRAINT xm_counts_source_check CHECK ((source = ANY (ARRAY['field'::text, 'office'::text]))),
+    CONSTRAINT xm_counts_source_shape_check CHECK (
+CASE source
+    WHEN 'field'::text THEN ((lat IS NOT NULL) AND (lng IS NOT NULL) AND (accuracy_m IS NOT NULL) AND (photo_path IS NOT NULL))
+    WHEN 'office'::text THEN ((lat IS NULL) AND (lng IS NULL) AND (accuracy_m IS NULL) AND (distance_m IS NULL) AND (photo_path IS NULL))
+    ELSE false
+END),
     CONSTRAINT xm_counts_void_reason_check CHECK (((void_reason IS NULL) OR ((length(btrim(void_reason)) >= 3) AND (length(btrim(void_reason)) <= 300))))
 );
 
@@ -10930,6 +11195,14 @@ ALTER TABLE ONLY public.scheduled_notifications
 
 
 --
+-- Name: sign_in_lockouts sign_in_lockouts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sign_in_lockouts
+    ADD CONSTRAINT sign_in_lockouts_pkey PRIMARY KEY (lock_key);
+
+
+--
 -- Name: staff_outlets staff_outlets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -11095,14 +11368,6 @@ ALTER TABLE ONLY public.xm_count_lines
 
 ALTER TABLE ONLY public.xm_count_lines
     ADD CONSTRAINT xm_count_lines_pkey PRIMARY KEY (id);
-
-
---
--- Name: xm_counts xm_counts_photo_path_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.xm_counts
-    ADD CONSTRAINT xm_counts_photo_path_key UNIQUE (photo_path);
 
 
 --
@@ -11587,6 +11852,13 @@ CREATE INDEX scheduled_notifications_due ON public.scheduled_notifications USING
 
 
 --
+-- Name: sign_in_lockouts_last; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX sign_in_lockouts_last ON public.sign_in_lockouts USING btree (last_failed_at);
+
+
+--
 -- Name: staff_outlets_by_outlet; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -11745,6 +12017,13 @@ CREATE INDEX xm_counts_by_store ON public.xm_counts USING btree (outlet_id, coun
 --
 
 CREATE INDEX xm_counts_by_user ON public.xm_counts USING btree (user_id, count_date);
+
+
+--
+-- Name: xm_counts_photo_path_uniq; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX xm_counts_photo_path_uniq ON public.xm_counts USING btree (photo_path) WHERE (photo_path IS NOT NULL);
 
 
 --
@@ -13843,6 +14122,12 @@ CREATE POLICY scheduled_notifications_read ON public.scheduled_notifications FOR
 
 
 --
+-- Name: sign_in_lockouts; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.sign_in_lockouts ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: staff_outlets; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -14522,6 +14807,15 @@ GRANT ALL ON FUNCTION public.can_send_notifications() TO service_role;
 
 
 --
+-- Name: FUNCTION can_unlock_sign_in(p_user uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.can_unlock_sign_in(p_user uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.can_unlock_sign_in(p_user uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.can_unlock_sign_in(p_user uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION can_visit_stores(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -15008,6 +15302,14 @@ GRANT ALL ON FUNCTION public.live_locations() TO service_role;
 
 
 --
+-- Name: FUNCTION locked_accounts(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.locked_accounts() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.locked_accounts() TO authenticated;
+
+
+--
 -- Name: FUNCTION log_location_block(p_reason text, p_accuracy_m double precision); Type: ACL; Schema: public; Owner: -
 --
 
@@ -15120,6 +15422,14 @@ GRANT ALL ON FUNCTION public.my_staff() TO service_role;
 REVOKE ALL ON FUNCTION public.my_store_visits() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.my_store_visits() TO authenticated;
 GRANT ALL ON FUNCTION public.my_store_visits() TO service_role;
+
+
+--
+-- Name: FUNCTION my_supervisor(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.my_supervisor() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.my_supervisor() TO authenticated;
 
 
 --
@@ -15722,11 +16032,11 @@ GRANT ALL ON FUNCTION public.selfie_retention_status() TO service_role;
 
 
 --
--- Name: FUNCTION send_message(p_staff uuid, p_body text); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION send_message(p_staff uuid, p_body text, p_attachment jsonb); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.send_message(p_staff uuid, p_body text) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.send_message(p_staff uuid, p_body text) TO authenticated;
+REVOKE ALL ON FUNCTION public.send_message(p_staff uuid, p_body text, p_attachment jsonb) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.send_message(p_staff uuid, p_body text, p_attachment jsonb) TO authenticated;
 
 
 --
@@ -15787,6 +16097,30 @@ GRANT ALL ON FUNCTION public.shift_end_for(p_user uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.shift_start_for(p_user uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.shift_start_for(p_user uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.shift_start_for(p_user uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION sign_in_failed(p_key text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.sign_in_failed(p_key text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.sign_in_failed(p_key text) TO service_role;
+
+
+--
+-- Name: FUNCTION sign_in_lock_status(p_key text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.sign_in_lock_status(p_key text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.sign_in_lock_status(p_key text) TO service_role;
+
+
+--
+-- Name: FUNCTION sign_in_succeeded(p_key text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.sign_in_succeeded(p_key text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.sign_in_succeeded(p_key text) TO service_role;
 
 
 --
@@ -15914,6 +16248,14 @@ REVOKE ALL ON FUNCTION public.touch_updated_at() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.tracking_coverage(p_user uuid, p_date date) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.tracking_coverage(p_user uuid, p_date date) TO authenticated;
 GRANT ALL ON FUNCTION public.tracking_coverage(p_user uuid, p_date date) TO service_role;
+
+
+--
+-- Name: FUNCTION unlock_sign_in(p_user uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.unlock_sign_in(p_user uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.unlock_sign_in(p_user uuid) TO authenticated;
 
 
 --
@@ -16070,6 +16412,15 @@ GRANT ALL ON FUNCTION public.xm_month_grades(p_month date) TO service_role;
 REVOKE ALL ON FUNCTION public.xm_my_store_batches() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.xm_my_store_batches() TO authenticated;
 GRANT ALL ON FUNCTION public.xm_my_store_batches() TO service_role;
+
+
+--
+-- Name: FUNCTION xm_office_count(p_outlet uuid, p_lines jsonb); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.xm_office_count(p_outlet uuid, p_lines jsonb) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.xm_office_count(p_outlet uuid, p_lines jsonb) TO authenticated;
+GRANT ALL ON FUNCTION public.xm_office_count(p_outlet uuid, p_lines jsonb) TO service_role;
 
 
 --

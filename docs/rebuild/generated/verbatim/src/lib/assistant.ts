@@ -107,14 +107,18 @@ Doing things on the dashboard: when the user asks you to do something rather tha
 - propose_flag_review: mark integrity flags as reviewed, with a note (F… references from integrity_flags).
 - propose_sales_target (admins): set a person's or store's X Metrics sales target for a month.
 - propose_outlet_hours (admins): set a store's clock-in and clock-out times. The store (S…) comes from match_names. Convert any time the user says to 24-hour HH:MM (9am is 09:00, 6pm is 18:00). The clock-in time is what decides who counts as late.
+- propose_schedule: set the weekly work schedule (the days worked) for merchandisers or marketers, by name (P…) or as a group. Days are weekday numbers, Sunday 0 to Saturday 6, so "Monday to Friday" is [1,2,3,4,5] and "Monday to Saturday" is [1,2,3,4,5,6]. Days not listed are days off, when they are not counted absent.
 - propose_xmetrics_store (admins): add a store to X Metrics or take it out.
+- propose_stock_count (admins): record an office stock count for a store, from what the user typed or a document they attached. Read every product with its on-shelf and backroom units (0 for none) and its batch and expiry where given. It counts in X Metrics like a count from the store. Use this for "record/enter the stock for S…", "here is the count sheet", a photo or file of a stock take.
+- propose_supply (admins): log a delivery to a store, from what the user typed or a document they attached, with the date and each product's units (and batch and expiry where given). Use this for "we delivered…", "log the supply", a delivery note or invoice.
+- When a user attaches a count sheet, stock take, delivery note or invoice, read it and fill the lines yourself; ask only if a product, a number or the store is missing or unclear. Give the product names exactly as written; the dashboard matches them.
 - propose_deactivate: stop someone signing in (their records are kept).
 - open_page: give the user a button to a dashboard page, filtered to the person and dates (for "show me", "take me to", "open"). Opening a page changes nothing, so no Apply is needed.
 People and stores always come from match_names first (P… and S… references); never guess one. If a name is ambiguous, ask which one. If the request is unclear (no date, no message), ask rather than invent it; for a notification, you may write the title and message yourself from what the user said, keeping their meaning. Propose each action once. After proposing, reply in one or two sentences: what the card will do and that nothing happens until they press its button. Only admins can do the admin-marked ones; say so to a supervisor. Things you cannot do (delete records, change passwords, change roles, change a store's name, location or geofence): say so and give an open_page button to where they can.
 
 More you can read: integrity_risk (who to look at first among the integrity flags, and why, in one sentence each), location_alerts (someone left their store on shift, clocked in away from it, or switched location off), support_threads (issues staff raised in the app; "escalated" ones are waiting for an office reply), notifications_sent (what the office sent and how many phones it reached), x_metrics (a month's units sold against target per enrolled store and person, stock counts that did not add up, and open expiry alerts) and store_coverage (which allocated stores each person visited in a range, and which no one visited). For "who should I worry about" or "who is cheating", start with integrity_risk and give each person's reason. When an answer names a person and a day, offer an open_page button to their movement or the excuse check when it would help.
 
-Everyone has a work schedule (days on and days off; Monday to Saturday unless changed) and may have approved leave. Never call someone absent, or say they did not come, on a day off or a day of approved leave: say it was their day off or that they were on leave. Only a working day with no clock-in is an absence.
+Everyone has a work schedule (days on and days off; Monday to Saturday unless changed) and may have approved leave. Never call someone absent, or say they did not come, on a day off or a day of approved leave: say it was their day off or that they were on leave. Only a working day with no clock-in is an absence. You can set or change a merchandiser's or marketer's schedule with propose_schedule.
 
 Resolve relative dates ("today", "yesterday", "last Monday", "this week", "last month") against today's date, given below, and pass them as YYYY-MM-DD. A week runs Monday to Sunday.
 
@@ -535,6 +539,90 @@ const tools: Anthropic.Beta.BetaTool[] = [
     },
   },
   {
+    name: 'propose_schedule',
+    description:
+      "Proposes a weekly work schedule (the days worked) for merchandisers or marketers. Give either people (P… references from match_names) or a group, and days as weekday numbers: 0 = Sunday, 1 = Monday … 6 = Saturday. So Monday to Friday is [1,2,3,4,5] and Monday to Saturday (the default) is [1,2,3,4,5,6]. Days not listed are days off: on them the person is not counted absent and gets no clock-in reminder.",
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        group: {
+          type: 'string',
+          enum: ['people', 'all_merchandisers', 'all_marketers', 'all_field'],
+          description: "'people' with the people list, or a whole group.",
+        },
+        people: { ...nameList, description: 'P… references, for group "people". Otherwise empty.' },
+        days: {
+          type: 'array',
+          items: { type: 'integer', minimum: 0, maximum: 6 },
+          description: 'Weekdays worked: 0 = Sunday … 6 = Saturday.',
+        },
+      },
+      required: ['group', 'people', 'days'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_stock_count',
+    description:
+      "Admins only. Proposes an office stock count for a store (S…) in X Metrics, from what the user typed or a document they attached. Give every product counted with its name and the units on the shelf and in the backroom (use 0 for none), plus the batch and expiry date where the user gives them. It is recorded in the admin's name and counts in X Metrics (stock on hand, expiry alerts, reconciliation) like a count sent from the store. Use the product name exactly as the user wrote it; the dashboard matches it to the product list.",
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        store: { type: 'string', description: 'An S… reference from match_names.' },
+        lines: {
+          type: 'array',
+          description: 'One per product counted.',
+          items: {
+            type: 'object',
+            properties: {
+              product: { type: 'string', description: 'The product name, as the user wrote it.' },
+              on_shelf: { type: 'integer', minimum: 0, description: 'Units on the shelf (0 if none).' },
+              in_backroom: { type: 'integer', minimum: 0, description: 'Units in the backroom (0 if none).' },
+              batch: { type: 'string', description: 'The batch or lot, or "" if none given.' },
+              expiry_date: { type: ['string', 'null'], description: 'YYYY-MM-DD, or null if none given.' },
+            },
+            required: ['product', 'on_shelf', 'in_backroom', 'batch', 'expiry_date'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['store', 'lines'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'propose_supply',
+    description:
+      "Admins only. Proposes logging a delivery to a store (S…) in X Metrics, from what the user typed or a document they attached. Give the delivery date and every product delivered with its name, the units, and the batch and expiry date where given. Use the product name exactly as the user wrote it; the dashboard matches it to the product list.",
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        store: { type: 'string', description: 'An S… reference from match_names.' },
+        supplied_on: { type: 'string', description: 'The delivery date, YYYY-MM-DD (today if not said).' },
+        lines: {
+          type: 'array',
+          description: 'One per product delivered.',
+          items: {
+            type: 'object',
+            properties: {
+              product: { type: 'string', description: 'The product name, as the user wrote it.' },
+              quantity: { type: 'integer', minimum: 1, description: 'Units delivered.' },
+              batch: { type: 'string', description: 'The batch or lot, or "" if none given.' },
+              expiry_date: { type: ['string', 'null'], description: 'YYYY-MM-DD, or null if none given.' },
+            },
+            required: ['product', 'quantity', 'batch', 'expiry_date'],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ['store', 'supplied_on', 'lines'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'propose_deactivate',
     description: 'Proposes deactivating a person (P…): they can no longer sign in; their records are kept.',
     strict: true,
@@ -588,6 +676,9 @@ const PROPOSE: Record<string, keyof ActionBuilder> = {
   propose_sales_target: 'salesTarget',
   propose_xmetrics_store: 'xmStore',
   propose_outlet_hours: 'outletHours',
+  propose_schedule: 'workPattern',
+  propose_stock_count: 'stockCount',
+  propose_supply: 'supply',
   propose_deactivate: 'deactivate',
 }
 

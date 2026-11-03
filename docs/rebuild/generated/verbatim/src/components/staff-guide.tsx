@@ -440,6 +440,15 @@ export function StaffGuide() {
               q: 'I forgot my password',
               a: <>Ask your supervisor or admin to reset it. You will choose a new one when you sign in.</>,
             },
+            {
+              q: 'It says my account is locked',
+              a: (
+                <>
+                  After 5 wrong passwords in a row, Xtend locks your account for 15 minutes to keep it safe.
+                  Wait, then try again with the right password, or ask your supervisor to unlock it sooner.
+                </>
+              ),
+            },
           ]}
         />
       </GuideSection>

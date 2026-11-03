@@ -16,6 +16,8 @@ grant update, delete on public.known_places to authenticated;
 -- On Supabase those defaults are granted when a table is made, and a
 -- migration's own revokes come after. Replay 026's in that order.
 revoke select on public.phone_checks from authenticated;
+-- 0077: sign-in locks are read and written by the server only.
+revoke all on public.sign_in_lockouts from authenticated;
 grant select (id, user_id, requested_by, devices, created_at, delivered_at, opened_at)
   on public.phone_checks to authenticated;
 
@@ -683,7 +685,7 @@ reset role;
 insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000a7', 'hr.rls@xpel.ng');
 insert into public.profiles (id, full_name, email, role)
 values ('00000000-0000-0000-0000-0000000000a7', 'HR Tester', 'hr.rls@xpel.ng', 'hr');
-grant execute on function public.send_message(uuid, text) to authenticated;
+grant execute on function public.send_message(uuid, text, jsonb) to authenticated;
 set role authenticated;
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a7', false);
@@ -720,6 +722,17 @@ end $$;
 reset role;
 delete from public.profiles where id = '00000000-0000-0000-0000-0000000000a7';
 delete from auth.users where id = '00000000-0000-0000-0000-0000000000a7';
+
+-- Sign-in lockout (0077): nobody signed in reads or writes the locks.
+reset role;
+insert into public.sign_in_lockouts (lock_key, failed_count, locked_until)
+values ('locked.rls@xpel.ng', 5, now() + interval '15 minutes');
+select assert(not has_table_privilege('authenticated', 'public.sign_in_lockouts', 'select')
+                and not has_table_privilege('authenticated', 'public.sign_in_lockouts', 'insert')
+                and not has_function_privilege('authenticated', 'public.sign_in_failed(text)', 'execute')
+                and not has_function_privilege('anon', 'public.sign_in_succeeded(text)', 'execute'),
+  'rls: sign-in locks are server only');
+delete from public.sign_in_lockouts;
 
 reset role;
 select 'ALL RLS CHECKS PASSED';

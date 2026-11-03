@@ -328,6 +328,16 @@ export default async function SupervisorGuidePage() {
                 a: <>Reset it on Staff. They choose a new one when they sign in.</>,
               },
               {
+                q: 'Someone is locked out',
+                a: (
+                  <>
+                    Five wrong passwords in a row lock an account for 15 minutes. Staff shows{' '}
+                    <Ui>Locked until</Ui> and the time; press <Ui>Unlock</Ui> to let them in now, or{' '}
+                    <Ui>Reset password</Ui> if they have forgotten it (that unlocks it too).
+                  </>
+                ),
+              },
+              {
                 q: 'Someone left the company',
                 a: <>Deactivate them on Staff. Their history stays.</>,
               },

@@ -41,7 +41,7 @@ export default async function UsersPage({
 
   // Who has notifications on: clocking in needs them (migration 027).
   const ids = ((staff ?? []) as Profile[]).map((p) => p.id)
-  const [{ data: addedRoles }, photoMap, notified] = await Promise.all([
+  const [{ data: addedRoles }, photoMap, notified, { data: lockedRows }] = await Promise.all([
     supabase.from('staff_roles').select('id, name, base_role, is_active').order('name'),
     avatarUrls(supabase, ids),
     (async () => {
@@ -61,8 +61,13 @@ export default async function UsersPage({
       }
       return result
     })(),
+    // Accounts locked after five wrong passwords (0077), for the people shown.
+    supabase.rpc('locked_accounts'),
   ])
   const photos = Object.fromEntries(photoMap)
+  const locked = Object.fromEntries(
+    ((lockedRows ?? []) as { user_id: string; locked_until: string }[]).map((r) => [r.user_id, r.locked_until]),
+  )
 
   return (
     <div className="space-y-5">
@@ -102,6 +107,7 @@ export default async function UsersPage({
         isAdmin={isAdmin}
         isHr={isHr}
         notified={notified}
+        locked={locked}
         supervisors={(supervisors ?? []) as { id: string; full_name: string; role: string }[]}
         initialSearch={typeof q === 'string' ? q.slice(0, 80) : ''}
         startCreating={startNew === '1'}
