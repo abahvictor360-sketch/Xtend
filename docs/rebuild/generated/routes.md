@@ -1283,6 +1283,8 @@ A random token for a phone or computer that has signed in before (0077).
 const schema = z.object({
   identifier: z.string().trim().min(3).max(120),
   password: z.string().min(1).max(200),
+  // Cloudflare Turnstile's token, when the human check is switched on.
+  turnstile: z.string().max(2048).optional(),
 })
 ```
 

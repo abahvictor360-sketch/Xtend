@@ -239,6 +239,28 @@ changes (Google loads or fails, OpenStreetMap tiles fail or load).
 
 Exports: `GoogleStatus`, `BaseChoice`, `GoogleType`, `GOOGLE_LOAD_TIMEOUT_MS`, `GOOGLE_TILE_TIMEOUT_MS`, `GOOGLE_GRACE_MS`, `OSM_ERROR_LIMIT`, `BaseMapState`, `osmUnreachable`, `chooseBaseMap`, `baseMapLabel`
 
+## `src/lib/bot-guard.ts`
+
+Xtend is a private staff app: nothing in it is for search engines, AI
+crawlers, scrapers or scripts. The middleware asks `botDecision` about
+every request it sees and answers 403 when the user agent is empty or
+looks like one of those.
+
+A user agent is easy to fake, so this only turns away the honest and
+the lazy; the password check, the sign-in lockout (0077), the optional
+human check (Turnstile) and the platform's firewall do the rest.
+
+Never blocked, whatever they send:
+- the scheduled jobs (`/api/cron/*`, which need CRON_SECRET; called by
+  curl, `node run-job.mjs` and Vercel's cron);
+- the phone's background tracker (`/api/track/*`, which needs its own
+  token; old app builds send Java's or iOS's default user agent);
+- health and version checks (`/api/health`, `/api/version`: Docker's
+  HEALTHCHECK, deploy.sh, uptime monitors);
+- static files and `robots.txt` (a crawler must be able to read it).
+
+Exports: `OPEN_PATH_PREFIXES`, `OPEN_FILES`, `BOT_AGENT_PATTERNS`, `BotDecision`, `isOpenPath`, `isBotUserAgent`, `botDecision`, `BOT_BLOCKED_BODY`
+
 ## `src/lib/chart-colours.ts`
 
 What each kind of day is drawn in.
@@ -1061,6 +1083,16 @@ who is not a supervisor or an admin as the supervisor.
 
 Exports: `assignSupervisor`
 
+## `src/lib/turnstile.ts`
+
+Cloudflare Turnstile: an optional "are you human?" check on the sign-in
+form, against bots trying passwords. It is on only when both keys are
+set (NEXT_PUBLIC_TURNSTILE_SITE_KEY for the form, TURNSTILE_SECRET_KEY
+for the server); without them sign-in works exactly as before. The
+widget runs in "managed" mode, so most people never see a puzzle.
+
+Exports: `TURNSTILE_VERIFY_URL`, `TURNSTILE_SCRIPT_URL`, `TURNSTILE_ERROR`, `turnstileEnabled`, `turnstileSiteKey`, `TurnstileResult`, `parseSiteverify`, `verifyTurnstile`
+
 ## `src/lib/types.ts`
 
 Null while the store waits for its location (migration 034).
@@ -1809,6 +1841,12 @@ Exports: `PolicyReadButton`, `XmMyScore`
 Jump links to each section, as chips that wrap.
 
 Exports: `GuideTopic`, `GuideContents`, `GuideSection`, `Steps`, `Tip`, `Questions`, `Ui`, `GuideShot`
+
+## `src/components/human-check.tsx`
+
+Loads Cloudflare's script once; a failed load can be tried again.
+
+Exports: `HumanCheckHandle`, `HumanCheck`
 
 ## `src/components/messages/conversation.tsx`
 

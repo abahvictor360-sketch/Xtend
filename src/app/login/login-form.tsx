@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowRight, Eye, EyeOff } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -8,8 +8,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Alert } from '@/components/ui/alert'
 import { loginDestination } from '@/lib/login-destination'
+import { HumanCheck, type HumanCheckHandle } from '@/components/human-check'
+import { TURNSTILE_ERROR } from '@/lib/turnstile'
 
-export function LoginForm() {
+/** `humanCheckKey`: Turnstile's site key when the human check is on. */
+export function LoginForm({ humanCheckKey }: { humanCheckKey?: string }) {
   const router = useRouter()
   const params = useSearchParams()
   const [identifier, setIdentifier] = useState('')
@@ -17,9 +20,15 @@ export function LoginForm() {
   const [show, setShow] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  const [humanToken, setHumanToken] = useState<string | null>(null)
+  const humanCheck = useRef<HumanCheckHandle>(null)
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault()
+    if (humanCheckKey && !humanToken) {
+      setError(TURNSTILE_ERROR)
+      return
+    }
     setBusy(true)
     setError(null)
 
@@ -29,8 +38,10 @@ export function LoginForm() {
       const res = await fetch('/api/auth/sign-in', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier, password }),
+        body: JSON.stringify({ identifier, password, ...(humanToken ? { turnstile: humanToken } : {}) }),
       })
+      // A check token works once: get a fresh one for the next try.
+      if (humanCheckKey) humanCheck.current?.reset()
       if (!res.ok) {
         const { error: message } = (await res.json().catch(() => ({}))) as { error?: string }
         setError(message ?? 'Those details are not correct.')
@@ -89,6 +100,8 @@ export function LoginForm() {
           </button>
         </div>
       </div>
+
+      {humanCheckKey && <HumanCheck ref={humanCheck} siteKey={humanCheckKey} onToken={setHumanToken} />}
 
       <Button type="submit" size="xl" className="w-full" disabled={busy}>
         {busy ? 'Signing in…' : 'Sign in'}

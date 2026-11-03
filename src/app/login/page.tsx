@@ -6,6 +6,7 @@ import { LoginForm } from '@/app/login/login-form'
 import { Skeleton } from '@/components/ui/skeleton'
 import { XpelLockup, XpelTile } from '@/components/brand/logo'
 import { isAppUserAgent } from '@/lib/app-agent'
+import { turnstileSiteKey } from '@/lib/turnstile'
 
 export const metadata = { title: 'Sign in — Xtend' }
 
@@ -22,6 +23,8 @@ export default async function LoginPage({
   const reason = (await searchParams).reason
   const notice = typeof reason === 'string' ? REASONS[reason] : undefined
   const inApp = isAppUserAgent((await headers()).get('user-agent'))
+  // The human check (Turnstile) shows only when both of its keys are set.
+  const humanCheckKey = turnstileSiteKey()
 
   return (
     <main className="relative flex min-h-dvh flex-col overflow-hidden">
@@ -48,7 +51,7 @@ export default async function LoginPage({
           )}
 
           <Suspense fallback={<Skeleton className="h-64 w-full" />}>
-            <LoginForm />
+            <LoginForm humanCheckKey={humanCheckKey} />
           </Suspense>
 
           {!inApp && (

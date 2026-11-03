@@ -50,6 +50,7 @@ environment variables):
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | the anon (publishable) key |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY` | web push public key |
 | `NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY` | optional; restrict it to your domain in Google Cloud |
+| `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | optional; the human check on sign-in (Cloudflare Turnstile), with `TURNSTILE_SECRET_KEY` in the environment |
 
 The build stops with a clear message if the first two are missing.
 
@@ -71,6 +72,16 @@ their address. If you turn Cloudflare's proxy (orange cloud) on, Traefik
 would see only Cloudflare: first add Cloudflare's address ranges to
 Traefik's entry point `forwardedHeaders.trustedIPs` (Dokploy: Traefik file
 system → `traefik.yml`; Coolify: Proxy configuration), then set `2`.
+
+**Bots.** Xtend already refuses crawlers, scrapers and scripts itself
+(`docs/BUILD_GUIDE.md` §4.8). For more, put Cloudflare's proxy in front as
+above and turn on **Security → Bots → Bot Fight Mode**. The scheduled jobs
+run inside the container (`node run-job.mjs`), so Cloudflare never sees
+them; if the GitHub Actions alerts job still calls the site with curl and
+starts getting 403, add a WAF skip rule for `/api/cron/` and `/api/track/`.
+For the human check on sign-in, create a Turnstile widget (Cloudflare →
+Turnstile → Add site, Managed) and set `NEXT_PUBLIC_TURNSTILE_SITE_KEY`
+(build argument and environment) and `TURNSTILE_SECRET_KEY` (environment).
 
 ## 5. Scheduled jobs
 
