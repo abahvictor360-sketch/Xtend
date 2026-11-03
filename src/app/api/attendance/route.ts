@@ -22,7 +22,7 @@ const schema = z.object({
   place_source: z.enum(['outlet', 'known', 'google', 'osm', 'coordinates']).nullable().optional(),
   selfie_path: z.string().min(1).max(300),
   thumb_path: z.string().min(1).max(300).nullable().optional(),
-  device_info: z.record(z.unknown()).default({}),
+  device_info: z.record(z.string(), z.unknown()).default({}),
   client_captured_at: z.string().datetime({ offset: true }),
 })
 

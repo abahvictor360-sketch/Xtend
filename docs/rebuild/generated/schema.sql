@@ -3389,15 +3389,16 @@ $$;
 -- Name: locked_accounts(); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.locked_accounts() RETURNS TABLE(user_id uuid, locked_until timestamp with time zone)
+CREATE FUNCTION public.locked_accounts() RETURNS TABLE(user_id uuid, locked_until timestamp with time zone, whole_account boolean)
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
-  select p.id, l.locked_until
+  select p.id, max(l.locked_until), bool_or(l.scope = 'account')
   from public.sign_in_lockouts l
-  join public.profiles p on lower(p.email) = l.lock_key
+  join public.profiles p on lower(p.email) = l.account
   where l.locked_until > now()
-    and (public.is_admin() or public.supervises_user(p.id) or public.hr_sees(p.id));
+    and (public.is_admin() or public.supervises_user(p.id) or public.hr_sees(p.id))
+  group by p.id;
 $$;
 
 
@@ -6849,73 +6850,154 @@ $$;
 
 
 --
--- Name: sign_in_failed(text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: sign_in_bump(text, text, text, integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.sign_in_failed(p_key text) RETURNS timestamp with time zone
+CREATE FUNCTION public.sign_in_bump(p_key text, p_account text, p_scope text, p_limit integer) RETURNS void
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
 declare
-  k text := lower(btrim(coalesce(p_key, '')));
   r public.sign_in_lockouts;
 begin
-  if k = '' then
-    return null;
-  end if;
-  delete from public.sign_in_lockouts
-  where last_failed_at < now() - interval '1 day' and coalesce(locked_until, now()) <= now();
-
-  insert into public.sign_in_lockouts (lock_key) values (k)
+  insert into public.sign_in_lockouts (lock_key, account, scope) values (p_key, p_account, p_scope)
   on conflict (lock_key) do nothing;
-  select * into r from public.sign_in_lockouts where lock_key = k for update;
-
+  select * into r from public.sign_in_lockouts where lock_key = p_key for update;
   if r.locked_until > now() then
-    return r.locked_until;
+    return; -- tries while paused do not extend the pause
   end if;
-  -- A fresh run of tries after 15 quiet minutes, or after a lock ran out.
+  -- A fresh run after 15 quiet minutes, or after a pause ran out.
   if r.first_failed_at < now() - interval '15 minutes' or r.locked_until is not null then
     r.failed_count := 0;
     r.first_failed_at := now();
     r.locked_until := null;
   end if;
   r.failed_count := r.failed_count + 1;
-  if r.failed_count >= 5 then
+  if r.failed_count >= p_limit then
     r.locked_until := now() + interval '15 minutes';
     r.lock_count := r.lock_count + 1;
   end if;
-
   update public.sign_in_lockouts
      set failed_count = r.failed_count, first_failed_at = r.first_failed_at,
          last_failed_at = now(), locked_until = r.locked_until, lock_count = r.lock_count
-   where lock_key = k;
-  return r.locked_until;
+   where lock_key = p_key;
 end;
 $$;
 
 
 --
--- Name: sign_in_lock_status(text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: sign_in_clear(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.sign_in_lock_status(p_key text) RETURNS timestamp with time zone
-    LANGUAGE sql STABLE SECURITY DEFINER
+CREATE FUNCTION public.sign_in_clear(p_account text) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
-  select locked_until from public.sign_in_lockouts
-  where lock_key = lower(btrim(p_key)) and locked_until > now();
+declare
+  removed integer;
+begin
+  delete from public.sign_in_lockouts where account = lower(btrim(p_account));
+  get diagnostics removed = row_count;
+  return removed;
+end;
 $$;
 
 
 --
--- Name: sign_in_succeeded(text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: sign_in_device_key(text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.sign_in_succeeded(p_key text) RETURNS void
-    LANGUAGE sql SECURITY DEFINER
+CREATE FUNCTION public.sign_in_device_key(p_account text, p_address text, p_device text) RETURNS text
+    LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
-  delete from public.sign_in_lockouts where lock_key = lower(btrim(p_key));
+  select lower(btrim(p_account)) || '#'
+         || case when public.sign_in_known_device(p_account, p_device) then 'dev:' || p_device
+                 else 'ip:' || coalesce(nullif(btrim(p_address), ''), 'unknown') end;
+$$;
+
+
+--
+-- Name: sign_in_failed(text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sign_in_failed(p_account text, p_address text, p_device text) RETURNS timestamp with time zone
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  acct text := lower(btrim(coalesce(p_account, '')));
+  known boolean;
+begin
+  if acct = '' then
+    return null;
+  end if;
+  delete from public.sign_in_lockouts
+  where last_failed_at < now() - interval '1 day' and coalesce(locked_until, now()) <= now();
+
+  known := public.sign_in_known_device(acct, p_device);
+  perform public.sign_in_bump(public.sign_in_device_key(acct, p_address, p_device), acct,
+                              case when known then 'device' else 'address' end, 5);
+  if not known then
+    perform public.sign_in_bump(acct || '#account', acct, 'account', 20);
+  end if;
+  return public.sign_in_lock_status(acct, p_address, p_device);
+end;
+$$;
+
+
+--
+-- Name: sign_in_known_device(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sign_in_known_device(p_account text, p_device text) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select p_device is not null and exists (
+    select 1 from public.sign_in_trusted_devices
+    where account = lower(btrim(p_account)) and device_hash = p_device);
+$$;
+
+
+--
+-- Name: sign_in_lock_status(text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sign_in_lock_status(p_account text, p_address text, p_device text) RETURNS timestamp with time zone
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select max(l.locked_until)
+  from public.sign_in_lockouts l
+  where l.locked_until > now()
+    and (l.lock_key = public.sign_in_device_key(p_account, p_address, p_device)
+         or (l.lock_key = lower(btrim(p_account)) || '#account'
+             and not public.sign_in_known_device(p_account, p_device)));
+$$;
+
+
+--
+-- Name: sign_in_succeeded(text, text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sign_in_succeeded(p_account text, p_address text, p_device text, p_new_device text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  acct text := lower(btrim(coalesce(p_account, '')));
+begin
+  delete from public.sign_in_lockouts
+  where lock_key in (public.sign_in_device_key(acct, p_address, p_device),
+                     acct || '#ip:' || coalesce(nullif(btrim(p_address), ''), 'unknown'));
+  if p_new_device is not null then
+    insert into public.sign_in_trusted_devices (account, device_hash) values (acct, p_new_device)
+    on conflict (account, device_hash) do update set last_ok_at = now();
+  end if;
+  -- Devices unused for 180 days are forgotten.
+  delete from public.sign_in_trusted_devices where last_ok_at < now() - interval '180 days';
+end;
 $$;
 
 
@@ -7649,18 +7731,18 @@ CREATE FUNCTION public.unlock_sign_in(p_user uuid) RETURNS boolean
     SET search_path TO 'public'
     AS $$
 declare
+  was_locked boolean;
   addr text;
-  removed integer;
 begin
   if not public.can_unlock_sign_in(p_user) then
     raise exception 'You can only unlock your own team';
   end if;
   select lower(email) into addr from public.profiles where id = p_user;
-  delete from public.sign_in_lockouts where lock_key = addr;
-  get diagnostics removed = row_count;
+  was_locked := exists (select 1 from public.sign_in_lockouts where account = addr and locked_until > now());
+  perform public.sign_in_clear(addr);
   insert into public.audit_log (actor_id, action, target_table, target_id, meta)
-  values (auth.uid(), 'user.unlock', 'profiles', p_user, jsonb_build_object('was_locked', removed > 0));
-  return removed > 0;
+  values (auth.uid(), 'user.unlock', 'profiles', p_user, jsonb_build_object('was_locked', was_locked));
+  return was_locked;
 end;
 $$;
 
@@ -9892,11 +9974,27 @@ CREATE TABLE public.schedule_overrides (
 
 CREATE TABLE public.sign_in_lockouts (
     lock_key text NOT NULL,
+    account text NOT NULL,
+    scope text NOT NULL,
     failed_count integer DEFAULT 0 NOT NULL,
     first_failed_at timestamp with time zone DEFAULT now() NOT NULL,
     last_failed_at timestamp with time zone DEFAULT now() NOT NULL,
     locked_until timestamp with time zone,
-    lock_count integer DEFAULT 0 NOT NULL
+    lock_count integer DEFAULT 0 NOT NULL,
+    CONSTRAINT sign_in_lockouts_scope_check CHECK ((scope = ANY (ARRAY['device'::text, 'address'::text, 'account'::text])))
+);
+
+
+--
+-- Name: sign_in_trusted_devices; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.sign_in_trusted_devices (
+    account text NOT NULL,
+    device_hash text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_ok_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT sign_in_trusted_devices_device_hash_check CHECK ((device_hash ~ '^[0-9a-f]{64}$'::text))
 );
 
 
@@ -11203,6 +11301,14 @@ ALTER TABLE ONLY public.sign_in_lockouts
 
 
 --
+-- Name: sign_in_trusted_devices sign_in_trusted_devices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sign_in_trusted_devices
+    ADD CONSTRAINT sign_in_trusted_devices_pkey PRIMARY KEY (account, device_hash);
+
+
+--
 -- Name: staff_outlets staff_outlets_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -11849,6 +11955,13 @@ CREATE INDEX schedule_overrides_by_day ON public.schedule_overrides USING btree 
 --
 
 CREATE INDEX scheduled_notifications_due ON public.scheduled_notifications USING btree (send_at) WHERE (status = 'scheduled'::text);
+
+
+--
+-- Name: sign_in_lockouts_account; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX sign_in_lockouts_account ON public.sign_in_lockouts USING btree (account);
 
 
 --
@@ -14128,6 +14241,12 @@ CREATE POLICY scheduled_notifications_read ON public.scheduled_notifications FOR
 ALTER TABLE public.sign_in_lockouts ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: sign_in_trusted_devices; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.sign_in_trusted_devices ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: staff_outlets; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -14643,6 +14762,13 @@ GRANT ALL ON FUNCTION public.assign_support_thread(p_thread uuid, p_assignee uui
 
 
 --
+-- Name: FUNCTION assistant_conversation_touch(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.assistant_conversation_touch() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION attendance_alert(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -14661,6 +14787,20 @@ REVOKE ALL ON FUNCTION public.attendance_enforce() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public.attendance_integrity() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION attendance_learn_waiting_store(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.attendance_learn_waiting_store() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION attendance_place_due(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.attendance_place_due() FROM PUBLIC;
 
 
 --
@@ -14697,6 +14837,13 @@ REVOKE ALL ON FUNCTION public.attendance_timing_flag() FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION public.audit_context_columns(p jsonb) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.audit_context_columns(p jsonb) TO service_role;
+
+
+--
+-- Name: FUNCTION audit_fill_context(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.audit_fill_context() FROM PUBLIC;
 
 
 --
@@ -15077,6 +15224,13 @@ GRANT ALL ON FUNCTION public.flag_own_integrity(p_kind text, p_severity text, p_
 --
 
 REVOKE ALL ON FUNCTION public.follow_active_count() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION follow_end_at_clock_out(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.follow_end_at_clock_out() FROM PUBLIC;
 
 
 --
@@ -15607,6 +15761,20 @@ REVOKE ALL ON FUNCTION public.ping_integrity() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION place_due_guard(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.place_due_guard() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION place_is_recognised(p_lat double precision, p_lng double precision); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.place_is_recognised(p_lat double precision, p_lng double precision) FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION post_support_message(p_thread uuid, p_body text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -15630,6 +15798,13 @@ REVOKE ALL ON FUNCTION public.profiles_staff_role_sync() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION profiles_supervisor_check(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.profiles_supervisor_check() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION purge_user_activity(p_days integer); Type: ACL; Schema: public; Owner: -
 --
 
@@ -15650,6 +15825,27 @@ REVOKE ALL ON FUNCTION public.raise_place_due(p_user uuid, p_lat double precisio
 
 REVOKE ALL ON FUNCTION public.read_messages(p_staff uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.read_messages(p_staff uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION realtime_notify_field_owner(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.realtime_notify_field_owner() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION realtime_notify_message(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.realtime_notify_message() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION realtime_notify_support_message(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.realtime_notify_support_message() FROM PUBLIC;
 
 
 --
@@ -15709,6 +15905,13 @@ GRANT ALL ON FUNCTION public.record_retention_purge(p_result jsonb) TO service_r
 
 REVOKE ALL ON FUNCTION public.record_selfie_sweep(p_result jsonb) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.record_selfie_sweep(p_result jsonb) TO service_role;
+
+
+--
+-- Name: FUNCTION release_reports_on_demotion(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.release_reports_on_demotion() FROM PUBLIC;
 
 
 --
@@ -16100,27 +16303,56 @@ GRANT ALL ON FUNCTION public.shift_start_for(p_user uuid) TO service_role;
 
 
 --
--- Name: FUNCTION sign_in_failed(p_key text); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION sign_in_bump(p_key text, p_account text, p_scope text, p_limit integer); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.sign_in_failed(p_key text) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.sign_in_failed(p_key text) TO service_role;
-
-
---
--- Name: FUNCTION sign_in_lock_status(p_key text); Type: ACL; Schema: public; Owner: -
---
-
-REVOKE ALL ON FUNCTION public.sign_in_lock_status(p_key text) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.sign_in_lock_status(p_key text) TO service_role;
+REVOKE ALL ON FUNCTION public.sign_in_bump(p_key text, p_account text, p_scope text, p_limit integer) FROM PUBLIC;
 
 
 --
--- Name: FUNCTION sign_in_succeeded(p_key text); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION sign_in_clear(p_account text); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.sign_in_succeeded(p_key text) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.sign_in_succeeded(p_key text) TO service_role;
+REVOKE ALL ON FUNCTION public.sign_in_clear(p_account text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.sign_in_clear(p_account text) TO service_role;
+
+
+--
+-- Name: FUNCTION sign_in_device_key(p_account text, p_address text, p_device text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.sign_in_device_key(p_account text, p_address text, p_device text) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sign_in_failed(p_account text, p_address text, p_device text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.sign_in_failed(p_account text, p_address text, p_device text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.sign_in_failed(p_account text, p_address text, p_device text) TO service_role;
+
+
+--
+-- Name: FUNCTION sign_in_known_device(p_account text, p_device text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.sign_in_known_device(p_account text, p_device text) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sign_in_lock_status(p_account text, p_address text, p_device text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.sign_in_lock_status(p_account text, p_address text, p_device text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.sign_in_lock_status(p_account text, p_address text, p_device text) TO service_role;
+
+
+--
+-- Name: FUNCTION sign_in_succeeded(p_account text, p_address text, p_device text, p_new_device text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.sign_in_succeeded(p_account text, p_address text, p_device text, p_new_device text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.sign_in_succeeded(p_account text, p_address text, p_device text, p_new_device text) TO service_role;
 
 
 --
@@ -16235,6 +16467,13 @@ GRANT ALL ON FUNCTION public.system_go_live(p_actor uuid) TO service_role;
 
 
 --
+-- Name: FUNCTION system_settings_guard(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.system_settings_guard() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION touch_updated_at(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -16264,6 +16503,13 @@ GRANT ALL ON FUNCTION public.unlock_sign_in(p_user uuid) TO authenticated;
 
 REVOKE ALL ON FUNCTION public.unread_messages() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.unread_messages() TO authenticated;
+
+
+--
+-- Name: FUNCTION visit_place_due(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.visit_place_due() FROM PUBLIC;
 
 
 --

@@ -97,7 +97,7 @@ const attachmentSchema = z.object({
 export const sendMessageSchema = z
   .object({
     /** The staff member's conversation. Ignored for staff, who write in their own. */
-    staff_id: z.string().uuid().nullable().optional(),
+    staff_id: z.string().guid().nullable().optional(),
     body: z
       .string()
       .transform((v) => v.trim())
@@ -110,7 +110,7 @@ export const sendMessageSchema = z
   })
 
 export const readMessagesSchema = z.object({
-  staff_id: z.string().uuid().nullable().optional(),
+  staff_id: z.string().guid().nullable().optional(),
 })
 
 /** A short preview for a push notification. */

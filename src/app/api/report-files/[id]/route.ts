@@ -4,7 +4,7 @@ import { ApiError, apiError, dbErrorMessage, requireApiSession, REPORTING_ROLES 
 import { audit } from '@/lib/audit'
 import { REPORT_FILE_BUCKET, downloadName } from '@/lib/report-files'
 
-const id = z.string().uuid()
+const id = z.string().guid()
 
 interface FileRow {
   id: string

@@ -331,8 +331,9 @@ export default async function SupervisorGuidePage() {
                 q: 'Someone is locked out',
                 a: (
                   <>
-                    Five wrong passwords in a row lock an account for 15 minutes. Staff shows{' '}
-                    <Ui>Locked until</Ui> and the time; press <Ui>Unlock</Ui> to let them in now, or{' '}
+                    Five wrong passwords in a row pause signing in on that phone for 15 minutes. Their usual
+                    phone is not affected by someone else guessing. Staff shows{' '}
+                    <Ui>Sign-in paused until</Ui> and the time; press <Ui>Unlock</Ui> to let them in now, or{' '}
                     <Ui>Reset password</Ui> if they have forgotten it (that unlocks it too).
                   </>
                 ),

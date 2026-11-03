@@ -81,8 +81,9 @@ export default async function AdminGuidePage() {
           </p>
           <ul className="list-disc space-y-1.5 pl-5">
             <li>
-              <Ui>Account lockout</Ui> (0077): five wrong passwords lock an account for 15 minutes. Staff
-              shows who is locked; <Ui>Unlock</Ui> or <Ui>Reset password</Ui> lets them back in.
+              <Ui>Sign-in lockout</Ui> (0077): five wrong passwords pause the phone or computer making
+              them for 15 minutes, never the person&apos;s own phone. Staff shows who is paused;{' '}
+              <Ui>Unlock</Ui> or <Ui>Reset password</Ui> lets them back in.
             </li>
             <li>
               <Ui>Messages</Ui> (0073): merchandisers and marketers chat with their supervisor from{' '}
@@ -779,11 +780,15 @@ export default async function AdminGuidePage() {
                 q: 'Someone is locked out',
                 a: (
                   <>
-                    Five wrong passwords in a row (within 15 minutes) lock an account for 15 minutes, even if
-                    the right password comes next. A phone number or email that belongs to nobody locks the
-                    same way, so the message never shows whether an account exists. Staff shows{' '}
-                    <Ui>Locked until</Ui>; <Ui>Unlock</Ui> lets them in now, and <Ui>Reset password</Ui> unlocks
-                    too. Supervisors unlock their own team and HR anyone but admins. Each unlock is in the audit
+                    Wrong passwords pause the phone or computer making them, not the person: five in a row
+                    (within 15 minutes) pause signing in there for 15 minutes, even if the right password comes
+                    next. A phone that has signed in to the account before is counted on its own, so someone
+                    who knows a colleague&apos;s number cannot lock them out of their own phone. Other devices
+                    are counted by internet address, and 20 wrong from unknown devices within 15 minutes pause
+                    every unknown device for that account (their usual phone still works). A number or email
+                    that belongs to nobody behaves the same, so the message never shows whether an account
+                    exists. Staff shows <Ui>Sign-in paused until</Ui>; <Ui>Unlock</Ui> lifts every pause, and{' '}
+                    <Ui>Reset password</Ui> does too. Supervisors unlock their own team and HR anyone but admins. Each unlock is in the audit
                     log as <Ui>user.unlock</Ui>.
                   </>
                 ),

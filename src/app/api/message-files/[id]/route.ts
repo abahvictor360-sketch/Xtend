@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { ApiError, apiError, requireApiSession } from '@/lib/auth'
 import { MESSAGE_FILE_BUCKET } from '@/lib/messages'
 
-const id = z.string().uuid()
+const id = z.string().guid()
 
 /**
  * Opens a message's attachment (0075) through a link that lasts five

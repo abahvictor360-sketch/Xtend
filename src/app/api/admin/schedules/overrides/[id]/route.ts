@@ -7,7 +7,7 @@ export async function DELETE(_request: Request, ctx: { params: Promise<{ id: str
   try {
     await requireApiSession(['admin', 'supervisor', 'hr'])
     const { id } = await ctx.params
-    if (!z.string().uuid().safeParse(id).success) {
+    if (!z.string().guid().safeParse(id).success) {
       return Response.json({ error: 'That date change was not found' }, { status: 404 })
     }
     const supabase = await createServerSupabase()

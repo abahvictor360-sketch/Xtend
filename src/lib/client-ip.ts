@@ -8,7 +8,7 @@ import 'server-only'
  * first entry is therefore whatever the caller chose to put there. This
  * reads from the end instead, skipping the proxies Xtend sits behind:
  *
- *   TRUSTED_PROXY_HOPS=1  Nginx or Caddy on the VPS, or Vercel (default)
+ *   TRUSTED_PROXY_HOPS=1  Nginx, Caddy or Traefik (Dokploy, Coolify) on the VPS, or Vercel (default)
  *   TRUSTED_PROXY_HOPS=2  Cloudflare in front of Nginx, and so on
  *
  * Without the header (a request straight to Node), X-Real-IP, which Nginx

@@ -5300,41 +5300,67 @@ begin
   perform public.send_message(null, 'Good morning, I am at the store.');
   perform set_config('request.jwt.claim.sub', '', false);
 
-  -- Sign-in lockout (0077): five wrong passwords lock the account for 15
-  -- minutes; the office lifts it for people it manages.
+  -- Sign-in lockout (0077): wrong passwords pause the device making them,
+  -- not the account; unknown devices are also capped per account.
   declare
     t timestamptz;
+    acct text := (select email from public.profiles where id = ada);
+    phone_hash text := repeat('a', 64);   -- Ada's own phone, known after a sign-in
+    fake_hash text := repeat('b', 64);    -- a cookie the server never gave out
   begin
-    perform assert(public.sign_in_lock_status('nobody@example.com') is null, 'lockout 0077: nobody starts locked');
+    perform public.sign_in_succeeded(acct, '10.0.0.1', null, phone_hash);
+    perform assert(public.sign_in_lock_status(acct, '10.0.0.9', null) is null, 'lockout 0077: nobody starts paused');
+
+    -- A guesser at another address: 4 wrong are fine, the 5th pauses that address.
     for i in 1..4 loop
-      t := public.sign_in_failed('Nobody@Example.com ');
-      perform assert(t is null, 'lockout 0077: four wrong passwords do not lock');
+      perform assert(public.sign_in_failed(upper(acct), '10.0.0.9', null) is null,
+        'lockout 0077: four wrong passwords do not pause');
     end loop;
-    t := public.sign_in_failed('nobody@example.com');
+    t := public.sign_in_failed(acct, '10.0.0.9', null);
     perform assert(t > now() + interval '14 minutes' and t <= now() + interval '15 minutes',
-      'lockout 0077: the fifth locks it for 15 minutes');
-    perform assert(public.sign_in_lock_status('NOBODY@example.com') = t, 'lockout 0077: case does not matter');
-    perform assert(public.sign_in_failed('nobody@example.com') = t, 'lockout 0077: tries while locked do not extend it');
+      'lockout 0077: the fifth pauses that address for 15 minutes');
+    perform assert(public.sign_in_failed(acct, '10.0.0.9', null) = t, 'lockout 0077: tries while paused do not extend it');
+    perform assert(public.sign_in_lock_status(acct, '10.0.0.9', fake_hash) = t,
+      'lockout 0077: an invented cookie does not get round it');
 
-    -- A right password before the fifth clears the count.
-    for i in 1..4 loop perform public.sign_in_failed('someone@example.com'); end loop;
-    perform public.sign_in_succeeded('someone@example.com');
-    perform assert(public.sign_in_failed('someone@example.com') is null, 'lockout 0077: a right password starts the count again');
+    -- Ada herself is not locked out: her known phone, even at the same address.
+    perform assert(public.sign_in_lock_status(acct, '10.0.0.9', phone_hash) is null,
+      'lockout 0077: the person''s own phone still signs in');
+    perform assert(public.sign_in_lock_status(acct, '10.0.0.10', null) is null,
+      'lockout 0077: another address is not paused');
 
-    -- Old tries do not count: a run 16 minutes back starts over.
-    update public.sign_in_lockouts set failed_count = 4, first_failed_at = now() - interval '16 minutes'
-     where lock_key = 'someone@example.com';
-    perform assert(public.sign_in_failed('someone@example.com') is null, 'lockout 0077: tries 15 minutes apart do not add up');
+    -- Her own phone with 5 wrong passwords pauses only that phone.
+    for i in 1..4 loop perform public.sign_in_failed(acct, '10.0.0.1', phone_hash); end loop;
+    perform assert(public.sign_in_failed(acct, '10.0.0.1', phone_hash) is not null, 'lockout 0077: a known phone pauses itself');
+    perform assert(public.sign_in_lock_status(acct, '10.0.0.1', null) is null,
+      'lockout 0077: and nobody else at its address');
 
-    -- A lock that ran out starts a fresh count.
-    update public.sign_in_lockouts set locked_until = now() - interval '1 second' where lock_key = 'nobody@example.com';
-    perform assert(public.sign_in_lock_status('nobody@example.com') is null, 'lockout 0077: the lock runs out');
-    perform assert(public.sign_in_failed('nobody@example.com') is null, 'lockout 0077: and the count starts again');
+    -- Many addresses: 20 wrong from unknown devices pause unknown devices for the account.
+    delete from public.sign_in_lockouts;
+    for i in 1..19 loop perform public.sign_in_failed(acct, '10.1.0.' || i, null); end loop;
+    perform assert(public.sign_in_lock_status(acct, '10.2.0.1', null) is null, 'lockout 0077: 19 from many addresses do not pause');
+    perform assert(public.sign_in_failed(acct, '10.1.0.20', null) is not null, 'lockout 0077: the 20th pauses unknown devices');
+    perform assert(public.sign_in_lock_status(acct, '10.2.0.2', fake_hash) is not null,
+      'lockout 0077: everywhere unknown');
+    perform assert(public.sign_in_lock_status(acct, '10.2.0.3', phone_hash) is null,
+      'lockout 0077: but never the person''s own phone');
 
-    -- The office unlocks; staff cannot; it is audited.
-    for i in 1..5 loop perform public.sign_in_failed((select email from public.profiles where id = ada)); end loop;
+    -- A right password clears that device's count.
+    delete from public.sign_in_lockouts;
+    for i in 1..4 loop perform public.sign_in_failed(acct, '10.3.0.1', null); end loop;
+    perform public.sign_in_succeeded(acct, '10.3.0.1', null, repeat('c', 64));
+    perform assert(public.sign_in_failed(acct, '10.3.0.1', repeat('c', 64)) is null,
+      'lockout 0077: a right password starts the count again');
+
+    -- Tries 15 minutes apart do not add up; a pause that ran out starts afresh.
+    update public.sign_in_lockouts set failed_count = 4, first_failed_at = now() - interval '16 minutes';
+    perform assert(public.sign_in_failed(acct, '10.3.0.1', repeat('c', 64)) is null,
+      'lockout 0077: tries 15 minutes apart do not add up');
+
+    -- The office sees and lifts it; staff cannot; it is audited.
+    for i in 1..5 loop perform public.sign_in_failed(acct, '10.4.0.1', null); end loop;
     perform act_as(boss);
-    perform assert(exists (select 1 from public.locked_accounts() where user_id = ada), 'lockout 0077: the office sees the lock');
+    perform assert(exists (select 1 from public.locked_accounts() where user_id = ada), 'lockout 0077: the office sees the pause');
     perform act_as(bala);
     begin
       perform public.unlock_sign_in(ada);
@@ -5342,15 +5368,15 @@ begin
     exception when others then
       perform assert(sqlerrm like '%own team%', 'lockout 0077: staff cannot unlock');
     end;
-    perform assert(not exists (select 1 from public.locked_accounts()), 'lockout 0077: staff see no locks');
+    perform assert(not exists (select 1 from public.locked_accounts()), 'lockout 0077: staff see no pauses');
     perform act_as(boss);
     perform assert(public.unlock_sign_in(ada), 'lockout 0077: an admin unlocks');
-    perform assert(public.sign_in_lock_status((select email from public.profiles where id = ada)) is null,
-      'lockout 0077: and the account signs in again');
+    perform assert(public.sign_in_lock_status(acct, '10.4.0.1', null) is null, 'lockout 0077: and it signs in again');
     perform assert(exists (select 1 from public.audit_log where action = 'user.unlock' and target_id = ada),
       'lockout 0077: unlocking is audited');
     perform set_config('request.jwt.claim.sub', '', false);
     delete from public.sign_in_lockouts;
+    delete from public.sign_in_trusted_devices;
     delete from public.audit_log where action = 'user.unlock';
   end;
 
@@ -5362,8 +5388,8 @@ begin
                                 'notification_templates', 'support_quick_replies', 'xm_settings',
                                 'xm_settings_history', 'xm_policy_versions', 'app_releases', 'job_runs',
                                 'system_settings', 'place_addresses', 'place_lookup_stats',
-                                -- 0077: sign-in locks run out by themselves.
-                                'sign_in_lockouts'];
+                                -- 0077: sign-in pauses run out by themselves; known devices stay known.
+                                'sign_in_lockouts', 'sign_in_trusted_devices'];
     all_keys text[] := public.reset_category_keys();
     k text;
     cats text[];

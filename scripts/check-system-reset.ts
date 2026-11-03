@@ -63,7 +63,7 @@ const FIXTURE: Record<string, 'wipe' | 'admins-kept' | 'keep'> = {
   // 0073: messages between staff and their supervisor, cleared with support.
   message_threads: 'wipe', messages: 'wipe', message_reads: 'wipe',
   // 0077: sign-in locks run out by themselves.
-  sign_in_lockouts: 'keep',
+  sign_in_lockouts: 'keep', sign_in_trusted_devices: 'keep',
 }
 
 // --- Typed confirmations.

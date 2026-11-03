@@ -7,7 +7,7 @@ import { mapText } from '@/lib/fields'
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expiry dates must be real dates')
 
 const schema = z.object({
-  outlet_id: z.string().uuid(),
+  outlet_id: z.string().guid(),
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   accuracy_m: z.number().nonnegative(),
@@ -16,7 +16,7 @@ const schema = z.object({
   lines: z
     .array(
       z.object({
-        product_id: z.string().uuid(),
+        product_id: z.string().guid(),
         batch: mapText(60).transform((v) => v ?? ''),
         expiry_date: isoDate.nullable().optional(),
         on_shelf: z.number().int().min(0).max(1_000_000),

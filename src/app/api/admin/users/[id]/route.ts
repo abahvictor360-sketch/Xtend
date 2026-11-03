@@ -16,9 +16,9 @@ const patchSchema = z.object({
   phone: z.union([z.literal(''), z.null(), phoneNumber]).optional().transform((v) => (v === '' ? null : v)),
   role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin', 'hr']).optional(),
   /** A role an admin added (042), or null for a built-in one. */
-  staff_role_id: z.string().uuid().nullable().optional(),
-  outlet_id: z.string().uuid().nullable().optional(),
-  supervisor_id: z.string().uuid().nullable().optional(),
+  staff_role_id: z.string().guid().nullable().optional(),
+  outlet_id: z.string().guid().nullable().optional(),
+  supervisor_id: z.string().guid().nullable().optional(),
   is_active: z.boolean().optional(),
   /** Admin only: may clock in without notifications on (migration 027). */
   push_exempt: z.boolean().optional(),
@@ -185,7 +185,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       await rememberTempPassword(admin, id, temp_password)
       // A new password also lifts a sign-in lock (0077).
       const { data: who } = await admin.from('profiles').select('email').eq('id', id).maybeSingle<{ email: string | null }>()
-      if (who?.email) await admin.rpc('sign_in_succeeded', { p_key: who.email })
+      if (who?.email) await admin.rpc('sign_in_clear', { p_account: who.email })
     }
 
     if (Object.keys(changes).length) {

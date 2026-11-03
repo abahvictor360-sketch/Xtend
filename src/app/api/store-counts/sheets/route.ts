@@ -4,7 +4,7 @@ import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { fileName } from '@/lib/fields'
 
 const schema = z.object({
-  outlet_id: z.string().uuid(),
+  outlet_id: z.string().guid(),
   path: z.string().min(1).max(300),
   file_name: fileName,
 })

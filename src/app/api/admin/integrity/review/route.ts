@@ -5,7 +5,7 @@ import { audit } from '@/lib/audit'
 import { note } from '@/lib/fields'
 
 const schema = z.object({
-  ids: z.array(z.string().uuid()).min(1, 'Pick at least one flag').max(200, 'Review at most 200 flags at a time'),
+  ids: z.array(z.string().guid()).min(1, 'Pick at least one flag').max(200, 'Review at most 200 flags at a time'),
   note: note(500),
 })
 

@@ -2,8 +2,8 @@ import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 
 const schema = z.object({
-  id: z.string().uuid(),
-  token: z.string().uuid(),
+  id: z.string().guid(),
+  token: z.string().guid(),
   stage: z.enum(['delivered', 'opened']),
 })
 

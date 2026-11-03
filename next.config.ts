@@ -14,6 +14,9 @@ const nextConfig: NextConfig = {
   // No "X-Powered-By: Next.js" on responses: no need to tell anyone what
   // Xtend is built with.
   poweredByHeader: false,
+  // The Docker image (Dockerfile, for Dokploy or Coolify) runs the small
+  // self-contained server; the PM2 setup (deploy/) keeps `next start`.
+  output: process.env.NEXT_OUTPUT === 'standalone' ? 'standalone' : undefined,
   env: { NEXT_PUBLIC_BUILD_ID: BUILD_ID },
   generateBuildId: async () => BUILD_ID.replace(/[^a-zA-Z0-9_-]/g, '-'),
   serverExternalPackages: ['exceljs'],
@@ -32,6 +35,24 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      // Safer defaults on every page and API answer. Camera and location
+      // stay allowed for Xtend itself (selfies, clock-in); nothing may frame
+      // it; browsers must keep using HTTPS for two years.
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'DENY' },
+          { key: 'Content-Security-Policy', value: "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'" },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          {
+            key: 'Permissions-Policy',
+            value: 'camera=(self), geolocation=(self), microphone=(), payment=(), usb=(), interest-cohort=()',
+          },
+          { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
+        ],
+      },
       {
         source: '/sw.js',
         headers: [

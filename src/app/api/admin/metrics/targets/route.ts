@@ -4,8 +4,8 @@ import { xmAdminAction } from '@/lib/metrics/admin-route'
 const schema = z
   .object({
     month: z.string().regex(/^\d{4}-\d{2}(-\d{2})?$/, 'Choose the month'),
-    user_id: z.string().uuid().nullable().optional(),
-    outlet_id: z.string().uuid().nullable().optional(),
+    user_id: z.string().guid().nullable().optional(),
+    outlet_id: z.string().guid().nullable().optional(),
     target_units: z.number().int('Whole units only').min(1, 'A target is at least 1 unit').max(100_000_000),
   })
   .refine((v) => !!v.user_id !== !!v.outlet_id, 'Choose a person or a store')

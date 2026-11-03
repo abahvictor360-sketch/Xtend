@@ -441,11 +441,12 @@ export function StaffGuide() {
               a: <>Ask your supervisor or admin to reset it. You will choose a new one when you sign in.</>,
             },
             {
-              q: 'It says my account is locked',
+              q: 'It says signing in is paused',
               a: (
                 <>
-                  After 5 wrong passwords in a row, Xtend locks your account for 15 minutes to keep it safe.
-                  Wait, then try again with the right password, or ask your supervisor to unlock it sooner.
+                  After 5 wrong passwords in a row, Xtend pauses signing in on that phone for 15 minutes to
+                  keep your account safe. Wait, then try again with the right password, or ask your
+                  supervisor to unlock it sooner.
                 </>
               ),
             },

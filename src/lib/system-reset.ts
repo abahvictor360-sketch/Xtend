@@ -166,7 +166,8 @@ export const KEPT_TABLES: { table: string; what: string }[] = [
   { table: 'system_reset_files', what: 'Files a reset is still removing' },
   { table: 'place_addresses', what: 'Street addresses Google gave for spots with no shop' },
   { table: 'place_lookup_stats', what: 'Counts of place lookups (Google use)' },
-  { table: 'sign_in_lockouts', what: 'Accounts locked after wrong passwords (they unlock by themselves)' },
+  { table: 'sign_in_lockouts', what: 'Sign-in pauses after wrong passwords (they lift by themselves)' },
+  { table: 'sign_in_trusted_devices', what: 'Phones and computers that have signed in before' },
 ]
 
 /** What stays, for the page. */

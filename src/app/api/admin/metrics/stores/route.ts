@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { xmAdminAction } from '@/lib/metrics/admin-route'
 
-const schema = z.object({ outlet_id: z.string().uuid(), active: z.boolean() })
+const schema = z.object({ outlet_id: z.string().guid(), active: z.boolean() })
 
 /** Adds a store to X Metrics, or takes it out (its history stays). */
 export async function POST(request: Request) {

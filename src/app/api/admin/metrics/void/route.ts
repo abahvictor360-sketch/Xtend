@@ -4,7 +4,7 @@ import { writtenText } from '@/lib/fields'
 
 const schema = z.object({
   kind: z.enum(['supply', 'count', 'sales']),
-  id: z.string().uuid(),
+  id: z.string().guid(),
   reason: writtenText(300, 3, 'the reason'),
 })
 

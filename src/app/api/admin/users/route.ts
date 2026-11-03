@@ -14,9 +14,9 @@ const createUserSchema = z.object({
   phone: optionalPhone,
   role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin', 'hr']).default('merchandiser'),
   /** A role an admin added (042); the person then works like its base role. */
-  staff_role_id: z.string().uuid().nullable().optional(),
-  outlet_id: z.string().uuid().nullable().optional(),
-  supervisor_id: z.string().uuid().nullable().optional(),
+  staff_role_id: z.string().guid().nullable().optional(),
+  outlet_id: z.string().guid().nullable().optional(),
+  supervisor_id: z.string().guid().nullable().optional(),
 })
 
 export async function POST(request: Request) {

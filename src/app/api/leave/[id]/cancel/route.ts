@@ -7,7 +7,7 @@ export async function POST(_request: Request, ctx: { params: Promise<{ id: strin
   try {
     await requireApiSession(FIELD_ROLES)
     const { id } = await ctx.params
-    if (!z.string().uuid().safeParse(id).success) {
+    if (!z.string().guid().safeParse(id).success) {
       return Response.json({ error: 'That request was not found' }, { status: 404 })
     }
     const supabase = await createServerSupabase()

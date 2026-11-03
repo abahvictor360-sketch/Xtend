@@ -1,0 +1,18 @@
+# Keep the image small and free of secrets and local state.
+.git
+.github
+node_modules
+.next
+out
+build
+mobile
+docs
+supabase
+deploy
+*.md
+.env
+.env.*
+!.env.example
+.vercel
+npm-debug.log*
+tsconfig.tsbuildinfo

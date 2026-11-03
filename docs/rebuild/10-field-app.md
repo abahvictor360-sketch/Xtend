@@ -146,17 +146,31 @@ sheet overlapping it (`-mt-10`, `rounded-t-[2rem]`).
 - Every failure returns the same text `Those details are not correct.`
   (400 bad shape, 401 unknown/wrong).
 - Rate limits (in-memory, per server instance, `src/lib/rate-limit.ts`):
-  30 attempts per IP and 10 per identifier (lower-cased) per **15 minutes**;
+  30 attempts per IP and 10 per identifier (lower-cased) and IP per **15 minutes**;
   over → 429 "Too many attempts. Wait 15 minutes, then try again."
-- **Account lockout (0077)**, kept in Postgres: before the password is
-  tried, `sign_in_lock_status(key)`; locked → **423** "Too many wrong
-  passwords, so this account is locked until HH:MM. Ask your supervisor to
-  unlock it sooner." (HH:MM Lagos, 24-hour) with `locked_until`. A wrong
-  password (or an identifier matching nobody) → `sign_in_failed(key)`; when
-  that returns a time the answer is the same 423, otherwise the usual 401.
-  A right password → `sign_in_succeeded(key)`. The key is the resolved
-  lower-case email, else the typed identifier lower-cased. The login form
-  shows the server's message as it is.
+- **Sign-in lockout (0077)**, kept in Postgres. Wrong passwords pause the **phone or computer making them, not the
+  account**. A device that has signed in to the account before carries a
+  random `xt_dev` cookie (httpOnly, path `/api/auth`, 180 days, a new token
+  every sign-in; only its SHA-256 reaches the database in
+  `sign_in_trusted_devices`), and is counted on its own; a cookie the server
+  never gave this account counts for nothing, so any other device is counted
+  by its address. Five wrong in a row within 15 minutes pause that device or
+  address for that account for 15 minutes (even the right password is
+  refused there; tries while paused do not extend it). Across unknown
+  devices together, 20 wrong within 15 minutes pause every unknown device for
+  that account; the person's known phone still signs in. A right password
+  clears that device's count. An identifier matching nobody is counted the
+  same way, so the answer never shows whether an account exists.
+  Order: `sign_in_lock_status({p_account, p_address, p_device})` (account
+  = resolved lower-case email, else the identifier lower-cased; device =
+  SHA-256 hex of the `xt_dev` cookie or null) → paused: **423** "Too many
+  wrong passwords, so signing in here is paused until HH:MM. Try again
+  then, or ask your supervisor to unlock it." with `locked_until`. Wrong
+  password → `sign_in_failed(same)`; a time back means the same 423, else
+  401. Right password → `sign_in_succeeded(same, p_new_device)` with a fresh
+  32-byte token's hash, then set the cookie. The in-memory per-identifier
+  limit is keyed by identifier *and* address. The login form shows the
+  server's message as it is.
 - If the identifier contains `@` it is the email (lower-cased). Otherwise it
   is a phone: strip to digits and `+`; under 7 characters → wrong. Try the
   number plus variants: `0…` ↔ `+234…`, `234…` → `0…`. Look up an **active**
@@ -193,10 +207,12 @@ administrator if you think this is a mistake.", and a **"Sign out"** button
 
 - Typing `08012345678` or `+2348012345678` signs in the same account.
 - A wrong phone and a wrong password give the identical message.
-- The 11th attempt for one identifier within 15 minutes gets the 429 text.
-- The 5th wrong password in a row gets the 423 lock message; the right
-  password is then refused too until the time shown, or until the office
-  presses **Unlock**. A made-up phone number locks after 5 tries the same way.
+- The 11th attempt for one identifier from one address within 15 minutes gets the 429 text.
+- The 5th wrong password in a row from one phone gets the 423 message and
+  that phone is refused until the time shown; the account's own phone
+  (signed in there before) still signs in. 20 wrong from different
+  addresses pause every unknown device but not that phone. A made-up phone
+  number behaves the same way. **Unlock** on Staff lifts it at once.
 - A merchandiser who signed in yesterday is sent to the login page with "A
   new day has started…" on the first navigation today.
 - After clocking out, any page or API call ends the session with the

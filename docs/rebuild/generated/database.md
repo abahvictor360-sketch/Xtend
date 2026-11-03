@@ -727,11 +727,22 @@ Policies:
 | Column | Type | Null | Default |
 |---|---|---|---|
 | lock_key | text(text) |  |  |
+| account | text(text) |  |  |
+| scope | text(text) |  |  |
 | failed_count | integer(int4) |  | 0 |
 | first_failed_at | timestamp with time zone(timestamptz) |  | now() |
 | last_failed_at | timestamp with time zone(timestamptz) |  | now() |
 | locked_until | timestamp with time zone(timestamptz) | yes |  |
 | lock_count | integer(int4) |  | 0 |
+
+### `sign_in_trusted_devices`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| account | text(text) |  |  |
+| device_hash | text(text) |  |  |
+| created_at | timestamp with time zone(timestamptz) |  | now() |
+| last_ok_at | timestamp with time zone(timestamptz) |  | now() |
 
 ### `staff_outlets`
 
@@ -1420,7 +1431,7 @@ Policies:
 - `learn_place(p_lat double precision, p_lng double precision, p_name text, p_address text, p_source text, p_photo_path text)` → uuid · definer · 0026_phone_evidence.sql
 - `learn_place_for(p_user uuid, p_lat double precision, p_lng double precision, p_name text, p_address text, p_source text)` → uuid · definer · 0068_place_lookups.sql
 - `live_locations()` → TABLE(user_id uuid, full_name text, phone text, outlet_name text, outlet_lat double precision, outlet_lng double precision, outlet_radius_m integer, clocked_in_at timestamp with time zone, clock_in_label text, clock_in_status attendance_status, last_ping_at timestamp with time zone, minutes_since_ping integer, last_lat double precision, last_lng double precision, last_place_name text, distance_from_outlet_m double precision, inside_geofence boolean) · definer · 0009_live_locations.sql
-- `locked_accounts()` → TABLE(user_id uuid, locked_until timestamp with time zone) · definer · 0077_sign_in_lockout.sql
+- `locked_accounts()` → TABLE(user_id uuid, locked_until timestamp with time zone, whole_account boolean) · definer · 0077_sign_in_lockout.sql
 - `log_location_block(p_reason text, p_accuracy_m double precision)` → uuid · definer · 0002_logic.sql
 - `mark_notifications_read()` → integer · definer · 0006_push_notifications.sql
 - `message_inbox()` → TABLE(staff_id uuid, full_name text, role user_role, outlet_name text, supervisor_name text, last_message_at timestamp with time zone, last_body text, last_from_staff boolean, unread integer) · definer · 0075_message_attachments.sql
@@ -1557,9 +1568,13 @@ Policies:
 - `set_work_pattern(p_users uuid[], p_days smallint[])` → integer · definer · 0059_schedules_leave.sql
 - `shift_end_for(p_user uuid)` → time without time zone · definer · 0061_clock_out_reminders.sql
 - `shift_start_for(p_user uuid)` → time without time zone · definer · 0069_shift_soon_reminders.sql
-- `sign_in_failed(p_key text)` → timestamp with time zone · definer · 0077_sign_in_lockout.sql
-- `sign_in_lock_status(p_key text)` → timestamp with time zone · definer · 0077_sign_in_lockout.sql
-- `sign_in_succeeded(p_key text)` → void · definer · 0077_sign_in_lockout.sql
+- `sign_in_bump(p_key text, p_account text, p_scope text, p_limit integer)` → void · definer · 0077_sign_in_lockout.sql
+- `sign_in_clear(p_account text)` → integer · definer · 0077_sign_in_lockout.sql
+- `sign_in_device_key(p_account text, p_address text, p_device text)` → text · definer · 0077_sign_in_lockout.sql
+- `sign_in_failed(p_account text, p_address text, p_device text)` → timestamp with time zone · definer · 0077_sign_in_lockout.sql
+- `sign_in_known_device(p_account text, p_device text)` → boolean · definer · 0077_sign_in_lockout.sql
+- `sign_in_lock_status(p_account text, p_address text, p_device text)` → timestamp with time zone · definer · 0077_sign_in_lockout.sql
+- `sign_in_succeeded(p_account text, p_address text, p_device text, p_new_device text)` → void · definer · 0077_sign_in_lockout.sql
 - `staff_analytics(p_from date, p_to date)` → TABLE(user_id uuid, full_name text, outlet_name text, days_present integer, days_late integer, days_off_site integer, avg_distance_m double precision) · definer · 0072_hr_role.sql
 - `staff_day(p_date date)` → TABLE(user_id uuid, staff_name text, role user_role, clocked_in_at timestamp with time zone, clocked_in_at_place text, clocked_out_at timestamp with time zone, clocked_out_at_place text, stores_visited integer, minutes_in_store integer, still_in_store text) · definer · 0016_visits_without_allocation.sql
 - `staff_no_show(p_grace_minutes integer)` → TABLE(user_id uuid, full_name text, phone text, outlet_id uuid, outlet_name text, shift_start time without time zone, minutes_late integer) · definer · 0059_schedules_leave.sql

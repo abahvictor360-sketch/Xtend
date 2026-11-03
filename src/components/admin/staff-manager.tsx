@@ -75,7 +75,7 @@ export function StaffManager({
   supervisors?: SupervisorOption[]
   /** Who has notifications on, which clocking in needs (migration 027). */
   notified?: string[]
-  /** Accounts locked after five wrong passwords (0077): until when, by person. */
+  /** Sign-in paused somewhere after wrong passwords (0077): until when, by person. */
   locked?: Record<string, string>
   /** From the dashboard's search box (?q=). */
   initialSearch?: string
@@ -584,7 +584,7 @@ export function StaffManager({
                   )}
                   {locked[person.id] && (
                     <Badge variant="destructive" className="ml-1">
-                      Locked until {formatLagos(locked[person.id], false)}
+                      Sign-in paused until {formatLagos(locked[person.id], false)}
                     </Badge>
                   )}
                   {isField(person.role) && (
@@ -679,7 +679,7 @@ export function StaffManager({
                   )}
                   {person.must_change_password && <Badge variant="warning">Temp password</Badge>}
                   {locked[person.id] && (
-                    <Badge variant="destructive">Locked until {formatLagos(locked[person.id], false)}</Badge>
+                    <Badge variant="destructive">Sign-in paused until {formatLagos(locked[person.id], false)}</Badge>
                   )}
                   {isField(person.role) && (
                     <NotificationBadge on={hasPush.has(person.id)} exempt={Boolean(person.push_exempt)} />

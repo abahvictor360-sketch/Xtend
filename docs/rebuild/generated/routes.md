@@ -55,7 +55,7 @@ alert; before that update runs, each goes through resolve_alert in turn.
 
 ```ts
 const schema = z.object({
-  ids: z.array(z.string().uuid()).min(1, 'Pick at least one alert').max(500, 'Resolve at most 500 alerts at a time'),
+  ids: z.array(z.string().guid()).min(1, 'Pick at least one alert').max(500, 'Resolve at most 500 alerts at a time'),
   note: note(1000),
 })
 ```
@@ -145,8 +145,8 @@ carries the request across.
 
 ```ts
 const schema = z.object({
-  user_id: z.string().uuid(),
-  outlet_ids: z.array(z.string().uuid()).max(200),
+  user_id: z.string().guid(),
+  outlet_ids: z.array(z.string().guid()).max(200),
 })
 ```
 
@@ -171,7 +171,7 @@ by request_store_count(); this route then tells the people on their phones.
 
 ```ts
 const schema = z.object({
-  user_ids: z.array(z.string().uuid()).min(1, 'Pick at least one person').max(500),
+  user_ids: z.array(z.string().guid()).min(1, 'Pick at least one person').max(500),
   due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   note: note(500),
 })
@@ -206,7 +206,7 @@ from the evidence, so what is kept is what the evidence says.
 
 ```ts
 const schema = z.object({
-  user_id: z.string().uuid(),
+  user_id: z.string().guid(),
   claim: z.string().refine(isClaim, 'Choose what they said'),
   from: z.string().datetime({ offset: true }),
   to: z.string().datetime({ offset: true }),
@@ -320,7 +320,7 @@ not clocked out, at most follow_max_sessions at once. follow_start
 writes the follow.start audit row (with this request's context).
 
 ```ts
-const schema = z.object({ user_id: z.string().uuid() })
+const schema = z.object({ user_id: z.string().guid() })
 ```
 
 - Database functions: `follow_start`
@@ -349,7 +349,7 @@ someone already reviewed keep that review.
 
 ```ts
 const schema = z.object({
-  ids: z.array(z.string().uuid()).min(1, 'Pick at least one flag').max(200, 'Review at most 200 flags at a time'),
+  ids: z.array(z.string().guid()).min(1, 'Pick at least one flag').max(200, 'Review at most 200 flags at a time'),
   note: note(500),
 })
 ```
@@ -548,7 +548,7 @@ const schema = z
 Adds a store to X Metrics, or takes it out (its history stays).
 
 ```ts
-const schema = z.object({ outlet_id: z.string().uuid(), active: z.boolean() })
+const schema = z.object({ outlet_id: z.string().guid(), active: z.boolean() })
 ```
 
 - Database functions: `xm_set_store`
@@ -633,8 +633,8 @@ Sets a month's sales target. The newest wins; earlier ones are kept.
 const schema = z
   .object({
     month: z.string().regex(/^\d{4}-\d{2}(-\d{2})?$/, 'Choose the month'),
-    user_id: z.string().uuid().nullable().optional(),
-    outlet_id: z.string().uuid().nullable().optional(),
+    user_id: z.string().guid().nullable().optional(),
+    outlet_id: z.string().guid().nullable().optional(),
     target_units: z.number().int('Whole units only').min(1, 'A target is at least 1 unit').max(100_000_000),
   })
   .refine((v) => !!v.user_id !== !!v.outlet_id, 'Choose a person or a store')
@@ -652,7 +652,7 @@ Voids a supply, count or sales report: kept, with who and why.
 ```ts
 const schema = z.object({
   kind: z.enum(['supply', 'count', 'sales']),
-  id: z.string().uuid(),
+  id: z.string().guid(),
   reason: writtenText(300, 3, 'the reason'),
 })
 ```
@@ -681,14 +681,14 @@ const schema = z.object({
     .optional(),
   audience: z.enum(['everyone', 'role', 'outlet', 'users']),
   role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).nullable().optional(),
-  outlet_id: z.string().uuid().nullable().optional(),
-  user_ids: z.array(z.string().uuid()).max(500).optional(),
+  outlet_id: z.string().guid().nullable().optional(),
+  user_ids: z.array(z.string().guid()).max(500).optional(),
   /** Resolve and count the audience without sending anything. */
   preview: z.boolean().default(false),
   /** Send later instead of now (an ISO instant). */
   send_at: z.string().datetime({ offset: true }).nullable().optional(),
   /** This send repeats an earlier one to the people it did not reach. */
-  resend_of: z.string().uuid().nullable().optional(),
+  resend_of: z.string().guid().nullable().optional(),
 })
 ```
 
@@ -804,7 +804,7 @@ reports that it arrived: then it is on, with network, right now. Who may
 check whom is decided by request_phone_check() (migration 026).
 
 ```ts
-const schema = z.object({ user_id: z.string().uuid() })
+const schema = z.object({ user_id: z.string().guid() })
 ```
 
 - Database functions: `request_phone_check`
@@ -822,7 +822,7 @@ names the spot. Postgres checks the caller is an admin and that the
 store is still waiting (migration 034).
 
 ```ts
-const schema = z.object({ outlet_id: z.string().uuid() })
+const schema = z.object({ outlet_id: z.string().guid() })
 ```
 
 - Database functions: `pin_store_from_place`
@@ -883,7 +883,7 @@ Whether built-in merchandisers or marketers take stock counts (migration 046). A
 
 ```ts
 const schema = z.object({
-  role: z.enum(['merchandiser', 'marketer'], { errorMap: () => ({ message: 'Choose a role' }) }),
+  role: z.enum(['merchandiser', 'marketer'], { error: 'Choose a role' }),
   counts_stock: z.boolean(),
 })
 ```
@@ -928,7 +928,7 @@ and writes one audit row per person.
 
 ```ts
 const schema = z.object({
-  user_ids: z.array(z.string().uuid()).min(1, 'Pick at least one person').max(500, 'Set at most 500 people at a time'),
+  user_ids: z.array(z.string().guid()).min(1, 'Pick at least one person').max(500, 'Set at most 500 people at a time'),
   // Days of the week worked, 0 = Sunday … 6 = Saturday. Null: back to Monday to Saturday.
   days: z.array(z.number().int().min(0).max(6)).max(7).nullable(),
 })
@@ -974,7 +974,7 @@ Adds a role (migration 042). Admins only; the table's policy agrees.
 const schema = z.object({
   name: roleName,
   base_role: z.enum(['merchandiser', 'marketer', 'supervisor'], {
-    errorMap: () => ({ message: 'Choose what the role works like' }),
+    error: 'Choose what the role works like',
   }),
   counts_stock: z.boolean().default(true),
 })
@@ -1013,7 +1013,7 @@ and who a thread can go to.
 const schema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('close') }),
   z.object({ action: z.literal('reopen') }),
-  z.object({ action: z.literal('assign'), user_id: z.string().uuid().nullable() }),
+  z.object({ action: z.literal('assign'), user_id: z.string().guid().nullable() }),
 ])
 ```
 
@@ -1090,8 +1090,8 @@ Assigns many people to one supervisor at once, or removes them from one.
 
 ```ts
 const schema = z.object({
-  user_ids: z.array(z.string().uuid()).min(1).max(500),
-  supervisor_id: z.string().uuid().nullable(),
+  user_ids: z.array(z.string().guid()).min(1).max(500),
+  supervisor_id: z.string().guid().nullable(),
 })
 ```
 
@@ -1113,7 +1113,7 @@ opens the download page, through the notifications route (reach checks,
 delivery log, audit).
 
 ```ts
-const schema = z.object({ user_ids: z.array(z.string().uuid()).min(1).max(500) })
+const schema = z.object({ user_ids: z.array(z.string().guid()).min(1).max(500) })
 ```
 
 ## `POST /api/admin/updates`
@@ -1153,9 +1153,9 @@ const patchSchema = z.object({
   phone: z.union([z.literal(''), z.null(), phoneNumber]).optional().transform((v) => (v === '' ? null : v)),
   role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin', 'hr']).optional(),
   /** A role an admin added (042), or null for a built-in one. */
-  staff_role_id: z.string().uuid().nullable().optional(),
-  outlet_id: z.string().uuid().nullable().optional(),
-  supervisor_id: z.string().uuid().nullable().optional(),
+  staff_role_id: z.string().guid().nullable().optional(),
+  outlet_id: z.string().guid().nullable().optional(),
+  supervisor_id: z.string().guid().nullable().optional(),
   is_active: z.boolean().optional(),
   /** Admin only: may clock in without notifications on (migration 027). */
   push_exempt: z.boolean().optional(),
@@ -1165,7 +1165,7 @@ const patchSchema = z.object({
 })
 ```
 
-- Database functions: `unlock_sign_in`, `sign_in_succeeded`
+- Database functions: `unlock_sign_in`, `sign_in_clear`
 - Tables and views: `profiles`, `staff_roles`, `audit_log`, `attendance`
 
 ## `POST /api/admin/users/import`
@@ -1206,9 +1206,9 @@ const createUserSchema = z.object({
   phone: optionalPhone,
   role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin', 'hr']).default('merchandiser'),
   /** A role an admin added (042); the person then works like its base role. */
-  staff_role_id: z.string().uuid().nullable().optional(),
-  outlet_id: z.string().uuid().nullable().optional(),
-  supervisor_id: z.string().uuid().nullable().optional(),
+  staff_role_id: z.string().guid().nullable().optional(),
+  outlet_id: z.string().guid().nullable().optional(),
+  supervisor_id: z.string().guid().nullable().optional(),
 })
 ```
 
@@ -1235,7 +1235,7 @@ const schema = z.object({
   place_source: z.enum(['outlet', 'known', 'google', 'osm', 'coordinates']).nullable().optional(),
   selfie_path: z.string().min(1).max(300),
   thumb_path: z.string().min(1).max(300).nullable().optional(),
-  device_info: z.record(z.unknown()).default({}),
+  device_info: z.record(z.string(), z.unknown()).default({}),
   client_captured_at: z.string().datetime({ offset: true }),
 })
 ```
@@ -1277,13 +1277,7 @@ const schema = z.object({
 - File: `src/app/api/auth/sign-in/route.ts`
 - Who: public / own check
 
-Staff sign in with an email or a phone number. Supabase signs in on
-email, so a phone is turned into the email here, on the server, and the
-sign-in happens here too: the email never goes back to the browser, so
-nobody can use this to find out a staff member's email from their phone
-number. Every failure gives the same answer, attempts are limited per
-address and per account, and five wrong passwords lock the account for
-15 minutes (0077).
+A random token for a phone or computer that has signed in before (0077).
 
 ```ts
 const schema = z.object({
@@ -1482,7 +1476,7 @@ and whether it is the store's opening stock are settled by xm_submit_count.
 
 ```ts
 const schema = z.object({
-  outlet_id: z.string().uuid(),
+  outlet_id: z.string().guid(),
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   accuracy_m: z.number().nonnegative(),
@@ -1491,7 +1485,7 @@ const schema = z.object({
   lines: z
     .array(
       z.object({
-        product_id: z.string().uuid(),
+        product_id: z.string().guid(),
         batch: mapText(60).transform((v) => v ?? ''),
         expiry_date: isoDate.nullable().optional(),
         on_shelf: z.number().int().min(0).max(1_000_000),
@@ -1513,7 +1507,7 @@ const schema = z.object({
 A member of staff says they have read the current scoring policy.
 
 ```ts
-const schema = z.object({ policy_id: z.string().uuid() })
+const schema = z.object({ policy_id: z.string().guid() })
 ```
 
 - Database functions: `xm_mark_policy_read`
@@ -1528,12 +1522,12 @@ replaces the figures; the earlier report is kept, marked superseded.
 
 ```ts
 const schema = z.object({
-  outlet_id: z.string().uuid(),
+  outlet_id: z.string().guid(),
   sale_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose the day'),
   photo_path: z.string().min(1).max(300).nullable().optional(),
   captured_at: z.string().datetime({ offset: true }),
   lines: z
-    .array(z.object({ product_id: z.string().uuid(), units: z.number().int().min(0).max(1_000_000) }))
+    .array(z.object({ product_id: z.string().guid(), units: z.number().int().min(0).max(1_000_000) }))
     .min(1, 'Enter at least one product')
     .max(500),
 })
@@ -1552,8 +1546,8 @@ that the answer came from the phone that received it.
 
 ```ts
 const schema = z.object({
-  id: z.string().uuid(),
-  token: z.string().uuid(),
+  id: z.string().guid(),
+  token: z.string().guid(),
   stage: z.enum(['delivered', 'opened']),
 })
 ```
@@ -1656,7 +1650,7 @@ Where the phone was when naming began and at each photo (045).
 
 ```ts
 const schema = z.object({
-  due_id: z.string().uuid(),
+  due_id: z.string().guid(),
   name: thingName(120, 'name on the store sign'),
   // The phone's GPS fix when the photos were taken; never typed.
   lat: z.number().min(-90).max(90),
@@ -1802,7 +1796,7 @@ which day it is and who counted are all decided by submit_store_count().
 
 ```ts
 const schema = z.object({
-  outlet_id: z.string().uuid(),
+  outlet_id: z.string().guid(),
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   accuracy_m: z.number().nonnegative(),
@@ -1843,7 +1837,7 @@ decided by submit_count_sheet() (migration 035).
 
 ```ts
 const schema = z.object({
-  outlet_id: z.string().uuid(),
+  outlet_id: z.string().guid(),
   path: z.string().min(1).max(300),
   file_name: fileName,
 })
@@ -2026,7 +2020,7 @@ the distance itself and decides the status.
 
 ```ts
 const schema = z.object({
-  outlet_id: z.string().uuid().nullable().optional(),
+  outlet_id: z.string().guid().nullable().optional(),
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   accuracy_m: z.number().nonnegative(),
@@ -2034,7 +2028,7 @@ const schema = z.object({
   place_name: mapText(200),
   selfie_path: z.string().min(1).max(300).nullable().optional(),
   thumb_path: z.string().min(1).max(300).nullable().optional(),
-  device_info: z.record(z.unknown()).default({}),
+  device_info: z.record(z.string(), z.unknown()).default({}),
   client_captured_at: z.string().datetime({ offset: true }),
 })
 ```

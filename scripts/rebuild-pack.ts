@@ -122,6 +122,10 @@ const VERBATIM = [
   'public/manifest.webmanifest',
   // Hosting on the VPS: server setup, deploys, PM2, Nginx and the jobs.
   'deploy/README.md',
+  'deploy/DOCKER.md',
+  'Dockerfile',
+  '.dockerignore',
+  'docker/run-job.mjs',
   'deploy/setup-server.sh',
   'deploy/deploy.sh',
   'deploy/ecosystem.config.cjs',

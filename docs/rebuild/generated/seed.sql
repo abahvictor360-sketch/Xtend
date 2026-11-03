@@ -506,6 +506,12 @@ INSERT INTO public.role_store_counts VALUES ('marketer', true, '2026-01-01 00:00
 
 
 --
+-- Data for Name: sign_in_trusted_devices; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
 -- Data for Name: staff_outlets; Type: TABLE DATA; Schema: public; Owner: -
 --
 

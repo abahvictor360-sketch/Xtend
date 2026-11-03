@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { apiError, requireApiSession } from '@/lib/auth'
 import { POST as sendNotification } from '@/app/api/admin/notifications/route'
 
-const schema = z.object({ user_ids: z.array(z.string().uuid()).min(1).max(500) })
+const schema = z.object({ user_ids: z.array(z.string().guid()).min(1).max(500) })
 
 /**
  * Reminds people on an old app to install the new one: a notification that

@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-11-03, after hiding what Xtend runs on from response headers (no migration) and account lockout after 5 wrong passwords (0077)._
+_Last updated: 2026-11-03, after the Docker image for Dokploy or Coolify, security headers, Next.js 15.5.28 and Zod 4, closing signed-out access to database helpers (0078), and the sign-in lockout that pauses the guessing device (0077)._
 
 ---
 
@@ -151,7 +151,14 @@ allocation, teams.
 3. Run any new migrations in Supabase **before or right after** the deploy
    that needs them. A page that needs a missing migration says which one.
 
-**On a Hostinger VPS** (the production host): follow `deploy/README.md`.
+**On a Hostinger VPS with Dokploy or Coolify** (Docker): follow
+`deploy/DOCKER.md`: server hardening first, then the repository's
+`Dockerfile` (standalone Next.js server, non-root, its own health check),
+build arguments for the `NEXT_PUBLIC_*` values, runtime environment for
+secrets, and the scheduled jobs as the panel's scheduled tasks
+(`node run-job.mjs alerts` and so on, `docker/run-job.mjs`).
+
+**On a Hostinger VPS with PM2 and Nginx** (no panel): follow `deploy/README.md`.
 In short:
 
 - `deploy/setup-server.sh` sets up a fresh Ubuntu server once: Node 22, PM2,
@@ -547,23 +554,30 @@ the code lives.
   office pages follow the table; a minute's poll covers a dropped
   connection. Support (020) stays for problems with the app.
 
-- **Account lockout** (0077): `/api/auth/sign-in` asks
-  `sign_in_lock_status` before trying the password and refuses a locked
-  account with HTTP 423 "Too many wrong passwords, so this account is locked
-  until HH:MM. Ask your supervisor to unlock it sooner." A wrong password
-  calls `sign_in_failed`; the fifth in a row within 15 minutes locks the
-  account for 15 minutes (the answer to that fifth try is already the lock
-  message). A right password calls `sign_in_succeeded` and clears the count.
-  The key is the account's lower-case email (a phone is turned into it
-  first), so every way of typing the number counts together; an identifier
-  that matches nobody is keyed as typed and locks the same way, so the
-  message never shows whether an account exists. Staff
-  (`/admin/users`) shows a red **Locked until HH:MM** badge from
-  `locked_accounts()` and an **Unlock** button (PATCH `{unlock: true}` →
-  `unlock_sign_in`, audited `user.unlock`); **Reset password** also clears
-  the lock. The in-memory limits (30 per IP, 10 per identifier per 15
-  minutes) still apply on top. A test reset keeps the table: locks run out
-  by themselves.
+- **Sign-in lockout** (0077): Wrong passwords pause the **phone or computer making them, not the
+  account**. A device that has signed in to the account before carries a
+  random `xt_dev` cookie (httpOnly, path `/api/auth`, 180 days, a new token
+  every sign-in; only its SHA-256 reaches the database in
+  `sign_in_trusted_devices`), and is counted on its own; a cookie the server
+  never gave this account counts for nothing, so any other device is counted
+  by its address. Five wrong in a row within 15 minutes pause that device or
+  address for that account for 15 minutes (even the right password is
+  refused there; tries while paused do not extend it). Across unknown
+  devices together, 20 wrong within 15 minutes pause every unknown device for
+  that account; the person's known phone still signs in. A right password
+  clears that device's count. An identifier matching nobody is counted the
+  same way, so the answer never shows whether an account exists.
+  `/api/auth/sign-in` asks `sign_in_lock_status(account, address, device)`
+  first and answers a pause with HTTP 423 "Too many wrong passwords, so
+  signing in here is paused until HH:MM. Try again then, or ask your
+  supervisor to unlock it."; a wrong password calls `sign_in_failed`, a
+  right one `sign_in_succeeded` (which makes the device known). The in-memory
+  limits are now 30 per address and 10 per identifier *per address*, so
+  neither can lock a person out from elsewhere. Staff shows **Sign-in paused
+  until HH:MM** from `locked_accounts()` and an **Unlock** button (PATCH
+  `{unlock: true}` → `unlock_sign_in`, audited `user.unlock`, lifts every
+  pause on the account); **Reset password** lifts them too
+  (`sign_in_clear`). A test reset keeps both tables.
 
 ## 6. The database: every migration
 
@@ -643,7 +657,8 @@ Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
 | 0071 | HR role value: `alter type user_role add value 'hr'` (alone, so it is committed before 0072) |
 | 0072 | HR role: `is_hr()`, `hr_sees(target)`; read policies `profiles_hr_select`, `attendance_hr_select`, `leave_requests_hr_read`, `work_patterns_hr_read`, `schedule_overrides_hr_read`, `staff_outlets_hr_select`; `my_staff`, `available_supervisors`, `staff_analytics`, `can_manage_schedule`, `schedule_guard`, `is_working_day`, `decide_leave` and `write_audit` replaced to let HR in ("Only admins, HR and supervisors …", "Admins, HR and supervisors only") |
 | 0076 | `my_supervisor()` (id, full_name, avatar_path): the staff member's own supervisor, name and photo only, for the Messages page header (SECURITY DEFINER; staff cannot read the office's profiles) |
-| 0077 | Sign-in lockout: `sign_in_lockouts` (lock_key = lower-case email, or the typed identifier when it matches nobody; failed_count, first/last failed, locked_until, lock_count; RLS on, no grants); `sign_in_lock_status(key)`, `sign_in_failed(key)` (5 within 15 minutes → locked 15 minutes; tries while locked do not extend; rows a day old cleared), `sign_in_succeeded(key)` — service role only; `can_unlock_sign_in(user)`, `unlock_sign_in(user)` (admins anyone, supervisors their team, HR anyone but admins; audited `user.unlock`); `locked_accounts()` for the Staff page |
+| 0077 | Sign-in lockout that pauses the guessing device, not the account: `sign_in_lockouts` (lock_key, account, scope device/address/account, counts, locked_until; RLS on, no grants) and `sign_in_trusted_devices` (account, SHA-256 of the device token; forgotten after 180 days unused); service-role only `sign_in_lock_status(account, address, device)`, `sign_in_failed(…)` (5 per device or address, 20 per account from unknown devices, within 15 minutes → 15-minute pause), `sign_in_succeeded(…, new_device)`, `sign_in_clear(account)`; `can_unlock_sign_in(user)`, `unlock_sign_in(user)` (admins anyone, supervisors their team, HR anyone but admins; audited `user.unlock`); `locked_accounts()` for the Staff page |
+| 0078 | Function grants: revokes EXECUTE from `public`, `anon` and `authenticated` on every trigger and event-trigger function in `public` (they fire without it) and on `place_is_recognised(lat, lng)` (only other database functions call it), after Supabase's security advisor found them callable signed out |
 | 0075 | Message attachments: `messages.attachment_path/name/mime/size_bytes/kind`; `messages_body_check` relaxed (words **or** an attachment); `messages_attachment_check` (all five columns together, picture or PDF ≤ 10 MB); private `message-files` bucket with `message_files_insert_own` + `message_files_read`; `send_message(uuid, text, jsonb)` (drops the 2-arg form, validates and stores the attachment); `conversation` returns the attachment columns; `message_inbox` preview shows "Attachment" for a file-only message |
 | 0074 | Office stock count: `xm_counts.source` (`'field'`/`'office'`, default `'field'`); `lat`, `lng`, `accuracy_m`, `photo_path` made nullable; the `photo_path` UNIQUE constraint replaced by a partial unique index (`xm_counts_photo_path_uniq`, where not null); check `xm_counts_source_shape_check` (field counts keep GPS + photo, office counts carry neither); `xm_office_count(outlet, lines)` (admin only, no GPS/photo, same line checks as `xm_submit_count`, recorded under `auth.uid()`) |
 | 0073 | Messages: `message_threads` (one per staff member), `messages` (never edited, `clock_timestamp()`), `message_reads`; RLS through `can_message(staff)` (the person, their supervisor, admins, HR), no direct writes; `send_message(staff, body)`, `read_messages(staff)`, `unread_messages()`, `conversation(staff)`, `my_supervisor_name()`, `message_inbox()`; trigger `realtime_broadcast` on messages (staff topic); `messages` in the `supabase_realtime` publication; `reset_category_tables()` redefined with the three tables under support |
@@ -671,7 +686,7 @@ Set in `.env.local` for development, and for production in Vercel or, on the VPS
 | `ANDROID_APK_URL`, `ANDROID_LATEST_BUILD` | Optional | Override the GitHub-hosted APK (e.g. Play Store) |
 | `APP_VERSION`, `APP_RELEASE_REPO` | Optional | Version shown on `/download`; repo whose `android` release holds the APK |
 | `CREDENTIALS_WEBHOOK_URL`, `CREDENTIALS_WEBHOOK_TOKEN` | Optional | Relay that sends temporary passwords by SMS or email |
-| `TRUSTED_PROXY_HOPS` | Optional | 1 behind Vercel/Nginx, 2 with Cloudflare in front |
+| `TRUSTED_PROXY_HOPS` | Optional | 1 behind Vercel, Nginx or Traefik (Dokploy, Coolify); 2 with Cloudflare's proxy in front (behind Traefik only once Traefik trusts Cloudflare's addresses, `deploy/DOCKER.md`) |
 | `IP_API_KEY`, `IP_GEO_URL`, `IP_GEO_DISABLED` | Optional | IP lookup for VPN checks and the audit log |
 | `XTEND_BUILD_ID` | Optional | Build id outside Vercel (Vercel sets `VERCEL_DEPLOYMENT_ID`); `deploy/deploy.sh` sets it to the commit's first 12 characters |
 | `NEXT_PUBLIC_REALTIME_DISABLED` | Optional | Set `1` to turn the client realtime sockets off fleet-wide and ride the safety poll instead — the release valve when Supabase's concurrent-connection cap is the bottleneck under heavy load |
@@ -846,7 +861,9 @@ scripts/                  Admin bootstrap, logic checks, SQL test runner
 mobile/                   Capacitor Android and iOS apps
 docs/                     This guide, LOCATION-INTEGRITY.md, and rebuild/ (the rebuild pack)
 .github/workflows/        Phone app builds, the 5-minute alerts job, deploy to the VPS
-deploy/                   Hostinger VPS: setup, deploy with rollback, PM2, Nginx, crontab
+deploy/                   Hostinger VPS: setup, deploy with rollback, PM2, Nginx, crontab; DOCKER.md for Dokploy/Coolify
+Dockerfile, .dockerignore The container for Dokploy or Coolify (standalone server, non-root)
+docker/run-job.mjs        Runs a scheduled job inside the container
 ```
 
 ## 12. Making a change
@@ -903,7 +920,8 @@ Newest first. Dates are when the work landed on the main branch.
 | 2026-10-28 | Ask Xtend can set a work schedule: a new `propose_schedule` tool proposes the weekly days worked (0 = Sunday … 6 = Saturday) for named merchandisers/marketers or a group; the Apply card runs it through `POST /api/admin/schedules` (`set_work_pattern`, 059), with the same team checks and audit as the Schedules page. No new migration | — |
 | 2026-10-28 | **Location required to clock in or out** (+ services-off probe): the clock button on Home shows only when location is on, for clock-out as well as clock-in, gated by the shared `LocationGate`. Permission denied is caught instantly by the permission watcher; the phone's own location service being off (which the Permissions API cannot see) is caught up front by a new coarse one-shot probe, `probeLocation()` in `lib/geo.ts`, that tells apart denied (code 1) / service off (code 2) / slow signal (code 3, not blocked) / ok. The probe runs only once permission is granted, so it never prompts early; `prompt`, `unknown` and Safari fall through to the button, where the tap asks and blocks on its own. Client-only (`clock-panel.tsx`, `geo.ts`); no migration | — |
 | 2026-11-03 | **Quieter response headers**: `poweredByHeader: false` (no `X-Powered-By: Next.js`); new `deploy/nginx/xtend-quiet.conf` in `/etc/nginx/conf.d/` (`server_tokens off`, hides `X-Powered-By`, `X-Nextjs-Cache`, `X-Nextjs-Matched-Path`), installed by `setup-server.sh`; existing servers copy it once (`deploy/README.md`). The router's own `x-nextjs-*` and `Vary` headers stay | — |
-| 2026-11-03 | **Account lockout**: five wrong passwords in a row (within 15 minutes) lock the account for 15 minutes, even against the right password; an unknown phone or email locks the same way so nothing shows whether an account exists. The login form says "Too many wrong passwords, so this account is locked until HH:MM. Ask your supervisor to unlock it sooner." (HTTP 423). Staff shows **Locked until HH:MM** and an **Unlock** button (admins, the person's supervisor, HR); **Reset password** unlocks too. Kept in Postgres, so it holds across server instances (the older in-memory limits stay as a second net). Also fixed the RLS test's grant on `send_message` after 0075 | 0077 |
+| 2026-11-03 | **Ready for Dokploy or Coolify, and security pass**: `Dockerfile` (standalone server, non-root `node` user, health check on `/api/health`, `NEXT_PUBLIC_*` as build arguments, fails fast without the Supabase pair), `.dockerignore`, `docker/run-job.mjs` for the scheduled jobs, `deploy/DOCKER.md` (server hardening, panel, settings, jobs, moving over); `next.config.ts` builds standalone only when `NEXT_OUTPUT=standalone`. Security headers on every response (HSTS, `nosniff`, `X-Frame-Options: DENY`, CSP `frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'`, referrer and permissions policies, COOP). Next.js 15.5.25 → 15.5.28 (critical cache-poisoning advisory), Zod 3 → 4 (high memory-exhaustion advisory; `.uuid()` → `.guid()` to keep accepting any UUID shape, `errorMap` → `error`, two-argument `z.record`), PostCSS pinned to 8.5.28 for Next's copy; no high or critical `npm audit` findings left. The service-role client is `server-only`. 0078 closes signed-out access to database helpers | 0078 |
+| 2026-11-03 | **Sign-in lockout**: five wrong passwords in a row (within 15 minutes) pause signing in on the phone or computer making them for 15 minutes, not the whole account, so nobody can lock a colleague out by knowing their phone number. A phone that has signed in before is recognised by a server-issued cookie (only its hash is stored) and counted on its own; other devices by address; 20 wrong from unknown devices pause unknown devices for that account (the person's own phone still works). Login says "…signing in here is paused until HH:MM…" (HTTP 423). Staff shows **Sign-in paused until HH:MM** with **Unlock** (admins, the person's supervisor, HR); **Reset password** lifts it too; audited. The in-memory per-identifier limit is now per address as well. Also fixed the RLS test's grant on `send_message` after 0075 | 0077 |
 | 2026-10-28 | **Supervisor on the Messages page**: the staff Messages page (`/field/messages`) now opens with a header showing who they are writing to — their supervisor's photo (or initials) and name, "Your supervisor", or an "Xtend office" tile when they have none. New `my_supervisor()` (name + photo only, SECURITY DEFINER, since staff cannot read the office's profiles) | 0076 |
 | 2026-10-28 | **Message attachments**: a message (0073) can carry one picture (JPEG/PNG/WebP/HEIC) or one PDF, up to 10 MB, on both the staff and office sides. The paperclip sits in the chat compose bar; the sender uploads to the private `message-files` bucket under their own folder, then `send_message` records it; a message may be an attachment with no words. Pictures show inline in the bubble, PDFs as a file card, both opened through `GET /api/message-files/<id>` (a 5-minute signed link, gated by the message's `can_message` RLS). Push says "Sent a photo"/"Sent a PDF" when there are no words; the inbox preview reads "Attachment". New columns on `messages`; `send_message` gains `p_attachment`; `conversation` returns the attachment. (Test-reset does not yet purge message-attachment blobs — see section 15.) | 0075 |
 | 2026-10-28 | **Office stock counts and supplies through Ask Xtend**: an admin can record a stock count (with expiries) or log a delivery by typing it or attaching a count sheet, delivery note or invoice. Ask Xtend reads it and proposes `propose_stock_count` or `propose_supply`; Apply goes through the same X Metrics routes as the dashboard. Office counts have no GPS or shelf photo (new `xm_counts.source`, `'field'`/`'office'`; location/photo now optional, kept required for field counts by a check) and are recorded in the admin's name, so they feed stock-on-hand, expiry alerts and reconciliation but never a merchandiser's grade. New RPC `xm_office_count`, route `POST /api/admin/metrics/count`; supplies reuse `POST /api/admin/metrics/supplies` | 0074 |
@@ -968,6 +986,22 @@ Newest first. Dates are when the work landed on the main branch.
 | 2026-09-09 | First build: clock in and out, dashboard, marketer role, push, no-show alerts, place names | 0001–0008 |
 
 ## 15. Open items
+
+- **Supabase advisor, left on purpose**: 27 small helper functions have no
+  fixed `search_path` (none is SECURITY DEFINER and nobody signed in can
+  create objects in `public`, so there is nothing to hijack; fixing it would
+  stop Postgres inlining them in queries). 156 SECURITY DEFINER functions are
+  callable when signed in: that is how Xtend works, each checks the caller
+  itself. Tables with RLS and no policy are server-only by design.
+- **Leaked-password check**: Supabase Auth → Passwords can refuse passwords
+  known from breaches (HaveIBeenPwned). Switch it on in the dashboard (it
+  may need a paid plan).
+- **`npm audit`**: 9 moderate findings remain, all inside `exceljs`'s own
+  dependencies (archiver, uuid, glob); the only fix is an old exceljs 3.4.
+  Server-side, used to write spreadsheets from Xtend's own data.
+- **Content-Security-Policy**: only the framing, base and form rules are
+  set. A full script/connect policy needs nonces for Next.js and the
+  Supabase, Google Maps and push hosts listed; worth doing with care.
 
 - **What still shows the stack**: the browser must load `/_next/static/…`
   files and read the `Vary: rsc, next-router-…` and router `x-nextjs-*`
