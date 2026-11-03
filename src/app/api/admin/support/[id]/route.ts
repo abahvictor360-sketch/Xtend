@@ -7,7 +7,7 @@ import { notifyUsers } from '@/lib/notify'
 const schema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('close') }),
   z.object({ action: z.literal('reopen') }),
-  z.object({ action: z.literal('assign'), user_id: z.string().uuid().nullable() }),
+  z.object({ action: z.literal('assign'), user_id: z.string().guid().nullable() }),
 ])
 
 /**
@@ -19,7 +19,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const session = await requireApiSession(['admin', 'supervisor'])
     const { id } = await params
-    if (!z.string().uuid().safeParse(id).success) {
+    if (!z.string().guid().safeParse(id).success) {
       return Response.json({ error: 'Which thread?' }, { status: 400 })
     }
     const parsed = schema.safeParse(await request.json())

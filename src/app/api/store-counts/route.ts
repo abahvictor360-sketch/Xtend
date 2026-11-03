@@ -5,7 +5,7 @@ import { flushFlagAlerts } from '@/lib/flag-alerts'
 import { thingName } from '@/lib/fields'
 
 const schema = z.object({
-  outlet_id: z.string().uuid(),
+  outlet_id: z.string().guid(),
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   accuracy_m: z.number().nonnegative(),

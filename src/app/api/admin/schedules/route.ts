@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 
 const schema = z.object({
-  user_ids: z.array(z.string().uuid()).min(1, 'Pick at least one person').max(500, 'Set at most 500 people at a time'),
+  user_ids: z.array(z.string().guid()).min(1, 'Pick at least one person').max(500, 'Set at most 500 people at a time'),
   // Days of the week worked, 0 = Sunday … 6 = Saturday. Null: back to Monday to Saturday.
   days: z.array(z.number().int().min(0).max(6)).max(7).nullable(),
 })

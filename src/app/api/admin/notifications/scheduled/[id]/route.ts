@@ -14,7 +14,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     await requireApiSession(['admin', 'supervisor'])
     const { id } = await params
-    if (!z.string().uuid().safeParse(id).success) {
+    if (!z.string().guid().safeParse(id).success) {
       return Response.json({ error: 'Which notification?' }, { status: 400 })
     }
     const parsed = schema.safeParse(await request.json())

@@ -16,6 +16,8 @@ grant update, delete on public.known_places to authenticated;
 -- On Supabase those defaults are granted when a table is made, and a
 -- migration's own revokes come after. Replay 026's in that order.
 revoke select on public.phone_checks from authenticated;
+-- 0077: sign-in locks are read and written by the server only.
+revoke all on public.sign_in_lockouts, public.sign_in_trusted_devices from authenticated;
 grant select (id, user_id, requested_by, devices, created_at, delivered_at, opened_at)
   on public.phone_checks to authenticated;
 
@@ -683,7 +685,7 @@ reset role;
 insert into auth.users (id, email) values ('00000000-0000-0000-0000-0000000000a7', 'hr.rls@xpel.ng');
 insert into public.profiles (id, full_name, email, role)
 values ('00000000-0000-0000-0000-0000000000a7', 'HR Tester', 'hr.rls@xpel.ng', 'hr');
-grant execute on function public.send_message(uuid, text) to authenticated;
+grant execute on function public.send_message(uuid, text, jsonb) to authenticated;
 set role authenticated;
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000000a7', false);
@@ -720,6 +722,25 @@ end $$;
 reset role;
 delete from public.profiles where id = '00000000-0000-0000-0000-0000000000a7';
 delete from auth.users where id = '00000000-0000-0000-0000-0000000000a7';
+
+-- Sign-in lockout (0077): nobody signed in reads or writes the pauses or known devices.
+reset role;
+select assert(not has_table_privilege('authenticated', 'public.sign_in_lockouts', 'select')
+                and not has_table_privilege('authenticated', 'public.sign_in_trusted_devices', 'select')
+                and not has_table_privilege('authenticated', 'public.sign_in_trusted_devices', 'insert')
+                and not has_function_privilege('authenticated', 'public.sign_in_failed(text, text, text)', 'execute')
+                and not has_function_privilege('anon', 'public.sign_in_succeeded(text, text, text, text)', 'execute')
+                and not has_function_privilege('authenticated', 'public.sign_in_clear(text)', 'execute'),
+  'rls: sign-in pauses and known devices are server only');
+
+-- 0078: nothing privileged is open to signed-out callers.
+select assert(not exists (
+    select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.prosecdef
+      and has_function_privilege('anon', p.oid, 'execute')),
+  'rls: signed-out callers run no SECURITY DEFINER function');
+select assert(not has_function_privilege('authenticated', 'public.place_is_recognised(double precision, double precision)', 'execute'),
+  'rls: nobody probes whether a spot is a known place');
 
 reset role;
 select 'ALL RLS CHECKS PASSED';

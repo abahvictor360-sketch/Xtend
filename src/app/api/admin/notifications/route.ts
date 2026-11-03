@@ -23,14 +23,14 @@ const schema = z.object({
     .optional(),
   audience: z.enum(['everyone', 'role', 'outlet', 'users']),
   role: z.enum(['merchandiser', 'marketer', 'supervisor', 'admin']).nullable().optional(),
-  outlet_id: z.string().uuid().nullable().optional(),
-  user_ids: z.array(z.string().uuid()).max(500).optional(),
+  outlet_id: z.string().guid().nullable().optional(),
+  user_ids: z.array(z.string().guid()).max(500).optional(),
   /** Resolve and count the audience without sending anything. */
   preview: z.boolean().default(false),
   /** Send later instead of now (an ISO instant). */
   send_at: z.string().datetime({ offset: true }).nullable().optional(),
   /** This send repeats an earlier one to the people it did not reach. */
-  resend_of: z.string().uuid().nullable().optional(),
+  resend_of: z.string().guid().nullable().optional(),
 })
 
 interface TargetRow {

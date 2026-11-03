@@ -5,7 +5,7 @@ import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { pushToUsers } from '@/lib/push-users'
 import { pushConfigured } from '@/lib/push'
 
-const schema = z.object({ user_id: z.string().uuid() })
+const schema = z.object({ user_id: z.string().guid() })
 
 /**
  * "Check the phone now". A push goes to the person's phone, and the phone

@@ -20,7 +20,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
   try {
     const session = await requireApiSession(['admin', 'supervisor', 'hr'])
     const { id } = await ctx.params
-    if (!z.string().uuid().safeParse(id).success) {
+    if (!z.string().guid().safeParse(id).success) {
       return Response.json({ error: 'That request was not found' }, { status: 404 })
     }
     const parsed = schema.safeParse(await request.json())

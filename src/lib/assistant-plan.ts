@@ -35,14 +35,14 @@ export const applyPlanSchema = z.object({
   stores: z
     .array(
       z.object({
-        user_id: z.string().uuid(),
+        user_id: z.string().guid(),
         mode: z.enum(['add', 'replace']),
-        outlet_ids: z.array(z.string().uuid()).max(200),
+        outlet_ids: z.array(z.string().guid()).max(200),
       }),
     )
     .max(500),
   supervisors: z
-    .array(z.object({ user_id: z.string().uuid(), supervisor_id: z.string().uuid().nullable() }))
+    .array(z.object({ user_id: z.string().guid(), supervisor_id: z.string().guid().nullable() }))
     .max(500),
 })
 

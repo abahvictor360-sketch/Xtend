@@ -4,7 +4,7 @@ import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { note } from '@/lib/fields'
 
 const schema = z.object({
-  ids: z.array(z.string().uuid()).min(1, 'Pick at least one alert').max(500, 'Resolve at most 500 alerts at a time'),
+  ids: z.array(z.string().guid()).min(1, 'Pick at least one alert').max(500, 'Resolve at most 500 alerts at a time'),
   note: note(1000),
 })
 

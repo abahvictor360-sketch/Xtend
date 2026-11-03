@@ -5,7 +5,7 @@ import { updateConversationSchema } from '@/lib/assistant-conversations'
 
 type Ctx = { params: Promise<{ id: string }> }
 
-const id = z.string().uuid()
+const id = z.string().guid()
 
 function conversationError(error: { code?: string; message: string }) {
   const missing = error.code === '42P01' || error.code === 'PGRST205'

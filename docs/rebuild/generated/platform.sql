@@ -4,6 +4,7 @@
 -- Load after schema.sql and seed.sql.
 
 insert into storage.buckets (id, name, public) values ('avatars', 'avatars', 'f') on conflict (id) do nothing;
+insert into storage.buckets (id, name, public) values ('message-files', 'message-files', 'f') on conflict (id) do nothing;
 insert into storage.buckets (id, name, public) values ('report-files', 'report-files', 'f') on conflict (id) do nothing;
 insert into storage.buckets (id, name, public) values ('reports', 'reports', 'f') on conflict (id) do nothing;
 insert into storage.buckets (id, name, public) values ('selfies', 'selfies', 'f') on conflict (id) do nothing;
@@ -23,6 +24,14 @@ create policy avatars_insert_own on storage.objects as PERMISSIVE for INSERT to 
 drop policy if exists avatars_read on storage.objects;
 create policy avatars_read on storage.objects as PERMISSIVE for SELECT to public
   using (((bucket_id = 'avatars'::text) AND (((storage.foldername(name))[1] = (auth.uid())::text) OR is_admin() OR supervises_user(((storage.foldername(name))[1])::uuid))));
+
+drop policy if exists message_files_insert_own on storage.objects;
+create policy message_files_insert_own on storage.objects as PERMISSIVE for INSERT to authenticated
+  with check (((bucket_id = 'message-files'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text)));
+
+drop policy if exists message_files_read on storage.objects;
+create policy message_files_read on storage.objects as PERMISSIVE for SELECT to authenticated
+  using ((bucket_id = 'message-files'::text));
 
 drop policy if exists report_files_delete_own on storage.objects;
 create policy report_files_delete_own on storage.objects as PERMISSIVE for DELETE to public

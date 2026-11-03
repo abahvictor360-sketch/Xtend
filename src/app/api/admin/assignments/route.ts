@@ -3,8 +3,8 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, ApiError } from '@/lib/auth'
 
 const schema = z.object({
-  user_id: z.string().uuid(),
-  outlet_ids: z.array(z.string().uuid()).max(200),
+  user_id: z.string().guid(),
+  outlet_ids: z.array(z.string().guid()).max(200),
 })
 
 /**

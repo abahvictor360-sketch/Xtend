@@ -4,7 +4,7 @@ import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/
 import { thingName } from '@/lib/fields'
 
 const schema = z.object({
-  due_id: z.string().uuid(),
+  due_id: z.string().guid(),
   name: thingName(120, 'name on the store sign'),
   // The phone's GPS fix when the photos were taken; never typed.
   lat: z.number().min(-90).max(90),

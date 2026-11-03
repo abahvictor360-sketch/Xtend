@@ -12,7 +12,7 @@ import { mapText } from '@/lib/fields'
  * the distance itself and decides the status.
  */
 const schema = z.object({
-  outlet_id: z.string().uuid().nullable().optional(),
+  outlet_id: z.string().guid().nullable().optional(),
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   accuracy_m: z.number().nonnegative(),
@@ -20,7 +20,7 @@ const schema = z.object({
   place_name: mapText(200),
   selfie_path: z.string().min(1).max(300).nullable().optional(),
   thumb_path: z.string().min(1).max(300).nullable().optional(),
-  device_info: z.record(z.unknown()).default({}),
+  device_info: z.record(z.string(), z.unknown()).default({}),
   client_captured_at: z.string().datetime({ offset: true }),
 })
 

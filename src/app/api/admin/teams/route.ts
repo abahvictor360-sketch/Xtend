@@ -3,8 +3,8 @@ import { apiError, requireApiSession } from '@/lib/auth'
 import { assignSupervisor } from '@/lib/teams'
 
 const schema = z.object({
-  user_ids: z.array(z.string().uuid()).min(1).max(500),
-  supervisor_id: z.string().uuid().nullable(),
+  user_ids: z.array(z.string().guid()).min(1).max(500),
+  supervisor_id: z.string().guid().nullable(),
 })
 
 /** Assigns many people to one supervisor at once, or removes them from one. */

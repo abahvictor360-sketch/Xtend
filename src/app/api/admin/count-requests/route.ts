@@ -8,7 +8,7 @@ import { note } from '@/lib/fields'
 export const maxDuration = 60
 
 const schema = z.object({
-  user_ids: z.array(z.string().uuid()).min(1, 'Pick at least one person').max(500),
+  user_ids: z.array(z.string().guid()).min(1, 'Pick at least one person').max(500),
   due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   note: note(500),
 })

@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, dbErrorMessage, requireApiSession } from '@/lib/auth'
 
-const id = z.string().uuid()
+const id = z.string().guid()
 const schema = z.object({ action: z.enum(['heartbeat', 'extend', 'stop', 'close']) })
 
 /**

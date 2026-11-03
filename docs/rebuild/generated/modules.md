@@ -254,7 +254,7 @@ writes in it comes first and the entries the proxies add come last. The
 first entry is therefore whatever the caller chose to put there. This
 reads from the end instead, skipping the proxies Xtend sits behind:
 
-  TRUSTED_PROXY_HOPS=1  Nginx or Caddy on the VPS, or Vercel (default)
+  TRUSTED_PROXY_HOPS=1  Nginx, Caddy or Traefik (Dokploy, Coolify) on the VPS, or Vercel (default)
   TRUSTED_PROXY_HOPS=2  Cloudflare in front of Nginx, and so on
 
 Without the header (a request straight to Node), X-Real-IP, which Nginx
@@ -461,7 +461,7 @@ Exports: `FAST_INTERVAL_MS`, `FOLLOW_MINUTES`, `FOLLOW_HEARTBEAT_MS`, `FOLLOW_GR
 
 A fix worse than this is not evidence of anything.
 
-Exports: `ACCURACY_CEILING_M`, `HEARTBEAT_INTERVAL_MS`, `HEARTBEAT_GEOFENCE_M`, `GeoBlockReason`, `Fix`, `GeoBlocked`, `readPosition`, `FixOptions`, `SampledFix`, `combineFixes`, `fixesAgree`, `bestFix`, `requireFix`, `followPosition`, `positionCheck`, `haversineMetres`
+Exports: `ACCURACY_CEILING_M`, `HEARTBEAT_INTERVAL_MS`, `HEARTBEAT_GEOFENCE_M`, `GeoBlockReason`, `Fix`, `GeoBlocked`, `readPosition`, `LocationProbe`, `probeLocation`, `FixOptions`, `SampledFix`, `combineFixes`, `fixesAgree`, `bestFix`, `requireFix`, `followPosition`, `positionCheck`, `haversineMetres`
 
 ## `src/lib/geocode.ts`
 
@@ -581,7 +581,7 @@ Messages between a merchandiser or marketer and their supervisor
 (migration 0073). Admins and HR can read and reply in any conversation.
 Who may write where is decided in Postgres (can_message, send_message).
 
-Exports: `ChatMessage`, `InboxRow`, `MESSAGE_MAX`, `sendMessageSchema`, `readMessagesSchema`, `preview`
+Exports: `ChatMessage`, `InboxRow`, `MESSAGE_MAX`, `MESSAGE_FILE_BUCKET`, `MAX_MESSAGE_FILE_BYTES`, `MESSAGE_FILE_ACCEPT`, `messageAttachmentType`, `messageAttachmentKind`, `messageFileExt`, `messageFilePath`, `sendMessageSchema`, `readMessagesSchema`, `preview`
 
 ## `src/lib/metrics/admin-route.ts`
 
@@ -1812,11 +1812,7 @@ Exports: `GuideTopic`, `GuideContents`, `GuideSection`, `Steps`, `Tip`, `Questio
 
 ## `src/components/messages/conversation.tsx`
 
-One conversation between a staff member and the office (0073), for both
-sides. Staff pass no staffId: they always write in their own. New
-messages arrive live: staff hear their own private topic (0058), the
-office follows the messages table through RLS. A slow poll covers a
-dropped socket.
+"Today", "Yesterday", else the full date.
 
 Exports: `Conversation`
 

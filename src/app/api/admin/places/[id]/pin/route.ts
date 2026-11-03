@@ -3,7 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 
-const schema = z.object({ outlet_id: z.string().uuid() })
+const schema = z.object({ outlet_id: z.string().guid() })
 
 /**
  * Confirms that a learned place is where one of the stores waiting for a

@@ -1,8 +1,11 @@
+import { createHash, randomBytes } from 'node:crypto'
+import { cookies } from 'next/headers'
 import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { allowAttempt, clientAddress } from '@/lib/rate-limit'
 import { recordActivity } from '@/lib/activity-server'
+import { formatLagos } from '@/lib/utils'
 
 const schema = z.object({
   identifier: z.string().trim().min(3).max(120),
@@ -11,39 +14,99 @@ const schema = z.object({
 
 const WRONG = 'Those details are not correct.'
 const WINDOW_MS = 15 * 60 * 1000
+/** A random token for a phone or computer that has signed in before (0077). */
+const DEVICE_COOKIE = 'xt_dev'
 
 /**
  * Staff sign in with an email or a phone number. Supabase signs in on
  * email, so a phone is turned into the email here, on the server, and the
  * sign-in happens here too: the email never goes back to the browser, so
  * nobody can use this to find out a staff member's email from their phone
- * number. Every failure gives the same answer, and attempts are limited
- * per address and per account.
+ * number. Every failure gives the same answer.
+ *
+ * Wrong passwords pause the phone or computer making them, not the account
+ * (0077): a device that has signed in to the account before is counted on
+ * its own, anything else by its address, and unknown devices together are
+ * capped per account. Postgres keeps the counts and decides.
  */
 export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return Response.json({ error: WRONG }, { status: 400 })
   const { identifier, password } = parsed.data
+  const address = clientAddress(request)
 
   const tooMany = Response.json(
     { error: 'Too many attempts. Wait 15 minutes, then try again.' },
     { status: 429 },
   )
-  if (!allowAttempt(`sign-in:ip:${clientAddress(request)}`, 30, WINDOW_MS)) return tooMany
-  if (!allowAttempt(`sign-in:id:${identifier.toLowerCase()}`, 10, WINDOW_MS)) return tooMany
+  if (!allowAttempt(`sign-in:ip:${address}`, 30, WINDOW_MS)) return tooMany
+  if (!allowAttempt(`sign-in:id:${identifier.toLowerCase()}:${address}`, 10, WINDOW_MS)) return tooMany
 
   const email = identifier.includes('@') ? identifier.toLowerCase() : await emailForPhone(identifier)
-  if (!email) return Response.json({ error: WRONG }, { status: 401 })
+
+  // An identifier that matches nobody is counted the same way, so the
+  // answer never says whether an account exists.
+  const attempt: Attempt = {
+    p_account: email ?? identifier.toLowerCase(),
+    p_address: address,
+    p_device: deviceHash((await cookies()).get(DEVICE_COOKIE)?.value),
+  }
+  const service = createAdminSupabase()
+  const { data: lockedUntil } = await service.rpc('sign_in_lock_status', attempt)
+  if (lockedUntil) return paused(lockedUntil as string)
+
+  if (!email) return wrongPassword(service, attempt)
 
   // The user-scoped client writes the session cookies onto this response.
   const supabase = await createServerSupabase()
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-  if (error) return Response.json({ error: WRONG }, { status: 401 })
+  if (error) return wrongPassword(service, attempt)
+
+  // This device is now known to this account: a new token each sign-in.
+  const token = randomBytes(32).toString('base64url')
+  const { error: trustError } = await service.rpc('sign_in_succeeded', {
+    ...attempt,
+    p_new_device: deviceHash(token),
+  })
+  if (!trustError) {
+    ;(await cookies()).set(DEVICE_COOKIE, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/api/auth',
+      maxAge: 180 * 24 * 60 * 60,
+    })
+  }
 
   // For the office's activity log (062); never holds up the sign-in.
   if (data.user) await recordActivity(data.user.id, 'sign_in', request.headers)
 
   return Response.json({ ok: true })
+}
+
+type Service = ReturnType<typeof createAdminSupabase>
+type Attempt = { p_account: string; p_address: string; p_device: string | null }
+
+/** Only the token's hash reaches the database. */
+function deviceHash(token: string | undefined): string | null {
+  if (!token || token.length > 100) return null
+  return createHash('sha256').update(token).digest('hex')
+}
+
+async function wrongPassword(service: Service, attempt: Attempt) {
+  const { data: lockedUntil } = await service.rpc('sign_in_failed', attempt)
+  if (lockedUntil) return paused(lockedUntil as string)
+  return Response.json({ error: WRONG }, { status: 401 })
+}
+
+function paused(until: string) {
+  return Response.json(
+    {
+      error: `Too many wrong passwords, so signing in here is paused until ${formatLagos(until, false)}. Try again then, or ask your supervisor to unlock it.`,
+      locked_until: until,
+    },
+    { status: 423 },
+  )
 }
 
 async function emailForPhone(identifier: string): Promise<string | null> {

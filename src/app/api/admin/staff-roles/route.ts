@@ -7,7 +7,7 @@ import { roleName } from '@/lib/staff-roles'
 const schema = z.object({
   name: roleName,
   base_role: z.enum(['merchandiser', 'marketer', 'supervisor'], {
-    errorMap: () => ({ message: 'Choose what the role works like' }),
+    error: 'Choose what the role works like',
   }),
   counts_stock: z.boolean().default(true),
 })

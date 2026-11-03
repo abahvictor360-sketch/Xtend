@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, dbErrorMessage, requireApiSession } from '@/lib/auth'
 
-const schema = z.object({ user_id: z.string().uuid() })
+const schema = z.object({ user_id: z.string().guid() })
 
 /**
  * Starts following someone live (migration 0070). The database decides:

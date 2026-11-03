@@ -3,12 +3,12 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage, dbErrorResponse } from '@/lib/auth'
 
 const schema = z.object({
-  outlet_id: z.string().uuid(),
+  outlet_id: z.string().guid(),
   sale_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Choose the day'),
   photo_path: z.string().min(1).max(300).nullable().optional(),
   captured_at: z.string().datetime({ offset: true }),
   lines: z
-    .array(z.object({ product_id: z.string().uuid(), units: z.number().int().min(0).max(1_000_000) }))
+    .array(z.object({ product_id: z.string().guid(), units: z.number().int().min(0).max(1_000_000) }))
     .min(1, 'Enter at least one product')
     .max(500),
 })

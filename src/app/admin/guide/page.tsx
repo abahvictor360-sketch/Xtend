@@ -76,10 +76,15 @@ export default async function AdminGuidePage() {
         <GuideSection topic={T.news} intro="The latest changes, where to find them, and the one-off steps they need.">
           <p>
             <Ui>First, run the new database updates</Ui> in Supabase (SQL editor), in this order, if they
-            have not been run yet: 0059, 0060, 0061, 0062, 0063, 0064, 0065, 0066, 0067, 0068, 0069, 0070, 0071, 0072, 0073 (run 0071 on its own first). A page that needs
+            have not been run yet: 0059, 0060, 0061, 0062, 0063, 0064, 0065, 0066, 0067, 0068, 0069, 0070, 0071, 0072, 0073, 0074, 0075, 0076, 0077 (run 0071 on its own first). A page that needs
             one it does not have says which number to run.
           </p>
           <ul className="list-disc space-y-1.5 pl-5">
+            <li>
+              <Ui>Sign-in lockout</Ui> (0077): five wrong passwords pause the phone or computer making
+              them for 15 minutes, never the person&apos;s own phone. Staff shows who is paused;{' '}
+              <Ui>Unlock</Ui> or <Ui>Reset password</Ui> lets them back in.
+            </li>
             <li>
               <Ui>Messages</Ui> (0073): merchandisers and marketers chat with their supervisor from{' '}
               <Ui>You</Ui> → <Ui>Messages</Ui>; the office answers under <Ui>Messages</Ui>. Admins and HR
@@ -770,6 +775,23 @@ export default async function AdminGuidePage() {
               {
                 q: 'Someone forgot their password',
                 a: <>Reset it on the Staff page. They choose a new one when they sign in.</>,
+              },
+              {
+                q: 'Someone is locked out',
+                a: (
+                  <>
+                    Wrong passwords pause the phone or computer making them, not the person: five in a row
+                    (within 15 minutes) pause signing in there for 15 minutes, even if the right password comes
+                    next. A phone that has signed in to the account before is counted on its own, so someone
+                    who knows a colleague&apos;s number cannot lock them out of their own phone. Other devices
+                    are counted by internet address, and 20 wrong from unknown devices within 15 minutes pause
+                    every unknown device for that account (their usual phone still works). A number or email
+                    that belongs to nobody behaves the same, so the message never shows whether an account
+                    exists. Staff shows <Ui>Sign-in paused until</Ui>; <Ui>Unlock</Ui> lifts every pause, and{' '}
+                    <Ui>Reset password</Ui> does too. Supervisors unlock their own team and HR anyone but admins. Each unlock is in the audit
+                    log as <Ui>user.unlock</Ui>.
+                  </>
+                ),
               },
               {
                 q: 'Someone left the company',

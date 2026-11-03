@@ -46,7 +46,7 @@ export interface PageLink {
   href: string
 }
 
-const uuid = z.string().uuid()
+const uuid = z.string().guid()
 
 /** What Apply sends back, re-checked by the route that does the work. */
 export const actionSchema = z.discriminatedUnion('kind', [

@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 
-const schema = z.object({ policy_id: z.string().uuid() })
+const schema = z.object({ policy_id: z.string().guid() })
 
 /** A member of staff says they have read the current scoring policy. */
 export async function POST(request: Request) {

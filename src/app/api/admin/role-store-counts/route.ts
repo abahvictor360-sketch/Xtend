@@ -4,7 +4,7 @@ import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 
 const schema = z.object({
-  role: z.enum(['merchandiser', 'marketer'], { errorMap: () => ({ message: 'Choose a role' }) }),
+  role: z.enum(['merchandiser', 'marketer'], { error: 'Choose a role' }),
   counts_stock: z.boolean(),
 })
 

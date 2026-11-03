@@ -34,6 +34,12 @@ in force.
   `integrity_flags`, `store_counts`, `xm_*`, `scheduled_notifications`,
   `tracking_tokens`, `photo_checks` have no insert policy for
   `authenticated`; only the named function (or the service role) writes them.
+- **Nobody signed out runs a privileged function (0078).** Trigger and
+  event-trigger functions in `public` have EXECUTE revoked from `public`,
+  `anon` and `authenticated` (triggers fire without it), and so has
+  `place_is_recognised`. Every new SECURITY DEFINER function revokes
+  `public, anon` and grants only who calls it; `rls_counts.sql` fails if
+  `anon` can run any.
 - **Errors.** A message raised on purpose by a Postgres function has
   SQLSTATE `P0001` and is written for people: pass it to the user
   (`dbErrorMessage` in `src/lib/auth.ts`). Any other database error is
@@ -81,7 +87,26 @@ in force.
   an **active** profile, turned into the email on the server, and the
   email is never returned. Every failure says "Those details are not
   correct." Rate limits per 15 minutes: **30 attempts per IP** and **10
-  per identifier**, then HTTP 429 "Wait 15 minutes".
+  per identifier from one IP**, then HTTP 429 "Wait 15 minutes".
+- **Sign-in lockout (0077).** Wrong passwords pause the **phone or computer making them, not the
+  account**. A device that has signed in to the account before carries a
+  random `xt_dev` cookie (httpOnly, path `/api/auth`, 180 days, a new token
+  every sign-in; only its SHA-256 reaches the database in
+  `sign_in_trusted_devices`), and is counted on its own; a cookie the server
+  never gave this account counts for nothing, so any other device is counted
+  by its address. Five wrong in a row within 15 minutes pause that device or
+  address for that account for 15 minutes (even the right password is
+  refused there; tries while paused do not extend it). Across unknown
+  devices together, 20 wrong within 15 minutes pause every unknown device for
+  that account; the person's known phone still signs in. A right password
+  clears that device's count. An identifier matching nobody is counted the
+  same way, so the answer never shows whether an account exists. HTTP 423
+  "Too many wrong passwords, so signing in here is paused until HH:MM. Try
+  again then, or ask your supervisor to unlock it." `unlock_sign_in(user)`:
+  admins anyone, the person's supervisor, HR anyone but admins, never
+  yourself ("You can only unlock your own team"), lifts every pause on the
+  account, audited `user.unlock`. A password reset by the office calls
+  `sign_in_clear`. The `sign_in_*` functions are service-role only.
 
 ### 1.2 Roles
 

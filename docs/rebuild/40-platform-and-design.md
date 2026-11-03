@@ -28,6 +28,7 @@ of repeating it:
 .env.example            .eslintrc.json        .vercelignore (contains: mobile/)
 next.config.ts          postcss.config.mjs    tailwind.config.ts
 tsconfig.json           tsconfig.scripts.json vercel.json
+Dockerfile              .dockerignore         docker/run-job.mjs   (Dokploy/Coolify; verbatim)
 package.json            package-lock.json     next-env.d.ts
 src/app/                App Router pages and route handlers
 src/components/         ui/, field/, admin/, admin/xm/, metrics/, brand/, plus shared top-level components
@@ -139,11 +140,19 @@ const BUILD_ID =
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  poweredByHeader: false, // no "X-Powered-By: Next.js"
+  output: process.env.NEXT_OUTPUT === 'standalone' ? 'standalone' : undefined, // the Docker build sets it
   env: { NEXT_PUBLIC_BUILD_ID: BUILD_ID },
   generateBuildId: async () => BUILD_ID.replace(/[^a-zA-Z0-9_-]/g, '-'),
   serverExternalPackages: ['exceljs'],
   experimental: { staleTimes: { dynamic: 15, static: 180 } },
   async headers() {
+    // First, on '/:path*': Strict-Transport-Security max-age=63072000; includeSubDomains,
+    // X-Content-Type-Options nosniff, X-Frame-Options DENY,
+    // Content-Security-Policy "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'",
+    // Referrer-Policy strict-origin-when-cross-origin,
+    // Permissions-Policy camera=(self), geolocation=(self), microphone=(), payment=(), usb=(), interest-cohort=(),
+    // Cross-Origin-Opener-Policy same-origin. Then:
     return [{
       source: '/sw.js',
       headers: [
@@ -252,15 +261,25 @@ matcher: ['/((?!_next/static|_next/image|favicon.ico|manifest.webmanifest|sw.js|
 }
 ```
 
-Production runs on a Hostinger VPS instead (`deploy/`, verbatim in the
-repository; steps in `deploy/README.md`):
+Production runs on a Hostinger VPS. With **Dokploy or Coolify**, the
+repository's `Dockerfile` (verbatim) builds a standalone server on
+`node:22-bookworm-slim` as the `node` user, takes the `NEXT_PUBLIC_*` values
+as build arguments (it fails without the Supabase pair), checks
+`/api/health` itself, and carries `run-job.mjs` so the panel's scheduled
+tasks run `node run-job.mjs alerts|absence-sweep|purge-selfies` inside the
+container; steps in `deploy/DOCKER.md`. Without a panel (`deploy/`,
+verbatim; steps in `deploy/README.md`):
 
 - **PM2:** cluster, `instances: 'max'`, `next start -p 3000 -H 127.0.0.1`,
   restart at 1500 MB.
 - **Nginx:** proxies to it with `X-Forwarded-For` (so `TRUSTED_PROXY_HOPS=1`),
   allows 25 MB uploads, and serves `/_next/static` with a one-year
   immutable cache. It has no per-address rate limit, because mobile
-  networks share addresses.
+  networks share addresses. `deploy/nginx/xtend-quiet.conf` (in
+  `/etc/nginx/conf.d/`) sets `server_tokens off` and hides `X-Powered-By`,
+  `X-Nextjs-Cache` and `X-Nextjs-Matched-Path`; the `x-nextjs-*` headers the
+  client router reads (prerender, stale-time, rewritten-path, postponed)
+  and the `Vary: rsc, next-router-…` header must stay.
 - **Crontab:** runs the three jobs through `deploy/cron.sh` against
   `127.0.0.1:3000`.
 - **Deploys:** `deploy/deploy.sh` builds each commit in `releases/<sha12>`
