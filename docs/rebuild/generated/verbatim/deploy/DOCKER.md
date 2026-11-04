@@ -35,6 +35,16 @@ Do these on the fresh VPS before installing the panel.
 - Source: GitHub, repository `abahvictor360-sketch/Xtend`, branch
   `claude/new-session-sgmxdg` (the main branch). Turn on auto-deploy on push.
 - Build type: **Dockerfile** (`Dockerfile` at the root). Port **3000**.
+  Dokploy defaults new apps to **Nixpacks**: change it (app → General →
+  Build Type). A Nixpacks build is the wrong one for Xtend: it copies every
+  environment variable, secrets included (service-role key, `CRON_SECRET`,
+  the Anthropic and VAPID private keys), into the image as build `ARG`/`ENV`
+  (Docker's `SecretsUsedInArgOrEnv` warnings), and without a Node version in
+  the repo it picks Node 18, which `@supabase/supabase-js` no longer supports
+  (`EBADENGINE`, "Node.js 20 and below are deprecated"). The Dockerfile takes
+  only the `NEXT_PUBLIC_*` build arguments below and runs Node 22. As a net,
+  `package.json` now says `"engines": {"node": ">=22"}` and `.nvmrc` says
+  `22`, so a Nixpacks build also gets Node 22.
 - Domain: e.g. `app.example.com`, HTTPS on (Let's Encrypt). Point the
   domain's A record at the VPS first.
 - Health check: path `/api/health` (the image also has its own).
