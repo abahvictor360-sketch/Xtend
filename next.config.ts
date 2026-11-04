@@ -3,11 +3,18 @@ import type { NextConfig } from 'next'
 // One id per deploy, baked into both the server and the pages it serves. A
 // page compares its own with what /api/version says now: when they differ,
 // a newer version is live and the page offers to update (UpdateManager).
+//
+// Next evaluates this file in several processes during one build (the
+// compiler passes for the browser and the server each load it), so a
+// Date.now() fallback gave every pass a different id: the page's id never
+// matched the server's and the "new version" bar came back after every
+// update. The fallback is therefore pinned in process.env on first use, which
+// the build's child processes inherit, so one build has one id.
 const BUILD_ID =
   process.env.VERCEL_DEPLOYMENT_ID ||
   process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ||
   process.env.XTEND_BUILD_ID ||
-  `local-${Date.now().toString(36)}`
+  (process.env.XTEND_BUILD_ID = `local-${Date.now().toString(36)}`)
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,

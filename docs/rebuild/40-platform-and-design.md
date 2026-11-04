@@ -136,7 +136,12 @@ const BUILD_ID =
   process.env.VERCEL_DEPLOYMENT_ID ||
   process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ||
   process.env.XTEND_BUILD_ID ||
-  `local-${Date.now().toString(36)}`
+  (process.env.XTEND_BUILD_ID = `local-${Date.now().toString(36)}`)
+// Pinned in process.env on first use: Next loads this file in several build
+// processes (browser and server compile passes), and a bare Date.now() gave
+// each its own id, so a page's id never matched /api/version and the "new
+// version" bar never cleared. The Dockerfile also exports XTEND_BUILD_ID
+// (SOURCE_COMMIT, or a timestamp) before `npm run build`.
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,

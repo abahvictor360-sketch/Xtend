@@ -29,7 +29,10 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN test -n "$NEXT_PUBLIC_SUPABASE_URL" && test -n "$NEXT_PUBLIC_SUPABASE_ANON_KEY" \
     || { echo "Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY as build arguments." >&2; exit 1; }
-RUN npm run build
+# One id for the whole build (the update banner compares the page's id with
+# the server's). Dokploy passes no SOURCE_COMMIT, so a timestamp is chosen
+# here once and every build process inherits it.
+RUN export XTEND_BUILD_ID="${XTEND_BUILD_ID:-$(date +%s)}" && npm run build
 
 FROM node:22-bookworm-slim AS run
 WORKDIR /app
