@@ -11,6 +11,7 @@ const MIN_LENGTH = 8
 
 export function ChangePasswordForm({ forced }: { forced: boolean }) {
   const router = useRouter()
+  const [current, setCurrent] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -20,6 +21,10 @@ export function ChangePasswordForm({ forced }: { forced: boolean }) {
     event.preventDefault()
     setError(null)
 
+    if (!forced && !current) {
+      setError('Enter your current password.')
+      return
+    }
     if (password.length < MIN_LENGTH) {
       setError(`Use at least ${MIN_LENGTH} characters.`)
       return
@@ -35,7 +40,7 @@ export function ChangePasswordForm({ forced }: { forced: boolean }) {
       const res = await fetch('/api/auth/password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify(forced ? { password } : { password, current_password: current }),
       })
       if (!res.ok) {
         const { error: message } = (await res.json().catch(() => ({}))) as { error?: string }
@@ -55,6 +60,20 @@ export function ChangePasswordForm({ forced }: { forced: boolean }) {
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       {error && <Alert variant="destructive">{error}</Alert>}
+
+      {!forced && (
+        <div className="space-y-1.5">
+          <Label htmlFor="current">Current password</Label>
+          <Input
+            id="current"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={current}
+            onChange={(e) => setCurrent(e.target.value)}
+          />
+        </div>
+      )}
 
       <div className="space-y-1.5">
         <Label htmlFor="password">New password</Label>

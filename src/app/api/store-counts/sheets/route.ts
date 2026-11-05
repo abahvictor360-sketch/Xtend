@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { fileName } from '@/lib/fields'
+import { isOwnStoragePath } from '@/lib/storage-path'
 
 const schema = z.object({
   outlet_id: z.string().guid(),
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
     const session = await requireApiSession(['merchandiser', 'marketer', 'admin'])
     const parsed = schema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return Response.json({ error: 'Choose the filled sheet to send' }, { status: 400 })
-    if (!parsed.data.path.startsWith(`${session.userId}/`)) {
+    if (!isOwnStoragePath(parsed.data.path, session.userId)) {
       return Response.json({ error: 'That file does not belong to you' }, { status: 400 })
     }
 

@@ -1,5 +1,6 @@
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { ApiError, apiError, requireApiSession } from '@/lib/auth'
+import { isExportFormat } from '@/lib/export/formats'
 import { audit } from '@/lib/audit'
 import { activitySheet, parseActivityFilter } from '@/lib/activity-log'
 import { fetchActivity } from '@/lib/activity-server'
@@ -12,6 +13,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ format: str
   try {
     await requireApiSession(['admin'])
     const { format } = await ctx.params
+    if (!isExportFormat(format)) throw new ApiError('Unsupported export format', 400)
     const filter = parseActivityFilter(new URL(request.url).searchParams)
     const supabase = await createServerSupabase()
     const [{ rows }, { data: people }] = await Promise.all([

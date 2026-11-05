@@ -96,6 +96,17 @@ export default async function AdminGuidePage() {
               <Ui>Unlock</Ui> or <Ui>Reset password</Ui> lets them back in.
             </li>
             <li>
+              <Ui>Limits and safeguards</Ui> (0079): each person may have up to 60 photos checked, 120
+              place lookups, 20 support helper replies and 60 Ask Xtend questions an hour; past that they
+              are asked to wait (a support message is still sent and the office answers it, as it does
+              once a conversation passes 12 messages). Google place lookups stop at 20,000 a month unless{' '}
+              <Ui>GOOGLE_MONTHLY_LOOKUP_LIMIT</Ui> says otherwise. Changing a password now needs the
+              current one, except the first change after an account is created or reset. Supervisors can
+              only edit merchandisers and marketers on their team: promoting someone to supervisor, HR or
+              admin takes them off any team. Message attachments open only for the people in that
+              conversation. <Ui>/api/health</Ui> shows the settings list only with the job secret.
+            </li>
+            <li>
               <Ui>Messages</Ui> (0073): merchandisers and marketers chat with their supervisor from{' '}
               <Ui>You</Ui> → <Ui>Messages</Ui>; the office answers under <Ui>Messages</Ui>. Admins and HR
               can read and reply in any chat.
@@ -581,9 +592,9 @@ export default async function AdminGuidePage() {
             from Xtend&apos;s own list (stores, places learned before, addresses saved before), from Google, or
             from OpenStreetMap — and how many paid requests went to Google. Google is asked only for a spot
             Xtend has never seen: whatever it finds is saved, so the next clock-in, visit or alert there is
-            named from Xtend&apos;s own list, including alerts from the phone app while it is closed. If a
-            monthly limit is set (<Ui>GOOGLE_MONTHLY_LOOKUP_LIMIT</Ui>), OpenStreetMap is used once it is
-            reached, until the next month.
+            named from Xtend&apos;s own list, including alerts from the phone app while it is closed. Once the
+            monthly limit is reached (<Ui>GOOGLE_MONTHLY_LOOKUP_LIMIT</Ui>, 20,000 when not set; 0 or none
+            for no limit), OpenStreetMap is used until the next month.
           </p>
           <p>
             <Ui>Audit log</Ui>: every change an admin or supervisor makes, with when, where they were and on

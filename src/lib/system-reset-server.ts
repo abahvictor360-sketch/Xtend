@@ -8,20 +8,10 @@ import { auditContextHeader } from '@/lib/audit-context'
  */
 
 /**
- * Whether this is the admin's password, checked by signing in on a
- * throwaway client that keeps no session, so the admin's own sign-in in
- * the browser is untouched. The new session is ended straight away
- * (locally: a global sign-out would end the admin's other sessions too).
+ * Whether this is the admin's password (lib/password-check.ts): a throwaway
+ * sign-in, so the admin's own session is untouched.
  */
-export async function passwordIsRight(email: string, password: string): Promise<boolean> {
-  const client = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
-    auth: { autoRefreshToken: false, persistSession: false, detectSessionInUrl: false },
-  })
-  const { data, error } = await client.auth.signInWithPassword({ email, password })
-  if (error || !data.session) return false
-  await client.auth.signOut({ scope: 'local' }).catch(() => undefined)
-  return true
-}
+export { passwordIsRight } from '@/lib/password-check'
 
 /**
  * Service-role client that carries where the request came from, so the

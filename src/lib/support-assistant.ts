@@ -2,6 +2,7 @@ import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { notifyWatchers } from '@/lib/notify'
+import { supportHelperMode } from '@/lib/usage-limits'
 
 /**
  * The AI that answers a field member's support message.
@@ -54,7 +55,10 @@ interface ThreadMsg {
  * the route can report it; never throws for an AI/transport error (the
  * member's message is already saved), it escalates instead.
  */
-export async function respondToSupportThread(threadId: string): Promise<{
+export async function respondToSupportThread(
+  threadId: string,
+  { withinHourlyLimit = true }: { withinHourlyLimit?: boolean } = {},
+): Promise<{
   replied: boolean
   escalated: boolean
   reply: string | null
@@ -81,6 +85,20 @@ export async function respondToSupportThread(threadId: string): Promise<{
     .eq('id', thread.user_id)
     .maybeSingle<{ full_name: string }>()
     .then((r) => r.data?.full_name ?? 'the member')
+
+  // Past the member's hourly allowance, or a long conversation: no AI call,
+  // the office answers. Told once; after that the thread is already theirs.
+  if (supportHelperMode(withinHourlyLimit, messages.length) === 'office') {
+    if (thread.status === 'escalated') return { replied: false, escalated: true, reply: null }
+    return finish(
+      admin,
+      thread,
+      staffName,
+      true,
+      "Thanks for your message. I've passed this to the office and someone will follow up with you.",
+      'a long conversation, or many messages in an hour',
+    )
+  }
 
   // If there is no key, escalate straight to a person rather than go silent.
   if (!supportAssistantConfigured()) {

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage, dbErrorResponse } from '@/lib/auth'
+import { isOwnStoragePath } from '@/lib/storage-path'
 
 const schema = z.object({
   outlet_id: z.string().guid(),
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
       return Response.json({ error: parsed.error.issues[0]?.message ?? 'Invalid sales report' }, { status: 400 })
     }
     const body = parsed.data
-    if (body.photo_path && !body.photo_path.startsWith(`${session.userId}/`)) {
+    if (body.photo_path && !isOwnStoragePath(body.photo_path, session.userId)) {
       return Response.json({ error: 'That photo does not belong to you' }, { status: 400 })
     }
     const supabase = await createServerSupabase()

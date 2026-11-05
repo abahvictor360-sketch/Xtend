@@ -1,11 +1,12 @@
 import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, dbErrorMessage, requireApiSession } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 import { deliverCredentials, generateTempPassword } from '@/lib/credentials'
 import { emailAddress, optionalPhone, personName } from '@/lib/fields'
 import { rememberTempPassword } from '@/lib/staff-logins'
+import { authAdminError } from '@/lib/auth-admin-errors'
 
 const rowSchema = z.object({
   full_name: personName,
@@ -132,7 +133,7 @@ export async function POST(request: Request) {
       })
 
       if (authError || !created.user) {
-        row.error = authError?.message ?? 'Could not create the account'
+        row.error = authError ? authAdminError(authError, 'Could not create the account').message : 'Could not create the account'
         continue
       }
 
@@ -148,7 +149,9 @@ export async function POST(request: Request) {
 
       if (profileError) {
         await admin.auth.admin.deleteUser(created.user.id)
-        row.error = profileError.message
+        row.error = profileError.code === '23505'
+          ? 'Somebody already has that email or phone number.'
+          : dbErrorMessage(profileError, 'Could not create the account')
         continue
       }
 

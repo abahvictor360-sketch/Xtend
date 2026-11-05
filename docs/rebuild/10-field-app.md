@@ -192,6 +192,11 @@ sheet overlapping it (`-mt-10`, `rounded-t-[2rem]`).
   number plus variants: `0…` ↔ `+234…`, `234…` → `0…`. Look up an **active**
   profile's email with the service-role client. The email is never returned
   to the browser.
+- When no account matches a phone number, the server still makes a sign-in
+  of the same cost (`passwordIsRight(NO_SUCH_ACCOUNT, password)`,
+  `src/lib/password-check.ts`, address `no-such-account@xtend.invalid`)
+  before answering, so the time taken does not show whether the number
+  exists (0079 security pass).
 - Signs in server-side so the session cookies are set on this response.
   Returns `{ ok: true }`.
 
@@ -202,11 +207,21 @@ sheet overlapping it (`-mt-10`, `rounded-t-[2rem]`).
   created with a temporary password. Choose your own before you start.";
   otherwise **"Change your password"** with "Pick something you will
   remember. You will not be asked again."
-- Fields **"New password"** and **"Repeat it"**. Minimum **8** characters
-  (`MIN_LENGTH` in `form.tsx`): "Use at least 8 characters." Mismatch: "The
-  two passwords do not match."
-- Save: `POST /api/auth/password { password }`, which calls
-  `auth.updateUser({ password })` on the server, sets own profile
+- Fields **"Current password"** (only when not forced; empty: "Enter your
+  current password."), **"New password"** and **"Repeat it"**. Minimum **8**
+  characters (`MIN_LENGTH` in `form.tsx`): "Use at least 8 characters."
+  Mismatch: "The two passwords do not match."
+- Save: `POST /api/auth/password { password, current_password? }`. Unless
+  `must_change_password` is set (the first change after the office set a
+  temporary password), the current password is required and checked by a
+  throwaway sign-in (`passwordIsRight`, `src/lib/password-check.ts`): missing
+  → 400 "Enter your current password.", wrong → 400 "Your current password
+  is not correct.", more than 10 tries in 15 minutes → 429 "Too many tries.
+  Wait 15 minutes, then try again." Supabase's refusals are put in words
+  ("Choose a password you have not used here before.", "That password is
+  too easy to guess. Try a longer one.", else "The password could not be
+  saved. Try again."). The route then calls `auth.updateUser({ password })`
+  on the server, sets own profile
   `must_change_password = false` (a trigger clears the stored temp password)
   and records the change for the office's activity log (0062); on an error
   the form shows the server's message; then `replace('/')`. Button **"Save password"** / **"Saving…"**; a ghost
@@ -235,6 +250,14 @@ administrator if you think this is a mistake.", and a **"Sign out"** button
   clocked-out wording.
 - Opening `/api/auth/expired` while validly signed in just lands on `/`.
 - A new account is forced through "Set your password" before anything else.
+  Until it is done every API call answers **403** `{ error: 'Choose your own
+  password first.', code: 'change_password' }` (`requireApiSession`, decided by
+  `passwordChangeBlocks` in `src/lib/password-gate.ts`), except the routes
+  that pass `allowDuringPasswordChange`: `/api/auth/password`,
+  `/api/activity`, `/api/push/subscribe`, `/api/push/native`,
+  `/api/version/seen`.
+- Changing a password later needs the current one; the forced first change
+  does not.
 
 ---
 
@@ -759,7 +782,17 @@ selfie).
 - Body `{ bucket: selfies|reports, path, thumb_path?, kind?:
   shelf|storefront|product_selfie }`; selfies bucket always means kind
   `selfie`; reports bucket defaults to `shelf`. Paths must be in the
-  caller's folder.
+  caller's folder, checked with `isOwnStoragePath(path, uid)`
+  (`src/lib/storage-path.ts`: `<uid>/<name>` or `<uid>/<folder>/<name>`, each
+  part `[A-Za-z0-9._-]+`, never `.`/`..`/empty, at most 300 characters; any
+  other → 400 "That photo does not belong to you"). The same check guards
+  every route that takes a storage path from the phone (attendance, visits,
+  reports, store counts and sheets, X Metrics counts and sales, place
+  naming, count template).
+- At most **60** checks per person per hour (`allowAttempt`,
+  `PHOTO_CHECKS_PER_HOUR`): over → **429** "Too many photos checked in the
+  last hour. Try again a little later." (the outbox keeps the photo and
+  tries again later).
 - Idempotent: an existing `photo_checks` row for the path returns the same
   verdict.
 - With `ANTHROPIC_API_KEY`: the image is judged by a vision model (45 s
@@ -1687,6 +1720,13 @@ role name or the base label). Sections:
   and pushes the office.
 - Replies: `POST /api/support/{id}/message { body }` →
   `post_support_message`, then the helper replies again.
+- Limits (`src/lib/usage-limits.ts`): the helper answers at most **20**
+  times per person per hour, and not once a conversation has **12**
+  messages (`supportHelperMode`). Past either, the member's message is still
+  saved and the thread goes to the office with no AI call: the first time a
+  fixed reply ("Thanks for your message. I've passed this to the office and
+  someone will follow up with you.") and escalation, after that nothing
+  more while it is already escalated.
 - Thread list: subject, last time, status pill: open "Waiting", ai_answered
   "Answered", escalated "With the office", resolved "Resolved". Expanded:
   bubbles (staff right in brand; "Xtend helper" left tinted; "Office" left

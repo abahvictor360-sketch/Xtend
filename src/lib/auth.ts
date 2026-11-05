@@ -4,6 +4,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import type { Profile, UserRole } from '@/lib/types'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { lagosDateString } from '@/lib/utils'
+import { CHANGE_PASSWORD_CODE, CHANGE_PASSWORD_MESSAGE, passwordChangeBlocks } from '@/lib/password-gate'
 
 export interface Session {
   userId: string
@@ -91,8 +92,15 @@ export class ApiError extends Error {
   }
 }
 
-/** Route-handler guard. Throws ApiError, which the handlers turn into JSON. */
-export async function requireApiSession(roles?: UserRole[]): Promise<Session> {
+/**
+ * Route-handler guard. Throws ApiError, which the handlers turn into JSON.
+ * Somebody who must choose their own password is refused (403,
+ * code 'change_password') unless the route is one the change needs.
+ */
+export async function requireApiSession(
+  roles?: UserRole[],
+  { allowDuringPasswordChange = false }: { allowDuringPasswordChange?: boolean } = {},
+): Promise<Session> {
   const session = await getSession()
   if (!session) throw new ApiError('Not authenticated', 401)
   if (!session.profile.is_active) throw new ApiError('Account deactivated', 403)
@@ -104,6 +112,9 @@ export async function requireApiSession(roles?: UserRole[]): Promise<Session> {
       401,
       'relogin',
     )
+  }
+  if (passwordChangeBlocks(Boolean(session.profile.must_change_password), allowDuringPasswordChange)) {
+    throw new ApiError(CHANGE_PASSWORD_MESSAGE, 403, CHANGE_PASSWORD_CODE)
   }
   if (roles && !roles.includes(session.profile.role)) {
     throw new ApiError('Not permitted', 403)

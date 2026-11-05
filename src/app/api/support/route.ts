@@ -3,6 +3,8 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/auth'
 import { respondToSupportThread } from '@/lib/support-assistant'
 import { writtenText } from '@/lib/fields'
+import { allowAttempt } from '@/lib/rate-limit'
+import { HOUR_MS, SUPPORT_HELPER_REPLIES_PER_HOUR } from '@/lib/usage-limits'
 
 export const maxDuration = 60
 
@@ -32,8 +34,14 @@ export async function POST(request: Request) {
       return Response.json({ error: dbErrorMessage(error, 'Could not send your message.') }, { status: 400 })
     }
 
-    void session
-    const result = await respondToSupportThread(threadId as string)
+    // The message is saved either way; past the hourly allowance the office
+    // answers it instead of the helper.
+    const withinHourlyLimit = allowAttempt(
+      `support-helper:${session.userId}`,
+      SUPPORT_HELPER_REPLIES_PER_HOUR,
+      HOUR_MS,
+    )
+    const result = await respondToSupportThread(threadId as string, { withinHourlyLimit })
 
     return Response.json(
       { thread_id: threadId, reply: result.reply, escalated: result.escalated },

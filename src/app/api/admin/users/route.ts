@@ -7,6 +7,7 @@ import { auditContext } from '@/lib/audit-context'
 import { deliverCredentials, generateTempPassword } from '@/lib/credentials'
 import { emailAddress, optionalPhone, personName } from '@/lib/fields'
 import { rememberTempPassword } from '@/lib/staff-logins'
+import { authAdminError } from '@/lib/auth-admin-errors'
 
 const createUserSchema = z.object({
   full_name: personName,
@@ -57,6 +58,18 @@ export async function POST(request: Request) {
         { status: 403 },
       )
     }
+    // Postgres agrees, as the caller (0017): admins anyone, supervisors
+    // field staff only. (HR is checked above; can_create_staff predates it.)
+    if (!isHr) {
+      const supabase = await createServerSupabase()
+      const { data: canCreate } = await supabase.rpc('can_create_staff', { p_role: input.role })
+      if (canCreate !== true) {
+        return Response.json({ error: 'Supervisors can create merchandisers and marketers only.' }, { status: 403 })
+      }
+    }
+    // Only field staff report to a supervisor; the database clears it for
+    // anyone else too (0079).
+    if (input.role !== 'merchandiser' && input.role !== 'marketer') input.supervisor_id = null
     // And into one of their own stores: editing a store is admin-only, so
     // creating somebody must not be a way round that.
     if (isSupervisor && input.outlet_id) {
@@ -105,8 +118,7 @@ export async function POST(request: Request) {
     })
 
     if (authError || !created.user) {
-      const message = authError?.message ?? 'Could not create the account'
-      const status = message.toLowerCase().includes('already') ? 409 : 400
+      const { message, status } = authAdminError(authError ?? null, 'Could not create the account. Try again.')
       return Response.json({ error: message }, { status })
     }
 

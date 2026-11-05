@@ -742,5 +742,43 @@ select assert(not exists (
 select assert(not has_function_privilege('authenticated', 'public.place_is_recognised(double precision, double precision)', 'execute'),
   'rls: nobody probes whether a spot is a known place');
 
+-- Message attachments (0079): the message-files bucket follows the message,
+-- with RLS on for storage as it is on Supabase.
+reset role;
+insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-0000000079a1', 'sup.mf@xpel.ng'),
+  ('00000000-0000-0000-0000-0000000079a2', 'kid.mf@xpel.ng');
+insert into public.profiles (id, full_name, email, role)
+values ('00000000-0000-0000-0000-0000000079a1', 'Segun Supervisor', 'sup.mf@xpel.ng', 'supervisor');
+insert into public.profiles (id, full_name, email, role, supervisor_id)
+values ('00000000-0000-0000-0000-0000000079a2', 'Kunle Field', 'kid.mf@xpel.ng', 'merchandiser',
+        '00000000-0000-0000-0000-0000000079a1');
+insert into storage.objects (bucket_id, name) values
+  ('message-files', '00000000-0000-0000-0000-0000000079a2/receipt.jpg'),
+  ('message-files', '00000000-0000-0000-0000-0000000079a2/loose.jpg');
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000079a2', false);
+select public.send_message(null, '', jsonb_build_object(
+  'path', '00000000-0000-0000-0000-0000000079a2/receipt.jpg', 'name', 'receipt.jpg',
+  'mime', 'image/jpeg', 'size', 100));
+alter table storage.objects enable row level security;
+set role authenticated;
+
+select assert((select count(*) from storage.objects where bucket_id = 'message-files') = 2,
+  'rls: staff read their own message attachments');
+select set_config('request.jwt.claim.sub', :'bala', false);
+select assert(not exists (select 1 from storage.objects where bucket_id = 'message-files'),
+  'rls: another staff member cannot read somebody''s message attachment');
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-0000000079a1', false);
+select assert((select count(*) from storage.objects where bucket_id = 'message-files') = 1
+                and exists (select 1 from storage.objects where name like '%/receipt.jpg'),
+  'rls: their supervisor reads the attachment on the message, not their loose uploads');
+select set_config('request.jwt.claim.sub', :'boss', false);
+select assert(exists (select 1 from storage.objects
+                      where bucket_id = 'message-files' and name like '%/receipt.jpg'),
+  'rls: an admin reads message attachments');
+
+reset role;
+alter table storage.objects disable row level security;
+
 reset role;
 select 'ALL RLS CHECKS PASSED';

@@ -1,5 +1,6 @@
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { ApiError, apiError, requireApiSession } from '@/lib/auth'
+import { isExportFormat } from '@/lib/export/formats'
 import { audit } from '@/lib/audit'
 import { renderExport } from '@/lib/export/render'
 import { buildReportSheet } from '@/lib/assistant-report'
@@ -15,6 +16,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ format: str
   try {
     await requireApiSession(['admin', 'supervisor'])
     const { format } = await ctx.params
+    if (!isExportFormat(format)) throw new ApiError('Unsupported export format', 400)
     const parsed = parseReportSpec(new URL(request.url))
     if (!parsed.success) {
       return Response.json({ error: 'That report link is not valid.' }, { status: 400 })

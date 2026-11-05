@@ -183,6 +183,14 @@ in force.
 - Demotion (`release_reports_on_demotion`, 0018): when someone stops being
   supervisor or admin, everyone whose `supervisor_id` pointed at them is
   set to null (shown as unassigned).
+- **Only field staff have a supervisor** (0079): trigger
+  `trg_profiles_zz_field_only_reporting` (`profiles_field_only_reporting`,
+  BEFORE insert or update, named to fire after the 0042 role sync) sets
+  `supervisor_id` to null whenever the row's role is not merchandiser or
+  marketer, silently (an insert or update naming a supervisor for an admin,
+  HR or supervisor just leaves it empty). 0079 also cleared every such link
+  already there. So promoting a team member to supervisor, HR or admin takes
+  them off the team, and their old supervisor can no longer edit them.
 - `available_supervisors()`: active supervisors and admins, returned only
   to admins (a supervisor gets an empty list).
 - `my_staff()`: an admin gets every profile; a supervisor gets their team
@@ -191,8 +199,11 @@ in force.
   field roles only (never supervisor or admin), and people a supervisor
   creates report to them (users route).
 - `can_edit_staff(target)` = admin or `supervises_user(target)`. The users
-  route is stricter for supervisors: they may edit only people whose
-  `supervisor_id` is them, and only name, phone, active and a password
+  route (PATCH, and so Ask Xtend's deactivate) asks it first, as the caller,
+  for supervisors (403 "That person is not on your team."), and the create
+  route asks `can_create_staff(role)` for admins and supervisors (HR keeps
+  its own field-roles-only rule). The users route is stricter still for
+  supervisors: they may edit only people whose `supervisor_id` is them, and only name, phone, active and a password
   reset; changing email, role, added role, store, supervisor or
   `push_exempt` is admin-only (HTTP 403).
 - An admin cannot deactivate their own account or remove their own admin
@@ -236,6 +247,14 @@ and never clears it.
 - Page guard order (`requireSession`): no session → `/login`; inactive →
   `/deactivated`; relogin → expired; must change password →
   `/change-password`; wrong role → `/`.
+- API guard (`requireApiSession`): the same order; while
+  `must_change_password` is true every route answers **403**
+  `{error: 'Choose your own password first.', code: 'change_password'}`
+  except those the change needs (`allowDuringPasswordChange`: set password,
+  activity, push registration, version seen).
+- Changing a password (`POST /api/auth/password`) needs the current password
+  (checked by a throwaway sign-in, 10 tries per 15 minutes) unless
+  `must_change_password` is true.
 
 ### 1.8 `push_exempt`
 
@@ -1112,7 +1131,10 @@ label and the store's own point.
 
 - A person's stores = home outlet (`profiles.outlet_id`) plus allocated
   stores, active only (`outlets_for_user`). With no allocation they have
-  exactly their home store.
+  exactly their home store. `outlets_for_user(target)` answers (0079) only
+  when the target is the caller, the caller is an admin, supervises them,
+  or is HR and the target is not an admin, or nobody is signed in (the
+  server and the database's own jobs); anyone else gets no rows.
 - `can_allocate_outlets(target)` = admin, or a supervisor who
   `supervises_user(target)` and target is field staff. Supervisors never
   allocate to admins, other supervisors or outside their team. Allocating
@@ -1905,6 +1927,11 @@ calculation.
   policy, time, name or decision.
 - When escalating it still replies, saying the office will follow up.
 - No API key, no tool answer, or any error → escalate with a canned reply.
+- Limits (`supportHelperMode`, `src/lib/usage-limits.ts`): more than **20**
+  helper replies for one person in an hour, or a conversation of **12** or
+  more messages → no AI call; the first time the thread is escalated with
+  the canned reply, after that nothing is added while it is escalated. The
+  member's message is always saved.
 - On escalation: status `escalated`, `escalated_at` set, watchers pushed
   "<name>: issue needs the office" (`kind: 'support_escalated'`).
 
@@ -1942,6 +1969,12 @@ calculation.
   staff member's `field:<uid>` topic; `messages` is in the
   `supabase_realtime` publication for the office pages (RLS applies).
 - Test reset: `message_reads`, `messages`, `message_threads` go with support.
+- Attachments (0075, 0079): private `message-files` bucket, uploads only into
+  the sender's own folder (`message_files_insert_own`). Reading
+  (`message_files_read`) needs `message_file_readable(name)`: the file is in
+  the caller's own folder, or a message carries it as `attachment_path` and
+  `can_message` lets the caller read that conversation. Another staff
+  member never opens it; the staff member's supervisor, HR and admins do.
 
 ## 14. Audit
 
@@ -2231,6 +2264,8 @@ Testable statements, grouped by area. They mirror the assertions in
 - A supervisor creates merchandisers and marketers only; an admin creates anyone; a merchandiser nobody.
 - Only supervisors/admins can be named supervisor; nobody supervises themselves.
 - Demoting a supervisor releases their reports; supervisors are not offered the supervisor list.
+- Promoting a team member to supervisor, HR or admin clears their supervisor, so their old supervisor cannot edit them; an admin or HR account cannot be given a supervisor (0079).
+- `outlets_for_user` answers for yourself, your team, anyone (admins), anyone but admins (HR), and the server; nobody else (0079).
 
 ### Retention
 - Both images of an expired clock event are listed; a photo a day old is not (14 days, 0067); forgetting nulls both paths and keeps the row; nothing is listed twice; visit photos follow the same rule.
@@ -2279,6 +2314,8 @@ Testable statements, grouped by area. They mirror the assertions in
 
 ### Profiles and roles
 - A photo changes only through `set_my_avatar`, from one's own uploaded file; onboarding is remembered.
+- A message attachment opens for its sender, the staff member's supervisor, HR and admins, never another staff member; a loose upload only for its uploader (0079, also as RLS on storage).
+- Nobody may overwrite a photo in the `reports` bucket (no update policy, 0079).
 - Names must be names and phones Nigerian mobiles.
 - Text rules: links and bare domains are not clean; two letters, dots or one key held are not a report section.
 - Temporary passwords are kept until the person picks their own.

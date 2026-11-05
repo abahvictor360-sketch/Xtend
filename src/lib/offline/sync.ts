@@ -293,9 +293,10 @@ export async function queuedRemovals(): Promise<string[]> {
 async function uploadShelfPhoto(photo: Blob, label: string) {
   const userId = await currentUserId()
   const path = `${userId}/xm-${label}-${uuid()}.jpg`
+  // A fresh name every try; photos in this bucket are never overwritten (0079).
   const { error } = await supabase().storage.from('reports').upload(path, photo, {
     contentType: 'image/jpeg',
-    upsert: true,
+    upsert: false,
   })
   if (error) throw new Error(error.message)
   await checkPhoto('reports', path)

@@ -186,9 +186,10 @@ async function main() {
   }
 
   // --- The monthly limit.
-  check(parseLimit(undefined) === null && parseLimit('') === null && parseLimit('abc') === null
-    && parseLimit('0') === null && parseLimit('-5') === null && parseLimit('2.5') === null && parseLimit(' 5000 ') === 5000,
-    'GOOGLE_MONTHLY_LOOKUP_LIMIT: a whole number above zero, anything else is no limit')
+  check(parseLimit(undefined) === 20000 && parseLimit('') === 20000 && parseLimit('abc') === 20000
+    && parseLimit('-5') === 20000 && parseLimit('2.5') === 20000 && parseLimit(' 5000 ') === 5000
+    && parseLimit('0') === null && parseLimit('none') === null && parseLimit(' None ') === null,
+    'GOOGLE_MONTHLY_LOOKUP_LIMIT: a whole number above zero; 0 or none is no limit; unset or anything else is 20,000')
   check(withinLimit(0, null) && withinLimit(10, null) && withinLimit(4, 5) && !withinLimit(5, 5) && !withinLimit(9, 5),
     'within the limit below it; at or over it, no more Google')
   check(withinLimit(null, 5), 'a counter that cannot be read leaves Google on')

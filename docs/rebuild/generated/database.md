@@ -1434,6 +1434,7 @@ Policies:
 - `locked_accounts()` → TABLE(user_id uuid, locked_until timestamp with time zone, whole_account boolean) · definer · 0077_sign_in_lockout.sql
 - `log_location_block(p_reason text, p_accuracy_m double precision)` → uuid · definer · 0002_logic.sql
 - `mark_notifications_read()` → integer · definer · 0006_push_notifications.sql
+- `message_file_readable(p_name text)` → boolean · definer · 0079_security_fixes.sql
 - `message_inbox()` → TABLE(staff_id uuid, full_name text, role user_role, outlet_name text, supervisor_name text, last_message_at timestamp with time zone, last_body text, last_from_staff boolean, unread integer) · definer · 0075_message_attachments.sql
 - `minutes_label(p_minutes integer)` → text · 0036_supervisor_alerts.sql
 - `month_end_count_days()` → integer · 0020_count_requests.sql
@@ -1460,7 +1461,7 @@ Policies:
 - `office_name(p uuid)` → text · definer · 0053_support_notifications.sql
 - `open_support_thread(p_subject text, p_body text)` → uuid · definer · 0031_support_messages.sql
 - `outlet_containing(p_lat double precision, p_lng double precision)` → uuid · definer · 0016_visits_without_allocation.sql
-- `outlets_for_user(target uuid)` → TABLE(outlet_id uuid) · definer · 0011_store_allocation.sql
+- `outlets_for_user(target uuid)` → TABLE(outlet_id uuid) · definer · 0079_security_fixes.sql
 - `owns_count_request(p_id uuid)` → boolean · definer · 0020_count_requests.sql
 - `person_counts_stock(target uuid)` → boolean · definer · 0046_role_store_counts.sql
 - `pgp_armor_headers(text, OUT key text, OUT value text)` → SETOF record
@@ -1497,6 +1498,7 @@ Policies:
 - `position_point(p jsonb)` → TABLE(lat double precision, lng double precision, accuracy_m double precision) · 0045_mandatory_place_naming.sql
 - `post_support_message(p_thread uuid, p_body text)` → uuid · definer · 0053_support_notifications.sql
 - `product_key(p_name text)` → text · 0021_counted_product_names.sql
+- `profiles_field_only_reporting()` → trigger · definer · 0079_security_fixes.sql
 - `profiles_self_guard()` → trigger · definer · 0042_staff_roles.sql
 - `profiles_staff_role_sync()` → trigger · definer · 0042_staff_roles.sql
 - `profiles_supervisor_check()` → trigger · definer · 0017_supervisor_manages_staff.sql
@@ -1654,6 +1656,7 @@ Policies:
 - `profiles`: `trg_profiles_staff_role_sync` — BEFORE INSERT OR UPDATE OF role, staff_role_id ON public.profiles FOR EACH ROW EXECUTE FUNCTION profiles_staff_role_sync()
 - `profiles`: `trg_profiles_supervisor_check` — BEFORE INSERT OR UPDATE OF supervisor_id ON public.profiles FOR EACH ROW EXECUTE FUNCTION profiles_supervisor_check()
 - `profiles`: `trg_profiles_touch` — BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION touch_updated_at()
+- `profiles`: `trg_profiles_zz_field_only_reporting` — BEFORE INSERT OR UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION profiles_field_only_reporting()
 - `profiles`: `trg_release_reports_on_demotion` — AFTER UPDATE OF role ON public.profiles FOR EACH ROW EXECUTE FUNCTION release_reports_on_demotion()
 - `report_files`: `trg_report_file_limit` — BEFORE INSERT ON public.report_files FOR EACH ROW EXECUTE FUNCTION report_file_limit()
 - `report_photos`: `trg_report_photo_limit` — BEFORE INSERT ON public.report_photos FOR EACH ROW EXECUTE FUNCTION report_photo_limit()

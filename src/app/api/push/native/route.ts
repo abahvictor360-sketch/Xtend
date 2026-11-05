@@ -17,7 +17,7 @@ const schema = z.object({
  */
 export async function POST(request: Request) {
   try {
-    const session = await requireApiSession()
+    const session = await requireApiSession(undefined, { allowDuringPasswordChange: true })
     const parsed = schema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return Response.json({ error: 'Invalid device token' }, { status: 400 })
     const supabase = await createServerSupabase()

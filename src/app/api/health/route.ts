@@ -1,13 +1,16 @@
 import { vapidStatus } from '@/lib/push'
+import { cronAuthorized } from '@/lib/cron'
+import { healthBody } from '@/lib/health'
 
 /**
- * Configuration health. Booleans and diagnoses — never a key, never any
- * data — so it can be checked without signing in when something is not
- * behaving.
+ * Health. Publicly only `{ ok, checked_at }`, enough for Docker's
+ * HEALTHCHECK and uptime monitors. With `Authorization: Bearer $CRON_SECRET`
+ * it also lists which settings are configured (booleans and diagnoses,
+ * never a key or any data), for checking a deploy that is not behaving.
  */
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+export async function GET(request: Request) {
   const vapid = vapidStatus()
 
   const configured = {
@@ -23,16 +26,7 @@ export async function GET() {
     cron_secret: Boolean(process.env.CRON_SECRET),
   }
 
-  return Response.json(
-    {
-      ok: configured.supabase_url && configured.supabase_anon_key,
-      configured,
-      web_push: vapid,
-      place_provider: configured.google_maps
-        ? 'google (with OpenStreetMap fallback)'
-        : 'openstreetmap only — shop names will often be missing',
-      checked_at: new Date().toISOString(),
-    },
-    { headers: { 'Cache-Control': 'no-store' } },
-  )
+  return Response.json(healthBody(cronAuthorized(request), configured, vapid, new Date().toISOString()), {
+    headers: { 'Cache-Control': 'no-store' },
+  })
 }

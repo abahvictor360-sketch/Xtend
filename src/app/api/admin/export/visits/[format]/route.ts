@@ -1,5 +1,6 @@
 import { createServerSupabase } from '@/lib/supabase/server'
 import { ApiError, apiError, requireApiSession } from '@/lib/auth'
+import { isExportFormat } from '@/lib/export/formats'
 import { audit } from '@/lib/audit'
 import { renderExport } from '@/lib/export/render'
 import {
@@ -24,6 +25,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ format: str
   try {
     const session = await requireApiSession(['admin', 'supervisor'])
     const { format } = await ctx.params
+    if (!isExportFormat(format)) throw new ApiError('Unsupported export format', 400)
     const filter = parseVisitFilter(new URL(request.url))
     const supabase = await createServerSupabase()
 

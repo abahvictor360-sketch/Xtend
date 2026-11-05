@@ -307,7 +307,8 @@ export function StaffGuide() {
         <p>
           <Ui>History</Ui> shows your attendance day by day. <Ui>You</Ui> shows your
           account: your store, notifications, <Ui>Messages</Ui>, <Ui>Change your password</Ui> and{' '}
-          <Ui>Message support</Ui>.
+          <Ui>Message support</Ui>. To change your password, type your current password first, then
+          the new one twice.
         </p>
         <p>The week on the home screen and the calendar in History are coloured:</p>
         <ul className="list-disc space-y-1 pl-5">

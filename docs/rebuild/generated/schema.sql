@@ -3464,6 +3464,23 @@ $$;
 
 
 --
+-- Name: message_file_readable(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.message_file_readable(p_name text) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'storage'
+    AS $$
+  select (storage.foldername(p_name))[1] = auth.uid()::text
+      or exists (select 1
+                 from public.messages m
+                 join public.message_threads t on t.id = m.thread_id
+                 where m.attachment_path = p_name
+                   and public.can_message(t.staff_id));
+$$;
+
+
+--
 -- Name: message_inbox(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4247,7 +4264,12 @@ CREATE FUNCTION public.outlets_for_user(target uuid) RETURNS TABLE(outlet_id uui
     AS $$
   select o.id
   from public.outlets o
-  where o.is_active
+  where (auth.uid() is null
+         or target = auth.uid()
+         or public.is_admin()
+         or public.supervises_user(target)
+         or public.hr_sees(target))
+    and o.is_active
     and (o.id in (select s.outlet_id from public.staff_outlets s where s.user_id = target)
          or o.id = (select p.outlet_id from public.profiles p where p.id = target));
 $$;
@@ -4591,6 +4613,23 @@ CREATE FUNCTION public.product_key(p_name text) RETURNS text
     LANGUAGE sql IMMUTABLE
     AS $$
   select lower(regexp_replace(btrim(coalesce(p_name, '')), '\s+', ' ', 'g'))
+$$;
+
+
+--
+-- Name: profiles_field_only_reporting(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.profiles_field_only_reporting() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.supervisor_id is not null and not public.is_field_role(new.role) then
+    new.supervisor_id := null;
+  end if;
+  return new;
+end;
 $$;
 
 
@@ -11797,6 +11836,13 @@ CREATE INDEX message_threads_latest ON public.message_threads USING btree (last_
 
 
 --
+-- Name: messages_by_attachment_path; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX messages_by_attachment_path ON public.messages USING btree (attachment_path) WHERE (attachment_path IS NOT NULL);
+
+
+--
 -- Name: messages_by_thread; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -12361,6 +12407,13 @@ CREATE TRIGGER trg_profiles_supervisor_check BEFORE INSERT OR UPDATE OF supervis
 --
 
 CREATE TRIGGER trg_profiles_touch BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.touch_updated_at();
+
+
+--
+-- Name: profiles trg_profiles_zz_field_only_reporting; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_profiles_zz_field_only_reporting BEFORE INSERT OR UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.profiles_field_only_reporting();
 
 
 --
@@ -15482,6 +15535,15 @@ GRANT ALL ON FUNCTION public.mark_notifications_read() TO service_role;
 
 
 --
+-- Name: FUNCTION message_file_readable(p_name text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.message_file_readable(p_name text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.message_file_readable(p_name text) TO authenticated;
+GRANT ALL ON FUNCTION public.message_file_readable(p_name text) TO service_role;
+
+
+--
 -- Name: FUNCTION message_inbox(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -15781,6 +15843,13 @@ REVOKE ALL ON FUNCTION public.place_is_recognised(p_lat double precision, p_lng 
 REVOKE ALL ON FUNCTION public.post_support_message(p_thread uuid, p_body text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.post_support_message(p_thread uuid, p_body text) TO authenticated;
 GRANT ALL ON FUNCTION public.post_support_message(p_thread uuid, p_body text) TO service_role;
+
+
+--
+-- Name: FUNCTION profiles_field_only_reporting(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.profiles_field_only_reporting() FROM PUBLIC;
 
 
 --

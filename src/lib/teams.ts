@@ -1,7 +1,7 @@
 import 'server-only'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { ApiError, type Session } from '@/lib/auth'
+import { ApiError, dbErrorMessage, type Session } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 
 /**
@@ -29,7 +29,7 @@ export async function assignSupervisor(
     .from('profiles')
     .select('id, role')
     .in('id', ids)
-  if (readError) throw new ApiError(readError.message, 400)
+  if (readError) throw new ApiError(dbErrorMessage(readError, 'Those people could not be read. Try again.'), 400)
   const found = people ?? []
   if (found.length !== ids.length) throw new ApiError('One of those people does not exist.', 400)
   if (found.some((p) => p.role !== 'merchandiser' && p.role !== 'marketer')) {
@@ -37,7 +37,7 @@ export async function assignSupervisor(
   }
 
   const { error } = await admin.from('profiles').update({ supervisor_id: supervisorId }).in('id', ids)
-  if (error) throw new ApiError(error.message, 400)
+  if (error) throw new ApiError(dbErrorMessage(error, 'The team could not be changed. Try again.'), 400)
 
   const supabase = await createServerSupabase()
   await audit(supabase, 'staff.assign_supervisor', 'profiles', null, {

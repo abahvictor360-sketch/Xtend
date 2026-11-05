@@ -1,5 +1,6 @@
 import 'server-only'
 import { ApiError } from '@/lib/auth'
+import { csvCell } from '@/lib/export/formats'
 
 export interface ExportRow {
   values: string[]
@@ -68,10 +69,9 @@ function download(body: BodyInit, type: string, filename: string) {
 }
 
 function csv(sheet: Sheet) {
-  const escape = (v: string) => `"${v.replace(/"/g, '""')}"`
   const body = [
-    sheet.columns.map(escape).join(','),
-    ...sheet.rows.map((r) => r.values.map(escape).join(',')),
+    sheet.columns.map(csvCell).join(','),
+    ...sheet.rows.map((r) => r.values.map(csvCell).join(',')),
   ].join('\r\n')
   // The BOM is what makes Excel on Windows read this as UTF-8.
   return download(`﻿${body}`, 'text/csv; charset=utf-8', exportFileName(sheet.fileBase, 'csv'))

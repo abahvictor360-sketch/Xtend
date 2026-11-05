@@ -217,6 +217,15 @@ the database function, never from the request body.
 
 Exports: `audit`
 
+## `src/lib/auth-admin-errors.ts`
+
+What an error from Supabase's account service (creating an account,
+changing its email or password) may tell the person who asked. A few
+known cases get plain words; anything else describes the service, so it
+is logged and the caller gets the fallback.
+
+Exports: `authAdminError`
+
 ## `src/lib/auth.ts`
 
 Set when a merchandiser or marketer must log in again before going on.
@@ -381,6 +390,15 @@ RLS decides the rows. The filter only narrows what the caller may see.
 
 Exports: `AttendanceFilter`, `parseFilter`, `fetchAttendance`, `EXPORT_COLUMNS`, `signSelfies`, `toExportRows`, `attendanceSheet`
 
+## `src/lib/export/formats.ts`
+
+The download formats renderExport() writes. Routes check the format
+against this list before anything else (and before the audit row), so
+a mistyped or made-up address is a plain 400 and leaves no junk in the
+audit log.
+
+Exports: `EXPORT_FORMATS`, `ExportFormat`, `isExportFormat`, `csvCell`
+
 ## `src/lib/export/marketer-report-docx.ts`
 
 The marketer's day or month report as a Word document: the same content
@@ -501,13 +519,23 @@ src/lib/place-resolve.ts):
     premises. Needs GOOGLE_MAPS_API_KEY with "Places API (New)" and
     "Geocoding API" enabled. Paid per request: answers are cached 30 days
     per spot, learned for good, counted per month (place_lookup_stats),
-    and GOOGLE_MONTHLY_LOOKUP_LIMIT, when set, stops Google for the rest
-    of the month once reached.
+    and GOOGLE_MONTHLY_LOOKUP_LIMIT (20,000 when unset; 0 or none for no
+    limit) stops Google for the rest of the month once reached.
  4. OpenStreetMap — Nominatim for the address, Overpass for a named
     business within 80 m. Free and needs no key, but Nigerian POI
     coverage is thin, so it often names the street rather than the shop.
 
 Exports: `resolvePlace`, `LocatedPlace`, `locateAddress`
+
+## `src/lib/health.ts`
+
+What /api/health answers. Anybody may ask whether the app is up (Docker's
+HEALTHCHECK, the deploy script, uptime monitors only need the 200), so the
+public answer is just that. Which services are configured, and why web
+push is failing, is shown only to a caller with the CRON_SECRET bearer
+token, because it tells an outsider what to aim at.
+
+Exports: `HealthConfigured`, `healthBody`
 
 ## `src/lib/image.ts`
 
@@ -752,6 +780,25 @@ A capture older than this can never be accepted by the server, so it is
 dropped locally instead of retried forever.
 
 Exports: `PermanentJobError`, `NamePlaceFirstError`, `checkPhoto`, `noticeStore`, `queuedRemovals`, `runJob`, `FlushResult`, `flushOutbox`, `submitOrQueue`
+
+## `src/lib/password-check.ts`
+
+Whether this is the password for that email, checked by signing in on a
+throwaway client that keeps no session, so the person's own sign-in is
+untouched. The new session is ended straight away (locally: a global
+sign-out would end their other sessions too).
+
+Exports: `passwordIsRight`, `NO_SUCH_ACCOUNT`
+
+## `src/lib/password-gate.ts`
+
+Somebody whose password was set by the office (a new account, or a reset)
+must choose their own before doing anything else. Pages already send them
+to /change-password; the API refuses them too, except the few calls the
+change itself needs (setting the password, signing out, recording that
+the app was opened or which version it runs).
+
+Exports: `CHANGE_PASSWORD_CODE`, `CHANGE_PASSWORD_MESSAGE`, `passwordChangeBlocks`, `currentPasswordRequired`
 
 ## `src/lib/phone-report.ts`
 
@@ -1005,6 +1052,18 @@ each region becomes a place hint that is searched alongside the name.
 
 Exports: `Stockist`, `regionHint`, `stockistQuery`, `isVisitableStore`
 
+## `src/lib/storage-path.ts`
+
+Whether a storage path a phone sent is a file in the caller's own folder.
+
+`path.startsWith(uid + '/')` is not enough: storage does not tidy
+`<uid>/../<someone-else>/x.jpg`, so a server-side (service role) read of
+that path would fetch another person's photo. Only plain names are
+accepted: `<uid>/<name>` or `<uid>/<folder>/<name>`, each part letters,
+digits, dot, dash or underscore, never `.` or `..`, never empty.
+
+Exports: `MAX_STORAGE_PATH`, `isOwnStoragePath`
+
 ## `src/lib/store-count-status.ts`
 
 Whether the signed-in person may take a stock count right now, and why.
@@ -1061,7 +1120,7 @@ Exports: `SupportStatus`, `SupportSender`, `InboxThread`, `ThreadMessage`, `VIEW
 Server side of test mode and the reset (0066). Admin checks happen in
 the routes and again in the database functions.
 
-Exports: `passwordIsRight`, `serviceClientWithContext`, `removeQueuedFiles`, `removeOrphanSignIns`
+Exports: `serviceClientWithContext`, `removeQueuedFiles`, `removeOrphanSignIns`
 
 ## `src/lib/system-reset.ts`
 
@@ -1098,6 +1157,16 @@ Exports: `TURNSTILE_VERIFY_URL`, `TURNSTILE_SCRIPT_URL`, `TURNSTILE_ERROR`, `tur
 Null while the store waits for its location (migration 034).
 
 Exports: `UserRole`, `AttendanceType`, `AttendanceStatus`, `AlertType`, `Outlet`, `Profile`, `AttendanceDetail`, `AlertDetail`, `DayState`, `ClockSummary`, `ClockPayload`, `Coverage`
+
+## `src/lib/usage-limits.ts`
+
+How much one person may use the paid services behind Xtend: the AI that
+checks photos, the support helper, Ask Xtend, and the map lookups. Each
+count is kept per person in the server process (lib/rate-limit.ts). The
+numbers are far above what a working day needs, so only a runaway phone
+or somebody misusing an account ever meets them.
+
+Exports: `HOUR_MS`, `PHOTO_CHECKS_PER_HOUR`, `GEOCODE_LOOKUPS_PER_HOUR`, `SUPPORT_HELPER_REPLIES_PER_HOUR`, `SUPPORT_HELPER_THREAD_MAX`, `ASK_XTEND_PER_HOUR`, `ASK_XTEND_LIMIT_MESSAGE`, `SupportHelperMode`, `supportHelperMode`, `DEFAULT_GOOGLE_MONTHLY_LOOKUP_LIMIT`
 
 ## `src/lib/utils.ts`
 
