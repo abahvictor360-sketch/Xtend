@@ -97,6 +97,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0076_my_supervisor.sql               # my_supervisor(): supervisor name + photo for the staff Messages page header
    supabase/migrations/0077_sign_in_lockout.sql             # 5 wrong passwords pause the guessing phone or computer for 15 minutes; the office unlocks from Staff
    supabase/migrations/0078_function_grants.sql             # nobody signed out can run trigger functions or place_is_recognised
+   supabase/migrations/0079_security_fixes.sql              # only field staff have a supervisor; attachments follow the message; outlets_for_user limited; report photos never overwritten
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

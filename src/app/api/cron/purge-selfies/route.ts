@@ -32,10 +32,8 @@ export async function GET(request: Request) {
   try {
     purge = await purgeExpiredSelfies(supabase)
   } catch (error) {
-    return Response.json(
-      { error: error instanceof Error ? error.message : 'Purge failed' },
-      { status: 500 },
-    )
+    console.error('selfie purge failed', error)
+    return Response.json({ error: 'Purge failed. See the server log.' }, { status: 500 })
   }
 
   // A marketer who forgot to check out should not still read as "in store"

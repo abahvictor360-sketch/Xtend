@@ -1,5 +1,6 @@
 import { createServerSupabase } from '@/lib/supabase/server'
 import { ApiError, apiError, requireApiSession } from '@/lib/auth'
+import { isExportFormat } from '@/lib/export/formats'
 import { audit } from '@/lib/audit'
 import { renderExport, type ExportRow } from '@/lib/export/render'
 import { duration, journey, mergeTrails, summarise } from '@/lib/movement'
@@ -13,6 +14,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ format: str
   try {
     await requireApiSession(['admin', 'supervisor'])
     const { format } = await ctx.params
+    if (!isExportFormat(format)) throw new ApiError('Unsupported export format', 400)
     const url = new URL(request.url)
     const person = url.searchParams.get('person') ?? ''
     if (!/^[0-9a-f-]{36}$/i.test(person)) throw new ApiError('Pick a person', 400)

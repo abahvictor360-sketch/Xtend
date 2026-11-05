@@ -7,6 +7,7 @@ import { auditContext } from '@/lib/audit-context'
 import { generateTempPassword } from '@/lib/credentials'
 import { emailAddress, personName, phoneNumber } from '@/lib/fields'
 import { rememberTempPassword } from '@/lib/staff-logins'
+import { authAdminError } from '@/lib/auth-admin-errors'
 
 const patchSchema = z.object({
   full_name: personName.optional(),
@@ -53,6 +54,14 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
     // grant anybody anything: name, phone, active, a new password.
     const isSupervisor = session.profile.role === 'supervisor'
     if (isSupervisor) {
+      // Postgres decides first, as the caller (0017): a supervisor reaches
+      // field staff on their team only, never a supervisor, HR or admin,
+      // whatever reporting line is left over from before a promotion.
+      const supabase = await createServerSupabase()
+      const { data: canEdit } = await supabase.rpc('can_edit_staff', { target: id })
+      if (canEdit !== true) {
+        return Response.json({ error: 'That person is not on your team.' }, { status: 403 })
+      }
       const { data: allowed } = await admin
         .from('profiles')
         .select('id')
@@ -170,7 +179,10 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
           email: input.email,
           email_confirm: true,
         })
-        if (error) return Response.json({ error: error.message }, { status: 400 })
+        if (error) {
+          const { message, status } = authAdminError(error, 'The email could not be changed. Try again.')
+          return Response.json({ error: message }, { status })
+        }
         previousEmail = current?.email ?? null
         changes.email = input.email
       }
@@ -180,7 +192,10 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
     if (input.reset_password) {
       temp_password = generateTempPassword()
       const { error } = await admin.auth.admin.updateUserById(id, { password: temp_password })
-      if (error) return Response.json({ error: error.message }, { status: 400 })
+      if (error) {
+        const { message, status } = authAdminError(error, 'The password could not be reset. Try again.')
+        return Response.json({ error: message }, { status })
+      }
       changes.must_change_password = true
       await rememberTempPassword(admin, id, temp_password)
       // A new password also lifts a sign-in lock (0077).

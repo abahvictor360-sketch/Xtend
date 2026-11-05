@@ -31,7 +31,7 @@ create policy message_files_insert_own on storage.objects as PERMISSIVE for INSE
 
 drop policy if exists message_files_read on storage.objects;
 create policy message_files_read on storage.objects as PERMISSIVE for SELECT to authenticated
-  using ((bucket_id = 'message-files'::text));
+  using (((bucket_id = 'message-files'::text) AND message_file_readable(name)));
 
 drop policy if exists report_files_delete_own on storage.objects;
 create policy report_files_delete_own on storage.objects as PERMISSIVE for DELETE to public
@@ -56,11 +56,6 @@ create policy reports_insert_own on storage.objects as PERMISSIVE for INSERT to 
 drop policy if exists reports_read on storage.objects;
 create policy reports_read on storage.objects as PERMISSIVE for SELECT to public
   using (((bucket_id = 'reports'::text) AND (((storage.foldername(name))[1] = (auth.uid())::text) OR is_admin())));
-
-drop policy if exists reports_update_own on storage.objects;
-create policy reports_update_own on storage.objects as PERMISSIVE for UPDATE to public
-  using (((bucket_id = 'reports'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text)))
-  with check (((bucket_id = 'reports'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text)));
 
 drop policy if exists selfies_insert_own on storage.objects;
 create policy selfies_insert_own on storage.objects as PERMISSIVE for INSERT to public

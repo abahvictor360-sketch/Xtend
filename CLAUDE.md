@@ -42,6 +42,13 @@ supervisors (`src/app/admin/supervisor-guide/page.tsx`) or admins
 - New migration: next number, registered in `scripts/test-sql.sh`, tested in
   `supabase/tests/rules.sql` (and `rls_counts.sql` for new tables).
 
+## Secrets
+
+Never read, print, echo, copy or paste `.env`, `.env.*` (other than
+`.env.example`) or any secret value, in a command, a file, a commit or a
+message. Refer to a setting by its variable name only; code reads it from
+`process.env`. A new setting goes in `.env.example` with a blank value.
+
 ## Shipping changes
 
 The owner has asked for every change to be merged and pushed without

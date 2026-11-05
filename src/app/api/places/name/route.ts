@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/auth'
 import { thingName } from '@/lib/fields'
+import { isOwnStoragePath } from '@/lib/storage-path'
 
 const schema = z.object({
   due_id: z.string().guid(),
@@ -47,7 +48,7 @@ export async function POST(request: Request) {
     }
     const b = parsed.data
     for (const p of [b.storefront_path, b.selfie_path]) {
-      if (!p.startsWith(`${session.userId}/`)) {
+      if (!isOwnStoragePath(p, session.userId)) {
         return Response.json({ error: 'That photo does not belong to you' }, { status: 400 })
       }
     }

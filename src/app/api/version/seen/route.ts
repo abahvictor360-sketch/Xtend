@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { apiError, requireApiSession } from '@/lib/auth'
 
 const schema = z.object({
   platform: z.enum(['android', 'ios', 'web']),
@@ -10,18 +11,20 @@ const schema = z.object({
 
 /** Which app build and site version this person is on, for the Updates page. */
 export async function POST(request: Request) {
-  const parsed = schema.safeParse(await request.json().catch(() => null))
-  if (!parsed.success) return Response.json({ error: 'Invalid' }, { status: 400 })
-  const supabase = await createServerSupabase()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return Response.json({ ok: false }, { status: 401 })
-  await supabase.rpc('report_app_install', {
-    p_platform: parsed.data.platform,
-    p_app_version: parsed.data.app_version,
-    p_app_build: parsed.data.app_build,
-    p_web_build: parsed.data.web_build,
-  })
-  return Response.json({ ok: true })
+  try {
+    // The same checks as every other call: signed in, active, today's login.
+    await requireApiSession(undefined, { allowDuringPasswordChange: true })
+    const parsed = schema.safeParse(await request.json().catch(() => null))
+    if (!parsed.success) return Response.json({ error: 'Invalid' }, { status: 400 })
+    const supabase = await createServerSupabase()
+    await supabase.rpc('report_app_install', {
+      p_platform: parsed.data.platform,
+      p_app_version: parsed.data.app_version,
+      p_app_build: parsed.data.app_build,
+      p_web_build: parsed.data.web_build,
+    })
+    return Response.json({ ok: true })
+  } catch (error) {
+    return apiError(error)
+  }
 }

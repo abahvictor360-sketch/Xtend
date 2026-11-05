@@ -16,7 +16,7 @@ const schema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const session = await requireApiSession()
+    const session = await requireApiSession(undefined, { allowDuringPasswordChange: true })
     const parsed = schema.safeParse(await request.json().catch(() => null))
     if (!parsed.success) return Response.json({ error: 'Invalid request' }, { status: 400 })
     await recordActivity(session.userId, parsed.data.kind, request.headers, {

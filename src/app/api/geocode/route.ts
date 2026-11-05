@@ -1,5 +1,7 @@
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, requireApiSession, FIELD_ROLES } from '@/lib/auth'
+import { allowAttempt } from '@/lib/rate-limit'
+import { GEOCODE_LOOKUPS_PER_HOUR, HOUR_MS } from '@/lib/usage-limits'
 import { resolvePlace, type OutletAnchor } from '@/lib/geocode'
 
 /**
@@ -9,7 +11,15 @@ import { resolvePlace, type OutletAnchor } from '@/lib/geocode'
  */
 export async function GET(request: Request) {
   try {
-    const session = await requireApiSession()
+    // Only the people who clock in and name stores (admins set stores up),
+    // and a fair number an hour each: a Google lookup is paid per request.
+    const session = await requireApiSession(FIELD_ROLES)
+    if (!allowAttempt(`geocode:${session.userId}`, GEOCODE_LOOKUPS_PER_HOUR, HOUR_MS)) {
+      return Response.json(
+        { error: 'Too many place lookups in the last hour. Try again a little later.' },
+        { status: 429 },
+      )
+    }
     const url = new URL(request.url)
     const lat = Number(url.searchParams.get('lat'))
     const lng = Number(url.searchParams.get('lng'))

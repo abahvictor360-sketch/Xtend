@@ -4,6 +4,7 @@ import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage, dbErrorRespon
 import { notifyWatchers } from '@/lib/notify'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
 import { mapText } from '@/lib/fields'
+import { isOwnStoragePath } from '@/lib/storage-path'
 
 /**
  * Check in to a store. Naming the store is optional: left out, the
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
     }
     const input = parsed.data
 
-    if (input.selfie_path && !input.selfie_path.startsWith(`${session.userId}/`)) {
+    if (input.selfie_path && !isOwnStoragePath(input.selfie_path, session.userId)) {
       return Response.json({ error: 'Selfie path does not belong to you' }, { status: 400 })
     }
 

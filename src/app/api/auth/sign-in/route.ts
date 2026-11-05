@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { allowAttempt, clientAddress } from '@/lib/rate-limit'
+import { NO_SUCH_ACCOUNT, passwordIsRight } from '@/lib/password-check'
 import { recordActivity } from '@/lib/activity-server'
 import { formatLagos } from '@/lib/utils'
 import { TURNSTILE_ERROR, turnstileEnabled, verifyTurnstile } from '@/lib/turnstile'
@@ -67,7 +68,12 @@ export async function POST(request: Request) {
   const { data: lockedUntil } = await service.rpc('sign_in_lock_status', attempt)
   if (lockedUntil) return paused(lockedUntil as string)
 
-  if (!email) return wrongPassword(service, attempt)
+  // Nobody has that phone number: still make a sign-in of the same cost,
+  // so the time the answer takes does not say whether the number exists.
+  if (!email) {
+    await passwordIsRight(NO_SUCH_ACCOUNT, password).catch(() => false)
+    return wrongPassword(service, attempt)
+  }
 
   // The user-scoped client writes the session cookies onto this response.
   const supabase = await createServerSupabase()

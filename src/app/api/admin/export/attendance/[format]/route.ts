@@ -1,5 +1,6 @@
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { ApiError, apiError, requireApiSession } from '@/lib/auth'
+import { isExportFormat } from '@/lib/export/formats'
 import { audit } from '@/lib/audit'
 import { loadAttendance, parseReportFilter } from '@/lib/attendance-server'
 import { attendanceDaysSheet } from '@/lib/export/attendance-days'
@@ -12,6 +13,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ format: str
   try {
     await requireApiSession(['admin', 'supervisor', 'hr'])
     const { format } = await ctx.params
+    if (!isExportFormat(format)) throw new ApiError('Unsupported export format', 400)
     const filter = parseReportFilter(new URL(request.url).searchParams, 1)
     // Through RLS: a supervisor's file holds their own team only.
     const supabase = await createServerSupabase()

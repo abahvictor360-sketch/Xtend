@@ -1,5 +1,5 @@
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { ApiError, apiError, dbErrorMessage, requireApiSession } from '@/lib/auth'
 import { assignSupervisor } from '@/lib/teams'
 import { applyPlanSchema, type ApplyResult } from '@/lib/assistant-plan'
 
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
       })
       results.push(
         error
-          ? { name: nameOf(change.user_id), ok: false, detail: error.message }
+          ? { name: nameOf(change.user_id), ok: false, detail: dbErrorMessage(error, 'could not be allocated') }
           : {
               name: nameOf(change.user_id),
               ok: true,
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
           })
         }
       } catch (e) {
-        const detail = e instanceof Error ? e.message : 'could not be changed'
+        const detail = e instanceof ApiError ? e.message : 'could not be changed'
         for (const id of userIds) results.push({ name: nameOf(id), ok: false, detail })
       }
     }

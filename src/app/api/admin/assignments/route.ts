@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession, ApiError } from '@/lib/auth'
+import { apiError, requireApiSession, ApiError, dbErrorMessage } from '@/lib/auth'
 
 const schema = z.object({
   user_id: z.string().guid(),
@@ -25,8 +25,9 @@ export async function PUT(request: Request) {
     })
 
     if (error) {
-      const denied = /cannot change/i.test(error.message)
-      throw new ApiError(error.message, denied ? 403 : 400)
+      // set_staff_outlets explains its refusals (P0001); anything else is logged.
+      const denied = error.code === 'P0001' && /cannot change/i.test(error.message)
+      throw new ApiError(dbErrorMessage(error, 'The stores could not be allocated. Try again.'), denied ? 403 : 400)
     }
 
     return Response.json({ ok: true, outlet_ids: data ?? [] })

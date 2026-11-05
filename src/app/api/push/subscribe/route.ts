@@ -15,7 +15,7 @@ const schema = z.object({
 /** A device registers itself for notifications. */
 export async function POST(request: Request) {
   try {
-    const session = await requireApiSession()
+    const session = await requireApiSession(undefined, { allowDuringPasswordChange: true })
     const parsed = schema.safeParse(await request.json())
     if (!parsed.success) {
       return Response.json({ error: 'Invalid subscription' }, { status: 400 })
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
 /** The user turns notifications off on this device. */
 export async function DELETE(request: Request) {
   try {
-    await requireApiSession()
+    await requireApiSession(undefined, { allowDuringPasswordChange: true })
     const { endpoint } = (await request.json().catch(() => ({}))) as { endpoint?: string }
     if (!endpoint) return Response.json({ error: 'endpoint is required' }, { status: 400 })
 

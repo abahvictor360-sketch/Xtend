@@ -4,6 +4,8 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession } from '@/lib/auth'
 import { askAssistant, assistantConfigured } from '@/lib/assistant'
 import { attachmentBlocks, attachmentSchema } from '@/lib/assistant-attachment'
+import { allowAttempt } from '@/lib/rate-limit'
+import { ASK_XTEND_LIMIT_MESSAGE, ASK_XTEND_PER_HOUR, HOUR_MS } from '@/lib/usage-limits'
 
 // Reading a long allocation sheet and matching every name takes several
 // model turns; a minute is not always enough.
@@ -28,6 +30,9 @@ export async function POST(request: Request) {
     // The assistant reads through the caller's own session, so a supervisor
     // only ever gets answers about the people RLS lets them see.
     const session = await requireApiSession(['admin', 'supervisor'])
+    if (!allowAttempt('ask-xtend:' + session.userId, ASK_XTEND_PER_HOUR, HOUR_MS)) {
+      return Response.json({ error: ASK_XTEND_LIMIT_MESSAGE }, { status: 429 })
+    }
     if (!assistantConfigured()) {
       return Response.json(
         { error: 'The assistant is not set up. Add ANTHROPIC_API_KEY to the environment.' },

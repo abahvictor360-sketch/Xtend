@@ -4,6 +4,9 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/auth'
 import { judgePhoto, photoCheckConfigured, type PhotoKind, type PhotoSetting } from '@/lib/photo-check'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
+import { isOwnStoragePath } from '@/lib/storage-path'
+import { allowAttempt } from '@/lib/rate-limit'
+import { HOUR_MS, PHOTO_CHECKS_PER_HOUR } from '@/lib/usage-limits'
 
 export const maxDuration = 60
 
@@ -36,9 +39,17 @@ export async function POST(request: Request) {
     const { bucket, path } = parsed.data
     const thumb = parsed.data.thumb_path ?? null
     for (const p of [path, thumb]) {
-      if (p && !p.startsWith(`${session.userId}/`)) {
+      if (p && !isOwnStoragePath(p, session.userId)) {
         return Response.json({ error: 'That photo does not belong to you' }, { status: 400 })
       }
+    }
+    // Each check costs a paid AI call: 60 an hour is far more than a working
+    // day needs. The phone keeps a refused photo and tries again later.
+    if (!allowAttempt(`photo-check:${session.userId}`, PHOTO_CHECKS_PER_HOUR, HOUR_MS)) {
+      return Response.json(
+        { error: 'Too many photos checked in the last hour. Try again a little later.' },
+        { status: 429 },
+      )
     }
     const kind: PhotoKind = bucket === 'selfies' ? 'selfie' : (parsed.data.kind ?? 'shelf')
     const admin = createAdminSupabase()

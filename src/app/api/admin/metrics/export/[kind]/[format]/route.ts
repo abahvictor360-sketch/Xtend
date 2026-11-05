@@ -1,5 +1,6 @@
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, ApiError } from '@/lib/auth'
+import { isExportFormat } from '@/lib/export/formats'
 import { audit } from '@/lib/audit'
 import { renderExport } from '@/lib/export/render'
 import { XM_EXPORTS, xmSheet, type XmExportKind } from '@/lib/metrics/export'
@@ -15,6 +16,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ kind: strin
     // Supervisors download what they can already see: RLS narrows it to their team.
     await requireApiSession(['admin', 'supervisor'])
     const { kind, format } = await ctx.params
+    if (!isExportFormat(format)) throw new ApiError('Unsupported export format', 400)
     if (!XM_EXPORTS.includes(kind as XmExportKind)) throw new ApiError('Unknown report', 404)
     const url = new URL(request.url)
     const month = monthStart(url.searchParams.get('month'))

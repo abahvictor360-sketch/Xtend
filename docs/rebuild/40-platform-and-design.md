@@ -424,20 +424,43 @@ VAPID_SUBJECT=mailto:ops@xpelbeauty.ng
 ANTHROPIC_API_KEY=
 TRUSTED_PROXY_HOPS=1
 IP_API_KEY=
+IP_GEO_URL=
+IP_GEO_DISABLED=
+FIREBASE_SERVICE_ACCOUNT=
+APNS_KEY=
+APNS_KEY_ID=
+APNS_TEAM_ID=
+APNS_BUNDLE_ID=
+APNS_SANDBOX=
+CREDENTIALS_WEBHOOK_URL=
+CREDENTIALS_WEBHOOK_TOKEN=
+IOS_APP_URL=
+IOS_LATEST_BUILD=
+ANDROID_APK_URL=
+ANDROID_LATEST_BUILD=
+APP_VERSION=
+APP_RELEASE_REPO=
+XTEND_BUILD_ID=
+NEXT_PUBLIC_REALTIME_DISABLED=
 NEXT_PUBLIC_TURNSTILE_SITE_KEY=
 TURNSTILE_SECRET_KEY=
 ```
+
+(The Turnstile pair sits after `IP_API_KEY` in the real file; order does not
+matter.) Every value is blank or a placeholder: real values live only in
+`.env.local`, the host's settings or the VPS's `.env.production`. `.gitignore`
+ignores `.env` and `.env.*` except `.env.example`; `.claudeignore`,
+`.cursorignore` and `.aiexclude` list the same so AI tools do not read them;
+`CLAUDE.md` has a **Secrets** rule (never read, print or paste them; refer to a
+setting by name).
 
 Each variable has a comment block in the file (copy them: they explain the
 Google APIs to enable, the `web-push` key generator command
 `node -e "console.log(require('web-push').generateVAPIDKeys())"`, and the proxy hop count).
 
-Variables read by code but not in `.env.example` (all optional): `IP_GEO_URL`,
-`IP_GEO_DISABLED`, `FIREBASE_SERVICE_ACCOUNT`, `APNS_KEY`, `APNS_KEY_ID`,
-`APNS_TEAM_ID`, `APNS_BUNDLE_ID`, `APNS_SANDBOX`, `CREDENTIALS_WEBHOOK_URL`,
-`CREDENTIALS_WEBHOOK_TOKEN`, `APP_RELEASE_REPO`, `ANDROID_APK_URL`,
-`ANDROID_LATEST_BUILD`, `IOS_APP_URL`, `IOS_LATEST_BUILD`, `APP_VERSION`,
-`XTEND_BUILD_ID`, and Vercel's own `VERCEL_DEPLOYMENT_ID` / `VERCEL_GIT_COMMIT_SHA`.
+Variables read by code but not in `.env.example`: only Vercel's own
+`VERCEL_DEPLOYMENT_ID` / `VERCEL_GIT_COMMIT_SHA`. `GOOGLE_MONTHLY_LOOKUP_LIMIT`
+blank means 20,000 a month; `0` or `none` means no limit.
 `XTEND_URL` is read only by `mobile/capacitor.config.ts`. The full table with
 meanings is BUILD_GUIDE section 7.
 
@@ -501,7 +524,7 @@ support helper, cron jobs, sign-in lookup).
 | relogin rule | Only for roles `merchandiser`, `marketer` (`DAILY_LOGIN_ROLES`). `'new-day'` if `last_sign_in_at` is before today's Lagos midnight (`${today}T00:00:00+01:00`). `'clocked-out'` if a `closing` attendance row for today has `created_at` after the sign-in. |
 | `requireSession(roles?)` | Page guard; redirects in this order: no session → `/login`; `!is_active` → `/deactivated`; relogin → `/api/auth/expired?reason=<reason>`; `must_change_password` → `/change-password`; wrong role → `/`. |
 | `ApiError(message, status, code?)` | Error class thrown by route helpers. |
-| `requireApiSession(roles?)` | Route guard; throws `ApiError`: 401 `Not authenticated`; 403 `Account deactivated`; 401 code `relogin` with `You have clocked out for today. Log in again to continue.` or `Please log in again for today.`; 403 `Not permitted`. |
+| `requireApiSession(roles?, { allowDuringPasswordChange? })` | Route guard; throws `ApiError`: 401 `Not authenticated`; 403 `Account deactivated`; 401 code `relogin` with `You have clocked out for today. Log in again to continue.` or `Please log in again for today.`; 403 code `change_password` `Choose your own password first.` while `must_change_password` (unless `allowDuringPasswordChange`: `/api/auth/password`, `/api/activity`, `/api/push/subscribe`, `/api/push/native`, `/api/version/seen`; `passwordChangeBlocks` in `src/lib/password-gate.ts`); 403 `Not permitted`. |
 | `apiError(e)` | `ApiError` → JSON `{ error, code? }` with its status. Anything else → logged, 500 `{ error: 'Something went wrong. Try again.' }`. |
 | `dbErrorMessage(error, fallback='That could not be saved. Try again.')` | Passes the message through only for SQLSTATE `P0001` (raised on purpose in SQL); otherwise logs and returns the fallback. |
 | `dbErrorResponse(error, fallback?)` | If `error.hint === 'place_naming_due'` → 423 `{ error, code: 'name_place' }`; else 400 `{ error: dbErrorMessage(...) }`. |
@@ -517,7 +540,17 @@ In-process fixed-window counter (`Map<key, { count, resetAt }>`). `allowAttempt(
 returns false once `count > limit`. When the map exceeds 10 000 keys, expired
 entries are swept. `clientAddress(request)` = `requestIp(headers) ?? 'unknown'`.
 
-Only caller: `POST /api/auth/sign-in`, window `15 * 60 * 1000` ms:
+Per-person usage limits (`src/lib/usage-limits.ts`, window one hour, key includes the user id):
+
+| Route | Key | Limit | Over the limit |
+|---|---|---|---|
+| `POST /api/photo-check` | `photo-check:<uid>` | 60 | 429 "Too many photos checked in the last hour. Try again a little later." |
+| `GET /api/geocode` (FIELD_ROLES only) | `geocode:<uid>` | 120 | 429 "Too many place lookups in the last hour. Try again a little later." |
+| `POST /api/support`, `/api/support/<id>/message` | `support-helper:<uid>` | 20 | message saved; no AI call, the office answers (`supportHelperMode`, also after 12 messages in a thread) |
+| `POST /api/admin/ask` | `ask-xtend:<uid>` | 60 | 429 "You have asked a lot of questions in the last hour. Take a short break and try again later." |
+| `POST /api/auth/password` (current password checks) | `password-change:<uid>` | 10 per 15 min | 429 "Too many tries. Wait 15 minutes, then try again." |
+
+Sign-in, window `15 * 60 * 1000` ms:
 
 | Key | Limit |
 |---|---|
@@ -526,7 +559,25 @@ Only caller: `POST /api/auth/sign-in`, window `15 * 60 * 1000` ms:
 
 Over the limit → 429 `{ error: 'Too many attempts. Wait 15 minutes, then try again.' }`.
 Every wrong credential answers 400 `Those details are not correct.` (the phone→email
-lookup happens on the server so emails never leak).
+lookup happens on the server so emails never leak). A phone that matches no account
+still costs a sign-in (`passwordIsRight(NO_SUCH_ACCOUNT, password)`, `src/lib/password-check.ts`),
+so timing does not reveal whether it exists.
+
+### 2.5a Other guards (0079 security pass)
+
+- `isOwnStoragePath(path, uid)` (`src/lib/storage-path.ts`): `<uid>/` then one or more
+  segments of `[A-Za-z0-9._-]+`, never `.`/`..`/empty, at most 300 characters. Used by
+  every route that takes a storage path from a phone (photo check, attendance, visits,
+  reports, store counts and sheets, X Metrics counts and sales, place naming, count template).
+- `isExportFormat` / `EXPORT_FORMATS` (`src/lib/export/formats.ts`, `xlsx|docx|pdf|csv`):
+  every `[format]` download route checks it before reading data or auditing (400
+  "Unsupported export format"). `csvCell` escapes CSV values and puts `'` before a value
+  starting with `= + - @`, tab or CR (not a plain negative number).
+- `authAdminError(error, fallback)` (`src/lib/auth-admin-errors.ts`): errors from the Auth
+  admin API in plain words (taken email → 409 "Somebody already uses that email."), else the
+  fallback; used by the users routes and bulk import.
+- `/api/health` (`healthBody`, `src/lib/health.ts`): public `{ ok, checked_at }`; with
+  `cronAuthorized` also `configured`, `web_push`, `place_provider`.
 
 ### 2.6 Client IP (`src/lib/client-ip.ts`, `src/lib/ip-geo.ts`)
 
@@ -614,6 +665,10 @@ export route and `ask/act`, `ask/apply`, `ask/report` 60 s.
   `<subject>[ — <reason>]. Open Support to reply.`, url `/admin/support`.
 - No key, no tool block, or any thrown error → escalates with
   "Thanks for your message. I've passed this to the office and someone will follow up with you."
+- `respondToSupportThread(threadId, { withinHourlyLimit })`: when `supportHelperMode`
+  says `office` (over 20 replies an hour for the person, or 12+ messages in the thread)
+  no model call is made: an already escalated thread gets nothing more; otherwise the
+  same canned reply and escalation (reason "a long conversation, or many messages in an hour").
 - The prompt forbids mentioning location checks, integrity checks, alerts, VPN detection or
   anything recorded (staff are never told how they are monitored).
 
@@ -627,7 +682,8 @@ export route and `ask/act`, `ask/apply`, `ask/report` 60 s.
   `message: string` (to the worker, "OK" on pass); `setting: 'shop'|'market'|'street'|'office'|'home'|'unclear'`.
 - `refusal` throws; a verdict other than pass/reject throws.
 - Route: body `{ bucket: 'selfies'|'reports', path, thumb_path?, kind?: 'shelf'|'storefront'|'product_selfie' }`;
-  paths must start with `<userId>/`. Re-check of a known path returns the stored verdict.
+  paths must pass `isOwnStoragePath` (else 400 "That photo does not belong to you"); 60 checks
+  per person per hour (429). Re-check of a known path returns the stored verdict.
   If the key is missing or the call fails, verdict `unchecked` (allowed). Rows upserted into
   `photo_checks` on `path` (selfie and thumbnail get the same verdict). Integrity flags:
   `photo_rejected` (severity `high` for screen/printed_photo, else `low`),
@@ -660,7 +716,7 @@ the pure `resolveWith` (`src/lib/place-resolve.ts`) and resolves in this order:
    then `rpc('known_place_at', …)` → learned place (source `known`); with `learn`, `rpc('note_place_visit', { p_id })`
    (or `note_place_visit_for { p_user: person, p_id }` when `person` is given).
 3. **Saved address** (service client): `rpc('address_at', { p_lat, p_lng })` → `{ name: null, address, label: address, source: 'google' }`.
-4. **Google** (only if `google !== false`, `GOOGLE_MAPS_API_KEY` set and `google_calls_this_month()` < `GOOGLE_MONTHLY_LOOKUP_LIMIT` when set), cached.
+4. **Google** (only if `google !== false`, `GOOGLE_MAPS_API_KEY` set and `google_calls_this_month()` < the limit from `parseLimit(GOOGLE_MONTHLY_LOOKUP_LIMIT)`: a whole number above zero; blank or anything else 20,000; `0` or `none` no limit), cached.
 5. **OpenStreetMap**.
 6. Fallback label `"<lat.toFixed(5)>, <lng.toFixed(5)>"`, source `coordinates`.
 

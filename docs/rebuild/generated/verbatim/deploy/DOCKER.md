@@ -114,15 +114,17 @@ server is live.
 
 1. In Supabase, run any migration not yet run (the app says which number a
    page needs). As of November 2026: `0077_sign_in_lockout.sql`,
-   `0078_function_grants.sql`, and the 0069 reminder constraint fix.
+   `0078_function_grants.sql`, `0079_security_fixes.sql`, and the 0069
+   reminder constraint fix.
 2. Supabase → Authentication → URL configuration: set the Site URL to the
    new domain.
 3. The phone apps open the address in the repository variable `APP_URL`
    (default `https://xtend-brown.vercel.app`). Set `APP_URL` to the new
    domain and let the mobile workflow build new apps; keep the old address
    working until staff have the new app.
-4. Check: `https://app.example.com/api/health` shows `"ok": true` and every
-   `configured` value you expect as `true`; `curl -sI` on the login page
+4. Check: `https://app.example.com/api/health` shows `"ok": true`. Sent
+   with the header `Authorization: Bearer <CRON_SECRET>` it also lists every
+   `configured` value: check each one you expect is `true`; `curl -sI` on the login page
    shows the security headers and no `x-powered-by`.
 
 ## 7. Scaling and headers

@@ -1165,7 +1165,7 @@ const patchSchema = z.object({
 })
 ```
 
-- Database functions: `unlock_sign_in`, `sign_in_clear`
+- Database functions: `can_edit_staff`, `unlock_sign_in`, `sign_in_clear`
 - Tables and views: `profiles`, `staff_roles`, `audit_log`, `attendance`
 
 ## `POST /api/admin/users/import`
@@ -1212,7 +1212,7 @@ const createUserSchema = z.object({
 })
 ```
 
-- Database functions: `outlets_for_user`
+- Database functions: `can_create_staff`, `outlets_for_user`
 - Tables and views: `staff_roles`, `profiles`, `audit_log`
 
 ## `POST /api/attendance`
@@ -1261,13 +1261,13 @@ sign out somebody whose login is still good.
 - File: `src/app/api/auth/password/route.ts`
 - Who: public / own check
 
-The signed-in person sets their own password. Done here rather than in the
-browser so the change is recorded with where it came from (migration 062).
-Supabase still decides whether the new password is acceptable.
+Needed except for the first change after the office set the password.
 
 ```ts
 const schema = z.object({
   password: z.string().min(8, 'Use at least 8 characters.').max(200),
+  /** Needed except for the first change after the office set the password. */
+  current_password: z.string().max(200).optional(),
 })
 ```
 - Tables and views: `profiles`
@@ -1374,7 +1374,7 @@ Vercel Cron sends `Authorization: Bearer $CRON_SECRET`.
 ## `GET /api/geocode`
 
 - File: `src/app/api/geocode/route.ts`
-- Who: public / own check
+- Who: FIELD_ROLES
 
 Names the caller's current position. Proxied server-side so the provider
 key never reaches a handset, and so the caller's own outlet can be used
@@ -1384,11 +1384,12 @@ as the answer when they are standing in it.
 ## `GET /api/health`
 
 - File: `src/app/api/health/route.ts`
-- Who: public / own check
+- Who: cron (Bearer CRON_SECRET)
 
-Configuration health. Booleans and diagnoses — never a key, never any
-data — so it can be checked without signing in when something is not
-behaving.
+Health. Publicly only `{ ok, checked_at }`, enough for Docker's
+HEALTHCHECK and uptime monitors. With `Authorization: Bearer $CRON_SECRET`
+it also lists which settings are configured (booleans and diagnoses,
+never a key or any data), for checking a deploy that is not behaving.
 
 ## `POST /api/leave/[id]/cancel`
 

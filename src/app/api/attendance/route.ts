@@ -6,6 +6,7 @@ import { flushFlagAlerts } from '@/lib/flag-alerts'
 import { clientIp } from '@/lib/ip-geo'
 import { evaluateLocationIntegrity } from '@/lib/integrity-signals'
 import { mapText } from '@/lib/fields'
+import { isOwnStoragePath } from '@/lib/storage-path'
 
 /**
  * The client sends what it observed. distance_m, status, user_id and
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
 
     // The selfie must live in the caller's own folder. Storage enforces this
     // too; rejecting here gives the user a readable error instead of a 403.
-    if (!input.selfie_path.startsWith(`${session.userId}/`)) {
+    if (!isOwnStoragePath(input.selfie_path, session.userId)) {
       return Response.json({ error: 'Selfie path does not belong to you' }, { status: 400 })
     }
 

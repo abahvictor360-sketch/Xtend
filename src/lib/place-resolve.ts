@@ -15,6 +15,8 @@
  * What a map finds is learned, so the next lookup there stops at 3 or 4.
  */
 
+import { DEFAULT_GOOGLE_MONTHLY_LOOKUP_LIMIT } from '@/lib/usage-limits'
+
 export type PlaceSource = 'outlet' | 'known' | 'google' | 'osm' | 'coordinates'
 
 export interface ResolvedPlace {
@@ -94,11 +96,16 @@ export function metresBetween(lat1: number, lng1: number, lat2: number, lng2: nu
 
 const coordinates = (lat: number, lng: number) => `${lat.toFixed(5)}, ${lng.toFixed(5)}`
 
-/** GOOGLE_MONTHLY_LOOKUP_LIMIT: a whole number above zero, or no limit. */
+/**
+ * GOOGLE_MONTHLY_LOOKUP_LIMIT: a whole number above zero is the limit;
+ * `0` or `none` turns the limit off; unset (or anything else) is the
+ * default, 20,000 a month, so a forgotten setting never means an open bill.
+ */
 export function parseLimit(value: string | undefined | null): number | null {
-  if (!value) return null
-  const n = Number(value.trim())
-  return Number.isInteger(n) && n > 0 ? n : null
+  const text = (value ?? '').trim().toLowerCase()
+  if (text === '0' || text === 'none') return null
+  const n = Number(text)
+  return text && Number.isInteger(n) && n > 0 ? n : DEFAULT_GOOGLE_MONTHLY_LOOKUP_LIMIT
 }
 
 /**

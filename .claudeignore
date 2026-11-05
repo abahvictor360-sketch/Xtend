@@ -1,0 +1,4 @@
+# Secrets: never read by AI assistants.
+.env
+.env.*
+!.env.example

@@ -5771,5 +5771,144 @@ begin
   end;
   perform assert(not exists (select 1 from public.place_addresses), 'places 0068: (the tests above rolled back)');
 
+  -- ---------------------------------------------------------------
+  -- Security fixes (0079): field staff only have a supervisor, who may
+  -- ask about whose stores, who opens a message attachment, and photos
+  -- are never overwritten. Rolled back.
+  -- ---------------------------------------------------------------
+  declare
+    s_sup uuid := gen_random_uuid();
+    s_kid uuid := gen_random_uuid();
+    s_new uuid := gen_random_uuid();
+    s_hr  uuid := gen_random_uuid();
+    s_adm uuid := gen_random_uuid();
+    s_out uuid;
+  begin
+    begin
+      perform set_config('request.jwt.claim.sub', '', false);
+      perform assert(not exists (select 1 from public.profiles
+                                 where supervisor_id is not null and not public.is_field_role(role)),
+        'security 0079: nobody above field staff has a supervisor');
+      insert into auth.users (id, email) values
+        (s_sup, 'sup.sec@xpel.ng'), (s_kid, 'kid.sec@xpel.ng'), (s_new, 'new.sec@xpel.ng'),
+        (s_hr, 'hr.sec@xpel.ng'), (s_adm, 'adm.sec@xpel.ng');
+      insert into public.outlets (name, lat, lng, geofence_radius_m)
+      values ('Security Test Store', 6.7, 3.7, 100) returning id into s_out;
+      insert into public.profiles (id, full_name, email, role) values
+        (s_sup, 'Sola Adebayo', 'sup.sec@xpel.ng', 'supervisor'),
+        (s_hr, 'Hauwa Bello', 'hr.sec@xpel.ng', 'hr');
+      insert into public.profiles (id, full_name, email, role, outlet_id, supervisor_id) values
+        (s_kid, 'Kemi Ojo', 'kid.sec@xpel.ng', 'merchandiser', s_out, s_sup),
+        (s_new, 'Nkem Obi', 'new.sec@xpel.ng', 'marketer', null, s_sup);
+      -- An admin created already "reporting" to somebody is not.
+      insert into public.profiles (id, full_name, email, role, outlet_id, supervisor_id)
+      values (s_adm, 'Ade Admin', 'adm.sec@xpel.ng', 'admin', s_out, s_sup);
+      perform assert((select supervisor_id from public.profiles where id = s_adm) is null,
+        'security 0079: a new admin never reports to a supervisor');
+      perform assert((select supervisor_id from public.profiles where id = s_kid) = s_sup
+                     and (select supervisor_id from public.profiles where id = s_new) = s_sup,
+        'security 0079: merchandisers and marketers keep their supervisor');
+
+      -- The takeover: a team member promoted above their supervisor.
+      perform act_as(s_sup);
+      perform assert(public.can_edit_staff(s_new), 'security 0079: a supervisor edits their own marketer');
+      perform set_config('request.jwt.claim.sub', '', false);
+      update public.profiles set role = 'supervisor' where id = s_new;
+      perform assert((select supervisor_id from public.profiles where id = s_new) is null,
+        'security 0079: promoting somebody to supervisor clears who they reported to');
+      perform act_as(s_sup);
+      perform assert(not public.can_edit_staff(s_new),
+        'security 0079: so their old supervisor can no longer reset their password or deactivate them');
+      perform set_config('request.jwt.claim.sub', '', false);
+      update public.profiles set role = 'merchandiser' where id = s_new;
+      update public.profiles set supervisor_id = s_sup where id = s_new;
+      update public.profiles set role = 'hr' where id = s_new;
+      perform assert((select supervisor_id from public.profiles where id = s_new) is null,
+        'security 0079: so does promoting them to HR');
+      update public.profiles set role = 'admin' where id = s_new;
+      update public.profiles set supervisor_id = s_sup where id = s_new;
+      perform assert((select supervisor_id from public.profiles where id = s_new) is null,
+        'security 0079: and an admin cannot be given a supervisor afterwards');
+      update public.profiles set supervisor_id = s_sup where id = s_hr;
+      perform assert((select supervisor_id from public.profiles where id = s_hr) is null,
+        'security 0079: nor can HR');
+
+      -- outlets_for_user answers for yourself, your team, admins, HR, the server.
+      perform act_as(s_kid);
+      perform assert((select count(*) from public.outlets_for_user(s_kid)) = 1,
+        'security 0079: staff see their own stores');
+      perform act_as(bala);
+      perform assert((select count(*) from public.outlets_for_user(s_kid)) = 0,
+        'security 0079: but not somebody else''s');
+      perform act_as(s_sup);
+      perform assert((select count(*) from public.outlets_for_user(s_kid)) = 1,
+        'security 0079: a supervisor sees their team''s stores');
+      perform assert((select count(*) from public.outlets_for_user(s_adm)) = 0,
+        'security 0079: but not an admin''s');
+      perform act_as(boss);
+      perform assert((select count(*) from public.outlets_for_user(s_kid)) = 1,
+        'security 0079: an admin sees anybody''s stores');
+      perform act_as(s_hr);
+      perform assert((select count(*) from public.outlets_for_user(s_kid)) = 1
+                     and (select count(*) from public.outlets_for_user(s_adm)) = 0,
+        'security 0079: HR sees staff''s stores, not an admin''s');
+      perform set_config('request.jwt.claim.sub', '', false);
+      perform assert((select count(*) from public.outlets_for_user(s_kid)) = 1,
+        'security 0079: the server (no signed-in user) still asks for anybody');
+
+      -- Message attachments follow the message.
+      insert into storage.objects (bucket_id, name) values
+        ('message-files', s_kid || '/payslip.pdf'), ('message-files', s_kid || '/loose.pdf'),
+        ('message-files', s_sup || '/rota.jpg');
+      perform act_as(s_kid);
+      perform public.send_message(null, '', jsonb_build_object(
+        'path', s_kid || '/payslip.pdf', 'name', 'payslip.pdf', 'mime', 'application/pdf', 'size', 100));
+      perform assert(public.message_file_readable(s_kid || '/payslip.pdf')
+                     and public.message_file_readable(s_kid || '/loose.pdf'),
+        'security 0079: the sender opens their own attachments');
+      perform act_as(bala);
+      perform assert(not public.message_file_readable(s_kid || '/payslip.pdf'),
+        'security 0079: another staff member cannot open somebody''s attachment');
+      perform act_as(s_sup);
+      perform assert(public.message_file_readable(s_kid || '/payslip.pdf'),
+        'security 0079: their supervisor can');
+      perform assert(not public.message_file_readable(s_kid || '/loose.pdf'),
+        'security 0079: but not a file of theirs that is on no message');
+      perform public.send_message(s_kid, '', jsonb_build_object(
+        'path', s_sup || '/rota.jpg', 'name', 'rota.jpg', 'mime', 'image/jpeg', 'size', 100));
+      perform act_as(boss);
+      perform assert(public.message_file_readable(s_kid || '/payslip.pdf')
+                     and public.message_file_readable(s_sup || '/rota.jpg'),
+        'security 0079: an admin can');
+      perform act_as(s_hr);
+      perform assert(public.message_file_readable(s_kid || '/payslip.pdf'), 'security 0079: HR can');
+      perform act_as(s_kid);
+      perform assert(public.message_file_readable(s_sup || '/rota.jpg'),
+        'security 0079: staff open what their supervisor sent them');
+      perform act_as(bala);
+      perform assert(not public.message_file_readable(s_sup || '/rota.jpg'),
+        'security 0079: and nobody else does');
+      perform assert(exists (select 1 from pg_policies where schemaname = 'storage'
+                               and policyname = 'message_files_read'
+                               and qual like '%message_file_readable%'),
+        'security 0079: the storage policy asks message_file_readable');
+
+      -- Photos in the reports bucket are never overwritten.
+      perform assert(not exists (select 1 from pg_policies where schemaname = 'storage'
+                                   and policyname = 'reports_update_own')
+                     and not exists (select 1 from pg_policies where schemaname = 'storage'
+                                       and tablename = 'objects' and cmd = 'UPDATE'
+                                       and qual like '%''reports''%'),
+        'security 0079: nobody may overwrite a photo in the reports bucket');
+      perform assert(not has_function_privilege('anon', 'public.message_file_readable(text)', 'execute')
+                     and not has_function_privilege('authenticated', 'public.profiles_field_only_reporting()', 'execute'),
+        'security 0079: the new helpers are closed to signed-out callers');
+      raise exception 'security-0079-done';
+    exception when others then
+      if sqlerrm <> 'security-0079-done' then raise; end if;
+    end;
+  end;
+  perform set_config('request.jwt.claim.sub', '', false);
+
   raise notice 'ALL RULES PASSED';
 end $$;

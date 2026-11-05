@@ -1,5 +1,6 @@
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession } from '@/lib/auth'
+import { ApiError, apiError, requireApiSession } from '@/lib/auth'
+import { isExportFormat } from '@/lib/export/formats'
 import { audit } from '@/lib/audit'
 import { applyIntegrityFilter, fetchIntegrity, integritySheet, parseIntegrityFilter } from '@/lib/integrity-review'
 import { renderExport } from '@/lib/export/render'
@@ -14,6 +15,7 @@ export async function GET(request: Request, ctx: { params: Promise<{ format: str
   try {
     await requireApiSession(['admin', 'supervisor'])
     const { format } = await ctx.params
+    if (!isExportFormat(format)) throw new ApiError('Unsupported export format', 400)
     const filter = parseIntegrityFilter(new URL(request.url).searchParams)
     const supabase = await createServerSupabase()
     const { rows } = await fetchIntegrity(supabase, filter, 5000)

@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-11-04, after pinning Node 22 for the build (Nixpacks warnings), the "new version" bar that never cleared on the VPS (one build id per build), blocking bots (robots.txt, `X-Robots-Tag`, bot user agents refused, optional Cloudflare Turnstile on sign-in), the Docker image for Dokploy or Coolify, security headers, Next.js 15.5.28 and Zod 4, closing signed-out access to database helpers (0078), and the sign-in lockout that pauses the guessing device (0077)._
+_Last updated: 2026-11-05, after the security fixes (0079: supervisors reach field staff only, message attachments follow the message, safe storage paths, usage limits on the AI and map lookups, current password to change a password, quieter health check and errors, CSV formula guard, secrets kept out of git and AI tools), pinning Node 22 for the build (Nixpacks warnings), the "new version" bar that never cleared on the VPS (one build id per build), blocking bots (robots.txt, `X-Robots-Tag`, bot user agents refused, optional Cloudflare Turnstile on sign-in), the Docker image for Dokploy or Coolify, security headers, Next.js 15.5.28 and Zod 4, closing signed-out access to database helpers (0078), and the sign-in lockout that pauses the guessing device (0077)._
 
 ---
 
@@ -14,7 +14,7 @@ _Last updated: 2026-11-04, after pinning Node 22 for the build (Nixpacks warning
 1. [What Xtend is](#1-what-xtend-is)
 2. [The rules everything follows](#2-the-rules-everything-follows)
 3. [What you need](#3-what-you-need)
-4. [Set up from zero](#4-set-up-from-zero) (bots: [4.8](#48-bots))
+4. [Set up from zero](#4-set-up-from-zero) (bots: [4.8](#48-bots), security: [4.9](#49-security))
 5. [How it was built, stage by stage](#5-how-it-was-built-stage-by-stage)
 6. [The database: every migration](#6-the-database-every-migration)
 7. [Environment variables](#7-environment-variables)
@@ -249,6 +249,44 @@ Xtend is a private staff app, so no bot may use it. In layers:
    challenge the scheduled jobs' curl calls from GitHub Actions: if a job
    starts failing with 403, add a Cloudflare WAF skip rule for
    `/api/cron/` and `/api/track/` (or run the jobs on the server).
+
+### 4.9 Security
+
+What protects Xtend beyond sign-in and RLS (each has a test: `rules.sql`,
+`rls_counts.sql` or `scripts/check-security-fixes.ts`):
+
+- **Who edits whom**: admin, supervisor and HR changes to an account ask
+  Postgres first (`can_edit_staff`, `can_create_staff`, 0017) as the caller,
+  and a supervisor only ever reaches merchandisers and marketers on their
+  team. Only field staff have a supervisor: promoting somebody to
+  supervisor, HR or admin clears the link (0079 trigger), so nobody keeps
+  power over a person promoted above them.
+- **Files**: message attachments open only for their sender and whoever may
+  read the message (0079 `message_file_readable`); report documents follow
+  the same idea (0064). Photos in the `reports` bucket are never
+  overwritten (no update policy). Every storage path a phone sends is
+  checked with `isOwnStoragePath` (`src/lib/storage-path.ts`): the caller's
+  own folder, plain names only, no `..`.
+- **Usage limits** (`src/lib/usage-limits.ts`, per person per hour, kept in
+  the server process): 60 photo checks, 120 place lookups (`/api/geocode`,
+  field roles only), 20 support helper replies (after that, or after 12
+  messages in one conversation, the office answers), 60 Ask Xtend
+  questions. Google place requests stop at `GOOGLE_MONTHLY_LOOKUP_LIMIT`,
+  20,000 a month unless set.
+- **Passwords**: changing a password needs the current one, except the
+  first change after the office set a temporary one; until that change,
+  every API call but the change itself (and sign-out, push and version
+  calls) answers 403 `change_password`. Sign-in takes as long for an unknown
+  phone number as for a wrong password.
+- **What callers are told**: database and account-service errors are put in
+  plain words (`dbErrorMessage`, `authAdminError`); `/api/health` publicly
+  says only `{ ok, checked_at }` (the configuration list needs
+  `Authorization: Bearer <CRON_SECRET>`); downloads check the format before
+  anything is audited; CSV cells that would run as a formula start with `'`.
+- **Secrets**: `.env` and `.env.*` are ignored by git (except
+  `.env.example`, which lists every setting blank) and by AI tools
+  (`.claudeignore`, `.cursorignore`, `.aiexclude`); `CLAUDE.md` tells any
+  assistant never to read or print them.
 
 ## 5. How it was built, stage by stage
 
@@ -510,8 +548,9 @@ the code lives.
   treat the spot as unknown). Every lookup is counted per Lagos month by what
   answered it, with every request actually sent to Google
   (`place_lookup_stats`, `count_place_lookups` after the response via
-  `after()`), shown on the Places page; `GOOGLE_MONTHLY_LOOKUP_LIMIT` switches
-  to OpenStreetMap for the rest of the month once reached (also for the store
+  `after()`), shown on the Places page; `GOOGLE_MONTHLY_LOOKUP_LIMIT` (20,000
+  when unset since 0079's security pass) switches to OpenStreetMap for the
+  rest of the month once reached (also for the store
   importer's searches).
 - **Google's map on Movement and Attendance**: with
   `NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY`, the Leaflet maps show Google's base
@@ -705,6 +744,7 @@ Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
 | 0072 | HR role: `is_hr()`, `hr_sees(target)`; read policies `profiles_hr_select`, `attendance_hr_select`, `leave_requests_hr_read`, `work_patterns_hr_read`, `schedule_overrides_hr_read`, `staff_outlets_hr_select`; `my_staff`, `available_supervisors`, `staff_analytics`, `can_manage_schedule`, `schedule_guard`, `is_working_day`, `decide_leave` and `write_audit` replaced to let HR in ("Only admins, HR and supervisors …", "Admins, HR and supervisors only") |
 | 0076 | `my_supervisor()` (id, full_name, avatar_path): the staff member's own supervisor, name and photo only, for the Messages page header (SECURITY DEFINER; staff cannot read the office's profiles) |
 | 0077 | Sign-in lockout that pauses the guessing device, not the account: `sign_in_lockouts` (lock_key, account, scope device/address/account, counts, locked_until; RLS on, no grants) and `sign_in_trusted_devices` (account, SHA-256 of the device token; forgotten after 180 days unused); service-role only `sign_in_lock_status(account, address, device)`, `sign_in_failed(…)` (5 per device or address, 20 per account from unknown devices, within 15 minutes → 15-minute pause), `sign_in_succeeded(…, new_device)`, `sign_in_clear(account)`; `can_unlock_sign_in(user)`, `unlock_sign_in(user)` (admins anyone, supervisors their team, HR anyone but admins; audited `user.unlock`); `locked_accounts()` for the Staff page |
+| 0079 | Security fixes: trigger `trg_profiles_zz_field_only_reporting` (`profiles_field_only_reporting()`, BEFORE insert or update, named to fire after the 0042 role sync) clears `supervisor_id` on anyone who is not a merchandiser or marketer, plus a one-off clear of existing links; `message_file_readable(name)` (uploader, or anyone `can_message` lets read a message carrying it) and policy `message_files_read` rewritten to use it, with index `messages_by_attachment_path`; `outlets_for_user(target)` now answers only for the caller, their team, admins, HR (not for admins) and the server (no signed-in user); storage policy `reports_update_own` dropped (photos in `reports` are never overwritten). No new table |
 | 0078 | Function grants: revokes EXECUTE from `public`, `anon` and `authenticated` on every trigger and event-trigger function in `public` (they fire without it) and on `place_is_recognised(lat, lng)` (only other database functions call it), after Supabase's security advisor found them callable signed out |
 | 0075 | Message attachments: `messages.attachment_path/name/mime/size_bytes/kind`; `messages_body_check` relaxed (words **or** an attachment); `messages_attachment_check` (all five columns together, picture or PDF ≤ 10 MB); private `message-files` bucket with `message_files_insert_own` + `message_files_read`; `send_message(uuid, text, jsonb)` (drops the 2-arg form, validates and stores the attachment); `conversation` returns the attachment columns; `message_inbox` preview shows "Attachment" for a file-only message |
 | 0074 | Office stock count: `xm_counts.source` (`'field'`/`'office'`, default `'field'`); `lat`, `lng`, `accuracy_m`, `photo_path` made nullable; the `photo_path` UNIQUE constraint replaced by a partial unique index (`xm_counts_photo_path_uniq`, where not null); check `xm_counts_source_shape_check` (field counts keep GPS + photo, office counts carry neither); `xm_office_count(outlet, lines)` (admin only, no GPS/photo, same line checks as `xm_submit_count`, recorded under `auth.uid()`) |
@@ -724,7 +764,7 @@ Set in `.env.local` for development, and for production in Vercel or, on the VPS
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Yes for web push | Generate with `node -e "console.log(require('web-push').generateVAPIDKeys())"` |
 | `ANTHROPIC_API_KEY` | Optional | Ask Xtend, support helper, invoice reading |
 | `GOOGLE_MAPS_API_KEY` | Optional | Shop names at clock-in (server only: Places API (New), Geocoding API) |
-| `GOOGLE_MONTHLY_LOOKUP_LIMIT` | Optional | Most Google place requests a month (Lagos time); once reached, OpenStreetMap until the next month, logged once. Unset = no limit. Shown on the Places page |
+| `GOOGLE_MONTHLY_LOOKUP_LIMIT` | Optional | Most Google place requests a month (Lagos time); once reached, OpenStreetMap until the next month, logged once. Unset (or not a whole number) = 20,000; `0` or `none` = no limit. Shown on the Places page |
 | `NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY` | Optional | Google's map (Map / Satellite) on Movement and Attendance. A **separate** key, visible in the browser: restrict it to HTTP referrers (the site's addresses, e.g. `https://your-domain/*`) and to the **Maps JavaScript API** only. Without it, or whenever Google fails, the maps use OpenStreetMap. Needs a deploy. No CSP is set, so no header change is needed; if one is added, allow `maps.googleapis.com`, `maps.gstatic.com`, `*.googleapis.com`, `unpkg.com` (scripts) and `*.googleusercontent.com`, `*.gstatic.com`, `*.google.com` (images) |
 | `GEOCODER_USER_AGENT` | Recommended | Contact string for OpenStreetMap's policy |
 | `FIREBASE_SERVICE_ACCOUNT` | For Android push | Firebase service account JSON |
@@ -878,7 +918,8 @@ for s in check-allocate check-assistant-actions check-attendance check-audit \
          check-support-notifications check-updates check-visits-alerts check-xm-exports \
          check-schedules-leave check-marketer-reports check-clock-out-reminder check-activity \
          check-xm-features check-report-files check-system-reset check-report-photos check-retention \
-         check-places-usage check-shift-reminders check-follow-live check-bot-guard; do
+         check-places-usage check-shift-reminders check-follow-live check-bot-guard \
+         check-security-fixes; do
   npx tsx --tsconfig tsconfig.scripts.json scripts/$s.ts | tail -1
 done
 ```
@@ -966,6 +1007,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-11-05 | **Security fixes** (section 4.9): a supervisor can no longer reset the password of or deactivate somebody promoted above them (`/api/admin/users/<id>` asks `can_edit_staff` as the caller, `/api/admin/users` asks `can_create_staff`; only field staff keep a supervisor); message attachments readable only by the sender and whoever may read the message; `outlets_for_user` limited to the caller's reach; photos in `reports` never overwritten (the X Metrics shelf photo upload no longer upserts); every phone-sent storage path checked by `src/lib/storage-path.ts`; per-person hourly limits on photo checks (60), place lookups (120, field roles only), support helper replies (20; after 12 messages a conversation goes to the office) and Ask Xtend (60) (`src/lib/usage-limits.ts`); `GOOGLE_MONTHLY_LOOKUP_LIMIT` defaults to 20,000; API calls refused with 403 `change_password` until a forced password change is done; changing a password needs the current one (new field on the form, not on the first change); sign-in for an unknown phone takes as long as a wrong password; raw database and account-service errors replaced by plain words; every `[format]` download refuses an unknown format before auditing; CSV cells that start like a formula get a leading `'`; `/api/health` public answer is `{ ok, checked_at }` (details with the job secret); `/api/version/seen` uses the usual session checks; `.env.*` ignored, `.env.example` lists every setting, `.claudeignore`/`.cursorignore`/`.aiexclude`, a Secrets rule in `CLAUDE.md`. New check `scripts/check-security-fixes.ts` | 0079 |
 | 2026-11-03 | **Bots blocked** (section 4.8): `src/app/robots.ts` disallows everything; `X-Robots-Tag: noindex, nofollow, noarchive` on every response and a robots meta tag on every page; the middleware refuses empty and bot user agents (crawlers, AI bots, link previewers, curl/wget/scripting libraries, headless browsers) with a 403 via `src/lib/bot-guard.ts`, never the apps, browsers, `/api/cron/*`, `/api/track/*`, `/api/health`, `/api/version` or static files. Optional Cloudflare Turnstile on `/login` (`NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`; `src/lib/turnstile.ts`, `src/components/human-check.tsx`), confirmed in `/api/auth/sign-in` before the password. Docker build argument for the site key. New check `scripts/check-bot-guard.ts` | — |
 | 2026-10-28 | Ask Xtend can set a work schedule: a new `propose_schedule` tool proposes the weekly days worked (0 = Sunday … 6 = Saturday) for named merchandisers/marketers or a group; the Apply card runs it through `POST /api/admin/schedules` (`set_work_pattern`, 059), with the same team checks and audit as the Schedules page. No new migration | — |
 | 2026-10-28 | **Location required to clock in or out** (+ services-off probe): the clock button on Home shows only when location is on, for clock-out as well as clock-in, gated by the shared `LocationGate`. Permission denied is caught instantly by the permission watcher; the phone's own location service being off (which the Permissions API cannot see) is caught up front by a new coarse one-shot probe, `probeLocation()` in `lib/geo.ts`, that tells apart denied (code 1) / service off (code 2) / slow signal (code 3, not blocked) / ok. The probe runs only once permission is granted, so it never prompts early; `prompt`, `unknown` and Safari fall through to the button, where the tap asks and blocks on its own. Client-only (`clock-panel.tsx`, `geo.ts`); no migration | — |
@@ -1152,5 +1194,9 @@ Newest first. Dates are when the work landed on the main branch.
   (`system_settings.follow_max_sessions`, 20; change it with SQL) keeps that
   to a handful. The follow page relies on the browser running its timers:
   a page left in a background tab may be ended as "closed" after 60 s.
+- **Usage limits** (4.9) are counted in the server process, like the
+  sign-in rate limit: a restart starts them afresh, and with several
+  replicas each keeps its own count. Fine for slowing misuse; a shared
+  count would need a table.
 - Migrations to run in production after each merge: check the change log
   above against what has been run in Supabase.

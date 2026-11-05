@@ -3,6 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, dbErrorMessage, dbErrorResponse } from '@/lib/auth'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
 import { mapText } from '@/lib/fields'
+import { isOwnStoragePath } from '@/lib/storage-path'
 
 const isoDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Expiry dates must be real dates')
 
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
       return Response.json({ error: parsed.error.issues[0]?.message ?? 'Invalid count' }, { status: 400 })
     }
     const body = parsed.data
-    if (!body.photo_path.startsWith(`${session.userId}/`)) {
+    if (!isOwnStoragePath(body.photo_path, session.userId)) {
       return Response.json({ error: 'That photo does not belong to you' }, { status: 400 })
     }
     const supabase = await createServerSupabase()

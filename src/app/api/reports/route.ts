@@ -3,6 +3,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, REPORTING_ROLES, dbErrorMessage, dbErrorResponse } from '@/lib/auth'
 import { fileName, writtenText } from '@/lib/fields'
 import { MAX_REPORT_FILES } from '@/lib/report-files'
+import { isOwnStoragePath } from '@/lib/storage-path'
 
 const schema = z.object({
   // What the day, sales and stock were like must be said; competitors and
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
     const input = parsed.data
 
     for (const path of [...input.photo_paths, ...input.files.map((f) => f.path)]) {
-      if (!path.startsWith(`${session.userId}/`)) {
+      if (!isOwnStoragePath(path, session.userId)) {
         return Response.json({ error: 'Photo path does not belong to you' }, { status: 400 })
       }
     }

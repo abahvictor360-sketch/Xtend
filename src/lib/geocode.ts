@@ -32,8 +32,8 @@ export type { OutletAnchor, PlaceSource, ResolvedPlace } from '@/lib/place-resol
  *     premises. Needs GOOGLE_MAPS_API_KEY with "Places API (New)" and
  *     "Geocoding API" enabled. Paid per request: answers are cached 30 days
  *     per spot, learned for good, counted per month (place_lookup_stats),
- *     and GOOGLE_MONTHLY_LOOKUP_LIMIT, when set, stops Google for the rest
- *     of the month once reached.
+ *     and GOOGLE_MONTHLY_LOOKUP_LIMIT (20,000 when unset; 0 or none for no
+ *     limit) stops Google for the rest of the month once reached.
  *  4. OpenStreetMap — Nominatim for the address, Overpass for a named
  *     business within 80 m. Free and needs no key, but Nigerian POI
  *     coverage is thin, so it often names the street rather than the shop.
