@@ -23,6 +23,8 @@ const schema = z.object({
     .max(30),
   /** A file attached to the last question. */
   attachment: attachmentSchema.nullable().optional(),
+  /** Skip a saved answer to the same question and look again. */
+  fresh: z.boolean().optional(),
 })
 
 export async function POST(request: Request) {
@@ -61,10 +63,12 @@ export async function POST(request: Request) {
       supabase,
       history,
       {
+        id: session.userId,
         name: session.profile.full_name,
         role: session.profile.role === 'admin' ? 'admin' : 'supervisor',
       },
       attachment,
+      { fresh: parsed.data.fresh === true },
     )
     return Response.json(reply)
   } catch (error) {

@@ -7,6 +7,8 @@
  * inside GitHub's limit for anonymous requests. Null when the repo is
  * private, nothing is published yet, or GitHub cannot be reached.
  */
+import { namedCache } from '@/lib/ttl-cache'
+
 const REPO = process.env.APP_RELEASE_REPO || 'abahvictor360-sketch/Xtend'
 const TAG = 'android'
 const ASSET = 'xtend.apk'
@@ -18,7 +20,16 @@ export interface PublishedApk {
   build: number | null
 }
 
+// GitHub allows 60 anonymous calls an hour. Next keeps a good answer for ten
+// minutes; this also remembers "nothing there" (a missing tag, a timeout) for
+// five, so a broken lookup is not retried on every page's version check.
+const apkCache = namedCache<PublishedApk | null>('published-apk', 2)
+
 export async function publishedAndroidApk(): Promise<PublishedApk | null> {
+  return apkCache.remember('apk', (v) => (v ? 10 * 60_000 : 5 * 60_000), lookupAndroidApk)
+}
+
+async function lookupAndroidApk(): Promise<PublishedApk | null> {
   try {
     const res = await fetch(`https://api.github.com/repos/${REPO}/releases/tags/${TAG}`, {
       headers: { Accept: 'application/vnd.github+json' },

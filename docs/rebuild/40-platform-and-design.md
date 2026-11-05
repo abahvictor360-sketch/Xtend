@@ -651,7 +651,18 @@ export route and `ask/act`, `ask/apply`, `ask/report` 60 s.
   attached count sheet, delivery note or invoice; the office count RPC
   `xm_office_count` records it with no GPS or photo under the admin.
   Strict schemas express optional values as `type: ['string','null']` with "Null for …" descriptions.
-- Reply shape: `{ answer, reports: ReportSpec[], plans: ChangePlan[], actions: ProposedAction[], links: PageLink[] }`.
+- Reply shape: `{ answer, reports: ReportSpec[], plans: ChangePlan[], actions: ProposedAction[], links: PageLink[], cached_at?: string }`.
+- Reuse (`src/lib/ttl-cache.ts`, `src/lib/assistant-cache.ts`; in memory, per server, bounded):
+  the first question of a chat (history of one, no file) is saved 5 minutes under
+  `<scope>|<today>|<folded question>` (scope `admin`, or `sup:<id>` for a supervisor), and
+  served with `cached_at`; never saved when the turn made a plan, action card or report, or a
+  lookup failed. Read-only tools `attendance_on_day, staff_history, attendance_summary,
+  field_reports, store_visits, store_counts, integrity_risk, location_alerts, support_threads,
+  notifications_sent, x_metrics, store_coverage` are kept 6 h when every date in the input is
+  before today (a `month` before this month likewise) and 90 s otherwise. The POST body may carry
+  `fresh: true` (the chat's "Look again") to skip both. The newest message block carries
+  `cache_control: ephemeral` each round (older marks are dropped; four are allowed). The model
+  is `ASSISTANT_MODEL` or `claude-opus-5`.
 - No key: the admin page shows a setup notice; the sidebar card shows "Your account / Change password" instead of "Ask Xtend".
 
 #### Support helper (`respondToSupportThread`)

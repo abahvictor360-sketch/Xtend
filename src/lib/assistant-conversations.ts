@@ -22,6 +22,8 @@ export interface ChatTurnView {
   links?: PageLink[]
   /** What an earlier answer proposed, in words, once it has been kept. */
   earlier?: string[]
+  /** Set when this answer came from memory (ISO time it was first worked out). */
+  cachedAt?: string
 }
 
 export const savedTurnSchema = z.object({

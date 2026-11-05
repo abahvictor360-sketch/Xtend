@@ -28,6 +28,15 @@ import { buildReportSheet } from '@/lib/assistant-report'
 import { REPORT_KINDS, reportSpecSchema, type ReportSpec } from '@/lib/assistant-report-spec'
 import { readXmFeatures } from '@/lib/metrics/features-server'
 import { xmAssistantNote, xmAssistantToolOn, type XmFeatures } from '@/lib/metrics/features'
+import { namedCache } from '@/lib/ttl-cache'
+import {
+  ANSWER_TTL_MS,
+  CACHEABLE_TOOLS,
+  answerKey,
+  answerWorthSaving,
+  lookupKey,
+  lookupTtlMs,
+} from '@/lib/assistant-cache'
 
 /**
  * "Ask Xtend": an admin or supervisor types a question ("who hasn't clocked
@@ -41,8 +50,18 @@ import { xmAssistantNote, xmAssistantToolOn, type XmFeatures } from '@/lib/metri
  * supervisor's people. Nothing here writes.
  */
 
-const MODEL = 'claude-opus-5'
+// ASSISTANT_MODEL lets the deployment pick a cheaper model (for example
+// claude-sonnet-5-5) without a code change; the default stays as it was.
+const MODEL = process.env.ASSISTANT_MODEL?.trim() || 'claude-opus-5'
 const MAX_TOOL_ROUNDS = 10
+
+// Work already done, kept briefly in memory (lib/ttl-cache.ts): whole answers
+// to a question just asked, individual lookups, and the X Metrics switches.
+// What may be reused, and for how long, is decided in lib/assistant-cache.ts.
+const answerCache = namedCache<{ reply: AssistantReply; at: string }>('assistant-answers', 300)
+const lookupCache = namedCache<string>('assistant-lookups', 600)
+const featureCache = namedCache<XmFeatures>('assistant-xm-features', 2)
+const FEATURES_TTL_MS = 30_000
 
 export interface ChatTurn {
   role: 'user' | 'assistant'
@@ -59,9 +78,13 @@ export interface AssistantReply {
   actions: ProposedAction[]
   /** Pages to open, as buttons. */
   links: PageLink[]
+  /** Set when this is a saved answer from a moment ago, not a fresh one. */
+  cached_at?: string
 }
 
 export interface Asker {
+  /** Who is asking: saved answers and lookups are kept per person where RLS differs. */
+  id: string
   name: string
   role: 'admin' | 'supervisor'
 }
@@ -665,6 +688,13 @@ interface Turn {
   plans: ChangePlan[]
   proposed: ProposedAction[]
   links: PageLink[]
+  /** Whose lookups may share a saved result: all admins, or one supervisor. */
+  scope: string
+  today: string
+  /** A lookup failed this turn, so the answer is not worth saving. */
+  lookupFailed: boolean
+  /** The person asked to look again: saved lookups are not reused. */
+  fresh: boolean
 }
 
 const PROPOSE: Record<string, keyof ActionBuilder> = {
@@ -688,6 +718,14 @@ async function runTool(
 ): Promise<Anthropic.Beta.BetaToolResultBlockParam> {
   const { supabase, reports } = turn
   const input = (block.input ?? {}) as Input
+  // A lookup already made for this person (or any admin), reused while it
+  // cannot have changed: hours for past days, a minute or two for today.
+  const keepFor = CACHEABLE_TOOLS.has(block.name) ? lookupTtlMs(block.name, input, turn.today) : 0
+  const cacheKey = keepFor > 0 ? lookupKey(turn.scope, block.name, input) : null
+  if (cacheKey && !turn.fresh) {
+    const saved = lookupCache.get(cacheKey)
+    if (saved !== undefined) return { type: 'tool_result', tool_use_id: block.id, content: saved }
+  }
   try {
     let result: unknown
     switch (block.name) {
@@ -791,8 +829,11 @@ async function runTool(
         }
       }
     }
-    return { type: 'tool_result', tool_use_id: block.id, content: JSON.stringify(result) }
+    const content = JSON.stringify(result)
+    if (cacheKey) lookupCache.set(cacheKey, content, keepFor)
+    return { type: 'tool_result', tool_use_id: block.id, content }
   } catch (error) {
+    turn.lookupFailed = true
     return {
       type: 'tool_result',
       tool_use_id: block.id,
@@ -802,18 +843,52 @@ async function runTool(
   }
 }
 
+/**
+ * The messages with a cache mark on the newest block, so what has been said
+ * so far (a long lookup result, say) is cached between the rounds of one
+ * question and costs a tenth to resend. Only the newest block is marked:
+ * the API allows four marks and the older ones would pile up. A copy, so the
+ * conversation itself is never changed.
+ */
+function withCacheMark(messages: Anthropic.Beta.BetaMessageParam[]): Anthropic.Beta.BetaMessageParam[] {
+  const last = messages.length - 1
+  return messages.map((m, i) => {
+    if (i !== last) return m
+    const blocks: Anthropic.Beta.BetaContentBlockParam[] =
+      typeof m.content === 'string' ? [{ type: 'text', text: m.content }] : [...m.content]
+    const tail = blocks[blocks.length - 1]
+    if (!tail) return m
+    blocks[blocks.length - 1] = { ...tail, cache_control: { type: 'ephemeral' } } as Anthropic.Beta.BetaContentBlockParam
+    return { ...m, content: blocks }
+  })
+}
+
 /** Runs one question through Claude and the tools, and returns the answer. */
 export async function askAssistant(
   supabase: SupabaseClient,
   history: ChatTurn[],
   asker: Asker,
   attachment: Anthropic.Beta.BetaContentBlockParam[] = [],
+  options: { fresh?: boolean } = {},
 ): Promise<AssistantReply> {
-  const client = new Anthropic()
   const today = lagosDateString()
+  // Admins all see everything, so they share saved work; a supervisor's
+  // answers depend on their own team, so theirs are kept apart.
+  const scope = asker.role === 'admin' ? 'admin' : `sup:${asker.id}`
+
+  // The same question, just asked the same way, is answered from memory
+  // unless the person asked for a fresh look. Follow-ups and files never are.
+  const savedKey = answerKey(scope, today, history, attachment.length > 0)
+  if (savedKey && !options.fresh) {
+    const saved = answerCache.get(savedKey)
+    if (saved) return { ...saved.reply, cached_at: saved.at }
+  }
+
+  const client = new Anthropic()
   const allocation = new AllocationContext(supabase, asker.role === 'admin')
-  // X Metrics parts switched off (0063): their tools are not offered.
-  const xm = await readXmFeatures(supabase)
+  // X Metrics parts switched off (0063): their tools are not offered. The
+  // same for everyone, so it is read once in a while, not on every question.
+  const xm = await featureCache.remember('xm', FEATURES_TTL_MS, () => readXmFeatures(supabase))
   const offered = tools.filter((t) => xmAssistantToolOn(xm, t.name))
   const xmNote = xmAssistantNote(xm)
   const turn: Turn = {
@@ -825,6 +900,10 @@ export async function askAssistant(
     plans: [],
     proposed: [],
     links: [],
+    scope,
+    today,
+    lookupFailed: false,
+    fresh: options.fresh === true,
   }
   const { reports, plans, proposed: actions, links } = turn
 
@@ -850,7 +929,7 @@ export async function askAssistant(
         },
       ],
       tools: offered,
-      messages,
+      messages: withCacheMark(messages),
     })
 
     if (response.stop_reason === 'refusal') {
@@ -872,7 +951,7 @@ export async function askAssistant(
         .map((b) => b.text)
         .join('\n')
         .trim()
-      return {
+      const reply: AssistantReply = {
         answer:
           text ||
           (plans.length || actions.length
@@ -885,6 +964,19 @@ export async function askAssistant(
         actions,
         links,
       }
+      if (
+        savedKey &&
+        answerWorthSaving({
+          plans: plans.length,
+          actions: actions.length,
+          reports: reports.length,
+          lookupFailed: turn.lookupFailed,
+          answered: text.length > 0,
+        })
+      ) {
+        answerCache.set(savedKey, { reply, at: new Date().toISOString() }, ANSWER_TTL_MS)
+      }
+      return reply
     }
 
     messages.push({ role: 'assistant', content: response.content })

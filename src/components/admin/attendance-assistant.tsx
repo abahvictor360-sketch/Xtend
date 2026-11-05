@@ -191,7 +191,7 @@ export function AttendanceAssistant({
     }
   }
 
-  async function ask(question: string) {
+  async function ask(question: string, fresh = false) {
     const file = attached
     const text =
       question.trim() || (file ? 'Read the attached file and prepare the store allocations in it.' : '')
@@ -216,6 +216,7 @@ export function AttendanceAssistant({
             content: name && i < sent.length - 1 ? `${content}\n(attached: ${name})` : content,
           })),
           attachment: file,
+          fresh: fresh || undefined,
         }),
       })
       const json = (await res.json().catch(() => ({}))) as {
@@ -224,6 +225,7 @@ export function AttendanceAssistant({
         plans?: ChangePlan[]
         actions?: ProposedAction[]
         links?: PageLink[]
+        cached_at?: string
         error?: string
       }
       if (!res.ok || !json.answer) {
@@ -243,6 +245,7 @@ export function AttendanceAssistant({
           plans: json.plans,
           actions: json.actions,
           links: json.links,
+          cachedAt: json.cached_at,
         },
       ]
       setTurns(all)
@@ -383,6 +386,19 @@ export function AttendanceAssistant({
                 {turn.actions?.map((action) => <ActionCard key={action.key} action={action} />)}
                 {turn.earlier?.length ? <Earlier items={turn.earlier} /> : null}
                 {turn.links?.length ? <PageLinks links={turn.links} /> : null}
+                {turn.role === 'assistant' && turn.cachedAt && turns[i - 1]?.role === 'user' && (
+                  <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>Saved answer from {savedAgo(turn.cachedAt)}.</span>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void ask(turns[i - 1].content, true)}
+                      className="font-semibold text-brand underline-offset-2 hover:underline disabled:opacity-50"
+                    >
+                      Look again
+                    </button>
+                  </div>
+                )}
                 {turn.role === 'assistant' && <CopyButton text={turn.content} />}
               </div>
             </div>
@@ -604,6 +620,12 @@ function ChatHistory({
       ))}
     </div>
   )
+}
+
+/** "just now", "2 min ago": how long ago a saved answer was worked out. */
+function savedAgo(iso: string) {
+  const mins = Math.round((Date.now() - Date.parse(iso)) / 60_000)
+  return mins < 1 ? 'just now' : `${mins} min ago`
 }
 
 function CopyButton({ text }: { text: string }) {
