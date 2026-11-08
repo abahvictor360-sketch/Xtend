@@ -126,6 +126,7 @@ const VERBATIM = [
   'Dockerfile',
   '.dockerignore',
   'docker/run-job.mjs',
+  'docker-compose.yml',
   'deploy/setup-server.sh',
   'deploy/deploy.sh',
   'deploy/ecosystem.config.cjs',

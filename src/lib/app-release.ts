@@ -23,7 +23,7 @@ export interface PublishedApk {
 // GitHub allows 60 anonymous calls an hour. Next keeps a good answer for ten
 // minutes; this also remembers "nothing there" (a missing tag, a timeout) for
 // five, so a broken lookup is not retried on every page's version check.
-const apkCache = namedCache<PublishedApk | null>('published-apk', 2)
+const apkCache = namedCache<PublishedApk | null>('published-apk', 2, { shared: true })
 
 export async function publishedAndroidApk(): Promise<PublishedApk | null> {
   return apkCache.remember('apk', (v) => (v ? 10 * 60_000 : 5 * 60_000), lookupAndroidApk)

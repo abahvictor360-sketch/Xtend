@@ -257,6 +257,12 @@ export default async function AdminGuidePage() {
             log. Chats are kept under <Ui>Earlier chats</Ui>, for you alone.
           </p>
           <p>
+            To keep it quick and cheap, the first question of a new chat is answered from memory if the
+            same question was asked a few minutes ago. The answer says <Ui>Saved answer from 3 min ago</Ui>;
+            press <Ui>Look again</Ui> to ask afresh. Questions that make a card or a report, and
+            follow-ups in a chat, are always worked out new.
+          </p>
+          <p>
             <Ui>Guide</Ui> is this page.
           </p>
         </GuideSection>

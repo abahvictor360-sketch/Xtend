@@ -127,12 +127,68 @@ server is live.
    `configured` value: check each one you expect is `true`; `curl -sI` on the login page
    shows the security headers and no `x-powered-by`.
 
-## 7. Scaling and headers
+## 7. Several containers: load balancing and Redis
 
-- One container runs one Node process. For the 08:00 rush on a bigger VPS,
-  run 2 or more replicas (Dokploy: Advanced → Replicas; Coolify: scale the
-  service). The sign-in lockout is kept in the database, so it holds across
-  replicas.
+One container is one Node process, so on its own it uses one CPU core. For
+the 08:00 clock-in rush, run several and let the panel's **Traefik share
+the requests between them**: it is already the load balancer, sends each
+request to a healthy container, skips any that are starting or failing its
+health check, and keeps working when one restarts. Sessions live in the
+browser's cookies, so any container can answer anyone; no sticky sessions
+are needed. Do not add a second load balancer in front of the app: every
+extra proxy changes `TRUSTED_PROXY_HOPS` and adds a hop for nothing.
+
+With several containers, give them a **shared Redis** (`REDIS_URL`):
+
+- the per-address and per-person attempt limits (sign-in, password change,
+  photo checks, address lookups, the support helper, Ask Xtend) are counted
+  once for all containers instead of once per container;
+- cached answers (Ask Xtend's answers and lookups, the update check's
+  rows, the app-release lookup, the X Metrics switches) are worked out once
+  and reused by every container, which saves database load and model cost.
+
+Redis holds nothing that is the record of anything (that is Supabase), so
+it keeps no data on disk. If it is missing, down or slow, every container
+quietly falls back to counting and caching on its own; nothing fails and
+nothing waits more than a fraction of a second. The sign-in lockout
+(0077) is in the database and is shared either way.
+
+**Size:** 2 containers on KVM 2, 3 to 4 on KVM 4 (at most one per core),
+each capped at about 1.5 GB. Redis needs about 256 MB.
+
+### Dokploy (recommended)
+
+1. **Redis:** Project → Create Service → **Database → Redis**. Set a long
+   password (`openssl rand -hex 32`), leave **External Port** empty (it must
+   not be reachable from the internet), deploy it, and copy its **Internal
+   Connection URL** (`redis://default:<password>@<name>:6379`).
+2. **The app** (the Dockerfile application from section 3): add
+   `REDIS_URL` = that internal URL to its environment.
+3. **Replicas:** app → Advanced → **Cluster settings → Replicas**: 2 to 4.
+   Deploys then replace containers one at a time, so the site stays up.
+4. Redeploy, then check `/api/health` with the `CRON_SECRET` bearer token:
+   `"redis": true` and `"redis_reachable": true`.
+
+### Coolify, or Dokploy with Docker Compose
+
+`docker-compose.yml` at the root runs the app (`APP_REPLICAS`, default 2)
+and a private Redis together:
+
+1. New resource → **Docker Compose** from the repository (Dokploy: Create
+   Service → Compose; Coolify: Public/Private Repository → Docker Compose).
+2. Environment: everything from section 4, plus `REDIS_PASSWORD` (long and
+   random) and optionally `APP_REPLICAS`. The compose file builds
+   `REDIS_URL` from the password itself, and refuses to start without the
+   password or the two Supabase values.
+3. Domain: on the **app** service, port **3000**. Leave Redis without a
+   domain or port.
+4. Scheduled tasks as in section 5, run in the `app` service.
+
+Compose deploys restart the containers together (a few seconds of
+downtime); the Dokploy application route above replaces them one by one.
+
+## 8. Headers
+
 - The app already sends HSTS, `nosniff`, `X-Frame-Options: DENY`, a
   `frame-ancestors 'none'` policy, a referrer policy and a permissions
   policy, and no `X-Powered-By`. Traefik adds no `Server` header.

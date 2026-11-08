@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict'
 import { isOwnStoragePath, MAX_STORAGE_PATH } from '@/lib/storage-path'
 import { csvCell, EXPORT_FORMATS, isExportFormat } from '@/lib/export/formats'
-import { allowAttempt } from '@/lib/rate-limit'
+import { allowAttemptInMemory as allowAttempt } from '@/lib/rate-limit'
 import {
   ASK_XTEND_PER_HOUR,
   DEFAULT_GOOGLE_MONTHLY_LOOKUP_LIMIT,

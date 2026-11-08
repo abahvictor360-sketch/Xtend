@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-11-05, after saved answers and a light cache for Ask Xtend and the version check (no migration), the security fixes (0079: supervisors reach field staff only, message attachments follow the message, safe storage paths, usage limits on the AI and map lookups, current password to change a password, quieter health check and errors, CSV formula guard, secrets kept out of git and AI tools), pinning Node 22 for the build (Nixpacks warnings), the "new version" bar that never cleared on the VPS (one build id per build), blocking bots (robots.txt, `X-Robots-Tag`, bot user agents refused, optional Cloudflare Turnstile on sign-in), the Docker image for Dokploy or Coolify, security headers, Next.js 15.5.28 and Zod 4, closing signed-out access to database helpers (0078), and the sign-in lockout that pauses the guessing device (0077)._
+_Last updated: 2026-11-08, after several app containers behind the panel's load balancer with a shared Redis for attempt limits and cached answers (no migration); see earlier entries for 2026-11-05 and before._
 
 ---
 
@@ -657,8 +657,8 @@ the code lives.
   first and answers a pause with HTTP 423 "Too many wrong passwords, so
   signing in here is paused until HH:MM. Try again then, or ask your
   supervisor to unlock it."; a wrong password calls `sign_in_failed`, a
-  right one `sign_in_succeeded` (which makes the device known). The in-memory
-  limits are now 30 per address and 10 per identifier *per address*, so
+  right one `sign_in_succeeded` (which makes the device known). The attempt
+  limits (shared through Redis when set) are 30 per address and 10 per identifier *per address*, so
   neither can lock a person out from elsewhere. Staff shows **Sign-in paused
   until HH:MM** from `locked_accounts()` and an **Unlock** button (PATCH
   `{unlock: true}` → `unlock_sign_in`, audited `user.unlock`, lifts every
@@ -775,6 +775,8 @@ Set in `.env.local` for development, and for production in Vercel or, on the VPS
 | `APP_VERSION`, `APP_RELEASE_REPO` | Optional | Version shown on `/download`; repo whose `android` release holds the APK |
 | `CREDENTIALS_WEBHOOK_URL`, `CREDENTIALS_WEBHOOK_TOKEN` | Optional | Relay that sends temporary passwords by SMS or email |
 | `TRUSTED_PROXY_HOPS` | Optional | 1 behind Vercel, Nginx or Traefik (Dokploy, Coolify); 2 with Cloudflare's proxy in front (behind Traefik only once Traefik trusts Cloudflare's addresses, `deploy/DOCKER.md`) |
+| `REDIS_URL` | Optional | A Redis shared by several app containers (`redis://user:password@host:6379/0`): attempt limits and cached answers are counted and kept once for all of them (`src/lib/redis.ts`). Without it, or while it is down, each container uses its own memory, as before |
+| `REDIS_PASSWORD`, `APP_REPLICAS` | Compose only | For `docker-compose.yml`: the password of the Redis it starts (required there) and how many app containers to run (default 2) |
 | `IP_API_KEY`, `IP_GEO_URL`, `IP_GEO_DISABLED` | Optional | IP lookup for VPN checks and the audit log |
 | `XTEND_BUILD_ID` | Optional | Build id outside Vercel (Vercel sets `VERCEL_DEPLOYMENT_ID`); `deploy/deploy.sh` sets it to the commit's first 12 characters |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY` | Optional | Cloudflare Turnstile site key: the human check on `/login` (section 4.8). On only together with `TURNSTILE_SECRET_KEY`. A Docker build argument too |
@@ -920,7 +922,7 @@ for s in check-allocate check-assistant-actions check-attendance check-audit \
          check-schedules-leave check-marketer-reports check-clock-out-reminder check-activity \
          check-xm-features check-report-files check-system-reset check-report-photos check-retention \
          check-places-usage check-shift-reminders check-follow-live check-bot-guard \
-         check-security-fixes check-assistant-cache; do
+         check-security-fixes check-assistant-cache check-redis; do
   npx tsx --tsconfig tsconfig.scripts.json scripts/$s.ts | tail -1
 done
 ```
@@ -954,6 +956,7 @@ docs/                     This guide, LOCATION-INTEGRITY.md, and rebuild/ (the r
 .github/workflows/        Phone app builds, the 5-minute alerts job, deploy to the VPS
 deploy/                   Hostinger VPS: setup, deploy with rollback, PM2, Nginx, crontab; DOCKER.md for Dokploy/Coolify
 Dockerfile, .dockerignore The container for Dokploy or Coolify (standalone server, non-root)
+docker-compose.yml        Several app containers behind the panel's Traefik, with a private Redis
 docker/run-job.mjs        Runs a scheduled job inside the container
 ```
 
@@ -1008,6 +1011,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-11-08 | **Several containers and Redis**: the panel's Traefik is the load balancer for 2 or more app containers (Dokploy: application replicas, replaced one by one; or the new `docker-compose.yml` with `APP_REPLICAS` and a private Redis: password required, no port, nothing on disk, 256 MB, oldest dropped first). With `REDIS_URL` set, every attempt limit (`src/lib/rate-limit.ts`: sign-in, password change, photo checks, place lookups, support helper, Ask Xtend) is counted once for all containers, and the shared caches (`src/lib/ttl-cache.ts` `shared`: Ask Xtend answers and lookups, the version rows and roles, the app-release lookup, the X Metrics switches) are kept once in Redis under `xt:`. Redis is never required: commands give up after 300 ms, nothing queues while it is down, the first command after a start waits at most 500 ms once for the first connection, and every caller falls back to memory. `/api/health` with the job secret shows `redis` and `redis_reachable`. `allowAttempt` is now async (every caller awaits it). New check `scripts/check-redis.ts` (starts a throwaway `redis-server` if installed) | — |
 | 2026-11-05 | **Security fixes** (section 4.9): a supervisor can no longer reset the password of or deactivate somebody promoted above them (`/api/admin/users/<id>` asks `can_edit_staff` as the caller, `/api/admin/users` asks `can_create_staff`; only field staff keep a supervisor); message attachments readable only by the sender and whoever may read the message; `outlets_for_user` limited to the caller's reach; photos in `reports` never overwritten (the X Metrics shelf photo upload no longer upserts); every phone-sent storage path checked by `src/lib/storage-path.ts`; per-person hourly limits on photo checks (60), place lookups (120, field roles only), support helper replies (20; after 12 messages a conversation goes to the office) and Ask Xtend (60) (`src/lib/usage-limits.ts`); `GOOGLE_MONTHLY_LOOKUP_LIMIT` defaults to 20,000; API calls refused with 403 `change_password` until a forced password change is done; changing a password needs the current one (new field on the form, not on the first change); sign-in for an unknown phone takes as long as a wrong password; raw database and account-service errors replaced by plain words; every `[format]` download refuses an unknown format before auditing; CSV cells that start like a formula get a leading `'`; `/api/health` public answer is `{ ok, checked_at }` (details with the job secret); `/api/version/seen` uses the usual session checks; `.env.*` ignored, `.env.example` lists every setting, `.claudeignore`/`.cursorignore`/`.aiexclude`, a Secrets rule in `CLAUDE.md`. New check `scripts/check-security-fixes.ts` | 0079 |
 | 2026-11-03 | **Bots blocked** (section 4.8): `src/app/robots.ts` disallows everything; `X-Robots-Tag: noindex, nofollow, noarchive` on every response and a robots meta tag on every page; the middleware refuses empty and bot user agents (crawlers, AI bots, link previewers, curl/wget/scripting libraries, headless browsers) with a 403 via `src/lib/bot-guard.ts`, never the apps, browsers, `/api/cron/*`, `/api/track/*`, `/api/health`, `/api/version` or static files. Optional Cloudflare Turnstile on `/login` (`NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`; `src/lib/turnstile.ts`, `src/components/human-check.tsx`), confirmed in `/api/auth/sign-in` before the password. Docker build argument for the site key. New check `scripts/check-bot-guard.ts` | — |
 | 2026-10-28 | Ask Xtend can set a work schedule: a new `propose_schedule` tool proposes the weekly days worked (0 = Sunday … 6 = Saturday) for named merchandisers/marketers or a group; the Apply card runs it through `POST /api/admin/schedules` (`set_work_pattern`, 059), with the same team checks and audit as the Schedules page. No new migration | — |
@@ -1082,6 +1086,12 @@ Newest first. Dates are when the work landed on the main branch.
 | 2026-09-09 | First build: clock in and out, dashboard, marketer role, push, no-show alerts, place names | 0001–0008 |
 
 ## 15. Open items
+
+- **Several containers**: the IP-to-country cache behind the VPN check
+  (`src/lib/audit-context.ts`) is still per container, so each one looks an
+  address up once (6 hours); harmless, a little more IP-API use. A Compose
+  deploy restarts all containers together (seconds of downtime); Dokploy's
+  application replicas roll one by one.
 
 - **Supabase advisor, left on purpose**: 27 small helper functions have no
   fixed `search_path` (none is SECURITY DEFINER and nobody signed in can

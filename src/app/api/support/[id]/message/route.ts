@@ -33,7 +33,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     // The message is saved either way; past the hourly allowance the office
     // answers it instead of the helper.
-    const withinHourlyLimit = allowAttempt(
+    const withinHourlyLimit = await allowAttempt(
       `support-helper:${session.userId}`,
       SUPPORT_HELPER_REPLIES_PER_HOUR,
       HOUR_MS,

@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     }
     // Each check costs a paid AI call: 60 an hour is far more than a working
     // day needs. The phone keeps a refused photo and tries again later.
-    if (!allowAttempt(`photo-check:${session.userId}`, PHOTO_CHECKS_PER_HOUR, HOUR_MS)) {
+    if (!(await allowAttempt(`photo-check:${session.userId}`, PHOTO_CHECKS_PER_HOUR, HOUR_MS))) {
       return Response.json(
         { error: 'Too many photos checked in the last hour. Try again a little later.' },
         { status: 429 },

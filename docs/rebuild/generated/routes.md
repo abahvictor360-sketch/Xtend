@@ -131,6 +131,8 @@ const schema = z.object({
     .max(30),
   /** A file attached to the last question. */
   attachment: attachmentSchema.nullable().optional(),
+  /** Skip a saved answer to the same question and look again. */
+  fresh: z.boolean().optional(),
 })
 ```
 

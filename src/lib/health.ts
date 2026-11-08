@@ -13,6 +13,8 @@ export interface HealthConfigured {
   google_maps_browser: boolean
   web_push: boolean
   cron_secret: boolean
+  /** REDIS_URL is set (shared rate limits and caches across app containers). */
+  redis?: boolean
 }
 
 export function healthBody(
@@ -20,6 +22,8 @@ export function healthBody(
   configured: HealthConfigured,
   webPush: unknown,
   checkedAt: string,
+  /** Only in the detailed answer: whether Redis answered just now (null: not set up). */
+  redisReachable: boolean | null = null,
 ): Record<string, unknown> {
   const ok = configured.supabase_url && configured.supabase_anon_key
   if (!detailed) return { ok, checked_at: checkedAt }
@@ -27,6 +31,7 @@ export function healthBody(
     ok,
     configured,
     web_push: webPush,
+    redis_reachable: redisReachable,
     place_provider: configured.google_maps
       ? 'google (with OpenStreetMap fallback)'
       : 'openstreetmap only — shop names will often be missing',

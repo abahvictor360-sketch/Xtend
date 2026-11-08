@@ -38,7 +38,7 @@ export async function POST(request: Request) {
       if (!current) {
         return Response.json({ error: 'Enter your current password.' }, { status: 400 })
       }
-      if (!allowAttempt(`password-change:${session.userId}`, 10, WINDOW_MS)) {
+      if (!(await allowAttempt(`password-change:${session.userId}`, 10, WINDOW_MS))) {
         return Response.json({ error: 'Too many tries. Wait 15 minutes, then try again.' }, { status: 429 })
       }
       if (!session.email || !(await passwordIsRight(session.email, current))) {

@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     // Only the people who clock in and name stores (admins set stores up),
     // and a fair number an hour each: a Google lookup is paid per request.
     const session = await requireApiSession(FIELD_ROLES)
-    if (!allowAttempt(`geocode:${session.userId}`, GEOCODE_LOOKUPS_PER_HOUR, HOUR_MS)) {
+    if (!(await allowAttempt(`geocode:${session.userId}`, GEOCODE_LOOKUPS_PER_HOUR, HOUR_MS))) {
       return Response.json(
         { error: 'Too many place lookups in the last hour. Try again a little later.' },
         { status: 429 },

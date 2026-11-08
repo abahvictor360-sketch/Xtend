@@ -1,6 +1,7 @@
 import { vapidStatus } from '@/lib/push'
 import { cronAuthorized } from '@/lib/cron'
 import { healthBody } from '@/lib/health'
+import { redisReachable } from '@/lib/redis'
 
 /**
  * Health. Publicly only `{ ok, checked_at }`, enough for Docker's
@@ -24,9 +25,13 @@ export async function GET(request: Request) {
     // different generator runs look configured and fail on every send.
     web_push: vapid.present && vapid.well_formed && vapid.matched && vapid.subject_valid,
     cron_secret: Boolean(process.env.CRON_SECRET),
+    redis: Boolean(process.env.REDIS_URL),
   }
 
-  return Response.json(healthBody(cronAuthorized(request), configured, vapid, new Date().toISOString()), {
+  // Redis is pinged only for the detailed answer, never for Docker's checks.
+  const detailed = cronAuthorized(request)
+  const reachable = detailed ? await redisReachable() : null
+  return Response.json(healthBody(detailed, configured, vapid, new Date().toISOString(), reachable), {
     headers: { 'Cache-Control': 'no-store' },
   })
 }
