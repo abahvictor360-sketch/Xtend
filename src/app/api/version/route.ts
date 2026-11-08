@@ -16,8 +16,9 @@ interface Shared {
   releases: (ReleaseNote & { audience: string })[]
   ok: boolean
 }
-const shared = namedCache<Shared>('version-shared', 2)
-const roles = namedCache<string>('version-roles', 2000)
+// Shared through Redis when it is set up, so every app container reads once.
+const shared = namedCache<Shared>('version-shared', 2, { shared: true })
+const roles = namedCache<string>('version-roles', 2000, { shared: true })
 const SHARED_TTL_MS = 60_000
 const ROLE_TTL_MS = 5 * 60_000
 

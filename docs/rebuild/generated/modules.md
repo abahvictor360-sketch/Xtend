@@ -121,6 +121,22 @@ Base64 of a ~3 MB file, which keeps the request under the platform's body limit.
 
 Exports: `MAX_ATTACHMENT_BASE64`, `attachmentSchema`, `Attachment`, `attachmentBlocks`
 
+## `src/lib/assistant-cache.ts`
+
+What Ask Xtend may reuse instead of working out again, and for how long.
+Pure on purpose (no server, no clock but the day passed in), so
+scripts/check-assistant-cache.ts can test it.
+
+Two things are reused, both only on the same server and only briefly:
+  - a lookup the assistant already made (a day's attendance, a month's
+    metrics): a past day cannot change, so it is kept for hours; anything
+    that includes today is kept for a minute or two;
+  - the whole answer to a question that was just asked the same way by the
+    same person: five minutes, never when the turn proposed a change or a
+    report (those are one-off cards) and never after a lookup failed.
+
+Exports: `CACHEABLE_TOOLS`, `ANSWER_TTL_MS`, `LOOKUP_TODAY_TTL_MS`, `LOOKUP_PAST_TTL_MS`, `stableJson`, `lookupTtlMs`, `lookupKey`, `normalizeQuestion`, `answerKey`, `answerWorthSaving`
+
 ## `src/lib/assistant-conversations.ts`
 
 Ask Xtend conversations kept for later (assistant_conversations, 054).
@@ -903,11 +919,26 @@ Exports: `pushConfigured`, `PushTarget`, `PushOutcome`, `PushPayload`, `sendPush
 
 ## `src/lib/rate-limit.ts`
 
-A fixed-window counter kept in this server process. Xtend runs as one
-Node process on a VPS, so one process sees every attempt. Behind several
-processes each keeps its own count, which still slows a guesser down.
+A fixed-window counter. With REDIS_URL set it is kept in Redis, so every
+app container counts the same attempts (deploy/DOCKER.md); otherwise, or
+while Redis is unreachable, in this server process, which still slows a
+guesser down. Never throws: a broken Redis falls back to memory.
 
-Exports: `allowAttempt`, `clientAddress`
+Exports: `allowAttempt`, `allowAttemptInMemory`, `clientAddress`
+
+## `src/lib/redis.ts`
+
+The shared Redis, when REDIS_URL is set (deploy/DOCKER.md: one Redis
+beside several app containers). It only ever holds what every container
+should agree on and can lose without harm: sign-in attempt counts and
+cached answers. Nothing here is the record of anything; that is Postgres.
+
+Redis must never be the reason a page fails. Commands give up quickly,
+nothing queues while it is down, and every caller has an in-memory
+fallback, so a missing or broken Redis just means each container counts
+and caches on its own, as before.
+
+Exports: `redis`, `redisClient`, `redisReachable`, `REDIS_PREFIX`
 
 ## `src/lib/report-file-queue.ts`
 
@@ -1141,6 +1172,25 @@ supervisor sight of somebody. The database trigger still refuses anyone
 who is not a supervisor or an admin as the supervisor.
 
 Exports: `assignSupervisor`
+
+## `src/lib/ttl-cache.ts`
+
+A small in-memory cache for work that is the same for many people: the
+answer to a question already asked, the global rows every phone reads, a
+lookup for a past day. It keeps load off the database and the paid APIs.
+
+It only ever saves work and never decides who may see what: callers put
+whatever decides access (the asker, their role) into the key. It holds at
+most `max` entries (oldest-used dropped first), forgets an entry after its
+time is up, and never keeps a failure.
+
+A cache made with `shared` also keeps its entries in Redis when
+REDIS_URL is set, so every app container reuses one answer: memory first,
+then Redis, then the real work. Only `fetch`, `store` and `remember` use
+Redis; `get` and `set` stay in memory. Shared values must survive JSON.
+Without Redis, or while it is down, a shared cache is a memory cache.
+
+Exports: `TtlCache`, `namedCache`
 
 ## `src/lib/turnstile.ts`
 

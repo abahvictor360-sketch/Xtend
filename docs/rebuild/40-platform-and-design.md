@@ -29,6 +29,7 @@ of repeating it:
 next.config.ts          postcss.config.mjs    tailwind.config.ts
 tsconfig.json           tsconfig.scripts.json vercel.json
 Dockerfile              .dockerignore         docker/run-job.mjs   (Dokploy/Coolify; verbatim)
+docker-compose.yml      (several app containers + private Redis; verbatim)
 package.json            package-lock.json     next-env.d.ts
 src/app/                App Router pages and route handlers
 src/components/         ui/, field/, admin/, admin/xm/, metrics/, brand/, plus shared top-level components
@@ -536,9 +537,27 @@ Every route handler follows: `try { const session = await requireApiSession([...
 
 ### 2.5 Rate limiting (`src/lib/rate-limit.ts`)
 
-In-process fixed-window counter (`Map<key, { count, resetAt }>`). `allowAttempt(key, limit, windowMs)`
-returns false once `count > limit`. When the map exceeds 10 000 keys, expired
-entries are swept. `clientAddress(request)` = `requestIp(headers) ?? 'unknown'`.
+Fixed-window counter. `await allowAttempt(key, limit, windowMs)` returns false
+once `count > limit`. With `REDIS_URL` set it runs one Lua script on the shared
+Redis (`INCR xt:rl:<key>`, `PEXPIRE` on the first attempt only), so every app
+container shares the count; without Redis, or on any Redis error, it falls back
+to `allowAttemptInMemory` (`Map<key, { count, resetAt }>`, expired entries swept
+past 10 000 keys). Every caller awaits it (a forgotten `await` would never
+block). `clientAddress(request)` = `requestIp(headers) ?? 'unknown'`.
+
+### 2.5a Redis (`src/lib/redis.ts`, optional)
+
+`redis()` returns one `ioredis` client per process when `REDIS_URL` is set,
+else null: `enableOfflineQueue: false`, `maxRetriesPerRequest: 1`,
+`connectTimeout` 2 s, `commandTimeout` 300 ms, reconnect at most every 5 s; the
+first error is logged once ("Redis unavailable, using memory instead").
+Commands go through `await redisClient()`, which waits for the very first
+connection attempt to settle (at most 500 ms, once per process) so the first
+requests after a start are counted in Redis too; a Redis that is down never
+makes later requests wait.
+`redisReachable()` (health check only) waits up to 1 s for the connection, then
+`PING`. Keys start `xt:`. Redis holds only attempt counts and cached answers:
+nothing written to disk, nothing that is a record.
 
 Per-person usage limits (`src/lib/usage-limits.ts`, window one hour, key includes the user id):
 
@@ -652,7 +671,11 @@ export route and `ask/act`, `ask/apply`, `ask/report` 60 s.
   `xm_office_count` records it with no GPS or photo under the admin.
   Strict schemas express optional values as `type: ['string','null']` with "Null for …" descriptions.
 - Reply shape: `{ answer, reports: ReportSpec[], plans: ChangePlan[], actions: ProposedAction[], links: PageLink[], cached_at?: string }`.
-- Reuse (`src/lib/ttl-cache.ts`, `src/lib/assistant-cache.ts`; in memory, per server, bounded):
+- Reuse (`src/lib/ttl-cache.ts`, `src/lib/assistant-cache.ts`; bounded, in memory, and for
+  caches made with `namedCache(name, max, { shared: true })` also in Redis under
+  `xt:cache:<name>:<key>` as JSON with the same time to live, read through `fetch` /
+  `store` / `remember`; all of Ask Xtend's caches, the version rows and roles and the
+  app-release lookup are shared):
   the first question of a chat (history of one, no file) is saved 5 minutes under
   `<scope>|<today>|<folded question>` (scope `admin`, or `sup:<id>` for a supervisor), and
   served with `cached_at`; never saved when the turn made a plan, action card or report, or a

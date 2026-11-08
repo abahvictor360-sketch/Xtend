@@ -1,0 +1,72 @@
+# Xtend as several app containers behind the panel's load balancer, with a
+# private Redis they share (deploy/DOCKER.md, "Several containers").
+#
+# For Dokploy (Docker Compose) or Coolify (Docker Compose). The panel's
+# Traefik is the load balancer: it finds every healthy `app` container and
+# shares requests between them, skipping any that are starting or unhealthy.
+# Give the `app` service your domain on port 3000 in the panel. No port is
+# published here: nothing but Traefik reaches the app, and nothing at all
+# reaches Redis from outside.
+#
+# Settings come from the panel's environment (its .env file): the same
+# variables as for the single container, plus REDIS_PASSWORD (a long random
+# string: openssl rand -hex 32) and, optionally, APP_REPLICAS.
+
+services:
+  app:
+    build:
+      context: .
+      args:
+        NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?Set NEXT_PUBLIC_SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?Set NEXT_PUBLIC_SUPABASE_ANON_KEY}
+        NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${NEXT_PUBLIC_VAPID_PUBLIC_KEY:-}
+        NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY: ${NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY:-}
+        NEXT_PUBLIC_TURNSTILE_SITE_KEY: ${NEXT_PUBLIC_TURNSTILE_SITE_KEY:-}
+        NEXT_PUBLIC_REALTIME_DISABLED: ${NEXT_PUBLIC_REALTIME_DISABLED:-}
+        SOURCE_COMMIT: ${SOURCE_COMMIT:-}
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD:?Set REDIS_PASSWORD}@redis:6379/0
+      TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-1}
+    expose:
+      - "3000"
+    deploy:
+      # Two to four on a 4 vCPU VPS; one per core at most.
+      replicas: ${APP_REPLICAS:-2}
+      resources:
+        limits:
+          memory: 1536M
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    stop_grace_period: 15s
+
+  redis:
+    image: redis:7.4-alpine
+    # Counts and cached answers only, all of them safe to lose: kept in
+    # memory, never written to disk, oldest dropped when full.
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASSWORD:?Set REDIS_PASSWORD}
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - allkeys-lru
+      - --protected-mode
+      - "yes"
+    environment:
+      REDISCLI_AUTH: ${REDIS_PASSWORD}
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped

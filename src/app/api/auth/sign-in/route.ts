@@ -47,8 +47,8 @@ export async function POST(request: Request) {
     { error: 'Too many attempts. Wait 15 minutes, then try again.' },
     { status: 429 },
   )
-  if (!allowAttempt(`sign-in:ip:${address}`, 30, WINDOW_MS)) return tooMany
-  if (!allowAttempt(`sign-in:id:${identifier.toLowerCase()}:${address}`, 10, WINDOW_MS)) return tooMany
+  if (!(await allowAttempt(`sign-in:ip:${address}`, 30, WINDOW_MS))) return tooMany
+  if (!(await allowAttempt(`sign-in:id:${identifier.toLowerCase()}:${address}`, 10, WINDOW_MS))) return tooMany
 
   if (turnstileEnabled()) {
     const human = await verifyTurnstile(turnstile, address)

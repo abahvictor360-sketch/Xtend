@@ -58,9 +58,11 @@ const MAX_TOOL_ROUNDS = 10
 // Work already done, kept briefly in memory (lib/ttl-cache.ts): whole answers
 // to a question just asked, individual lookups, and the X Metrics switches.
 // What may be reused, and for how long, is decided in lib/assistant-cache.ts.
-const answerCache = namedCache<{ reply: AssistantReply; at: string }>('assistant-answers', 300)
-const lookupCache = namedCache<string>('assistant-lookups', 600)
-const featureCache = namedCache<XmFeatures>('assistant-xm-features', 2)
+// Shared through Redis when it is set up (the keys already carry who asked),
+// so a question answered by one app container is not paid for again by another.
+const answerCache = namedCache<{ reply: AssistantReply; at: string }>('assistant-answers', 300, { shared: true })
+const lookupCache = namedCache<string>('assistant-lookups', 600, { shared: true })
+const featureCache = namedCache<XmFeatures>('assistant-xm-features', 2, { shared: true })
 const FEATURES_TTL_MS = 30_000
 
 export interface ChatTurn {
@@ -723,7 +725,7 @@ async function runTool(
   const keepFor = CACHEABLE_TOOLS.has(block.name) ? lookupTtlMs(block.name, input, turn.today) : 0
   const cacheKey = keepFor > 0 ? lookupKey(turn.scope, block.name, input) : null
   if (cacheKey && !turn.fresh) {
-    const saved = lookupCache.get(cacheKey)
+    const saved = await lookupCache.fetch(cacheKey)
     if (saved !== undefined) return { type: 'tool_result', tool_use_id: block.id, content: saved }
   }
   try {
@@ -830,7 +832,7 @@ async function runTool(
       }
     }
     const content = JSON.stringify(result)
-    if (cacheKey) lookupCache.set(cacheKey, content, keepFor)
+    if (cacheKey) lookupCache.store(cacheKey, content, keepFor)
     return { type: 'tool_result', tool_use_id: block.id, content }
   } catch (error) {
     turn.lookupFailed = true
@@ -880,7 +882,7 @@ export async function askAssistant(
   // unless the person asked for a fresh look. Follow-ups and files never are.
   const savedKey = answerKey(scope, today, history, attachment.length > 0)
   if (savedKey && !options.fresh) {
-    const saved = answerCache.get(savedKey)
+    const saved = await answerCache.fetch(savedKey)
     if (saved) return { ...saved.reply, cached_at: saved.at }
   }
 
@@ -974,7 +976,7 @@ export async function askAssistant(
           answered: text.length > 0,
         })
       ) {
-        answerCache.set(savedKey, { reply, at: new Date().toISOString() }, ANSWER_TTL_MS)
+        answerCache.store(savedKey, { reply, at: new Date().toISOString() }, ANSWER_TTL_MS)
       }
       return reply
     }

@@ -32,7 +32,7 @@ export async function POST(request: Request) {
     // The assistant reads through the caller's own session, so a supervisor
     // only ever gets answers about the people RLS lets them see.
     const session = await requireApiSession(['admin', 'supervisor'])
-    if (!allowAttempt('ask-xtend:' + session.userId, ASK_XTEND_PER_HOUR, HOUR_MS)) {
+    if (!(await allowAttempt('ask-xtend:' + session.userId, ASK_XTEND_PER_HOUR, HOUR_MS))) {
       return Response.json({ error: ASK_XTEND_LIMIT_MESSAGE }, { status: 429 })
     }
     if (!assistantConfigured()) {

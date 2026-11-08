@@ -156,7 +156,8 @@ sheet overlapping it (`-mt-10`, `rounded-t-[2rem]`).
 - Body `{ identifier (3–120, trimmed), password (1–200) }`.
 - Every failure returns the same text `Those details are not correct.`
   (400 bad shape, 401 unknown/wrong).
-- Rate limits (in-memory, per server instance, `src/lib/rate-limit.ts`):
+- Rate limits (`src/lib/rate-limit.ts`; shared across containers through Redis when
+  `REDIS_URL` is set, otherwise per server process):
   30 attempts per IP and 10 per identifier (lower-cased) and IP per **15 minutes**;
   over → 429 "Too many attempts. Wait 15 minutes, then try again."
 - Body may also carry `turnstile` (≤ 2048). When `turnstileEnabled()`, right
@@ -184,7 +185,7 @@ sheet overlapping it (`-mt-10`, `rounded-t-[2rem]`).
   then, or ask your supervisor to unlock it." with `locked_until`. Wrong
   password → `sign_in_failed(same)`; a time back means the same 423, else
   401. Right password → `sign_in_succeeded(same, p_new_device)` with a fresh
-  32-byte token's hash, then set the cookie. The in-memory per-identifier
+  32-byte token's hash, then set the cookie. The per-identifier
   limit is keyed by identifier *and* address. The login form shows the
   server's message as it is.
 - If the identifier contains `@` it is the email (lower-cased). Otherwise it
