@@ -185,11 +185,20 @@ export function FieldHome({
 
       {tab === 'stores' && visitsStore && (
         <div id="stores" className="scroll-mt-4">
-        <StoreVisits
-          outlets={outlets}
-          visits={visits}
-          currentFix={gate.fix ? { lat: gate.fix.lat, lng: gate.fix.lng } : null}
-        />
+        {/* Location must be on before checking in or out of a store, the
+            same as clocking in: the buttons stay hidden until it is. */}
+        <LocationGate
+          status={gate.status}
+          reason={gate.reason}
+          message={gate.message}
+          onRetry={() => void gate.retry()}
+        >
+          <StoreVisits
+            outlets={outlets}
+            visits={visits}
+            currentFix={gate.fix ? { lat: gate.fix.lat, lng: gate.fix.lng } : null}
+          />
+        </LocationGate>
         </div>
       )}
 

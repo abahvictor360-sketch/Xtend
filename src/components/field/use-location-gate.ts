@@ -68,5 +68,17 @@ export function useLocationGate() {
     void check()
   }, [check])
 
+  // Someone who turns location on in Settings and comes back to Xtend gets a
+  // working screen without having to tap Try again.
+  const blocked = state.status === 'blocked'
+  useEffect(() => {
+    if (!blocked) return
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') void check()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [blocked, check])
+
   return { ...state, retry: check }
 }

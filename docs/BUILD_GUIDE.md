@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-11-10, after the alerts job message, the staff guide's install questions, the move to www.withxtend.com, the phone app's No connection page fix, the Android signing key check, the Android install help on the download page and zero trust: two-step sign-in for admins and HR, office sign-in limits, the origin check on changes, the password again before risky Staff actions and new-device alerts (0080); see earlier entries for 2026-11-08 and before._
+_Last updated: 2026-11-10, after location required for store visits, the alerts job message, the staff guide's install questions, the move to www.withxtend.com, the phone app's No connection page fix, the Android signing key check, the Android install help on the download page and zero trust: two-step sign-in for admins and HR, office sign-in limits, the origin check on changes, the password again before risky Staff actions and new-device alerts (0080); see earlier entries for 2026-11-08 and before._
 
 ---
 
@@ -965,7 +965,8 @@ for s in check-allocate check-assistant-actions check-attendance check-audit \
          check-schedules-leave check-marketer-reports check-clock-out-reminder check-activity \
          check-xm-features check-report-files check-system-reset check-report-photos check-retention \
          check-places-usage check-shift-reminders check-follow-live check-bot-guard \
-         check-security-fixes check-assistant-cache check-redis check-zero-trust; do
+         check-security-fixes check-assistant-cache check-redis check-zero-trust \
+         check-location-required; do
   npx tsx --tsconfig tsconfig.scripts.json scripts/$s.ts | tail -1
 done
 ```
@@ -1055,6 +1056,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-11-10 | **Location required for store visits too**: the Stores tab now sits inside the same location gate as the clock button, so with location off (permission, the phone's GPS, or no fix within 100 m) marketers see **Location required** instead of the Check in / Check out buttons; the gate re-checks by itself when Xtend comes back to the screen. Clock in/out, check-in and check-out each still read a fresh fix at the tap (and again if the camera stayed open over 90 s), and the server refuses any of them without lat, lng and accuracy. New check `scripts/check-location-required.ts`. Staff guide: keep location on all day | — |
 | 2026-11-10 | **Alerts job message**: a 401 from the GitHub alerts job now says the `CRON_SECRET` secret does not match the one on the server at `APP_URL` (it named Vercel) | — |
 | 2026-11-10 | **Staff guide**: two new questions under problems: "App not installed" / "package appears to be invalid" (uninstall the old Xtend, then install again) and "No connection" (check data or Wi-Fi, tap Try again). The staff training deck was updated to match (download from www.withxtend.com/download, the same two problems, current password to change it) | — |
 | 2026-11-10 | **Live address is now `https://www.withxtend.com`** (Hostinger): the default for the phone apps (`XTEND_URL` in `mobile/capacitor.config.ts` and `.github/workflows/mobile.yml`), the GitHub alerts job and the download page, used when the repository variable `APP_URL` is not set. The apps also allow the address with or without `www.`. Phones need the next app build | — |

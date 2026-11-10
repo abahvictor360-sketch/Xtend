@@ -1148,7 +1148,14 @@ both paths are in the caller's folder.
 
 ## 7. Store visits (marketers)
 
-Component `src/components/field/store-visits.tsx`, on the **Stores** tab.
+Component `src/components/field/store-visits.tsx`, on the **Stores** tab,
+inside the same `LocationGate` as the clock panel (`useLocationGate`: a live
+fix within 100 m, re-checked when the page becomes visible again while
+blocked). Until location is on, the tab shows the **Location required** card
+instead of the store list and its Check in / Check out buttons. Each check-in
+reads a fresh fix before the camera opens (again if the camera stayed open
+over 90 s); each check-out reads one at the tap. `scripts/check-location-required.ts`
+guards all of this.
 
 - Header "Store visits" with "<n> done today".
 - One open visit at a time (the database refuses a second: 409 "You are
