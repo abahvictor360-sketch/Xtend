@@ -1166,7 +1166,11 @@ const config: CapacitorConfig = {
 
 `useLegacyBridge: true` keeps background-geolocation updates flowing after 5 minutes in the
 background. `mobile/www/index.html` is a small branded "cannot reach Xtend" page
-(background `#f9f6f3`, text `#2b211c`, system font).
+(background `#f9f6f3`, text `#2b211c`, system font). Capacitor serves it from the app's own
+address (`https://localhost`), so its **Try again** button goes to `window.XTEND_HOME`, set by
+`www/home.js`, which `capacitor.config.ts` writes from `XTEND_URL` on every `cap sync` (git-ignored;
+fallback `https://xtend-brown.vercel.app`). Never link to `/` there: any address other than the site
+opens in the phone's browser.
 
 ### 5.2 `mobile/package.json` (exact pins)
 
