@@ -543,7 +543,7 @@ src/lib/place-resolve.ts):
     business within 80 m. Free and needs no key, but Nigerian POI
     coverage is thin, so it often names the street rather than the shop.
 
-Exports: `resolvePlace`, `LocatedPlace`, `locateAddress`
+Exports: `resolvePlace`, `placeForEvent`, `LocatedPlace`, `locateAddress`
 
 ## `src/lib/health.ts`
 
@@ -871,14 +871,14 @@ src/lib/geocode.ts supplies the real ones.
   2. any store Xtend knows;
   3. a place Xtend learned before (named by a map or by staff);
   4. an address Google gave before for this spot (no shop there);
-  5. OpenStreetMap, free: its answer is used when it names a business;
-  6. Google, only when OpenStreetMap could not name one (its answers are
-     also kept 30 days per spot in the server's cache), unless this is only
-     a preview or this month's limit is used;
-  7. OpenStreetMap's street address, when Google found nothing either.
+  5. Google, for the shop's name (its answers are also kept 30 days per
+     spot in the server's cache), unless this is only a preview or this
+     month's limit is used;
+  6. OpenStreetMap, free.
 
-`order: 'google-first'` (PLACE_LOOKUP_ORDER=google-first) asks Google
-before OpenStreetMap instead, as Xtend did before November 2026.
+`order: 'osm-first'` (PLACE_LOOKUP_ORDER=osm-first) asks OpenStreetMap
+first and Google only when OpenStreetMap names no business: cheaper, with
+fewer shop names.
 
 What a map finds is learned, so the next lookup there stops at 3 or 4.
 

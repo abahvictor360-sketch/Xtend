@@ -610,9 +610,10 @@ export default async function AdminGuidePage() {
           <p>
             <Ui>Place lookups this month</Ui> (top of Places): how the names of places were found this month —
             from Xtend&apos;s own list (stores, places learned before, addresses saved before), from Google, or
-            from OpenStreetMap — and how many paid requests went to Google. For a spot Xtend has never seen,
-            the free OpenStreetMap is asked first; Google only when OpenStreetMap cannot name a shop there.
-            Whatever either finds is saved, so the next clock-in, visit or alert there is
+            from OpenStreetMap — and how many paid requests went to Google. Google is asked only for a spot
+            Xtend has never seen, for the shop&apos;s name. Every clock-in, clock-out, check-in and check-out
+            saves the place and where it is (also when the phone was offline: the server names it when the
+            clock-in arrives). Whatever is found is saved, so the next clock-in, visit or alert there is
             named from Xtend&apos;s own list, including alerts from the phone app while it is closed. Once the
             monthly limit is reached (<Ui>GOOGLE_MONTHLY_LOOKUP_LIMIT</Ui>, 20,000 when not set; 0 or none
             for no limit), OpenStreetMap is used until the next month.

@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/auth'
 import { mapText } from '@/lib/fields'
+import { placeForEvent } from '@/lib/geocode'
 
 const schema = z.object({
   lat: z.number().min(-90).max(90),
@@ -22,13 +23,15 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     }
 
     const supabase = await createServerSupabase()
+    // The phone could not name the spot: name and save it here.
+    const found = await placeForEvent(supabase, parsed.data.lat, parsed.data.lng, parsed.data)
     const { data, error } = await supabase.rpc('end_store_visit', {
       p_visit_id: id,
       p_lat: parsed.data.lat,
       p_lng: parsed.data.lng,
       p_accuracy_m: parsed.data.accuracy_m,
-      p_place_name: parsed.data.place_name ?? null,
-      p_address: parsed.data.address ?? null,
+      p_place_name: parsed.data.place_name ?? found?.name ?? null,
+      p_address: parsed.data.address ?? found?.address ?? null,
     })
 
     if (error) {

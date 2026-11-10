@@ -313,9 +313,9 @@ async function fromOsm(lat: number, lng: number): Promise<ResolvedPlace | null> 
  * from a guess by a mapping service.
  *
  * `google: false` is for names nobody keeps, like the home screen's "you are
- * at…" line: OpenStreetMap only. Clock-ins, store visits and alerts may use
- * Google too, but only when OpenStreetMap names no business (or first, with
- * PLACE_LOOKUP_ORDER=google-first).
+ * at…" line: OpenStreetMap only, and nothing is saved. Clock-ins, store
+ * visits and alerts ask Google first for a spot Xtend does not know
+ * (OpenStreetMap first with PLACE_LOOKUP_ORDER=osm-first) and save it.
  */
 export async function resolvePlace(
   lat: number,
@@ -393,6 +393,27 @@ export async function resolvePlace(
     outlet,
     { google: options.google, learn: options.learn, order: parseMapOrder(process.env.PLACE_LOOKUP_ORDER) },
   )
+}
+
+/**
+ * For a clock or visit event that reached the server with no place: the
+ * phone was offline when it was made, or the lookup took too long. Names the
+ * spot here and saves what it finds, so the place is known next time all the
+ * same. Null when the phone did name it, or nothing could; never throws.
+ */
+export async function placeForEvent(
+  supabase: SupabaseClient,
+  lat: number,
+  lng: number,
+  given: { address?: string | null; place_name?: string | null },
+): Promise<ResolvedPlace | null> {
+  if (given.address || given.place_name) return null
+  try {
+    const place = await resolvePlace(lat, lng, null, { supabase, learn: true })
+    return place.source === 'coordinates' ? null : place
+  } catch {
+    return null
+  }
 }
 
 // ---------------------------------------------------------------------------
