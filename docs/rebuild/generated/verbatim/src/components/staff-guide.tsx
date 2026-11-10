@@ -438,6 +438,19 @@ export function StaffGuide() {
               ),
             },
             {
+              q: 'The phone says “App not installed” or “package appears to be invalid”',
+              a: (
+                <>
+                  Uninstall any old Xtend first (hold its icon, then <Ui>Uninstall</Ui>), then open the
+                  file from the download page again and tap <Ui>Install</Ui>.
+                </>
+              ),
+            },
+            {
+              q: 'Xtend says “No connection”',
+              a: <>Check your data or Wi-Fi, then tap <Ui>Try again</Ui>.</>,
+            },
+            {
               q: 'I forgot my password',
               a: <>Ask your supervisor or admin to reset it. You will choose a new one when you sign in.</>,
             },

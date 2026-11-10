@@ -1760,7 +1760,9 @@ Sections: Get started; Before your first clock-in; Your profile photo; Clock
 in; Store visits (marketers); Adding a place; Daily report; Stock count;
 Clock out; History and your account; Report a problem; Common problems
 (location blocked, not accurate enough, off site but in my store,
-notifications blocked, camera does not open, banner waiting to send, forgot
+notifications blocked, camera does not open, banner waiting to send, "App not
+installed" or "package appears to be invalid" (uninstall the old Xtend, install
+again), "No connection" (check data or Wi-Fi, tap Try again), forgot
 password). Screenshots under `/guide/staff-*.png`. It covers only what to
 do; it never explains monitoring.
 
