@@ -1357,7 +1357,9 @@ Versioning: Android `versionCode` = 100 + commits that changed `mobile/` or the 
 (website-only changes keep the same version, so the update prompt does not fire); the `/download` page
 and `UpdateManager` read the build from the release name's third number. iOS builds are set by hand
 in Xcode and announced with `IOS_LATEST_BUILD` / `IOS_APP_URL`. Admins can set minimum builds
-(`app_minimum_builds`) to force an install.
+(`app_minimum_builds`) to force an install. The `/download` Android steps end with: "Says “App not installed” or
+“package appears to be invalid”? Uninstall the old Xtend first (hold its icon, then Uninstall), then open the file
+again." (an unsigned-secrets debug APK is signed with a new key each build, so it cannot replace the installed one).
 
 ---
 
