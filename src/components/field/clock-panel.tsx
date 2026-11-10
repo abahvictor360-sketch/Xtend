@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AlertTriangle, Camera, CheckCircle2, CloudUpload, LogIn, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -10,6 +10,7 @@ import { CameraCapture } from '@/components/field/camera-capture'
 import { CLOCK_OUT_EVENT } from '@/components/field/clock-out-prompt'
 import { useLocationPermission } from '@/components/field/location-help'
 import { LocationGate } from '@/components/field/location-gate'
+import { BackgroundGate, useBackgroundNeeds } from '@/components/field/background-gate'
 import { Alert } from '@/components/ui/alert'
 import { processSelfie } from '@/lib/image'
 import { deviceInfo } from '@/lib/device'
@@ -112,6 +113,10 @@ export function ClockPanel({
   // Location must be on before clocking in or out: the browser's permission
   // record, plus a coarse probe for the phone's own location service.
   const locationGate = useClockLocationGate()
+  // The phone app must be allowed to keep running (location all the time, and
+  // on Android no battery saving) before anyone can clock in or out. Nothing
+  // is asked in a browser or of an app that does not report these settings.
+  const background = useBackgroundNeeds()
   // Set once the location is in hand; that is what opens the camera.
   const [pending, setPending] = useState<{
     type: AttendanceType
@@ -125,6 +130,7 @@ export function ClockPanel({
   const [endsLogin, setEndsLogin] = useState(false)
 
   const nextType: AttendanceType | null = !day.opening ? 'opening' : !day.closing ? 'closing' : null
+  const backgroundHeld = Boolean(!day.closing && background.needs.blocked)
   // Clocking in needs notifications on (migration 027); clocking out never
   // waits on them. 'unconfigured' means the server has no keys: not theirs to fix.
   const needsNotifications =
@@ -141,7 +147,16 @@ export function ClockPanel({
    * then. So the location is settled and named before the camera opens,
    * and the shutter screen says where it thinks they are.
    */
+  // Read by start(): the "Clock out now" prompt on Home calls it directly, so
+  // the held-back button alone would not stop it.
+  const heldBack = useRef(false)
+  heldBack.current = backgroundHeld
+
   const start = useCallback(async (type: AttendanceType) => {
+    if (heldBack.current) {
+      setError('Finish the settings on this screen first, then try again.')
+      return
+    }
     setError(null)
     setOutcome(null)
     try {
@@ -380,6 +395,13 @@ export function ClockPanel({
         >
           {null}
         </LocationGate>
+      ) : nextType && background.needs.blocked ? (
+        <BackgroundGate
+          state={background.state}
+          needs={background.needs}
+          action={nextType === 'opening' ? 'clock in' : 'clock out'}
+          onDone={() => void background.recheck()}
+        />
       ) : needsNotifications ? (
         <NotificationGate push={push} />
       ) : nextType ? (

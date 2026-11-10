@@ -662,6 +662,20 @@ Component: `src/components/field/clock-panel.tsx`.
   asks and blocks on its own. The blocked card is `LocationGate`'s: "Location
   required", the reason's help line, and the per-phone `LocationHelp` with a
   "Try again" that re-probes.
+- Background gate (native apps only), after the location gate and before the
+  notifications gate: `useBackgroundNeeds()` reads the tracker's `status`
+  (`always`, `batteryUnrestricted`, `platform`) on mount, on focus or
+  visibility, and every 3 s while something is missing. `backgroundNeeds()`
+  (`src/lib/background-gate.ts`) demands only a setting reported as `false`:
+  `always === false`, or on Android `batteryUnrestricted === false`; a
+  browser, an app without the tracker, or one that omits a setting is never
+  held back. The card **"Finish setting up Xtend to clock in/out"** lists
+  "Location: Allow all the time" (iPhone "Always") and, on Android, "Battery:
+  Unrestricted", each with plain steps (TECNO/Infinix/Xiaomi: also Auto-start
+  and "No restrictions") and a button (`askAlwaysLocation`,
+  `openBatterySettings`); a done setting shows a tick; it clears itself. The
+  "Clock out now" prompt (`CLOCK_OUT_EVENT`) is held back too: `start()`
+  refuses while it is shown.
 
 ### 5.2 Step 1: location first (`requireFix` → `bestFix`, `src/lib/geo.ts`)
 

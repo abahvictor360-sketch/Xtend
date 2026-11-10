@@ -389,6 +389,13 @@ export default async function AdminGuidePage() {
               In a browser instead of the app, Xtend must stay open on screen. Some Android phones stop
               apps to save battery; the app asks staff to change that setting, without saying why.
             </li>
+            <li>
+              In the Android and iPhone apps, clocking in or out is held back until location is set to{' '}
+              <Ui>Allow all the time</Ui> (iPhone: <Ui>Always</Ui>) and, on Android, battery saving is off
+              for Xtend. Staff see a card with the steps and a button for each phone screen, and it clears
+              by itself when they come back. An app that does not report these settings (an old version, or a
+              browser) is not held back, so ask staff to keep the app updated.
+            </li>
           </ul>
         </GuideSection>
 

@@ -81,7 +81,9 @@ export function StaffGuide() {
             <>
               <Ui>Location:</Ui> when asked, tap Allow (choose <Ui>Allow all the time</Ui> or{' '}
               <Ui>Always</Ui> if your phone offers it). In your phone’s settings, set location to{' '}
-              <Ui>High accuracy</Ui>.
+              <Ui>High accuracy</Ui>. In the Xtend app, you also need <Ui>Battery: Unrestricted</Ui>{' '}
+              (turn off battery saving for Xtend). Xtend will not let you clock in or out until both
+              are set, and it shows you where to change them.
             </>,
             <>
               <Ui>Camera:</Ui> allow it when asked. Clocking in and out takes a selfie with
