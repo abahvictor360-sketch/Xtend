@@ -101,6 +101,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0080_zero_trust.sql                  # two-step sign-in for admin/HR in is_admin/is_hr; recent password confirmations; sign-in device status
    supabase/migrations/0081_reset_keeps_places.sql          # a test-run reset keeps every learned place and its photos
    supabase/migrations/0082_app_update_notices.sql          # phone notifications about a new app, recorded once per build
+   supabase/migrations/0083_team_photo_access.sql           # supervisors (own team), HR and admins can open clock-in, shelf and profile photos
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

@@ -268,6 +268,8 @@ function FlagItem({
             </dl>
           )}
 
+          <FlagPhoto kind={f.kind} detail={f.detail} />
+
           {products.length > 0 && (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[22rem] text-xs">
@@ -361,5 +363,67 @@ function FlagItem({
         </div>
       </details>
     </li>
+  )
+}
+
+/** The kinds of flag that are about a photo the person should look at. */
+const PHOTO_KINDS = new Set(['photo_unchecked', 'photo_rejected', 'selfie_at_home'])
+
+/**
+ * The photo behind a photo flag, opened on request through a short-lived
+ * link (the same /api/signed-url the other pages use; storage lets a
+ * supervisor open their own team's photos, HR and admins anyone's, 0083).
+ * When the automatic photo check could not run, this is how a person checks
+ * it: is it a live face, taken just now, at the place? Then they mark the
+ * flag reviewed with what they found.
+ */
+function FlagPhoto({ kind, detail }: { kind: string; detail: Record<string, unknown> | null }) {
+  const [url, setUrl] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [problem, setProblem] = useState<string | null>(null)
+  const path = typeof detail?.path === 'string' ? detail.path : null
+  const bucket = detail?.bucket === 'reports' ? 'reports' : 'selfies'
+  if (!PHOTO_KINDS.has(kind) || !path) return null
+
+  async function show() {
+    setBusy(true)
+    setProblem(null)
+    try {
+      const res = await fetch('/api/signed-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bucket, paths: [path] }),
+      })
+      const json = (await res.json().catch(() => ({}))) as { urls?: Record<string, string>; error?: string }
+      const link = path ? json.urls?.[path] : undefined
+      if (!res.ok || !link) throw new Error(json.error ?? 'The photo could not be opened. It may have been deleted.')
+      setUrl(link)
+    } catch (e) {
+      setProblem(e instanceof Error ? e.message : 'The photo could not be opened.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      {kind === 'photo_unchecked' && (
+        <p className="text-xs">
+          The automatic photo check was not available, so this photo was let through unseen. Look at it:
+          is it a live face, taken now, at the place? Then mark the flag reviewed with what you found.
+        </p>
+      )}
+      {url ? (
+        <a href={url} target="_blank" rel="noopener noreferrer" className="block w-fit">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={url} alt="The photo to check" className="max-h-72 max-w-full rounded-xl border border-border object-contain" />
+        </a>
+      ) : (
+        <Button type="button" size="sm" variant="outline" onClick={() => void show()} disabled={busy}>
+          {busy ? 'Opening…' : 'Show photo'}
+        </Button>
+      )}
+      {problem && <p className="text-xs text-destructive">{problem}</p>}
+    </div>
   )
 }
