@@ -1341,7 +1341,7 @@ version set by a "Version" step: `XTEND_VERSION_CODE = 100 + git rev-list --coun
 6. `npx cap sync android`
 7. `./gradlew assembleDebug --no-daemon --console=plain` (log tee'd to `$RUNNER_TEMP/gradle.log`)
 8. On failure: extract "What went wrong/Where" lines as `::error::` annotations (max 40)
-9. Decode `ANDROID_KEYSTORE_BASE64` to `$RUNNER_TEMP/xtend.keystore` if set
+9. Decode `ANDROID_KEYSTORE_BASE64` to `$RUNNER_TEMP/xtend.keystore` if set (spaces and line breaks removed first); fail with a plain `::error::` if it is not valid base64, or if `keytool -list` cannot open it with `ANDROID_KEYSTORE_PASSWORD` and `ANDROID_KEY_ALIAS`
 10. If a key: `./gradlew assembleRelease bundleRelease --no-daemon` with `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`
 11. `actions/upload-artifact@v4` name `xtend-android-<run>`, APKs and AABs, `if-no-files-found: error`
 12. On the default branch: copy the signed release APK (or the debug APK) to `xtend.apk`; create or edit release
