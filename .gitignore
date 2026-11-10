@@ -12,3 +12,6 @@ npm-debug.log*
 .vercel
 next-env.d.ts
 tsconfig.tsbuildinfo
+
+# graphify knowledge graph (generated; rebuild with /graphify src)
+graphify-out/

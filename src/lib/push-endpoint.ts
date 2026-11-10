@@ -41,3 +41,21 @@ export function isWebPushEndpoint(endpoint: string): boolean {
     PUSH_HOSTS.some((host) => host.test(url.hostname))
   )
 }
+
+/** Who the push services may contact about this server. */
+export const DEFAULT_VAPID_SUBJECT = 'mailto:ops@xpelbeauty.ng'
+
+/**
+ * The VAPID subject from the environment, cleaned. A hand-typed value is
+ * easy to get slightly wrong ("mailto: <me@x.com>" with a space and angle
+ * brackets, or wrapped in quotes), and the push library then refuses to
+ * send anything at all. This forgives those slips: it trims, drops quotes
+ * and angle brackets, removes spaces, and adds "mailto:" to a bare address.
+ * Anything still not a mailto: address or an https: URL gives the default.
+ */
+export function cleanVapidSubject(raw: string | undefined | null): string {
+  let s = (raw ?? '').trim().replace(/^["']+|["']+$/g, '').replace(/[<>\s]/g, '')
+  if (!s) return DEFAULT_VAPID_SUBJECT
+  if (!/^(mailto:|https:\/\/)/i.test(s) && /^[^@/]+@[^@/]+\.[^@/]+$/.test(s)) s = `mailto:${s}`
+  return /^(mailto:[^@]+@[^@]+\.[^@]+|https:\/\/[^/].*)$/i.test(s) ? s : DEFAULT_VAPID_SUBJECT
+}

@@ -894,7 +894,7 @@ from the Xtend Android or iOS app. Kept the same as has_live_push() in
 migrations 027 and 030: an address typed in by hand does not count as
 notifications being on.
 
-Exports: `LIVE_PUSH_ENDPOINT`, `NATIVE_TOKEN`, `isWebPushEndpoint`
+Exports: `LIVE_PUSH_ENDPOINT`, `NATIVE_TOKEN`, `isWebPushEndpoint`, `DEFAULT_VAPID_SUBJECT`, `cleanVapidSubject`
 
 ## `src/lib/push-native.ts`
 
