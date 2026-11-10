@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-11-10, after the move to www.withxtend.com, the phone app's No connection page fix, the Android signing key check, the Android install help on the download page and zero trust: two-step sign-in for admins and HR, office sign-in limits, the origin check on changes, the password again before risky Staff actions and new-device alerts (0080); see earlier entries for 2026-11-08 and before._
+_Last updated: 2026-11-10, after the staff guide's install questions, the move to www.withxtend.com, the phone app's No connection page fix, the Android signing key check, the Android install help on the download page and zero trust: two-step sign-in for admins and HR, office sign-in limits, the origin check on changes, the password again before risky Staff actions and new-device alerts (0080); see earlier entries for 2026-11-08 and before._
 
 ---
 
@@ -1055,6 +1055,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-11-10 | **Staff guide**: two new questions under problems: "App not installed" / "package appears to be invalid" (uninstall the old Xtend, then install again) and "No connection" (check data or Wi-Fi, tap Try again). The staff training deck was updated to match (download from www.withxtend.com/download, the same two problems, current password to change it) | — |
 | 2026-11-10 | **Live address is now `https://www.withxtend.com`** (Hostinger): the default for the phone apps (`XTEND_URL` in `mobile/capacitor.config.ts` and `.github/workflows/mobile.yml`), the GitHub alerts job and the download page, used when the repository variable `APP_URL` is not set. The apps also allow the address with or without `www.`. Phones need the next app build | — |
 | 2026-11-10 | **Phone app "No connection" page**: its **Try again** button went to `/` on the app's own address (`https://localhost`), which the app opened in Chrome ("localhost refused to connect"). It now goes back to the site: `mobile/capacitor.config.ts` writes `www/home.js` (`window.XTEND_HOME` = `XTEND_URL`) on every `cap sync`. Needs the new app build | — |
 | 2026-11-10 | **Android signing key check**: the mobile workflow removes spaces and line breaks from `ANDROID_KEYSTORE_BASE64` (they creep in when the key is copied on a phone), and stops with a plain error if the key is not complete base64 or cannot be opened with `ANDROID_KEYSTORE_PASSWORD` and `ANDROID_KEY_ALIAS` | — |
