@@ -2,7 +2,7 @@ import 'server-only'
 import { createECDH } from 'node:crypto'
 import webpush, { type PushSubscription, type WebPushError } from 'web-push'
 import { isNativeEndpoint, sendNative } from '@/lib/push-native'
-import { isWebPushEndpoint, NATIVE_TOKEN } from '@/lib/push-endpoint'
+import { cleanVapidSubject, isWebPushEndpoint, NATIVE_TOKEN } from '@/lib/push-endpoint'
 
 let configured = false
 
@@ -18,11 +18,7 @@ function configure() {
   const privateKey = process.env.VAPID_PRIVATE_KEY
   if (!publicKey || !privateKey) return false
 
-  webpush.setVapidDetails(
-    process.env.VAPID_SUBJECT ?? 'mailto:ops@xpelbeauty.ng',
-    publicKey,
-    privateKey,
-  )
+  webpush.setVapidDetails(cleanVapidSubject(process.env.VAPID_SUBJECT), publicKey, privateKey)
   configured = true
   return true
 }
@@ -148,7 +144,7 @@ export interface VapidStatus {
 export function vapidStatus(): VapidStatus {
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
   const privateKey = process.env.VAPID_PRIVATE_KEY
-  const subject = process.env.VAPID_SUBJECT ?? 'mailto:ops@xpelbeauty.ng'
+  const subject = cleanVapidSubject(process.env.VAPID_SUBJECT)
 
   const status: VapidStatus = {
     present: Boolean(publicKey && privateKey),

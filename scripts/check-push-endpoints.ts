@@ -4,7 +4,7 @@
  *
  *   npx tsx --tsconfig tsconfig.scripts.json scripts/check-push-endpoints.ts
  */
-import { isWebPushEndpoint } from '@/lib/push-endpoint'
+import { DEFAULT_VAPID_SUBJECT, cleanVapidSubject, isWebPushEndpoint } from '@/lib/push-endpoint'
 const cases: [string, boolean][] = [
   ['https://fcm.googleapis.com/fcm/send/abc:APA91b', true],
   ['https://updates.push.services.mozilla.com/wpush/v2/gAAA', true],
@@ -27,6 +27,25 @@ let bad = 0
 for (const [u, want] of cases) {
   const got = isWebPushEndpoint(u)
   console.log(got === want ? 'ok  ' : 'FAIL', got ? 'allowed' : 'refused', u)
+  if (got !== want) bad++
+}
+
+// The VAPID subject is forgiven for the slips seen in real settings.
+const subjects: [string | undefined, string][] = [
+  ['mailto:ops@xpelbeauty.ng', 'mailto:ops@xpelbeauty.ng'],
+  ['mailto: <xpelbeauty001@gmail.com>', 'mailto:xpelbeauty001@gmail.com'],
+  ['"mailto:ops@xpelbeauty.ng"', 'mailto:ops@xpelbeauty.ng'],
+  ['  mailto:ops@xpelbeauty.ng  ', 'mailto:ops@xpelbeauty.ng'],
+  ['ops@xpelbeauty.ng', 'mailto:ops@xpelbeauty.ng'],
+  ['https://xtend.example.com/contact', 'https://xtend.example.com/contact'],
+  ['', DEFAULT_VAPID_SUBJECT],
+  [undefined, DEFAULT_VAPID_SUBJECT],
+  ['not an address', DEFAULT_VAPID_SUBJECT],
+  ['http://insecure.example.com', DEFAULT_VAPID_SUBJECT],
+]
+for (const [raw, want] of subjects) {
+  const got = cleanVapidSubject(raw)
+  console.log(got === want ? 'ok  ' : 'FAIL', JSON.stringify(raw), '->', got)
   if (got !== want) bad++
 }
 process.exit(bad)
