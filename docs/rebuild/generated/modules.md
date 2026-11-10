@@ -69,6 +69,24 @@ private, nothing is published yet, or GitHub cannot be reached.
 
 Exports: `PublishedApk`, `publishedAndroidApk`
 
+## `src/lib/app-update-notice.ts`
+
+The phone notification that tells someone a new Xtend app is out
+(migration 0082). Pure: shared by the alerts job and
+scripts/check-updates.ts.
+
+Exports: `NOTICE_HOURS`, `lagosHour`, `noticeHour`, `updateNoticeMessage`
+
+## `src/lib/app-update-notices.ts`
+
+The five-minute job's part for new phone apps (migration 0082): everyone
+active whose app is older than the newest is sent "A new Xtend app is
+ready" once, then "Please update Xtend" every two days while they stay
+behind, three times in all per build. Only in the day (Lagos). Never
+throws.
+
+Exports: `flushAppUpdateNotices`
+
 ## `src/lib/app-update.ts`
 
 Deciding what to tell someone about updates. Shared by the server
@@ -2135,7 +2153,9 @@ Exports: `Textarea`
 
 ## `src/components/update-manager.tsx`
 
-Reloads onto the new version, with a fresh service worker.
+"Later" hides the bar for this sitting only: it is back the next time Xtend
+opens or comes back to the screen, and after this long at the latest, so
+nobody stays on an old version without being told.
 
 Exports: `UpdateManager`
 

@@ -1106,7 +1106,7 @@ count every 15 000 ms and counts everything except pings), `PhoneBeacon` on `onl
 ### 4.6 Update manager (`src/components/update-manager.tsx`)
 
 Checks `GET /api/version` (no-store) on open, every `10 * 60_000` ms, and on return to
-the screen (not more than once a minute). Snoozes: site 30 min, app 24 h (localStorage).
+the screen (every return to the screen checks at once). **Later** hides the site or app bar for this sitting only: in memory, cleared whenever the page becomes visible again (or comes back online), and at most `SNOOZE_MS = 15 * 60_000`; never kept in localStorage.
 `decideUpdate` (`src/lib/app-update.ts`): site `available` if build ids differ, `required`
 if the latest release note has `required`; app build read with `callNative('App', 'getInfo')`
 and compared with `latest_build` / admin `minimum`. "Update now" calls `registration.update()`

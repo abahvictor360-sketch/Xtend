@@ -2038,8 +2038,10 @@ reached from the home week row, History ("Your month") and You.
 ### 13.5 Update manager (mention only)
 
 `src/components/update-manager.tsx`, mounted in the root layout: checks the
-build every **10 minutes**; site update snooze **30 minutes**, app update
-snooze **24 hours**; prompts such as "Update Xtend to carry on" and "Install
+build every **10 minutes** and on every return to the screen; **Later** hides
+the update bar only until Xtend is opened again or comes back to the screen
+(15 minutes at most); a new phone app is also announced by phone notification
+(0082, "A new Xtend app is ready"); prompts such as "Update Xtend to carry on" and "Install
 the new Xtend app" ("This version of the app is too old to keep using.
 Install the new one; your account and anything waiting to upload are
 kept."). Full spec belongs to the platform file.

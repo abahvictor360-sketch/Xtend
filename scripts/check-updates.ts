@@ -5,7 +5,10 @@
  *
  *   npx tsx --tsconfig tsconfig.scripts.json scripts/check-updates.ts
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { buildNumber, decideUpdate, installStatus, shouldShowNotes, type VersionInfo } from '@/lib/app-update'
+import { lagosHour, noticeHour, updateNoticeMessage } from '@/lib/app-update-notice'
 
 let failed = 0
 function check(ok: boolean, label: string, got?: unknown) {
@@ -59,6 +62,32 @@ check(installStatus({ platform: 'android', app_build: 60, web_build: 'B1' }, liv
 check(installStatus({ platform: 'android', app_build: 57, web_build: 'B2' }, live) === 'old_app', 'older app')
 check(installStatus({ platform: 'android', app_build: 50, web_build: 'B2' }, live) === 'must_update', 'below the lowest allowed: must update')
 check(installStatus({ platform: 'web', app_build: null, web_build: 'B2' }, live) === 'current', 'a browser on the newest site is up to date')
+
+// --- Telling people about a new phone app (0082).
+check(lagosHour(new Date('2026-11-10T05:59:00Z')) === 6 && lagosHour(new Date('2026-11-10T23:30:00Z')) === 0,
+  'Lagos is an hour ahead of UTC')
+check(!noticeHour(new Date('2026-11-10T05:30:00Z')) && noticeHour(new Date('2026-11-10T06:00:00Z'))
+  && noticeHour(new Date('2026-11-10T18:59:00Z')) && !noticeHour(new Date('2026-11-10T19:00:00Z')),
+  'the new-app notice is sent from 07:00 to 19:59 Lagos time, never at night')
+{
+  const first = updateNoticeMessage('android', '1.0.124', 1)
+  const again = updateNoticeMessage('android', '1.0.124', 2)
+  const ios = updateNoticeMessage('ios', null, 1)
+  check(first.title === 'A new Xtend app is ready' && first.body.startsWith('Xtend 1.0.124 is ready to install.')
+    && /Get it/.test(first.body) && first.title.length <= 80 && first.body.length <= 400,
+    'the first notice names the version and says where to get it', first)
+  check(again.title === 'Please update Xtend', 'a reminder says so', again)
+  check(ios.body.startsWith('A new Xtend app is ready to install.') && /TestFlight/.test(ios.body), 'iPhone: TestFlight', ios)
+  check(!/monitor|track|location/i.test(first.body + again.body + ios.body), 'the notice says nothing about monitoring')
+}
+{
+  const read = (p: string) => readFileSync(join(__dirname, '..', p), 'utf8')
+  const manager = read('src/components/update-manager.tsx')
+  check(!/xt_snooze/.test(manager) && /setSnoozed\(\{ site: 0, app: 0 \}\)/.test(manager) && /SNOOZE_MS = 15 \* 60_000/.test(manager),
+    '"Later" lasts only until Xtend is opened again (15 minutes at most), and is never kept')
+  check(/await flushAppUpdateNotices\(\)/.test(read('src/app/api/cron/alerts/route.ts')),
+    'the five-minute job sends the new-app notices')
+}
 
 if (failed) {
   console.log(`\n${failed} check(s) FAILED`)
