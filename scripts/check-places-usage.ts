@@ -13,6 +13,7 @@ import {
   lookupSummary,
   metresBetween,
   parseLimit,
+  parseMapOrder,
   resolveWith,
   withinLimit,
   type GoogleAnswer,
@@ -88,6 +89,10 @@ function world(opts: { limit?: number | null; googleKey?: boolean } = {}) {
     osm: async (lat, lng) => {
       calls.osm++
       if (lat > 9) return null // nothing known up north, for the test
+      // What OpenStreetMap knows by name: one shop at Surulere.
+      if (near({ lat: 6.4990, lng: 3.3550 }, lat, lng, 80)) {
+        return { name: 'Shoprite Surulere', address: 'Adeniran Ogunsanya St, Surulere', label: 'Shoprite Surulere, Adeniran Ogunsanya St, Surulere', source: 'osm' }
+      }
       return { name: null, address: 'Some Road, Lagos', label: 'Some Road, Lagos', source: 'osm' }
     },
     learnPlace: async (lat, lng, place) => {
@@ -184,6 +189,44 @@ async function main() {
     check(a.source === 'osm' && w.calls.google === 0 && w.known.length === 0 && w.addresses.length === 0,
       'the home screen preview uses OpenStreetMap and learns nothing', a)
   }
+
+  // --- OpenStreetMap first, Google only when it cannot name the place.
+  {
+    const w = world()
+    const a = await resolveWith(w.p, 6.4991, 3.3551, null, { learn: true })
+    check(a.source === 'osm' && a.name === 'Shoprite Surulere' && w.calls.google === 0 && w.calls.osm === 1,
+      'a new spot OpenStreetMap can name: no Google request at all', { a, calls: w.calls })
+    check(w.known.length === 1 && w.known[0].name === 'Shoprite Surulere', 'and the shop is saved', w.known)
+    const b = await resolveWith(w.p, 6.49915, 3.35515, null, { learn: true })
+    check(b.source === 'known' && w.calls.osm === 1 && w.calls.google === 0,
+      'the next clock-in there is named from the saved place: no map asked', { b, calls: w.calls })
+
+    // Bariga: OpenStreetMap has only a road, so Google is asked once.
+    const c = await resolveWith(w.p, 6.5395, 3.3870, null, { learn: true })
+    check(c.name === 'Justrite Superstore Bariga' && w.calls.osm === 2 && w.calls.google === 1,
+      'OpenStreetMap names no business: Google is asked, once', { c, calls: w.calls })
+    await resolveWith(w.p, 6.53955, 3.38705, null, { learn: true })
+    check(w.calls.google === 1 && w.calls.osm === 2, 'and never again at that spot', w.calls)
+
+    // Nowhere Google knows either: OpenStreetMap's street is the answer.
+    const d = await resolveWith(w.p, 6.70, 3.20, null, { learn: true })
+    check(d.source === 'osm' && d.address === 'Some Road, Lagos' && w.calls.google === 2,
+      'neither names a business: OpenStreetMap’s address is used', d)
+
+    // Google switched off or over its limit: OpenStreetMap alone.
+    const off = world({ googleKey: false })
+    const e = await resolveWith(off.p, 6.5395, 3.3870, null, { learn: true })
+    check(e.source === 'osm' && off.calls.google === 0, 'with no Google key: OpenStreetMap only', e)
+  }
+  {
+    const w = world()
+    const a = await resolveWith(w.p, 6.4991, 3.3551, null, { learn: true, order: 'google-first' })
+    check(w.calls.google === 1 && w.calls.osm === 1 && a.source === 'osm',
+      'google-first: Google is asked before OpenStreetMap (here Google has nothing, so OpenStreetMap answers)', { a, calls: w.calls })
+  }
+  check(parseMapOrder(undefined) === 'osm-first' && parseMapOrder('') === 'osm-first'
+    && parseMapOrder('Google-First ') === 'google-first' && parseMapOrder('osm') === 'osm-first',
+    'PLACE_LOOKUP_ORDER: OpenStreetMap first unless it says google-first')
 
   // --- The monthly limit.
   check(parseLimit(undefined) === 20000 && parseLimit('') === 20000 && parseLimit('abc') === 20000

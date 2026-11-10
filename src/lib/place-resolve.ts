@@ -8,9 +8,14 @@
  *   2. any store Xtend knows;
  *   3. a place Xtend learned before (named by a map or by staff);
  *   4. an address Google gave before for this spot (no shop there);
- *   5. Google (its answers are also kept 30 days per spot in the server's
- *      cache), unless this is only a preview or this month's limit is used;
- *   6. OpenStreetMap, free.
+ *   5. OpenStreetMap, free: its answer is used when it names a business;
+ *   6. Google, only when OpenStreetMap could not name one (its answers are
+ *      also kept 30 days per spot in the server's cache), unless this is only
+ *      a preview or this month's limit is used;
+ *   7. OpenStreetMap's street address, when Google found nothing either.
+ *
+ * `order: 'google-first'` (PLACE_LOOKUP_ORDER=google-first) asks Google
+ * before OpenStreetMap instead, as Xtend did before November 2026.
  *
  * What a map finds is learned, so the next lookup there stops at 3 or 4.
  */
@@ -27,6 +32,14 @@ export interface ResolvedPlace {
   /** What to show the user: name and address joined, or the best available. */
   label: string
   source: PlaceSource
+}
+
+/** Which map is asked first for a spot Xtend does not know. */
+export type MapOrder = 'osm-first' | 'google-first'
+
+/** PLACE_LOOKUP_ORDER: OpenStreetMap first unless it says google-first. */
+export function parseMapOrder(raw: string | undefined): MapOrder {
+  return raw?.trim().toLowerCase() === 'google-first' ? 'google-first' : 'osm-first'
 }
 
 export interface OutletAnchor {
@@ -123,7 +136,7 @@ export async function resolveWith(
   lat: number,
   lng: number,
   outlet?: OutletAnchor | null,
-  options: { google?: boolean; learn?: boolean } = {},
+  options: { google?: boolean; learn?: boolean; order?: MapOrder } = {},
 ): Promise<ResolvedPlace> {
   const counts: LookupCount[] = []
   try {
@@ -158,18 +171,36 @@ export async function resolveWith(
       return { name: null, address: saved, label: saved, source: 'google' }
     }
 
-    let mapped: ResolvedPlace | null = null
-    if ((options.google ?? true) && (await p.googleAllowed().catch(() => false))) {
+    const askGoogle = async (): Promise<ResolvedPlace | null> => {
+      if (!(options.google ?? true) || !(await p.googleAllowed().catch(() => false))) return null
       const answer = await p.google(lat, lng).catch(() => ({ place: null, fresh: false, calls: [] }) as GoogleAnswer)
       counts.push(...answer.calls)
-      if (answer.place) {
-        mapped = answer.place
-        counts.push(answer.fresh ? 'google' : 'cache')
-      }
+      if (!answer.place) return null
+      counts.push(answer.fresh ? 'google' : 'cache')
+      return answer.place
     }
-    if (!mapped) {
-      mapped = await p.osm(lat, lng).catch(() => null)
-      if (mapped) counts.push('osm')
+
+    let mapped: ResolvedPlace | null = null
+    if ((options.order ?? 'osm-first') === 'osm-first') {
+      // Free first. Google only when OpenStreetMap cannot name a business,
+      // and then only once: what it finds is learned below.
+      const osm = await p.osm(lat, lng).catch(() => null)
+      if (osm?.name) {
+        mapped = osm
+        counts.push('osm')
+      } else {
+        mapped = await askGoogle()
+        if (!mapped && osm) {
+          mapped = osm
+          counts.push('osm')
+        }
+      }
+    } else {
+      mapped = await askGoogle()
+      if (!mapped) {
+        mapped = await p.osm(lat, lng).catch(() => null)
+        if (mapped) counts.push('osm')
+      }
     }
 
     if (mapped && options.learn) {

@@ -54,7 +54,8 @@ export async function GET(request: Request) {
     }
 
     // A preview is only shown, never stored, so it is named with the free
-    // provider; clock-ins and store visits ask without it and get Google.
+    // provider only; clock-ins and store visits may fall back to Google when
+    // OpenStreetMap names no business.
     const preview = url.searchParams.get('purpose') === 'preview'
     // Stores and learned places first; a map only for somewhere new, and
     // what it finds is learned unless this is only a preview.

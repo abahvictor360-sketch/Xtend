@@ -7,6 +7,7 @@ import {
   join,
   parseLimit,
   resolveWith,
+  parseMapOrder,
   withinLimit,
   type GoogleAnswer,
   type GoogleCall,
@@ -312,8 +313,9 @@ async function fromOsm(lat: number, lng: number): Promise<ResolvedPlace | null> 
  * from a guess by a mapping service.
  *
  * `google: false` is for names nobody keeps, like the home screen's "you are
- * at…" line: it goes to OpenStreetMap, which is free, and leaves the paid
- * Google lookups for clock-ins, store visits and alerts, which are recorded.
+ * at…" line: OpenStreetMap only. Clock-ins, store visits and alerts may use
+ * Google too, but only when OpenStreetMap names no business (or first, with
+ * PLACE_LOOKUP_ORDER=google-first).
  */
 export async function resolvePlace(
   lat: number,
@@ -389,7 +391,7 @@ export async function resolvePlace(
     lat,
     lng,
     outlet,
-    { google: options.google, learn: options.learn },
+    { google: options.google, learn: options.learn, order: parseMapOrder(process.env.PLACE_LOOKUP_ORDER) },
   )
 }
 
