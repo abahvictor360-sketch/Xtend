@@ -137,6 +137,11 @@ export function StaffGuide() {
           items={[
             <>Clock in at the start of your day as above.</>,
             <>
+              Keep your phone’s location on all day. Without it, Xtend shows{' '}
+              <Ui>Location required</Ui> and you cannot clock in or out, or check in or out of a
+              store.
+            </>,
+            <>
               At each store, tap <Ui>Check in here</Ui>. If Xtend does not find the store, tap{' '}
               <Ui>Pick the store myself</Ui>: it lists only the stores on your list.
             </>,
