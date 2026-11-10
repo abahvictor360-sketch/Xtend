@@ -137,7 +137,11 @@ export function StaffGuide() {
       <GuideSection topic={T.visits} intro="Marketers who move between stores check in at each one.">
         <Steps
           items={[
-            <>Clock in at the start of your day as above.</>,
+            <>
+              Clock in at the start of your day as above. You cannot check in at a store until you have
+              clocked in, and with no signal a check-in or check-out is not recorded: try again when you
+              have signal.
+            </>,
             <>
               Keep your phone’s location on all day. Without it, Xtend shows{' '}
               <Ui>Location required</Ui> and you cannot clock in or out, or check in or out of a

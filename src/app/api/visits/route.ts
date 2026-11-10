@@ -6,6 +6,7 @@ import { flushFlagAlerts } from '@/lib/flag-alerts'
 import { mapText } from '@/lib/fields'
 import { isOwnStoragePath } from '@/lib/storage-path'
 import { placeForEvent } from '@/lib/geocode'
+import { lagosDateString } from '@/lib/utils'
 
 /**
  * Check in to a store. Naming the store is optional: left out, the
@@ -45,6 +46,29 @@ export async function POST(request: Request) {
     }
 
     const supabase = await createServerSupabase()
+
+    // The day starts with a clock-in. Without one the person has no
+    // attendance for the day and looks absent while visiting stores.
+    const { data: today } = await supabase
+      .from('attendance')
+      .select('type')
+      .eq('user_id', session.userId)
+      .eq('attendance_date', lagosDateString())
+    const types = new Set((today ?? []).map((row: { type: string }) => row.type))
+    if (!types.has('opening')) {
+      return Response.json(
+        {
+          error:
+            'Clock in first, then check in at a store. If you clocked in with no signal, wait until Home shows it recorded.',
+          code: 'clock_in_first',
+        },
+        { status: 409 },
+      )
+    }
+    if (types.has('closing')) {
+      return Response.json({ error: 'You have clocked out for today.', code: 'clocked_out' }, { status: 409 })
+    }
+
     // The phone could not name the spot: name and save it here.
     const found = await placeForEvent(supabase, input.lat, input.lng, input)
     const { data, error } = await supabase

@@ -58,6 +58,41 @@ function uuid() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
+/**
+ * Words for a failure. A request that never reached the server ("Failed to
+ * fetch", "Load failed") is shown as no signal, and says the check-in or
+ * check-out was NOT recorded, rather than a browser's own text.
+ */
+function failureMessage(err: unknown, what: string) {
+  const text = err instanceof Error ? err.message : ''
+  if (err instanceof TypeError || /failed to fetch|load failed|network ?error|networkerror/i.test(text)) {
+    return `No signal. Your ${what} was NOT recorded. Try again when you have signal.`
+  }
+  return text || 'That did not go through.'
+}
+
+/**
+ * Reads a visit back from the database before the person is told it is
+ * done (people read their own visits). True: it is there. False: the server
+ * said saved but it is not. Null: could not be checked, which is not a
+ * reason to doubt the server's own answer.
+ */
+async function visitRecorded(id: string | undefined, closed: boolean): Promise<boolean | null> {
+  if (!id) return null
+  try {
+    const { data, error } = await supabase()
+      .from('store_visits')
+      .select('id, status')
+      .eq('id', id)
+      .maybeSingle<{ id: string; status: string }>()
+    if (error) return null
+    if (!data) return false
+    return closed ? data.status !== 'open' : true
+  } catch {
+    return null
+  }
+}
+
 async function namePlace(lat: number, lng: number) {
   try {
     const res = await fetch(`/api/geocode?lat=${lat}&lng=${lng}`)
@@ -79,10 +114,13 @@ export function StoreVisits({
   outlets,
   visits,
   currentFix,
+  onShift = true,
 }: {
   outlets: VisitOutlet[]
   visits: VisitRow[]
   currentFix: { lat: number; lng: number } | null
+  /** Clocked in and not yet clocked out today: checking in at a store needs it. */
+  onShift?: boolean
 }) {
   const router = useRouter()
   const open = visits.find((v) => v.status === 'open') ?? null
@@ -222,6 +260,15 @@ export function StoreVisits({
           return
         }
 
+        // The server says it saved it. Say so only once it is really there.
+        if ((await visitRecorded(data.visit?.id, false)) === false) {
+          setError(
+            'Your check-in was not confirmed: the server answered, but the record could not be found. Check the list below, and if it is not there, try again.',
+          )
+          router.refresh()
+          return
+        }
+
         const distance = data.visit?.arrived_distance_m
         const nearest = data.visit?.outlet_name ?? outlet?.name ?? 'your store'
         const label = data.visit?.store_label ?? nearest
@@ -235,7 +282,7 @@ export function StoreVisits({
         router.refresh()
       } catch (err) {
         if (err instanceof GeoBlocked) setError(err.message)
-        else setError(err instanceof Error ? err.message : 'That did not go through.')
+        else setError(failureMessage(err, 'check-in'))
       } finally {
         setBusy(null)
       }
@@ -272,13 +319,22 @@ export function StoreVisits({
         return
       }
 
+      // The server says it saved it. Say so only once it is really there.
+      if ((await visitRecorded(open.id, true)) === false) {
+        setError(
+          'Your check-out was not confirmed: the server answered, but the visit still shows as open. Try again.',
+        )
+        router.refresh()
+        return
+      }
+
       setNotice(
         `Checked out of ${open.store_label ?? open.outlet_name} after ${data.visit?.minutes ?? open.minutes} minutes.`,
       )
       router.refresh()
     } catch (err) {
       if (err instanceof GeoBlocked) setError(err.message)
-      else setError(err instanceof Error ? err.message : 'That did not go through.')
+      else setError(failureMessage(err, 'check-out'))
     } finally {
       setBusy(null)
     }
@@ -362,10 +418,16 @@ export function StoreVisits({
         </Card>
       ) : (
         <div className="space-y-2">
+          {!onShift && (
+            <Alert variant="warning">
+              Clock in first, then check in at a store. If you clocked in with no signal, wait until Home
+              shows it recorded.
+            </Alert>
+          )}
           <Button
             size="xl"
             className="w-full"
-            disabled={Boolean(busy)}
+            disabled={Boolean(busy) || !onShift}
             onClick={() => void beginCheckIn(null)}
           >
             <Camera className="h-5 w-5" />
@@ -380,7 +442,7 @@ export function StoreVisits({
             <Button
               variant="ghost"
               className="w-full"
-              disabled={Boolean(busy)}
+              disabled={Boolean(busy) || !onShift}
               onClick={() => setPicking(true)}
             >
               Pick the store myself

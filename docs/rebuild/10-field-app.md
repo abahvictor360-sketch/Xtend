@@ -1204,6 +1204,22 @@ guards all of this.
 - With an empty list, instead of that button: muted rounded line "No stores
   are allocated to you yet. Ask your supervisor." ("Check in here" still
   works.)
+- **Clock in first.** `StoreVisits` takes `onShift` (clocked in and not out).
+  When false, a warning alert "Clock in first, then check in at a store. If
+  you clocked in with no signal, wait until Home shows it recorded." sits
+  above the buttons, and "Check in here" and "Pick the store myself" are
+  disabled. `POST /api/visits` enforces it too: no `opening` attendance row
+  for today gives 409 `clock_in_first` ("Clock in first, then check in at a
+  store. If you clocked in with no signal, wait until Home shows it
+  recorded."), a `closing` row gives 409 `clocked_out` ("You have clocked
+  out for today."). A visit may still be checked out after clock-out.
+- **Done only once recorded.** After the check-in answer the visit is read
+  back (`visitRecorded`, the person's own `store_visits` row); a missing row
+  shows "Your check-in was not confirmed…" instead of "Checked in". Check-out
+  does the same (the visit must no longer be `open`). A request that never
+  reached the server ("Failed to fetch"/"Load failed") reads "No signal.
+  Your check-in/check-out was NOT recorded. Try again when you have signal."
+  Check-in and check-out are online only (no offline queue).
 
 ### 7.2 Check-in flow
 

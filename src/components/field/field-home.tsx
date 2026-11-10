@@ -197,6 +197,7 @@ export function FieldHome({
             outlets={outlets}
             visits={visits}
             currentFix={gate.fix ? { lat: gate.fix.lat, lng: gate.fix.lng } : null}
+            onShift={onShift}
           />
         </LocationGate>
         </div>
