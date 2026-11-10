@@ -2055,6 +2055,19 @@ $$;
 
 
 --
+-- Name: confirm_recent_auth(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.confirm_recent_auth(p_user uuid) RETURNS void
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  insert into public.recent_auth (user_id, confirmed_at) values (p_user, now())
+  on conflict (user_id) do update set confirmed_at = excluded.confirmed_at;
+$$;
+
+
+--
 -- Name: conversation(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3059,7 +3072,9 @@ CREATE FUNCTION public.is_admin() RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
-  select coalesce((select role from public.profiles where id = auth.uid()) = 'admin', false);
+  select coalesce(
+    (select role = 'admin'::public.user_role and is_active from public.profiles where id = auth.uid()),
+    false) and public.mfa_satisfied();
 $$;
 
 
@@ -3084,8 +3099,8 @@ CREATE FUNCTION public.is_hr() RETURNS boolean
     SET search_path TO 'public'
     AS $$
   select coalesce(
-    (select role = 'hr'::user_role and is_active from public.profiles where id = auth.uid()),
-    false);
+    (select role = 'hr'::public.user_role and is_active from public.profiles where id = auth.uid()),
+    false) and public.mfa_satisfied();
 $$;
 
 
@@ -3508,6 +3523,31 @@ $$;
 
 
 --
+-- Name: mfa_required_for(public.user_role); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.mfa_required_for(p_role public.user_role) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select coalesce((select p_role = any(mfa_roles) from public.system_settings where id), false);
+$$;
+
+
+--
+-- Name: mfa_satisfied(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.mfa_satisfied() RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select public.session_aal() = 'aal2'
+      or not coalesce((select public.mfa_required_for(role) from public.profiles where id = auth.uid()), false);
+$$;
+
+
+--
 -- Name: minutes_label(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3689,6 +3729,18 @@ CREATE FUNCTION public.my_day() RETURNS jsonb
       where r.user_id = auth.uid() and r.report_date = public.business_date()
     )
   );
+$$;
+
+
+--
+-- Name: my_mfa_required(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_mfa_required() RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select coalesce((select public.mfa_required_for(role) from public.profiles where id = auth.uid()), false);
 $$;
 
 
@@ -4890,6 +4942,20 @@ begin
   end if;
   return null;
 end;
+$$;
+
+
+--
+-- Name: recent_auth_ok(uuid, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.recent_auth_ok(p_user uuid, p_minutes integer DEFAULT 10) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select exists (select 1 from public.recent_auth
+                 where user_id = p_user
+                   and confirmed_at > now() - make_interval(mins => greatest(1, least(p_minutes, 60))));
 $$;
 
 
@@ -6638,6 +6704,18 @@ $$;
 
 
 --
+-- Name: session_aal(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.session_aal() RETURNS text
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select coalesce(nullif(auth.jwt() ->> 'aal', ''), 'aal1');
+$$;
+
+
+--
 -- Name: set_count_sheet_template(text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -6953,6 +7031,20 @@ CREATE FUNCTION public.sign_in_device_key(p_account text, p_address text, p_devi
   select lower(btrim(p_account)) || '#'
          || case when public.sign_in_known_device(p_account, p_device) then 'dev:' || p_device
                  else 'ip:' || coalesce(nullif(btrim(p_address), ''), 'unknown') end;
+$$;
+
+
+--
+-- Name: sign_in_device_status(text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sign_in_device_status(p_account text, p_device text) RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select jsonb_build_object(
+    'known', public.sign_in_known_device(p_account, p_device),
+    'any_known', exists (select 1 from public.sign_in_trusted_devices where account = lower(btrim(p_account))));
 $$;
 
 
@@ -9900,6 +9992,16 @@ CREATE TABLE public.push_subscriptions (
 
 
 --
+-- Name: recent_auth; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.recent_auth (
+    user_id uuid NOT NULL,
+    confirmed_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: report_files; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -10343,6 +10445,7 @@ CREATE TABLE public.system_settings (
     last_reset jsonb,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     follow_max_sessions integer DEFAULT 20 NOT NULL,
+    mfa_roles public.user_role[] DEFAULT '{admin,hr}'::public.user_role[] NOT NULL,
     CONSTRAINT system_settings_follow_max_sessions_check CHECK (((follow_max_sessions >= 1) AND (follow_max_sessions <= 200))),
     CONSTRAINT system_settings_id_check CHECK (id)
 );
@@ -11249,6 +11352,14 @@ ALTER TABLE ONLY public.push_subscriptions
 
 ALTER TABLE ONLY public.push_subscriptions
     ADD CONSTRAINT push_subscriptions_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: recent_auth recent_auth_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recent_auth
+    ADD CONSTRAINT recent_auth_pkey PRIMARY KEY (user_id);
 
 
 --
@@ -12976,6 +13087,14 @@ ALTER TABLE ONLY public.push_subscriptions
 
 
 --
+-- Name: recent_auth recent_auth_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.recent_auth
+    ADD CONSTRAINT recent_auth_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
 -- Name: report_files report_files_report_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -14164,6 +14283,12 @@ CREATE POLICY push_subs_own_update ON public.push_subscriptions FOR UPDATE USING
 ALTER TABLE public.push_subscriptions ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: recent_auth; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.recent_auth ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: report_files; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -15147,6 +15272,14 @@ GRANT ALL ON FUNCTION public.close_count_request(p_request_id uuid) TO service_r
 
 
 --
+-- Name: FUNCTION confirm_recent_auth(p_user uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.confirm_recent_auth(p_user uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.confirm_recent_auth(p_user uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION conversation(p_staff uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -15552,6 +15685,24 @@ GRANT ALL ON FUNCTION public.message_inbox() TO authenticated;
 
 
 --
+-- Name: FUNCTION mfa_required_for(p_role public.user_role); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.mfa_required_for(p_role public.user_role) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.mfa_required_for(p_role public.user_role) TO authenticated;
+GRANT ALL ON FUNCTION public.mfa_required_for(p_role public.user_role) TO service_role;
+
+
+--
+-- Name: FUNCTION mfa_satisfied(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.mfa_satisfied() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.mfa_satisfied() TO authenticated;
+GRANT ALL ON FUNCTION public.mfa_satisfied() TO service_role;
+
+
+--
 -- Name: FUNCTION movement_trail(p_user uuid, p_date date); Type: ACL; Schema: public; Owner: -
 --
 
@@ -15584,6 +15735,15 @@ GRANT ALL ON FUNCTION public.my_coverage() TO service_role;
 REVOKE ALL ON FUNCTION public.my_day() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.my_day() TO authenticated;
 GRANT ALL ON FUNCTION public.my_day() TO service_role;
+
+
+--
+-- Name: FUNCTION my_mfa_required(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.my_mfa_required() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.my_mfa_required() TO authenticated;
+GRANT ALL ON FUNCTION public.my_mfa_required() TO service_role;
 
 
 --
@@ -15915,6 +16075,14 @@ REVOKE ALL ON FUNCTION public.realtime_notify_message() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public.realtime_notify_support_message() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION recent_auth_ok(p_user uuid, p_minutes integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.recent_auth_ok(p_user uuid, p_minutes integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.recent_auth_ok(p_user uuid, p_minutes integer) TO service_role;
 
 
 --
@@ -16312,6 +16480,15 @@ GRANT ALL ON FUNCTION public.send_message(p_staff uuid, p_body text, p_attachmen
 
 
 --
+-- Name: FUNCTION session_aal(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.session_aal() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.session_aal() TO authenticated;
+GRANT ALL ON FUNCTION public.session_aal() TO service_role;
+
+
+--
 -- Name: FUNCTION set_count_sheet_template(p_path text, p_file_name text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -16391,6 +16568,14 @@ GRANT ALL ON FUNCTION public.sign_in_clear(p_account text) TO service_role;
 --
 
 REVOKE ALL ON FUNCTION public.sign_in_device_key(p_account text, p_address text, p_device text) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION sign_in_device_status(p_account text, p_device text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.sign_in_device_status(p_account text, p_device text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.sign_in_device_status(p_account text, p_device text) TO service_role;
 
 
 --

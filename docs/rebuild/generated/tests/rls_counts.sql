@@ -9,6 +9,9 @@ set client_min_messages = notice;
 grant usage on schema public, auth to authenticated;
 grant select on all tables in schema public to authenticated;
 grant execute on function auth.uid() to authenticated;
+grant execute on function auth.jwt() to authenticated;
+-- Sessions that passed the two-step code (0080), as a real admin's would.
+select set_config('request.jwt.claims', '{"aal":"aal2"}', false);
 grant execute on function assert(boolean, text) to authenticated;
 -- Supabase also grants writes on public tables and relies on RLS; do the
 -- same here for learned places, so the test proves the policy stops staff.
@@ -17,7 +20,7 @@ grant update, delete on public.known_places to authenticated;
 -- migration's own revokes come after. Replay 026's in that order.
 revoke select on public.phone_checks from authenticated;
 -- 0077: sign-in locks are read and written by the server only.
-revoke all on public.sign_in_lockouts, public.sign_in_trusted_devices from authenticated;
+revoke all on public.sign_in_lockouts, public.sign_in_trusted_devices, public.recent_auth from authenticated;
 grant select (id, user_id, requested_by, devices, created_at, delivered_at, opened_at)
   on public.phone_checks to authenticated;
 
@@ -779,6 +782,14 @@ select assert(exists (select 1 from storage.objects
 
 reset role;
 alter table storage.objects disable row level security;
+
+-- Zero trust (0080): nobody signed in reads or writes confirmations.
+select assert(not has_table_privilege('authenticated', 'public.recent_auth', 'select')
+                and not has_table_privilege('authenticated', 'public.recent_auth', 'insert')
+                and not has_function_privilege('authenticated', 'public.confirm_recent_auth(uuid)', 'execute')
+                and not has_function_privilege('authenticated', 'public.recent_auth_ok(uuid, integer)', 'execute')
+                and not has_function_privilege('authenticated', 'public.sign_in_device_status(text, text)', 'execute'),
+  'rls: re-confirmations and device checks are server only');
 
 reset role;
 select 'ALL RLS CHECKS PASSED';

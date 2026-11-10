@@ -3,6 +3,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { apiError, requireApiSession } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 import { buildStaffLoginDoc, staffLogins } from '@/lib/staff-logins'
+import { requireRecentAuth } from '@/lib/reconfirm'
 
 /**
  * The staff login sheet as Word (migration 041): built from the live staff
@@ -11,7 +12,8 @@ import { buildStaffLoginDoc, staffLogins } from '@/lib/staff-logins'
  */
 export async function GET(request: Request) {
   try {
-    await requireApiSession(['admin'])
+    // It holds temporary passwords: the password again first (0080).
+    await requireRecentAuth(await requireApiSession(['admin']))
     const staff = await staffLogins(createAdminSupabase())
     const site = new URL(request.url).origin
     const file = await buildStaffLoginDoc(staff, site)

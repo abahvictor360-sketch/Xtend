@@ -339,6 +339,26 @@ export default async function SupervisorGuidePage() {
                 ),
               },
               {
+                q: 'Can I protect my account with a code?',
+                a: (
+                  <>
+                    Yes. Open <Ui>Two-step sign-in</Ui> in the menu (or go to <Ui>/mfa/setup</Ui>), scan the QR
+                    code with Google or Microsoft Authenticator and type the 6-digit code. After that Xtend asks
+                    for a code from the app each time you sign in. Lost your phone? Ask an admin to reset it.
+                  </>
+                ),
+              },
+              {
+                q: 'Why was I signed out?',
+                a: (
+                  <>
+                    For safety, a dashboard sign-in lasts 12 hours and ends after an hour with nothing done; just
+                    log in again. If you get a notification about a new sign-in that was not you, change your
+                    password at once and tell an admin.
+                  </>
+                ),
+              },
+              {
                 q: 'Someone left the company',
                 a: <>Deactivate them on Staff. Their history stays.</>,
               },

@@ -96,6 +96,20 @@ export default async function AdminGuidePage() {
               <Ui>Unlock</Ui> or <Ui>Reset password</Ui> lets them back in.
             </li>
             <li>
+              <Ui>Zero trust</Ui> (0080): Xtend checks the person on every request, wherever they are.
+              Admins and HR enter a 6-digit code from an authenticator app (Google or Microsoft
+              Authenticator) after their password; the first time, Xtend shows a QR code to scan.
+              Supervisors can turn it on under <Ui>Two-step sign-in</Ui> in the menu (or open{' '}
+              <Ui>/mfa/setup</Ui>); field staff never see it. Without the code the database gives no admin or
+              HR power, even with the right password. An office sign-in lasts 12 hours at most and ends
+              after an hour with nothing done. Changing someone&apos;s role or email, deleting an account,
+              a new password or deactivation for an office account, resetting two-step sign-in, the
+              login sheet and the CSV import ask for your password again (<Ui>Confirm it is you</Ui>) if you
+              have not given it in the last 10 minutes. When an office account signs in on a new phone or
+              computer, the person and every admin get a notification (audit <Ui>auth.new_device</Ui>):
+              if it was not them, reset their password. Changes sent from another website are refused.
+            </li>
+            <li>
               <Ui>Limits and safeguards</Ui> (0079): each person may have up to 60 photos checked, 120
               place lookups, 20 support helper replies and 60 Ask Xtend questions an hour; past that they
               are asked to wait (a support message is still sent and the office answers it, as it does
@@ -817,6 +831,18 @@ export default async function AdminGuidePage() {
                     exists. Staff shows <Ui>Sign-in paused until</Ui>; <Ui>Unlock</Ui> lifts every pause, and{' '}
                     <Ui>Reset password</Ui> does too. Supervisors unlock their own team and HR anyone but admins. Each unlock is in the audit
                     log as <Ui>user.unlock</Ui>.
+                  </>
+                ),
+              },
+              {
+                q: 'Someone lost the phone with their authenticator app',
+                a: (
+                  <>
+                    On Staff, press <Ui>Reset two-step sign-in</Ui> for them (admins only; it asks for your
+                    password). At their next sign-in they scan a new QR code on their new phone. Audited as{' '}
+                    <Ui>user.mfa_reset</Ui>. If no admin can sign in at all, the owner runs this in the Supabase SQL
+                    editor: <Ui>update public.system_settings set mfa_roles = &apos;{'{hr}'}&apos;;</Ui>, signs in,
+                    resets it, then sets it back with <Ui>&apos;{'{admin,hr}'}&apos;</Ui>.
                   </>
                 ),
               },

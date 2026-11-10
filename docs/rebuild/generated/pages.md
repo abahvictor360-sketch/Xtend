@@ -2,7 +2,7 @@
 
 # Pages
 
-60 pages. "Who" is what `requireSession` admits (field pages are also guarded by their layout).
+62 pages. "Who" is what `requireSession` admits (field pages are also guarded by their layout).
 
 ## `/admin/activity` — Activity log — Xtend
 
@@ -342,7 +342,7 @@ On screen: Upload a CSV with the columns
 
 - File: `src/app/admin/users/page.tsx`
 - Who: ['admin', 'supervisor', 'hr']
-- Components: `ui/button`, `admin/staff-manager`
+- Components: `admin/staff-logins-button`, `ui/button`, `admin/staff-manager`
 
 ## `/admin/visits` — Store visits — Xtend
 
@@ -469,6 +469,24 @@ The staff guide: public, so it can be shared before anyone signs in.
 - Components: `ui/skeleton`, `brand/logo`
 
 On screen: Use the email or phone number your admin registered.
+
+## `/mfa` — Enter your code — Xtend
+
+- File: `src/app/mfa/page.tsx`
+- Who: public / own check
+
+Two-step sign-in (0080): the code from the authenticator app.
+
+On screen: Open your authenticator app and type the 6-digit code it shows for Xtend.
+
+## `/mfa/setup` — Two-step sign-in — Xtend
+
+- File: `src/app/mfa/setup/page.tsx`
+- Who: public / own check
+
+Setting up two-step sign-in (0080): required for the roles in
+mfa_roles (admins and HR), a choice for supervisors. Field staff are not
+offered it.
 
 ## `/offline` — Offline — Xtend
 

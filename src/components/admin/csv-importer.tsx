@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { confirmedFetch } from '@/components/reconfirm'
 
 interface RowResult {
   line: number
@@ -68,7 +69,7 @@ export function CsvImporter({ outletNames }: { outletNames: string[] }) {
   async function validate(parsed: Record<string, string | null>[]) {
     setBusy(true)
     try {
-      const res = await fetch('/api/admin/users/import', {
+      const res = await confirmedFetch('/api/admin/users/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rows: parsed, commit: false }),
@@ -90,7 +91,7 @@ export function CsvImporter({ outletNames }: { outletNames: string[] }) {
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch('/api/admin/users/import', {
+      const res = await confirmedFetch('/api/admin/users/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rows, commit: true }),

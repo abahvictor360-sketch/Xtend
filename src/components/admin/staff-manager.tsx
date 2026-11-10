@@ -18,6 +18,7 @@ import { RoleSelect } from '@/components/admin/role-select'
 import { BUILT_IN_ROLES, parseRoleValue, roleLabel, roleValue, type StaffRole } from '@/lib/staff-roles'
 import { emailAddress, personName, phoneNumber } from '@/lib/fields'
 import { problemWith } from '@/lib/field-check'
+import { confirmedFetch } from '@/components/reconfirm'
 
 interface Draft {
   full_name: string
@@ -235,7 +236,7 @@ export function StaffManager({
     setError(null)
     setSaved(null)
     try {
-      const res = await fetch(`/api/admin/users/${person.id}`, { method: 'DELETE' })
+      const res = await confirmedFetch(`/api/admin/users/${person.id}`, { method: 'DELETE' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
         setError(data.error ?? 'That account could not be deleted.')
@@ -250,11 +251,25 @@ export function StaffManager({
     }
   }
 
+  async function resetMfa(person: Profile) {
+    if (
+      !confirm(
+        `Reset two-step sign-in for ${person.full_name}? Their authenticator app stops working for Xtend and they set it up again at their next sign-in. Do this when they lost or changed their phone.`,
+      )
+    ) {
+      return
+    }
+    setSaved(null)
+    if (await patch(person.id, { reset_mfa: true })) {
+      setSaved(`Two-step sign-in was reset for ${person.full_name}.`)
+    }
+  }
+
   async function patch(id: string, changes: Record<string, unknown>): Promise<boolean> {
     setBusy(true)
     setError(null)
     try {
-      const res = await fetch(`/api/admin/users/${id}`, {
+      const res = await confirmedFetch(`/api/admin/users/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(changes),
@@ -630,6 +645,16 @@ export function StaffManager({
                   >
                     {person.is_active ? 'Deactivate' : 'Reactivate'}
                   </Button>
+                  {isAdmin && !isField(person.role) && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled={busy}
+                      onClick={() => void resetMfa(person)}
+                    >
+                      Reset two-step sign-in
+                    </Button>
+                  )}
                   {isAdmin && isField(person.role) && (
                     <ExemptButton person={person} busy={busy} patch={patch} />
                   )}
@@ -783,6 +808,16 @@ export function StaffManager({
                 >
                   {person.is_active ? 'Deactivate' : 'Reactivate'}
                 </Button>
+                {isAdmin && !isField(person.role) && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={busy}
+                    onClick={() => void resetMfa(person)}
+                  >
+                    Reset two-step sign-in
+                  </Button>
+                )}
                 {isAdmin && isField(person.role) && (
                   <ExemptButton person={person} busy={busy} patch={patch} />
                 )}

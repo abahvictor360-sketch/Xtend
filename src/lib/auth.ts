@@ -1,3 +1,4 @@
+import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { cache } from 'react'
 import { createServerSupabase } from '@/lib/supabase/server'
@@ -5,13 +6,27 @@ import type { Profile, UserRole } from '@/lib/types'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { lagosDateString } from '@/lib/utils'
 import { CHANGE_PASSWORD_CODE, CHANGE_PASSWORD_MESSAGE, passwordChangeBlocks } from '@/lib/password-gate'
+import {
+  DEFAULT_MFA_ROLES,
+  LAST_SEEN_HEADER,
+  OFFICE_ROLES,
+  mfaStep,
+  officeRelogin,
+  type MfaStep,
+} from '@/lib/zero-trust'
 
 export interface Session {
   userId: string
   email: string | null
   profile: Profile
-  /** Set when a merchandiser or marketer must log in again before going on. */
+  /**
+   * Set when the person must log in again before going on: a field
+   * sign-in from yesterday or after clocking out, or an office sign-in
+   * past 12 hours or idle for an hour (zero trust, lib/zero-trust.ts).
+   */
   relogin: ReloginReason | null
+  /** Two-step sign-in (0080): what is still to do, if anything. */
+  mfa: { step: MfaStep | null; enrolled: boolean; required: boolean }
 }
 
 /**
@@ -20,7 +35,7 @@ export interface Session {
  * holds the phone the next morning has to know the password, which stops a
  * colleague clocking in on a phone left logged in.
  */
-export type ReloginReason = 'new-day' | 'clocked-out'
+export type ReloginReason = 'new-day' | 'clocked-out' | 'office-time' | 'idle'
 
 const DAILY_LOGIN_ROLES: UserRole[] = ['merchandiser', 'marketer']
 
@@ -29,6 +44,16 @@ async function reloginReason(
   user: User,
   profile: Profile,
 ): Promise<ReloginReason | null> {
+  if (OFFICE_ROLES.includes(profile.role)) {
+    // The middleware hands over when this browser last made a request.
+    const seen = Number((await headers()).get(LAST_SEEN_HEADER))
+    return officeRelogin({
+      role: profile.role,
+      lastSignInAt: user.last_sign_in_at ?? null,
+      lastSeenMs: Number.isFinite(seen) && seen > 0 ? seen : null,
+      now: Date.now(),
+    })
+  }
   if (!DAILY_LOGIN_ROLES.includes(profile.role)) return null
   const today = lagosDateString()
   // Africa/Lagos is UTC+1 all year.
@@ -68,8 +93,27 @@ export const getSession = cache(async (): Promise<Session | null> => {
     email: user.email ?? null,
     profile,
     relogin: await reloginReason(supabase, user, profile),
+    mfa: await mfaState(supabase, profile),
   }
 })
+
+/**
+ * Two-step sign-in for this session. Field staff never set it up, so they
+ * are not asked. Whether a role must use it is the database's answer
+ * (my_mfa_required, 0080); before that migration runs, admins and HR.
+ */
+async function mfaState(supabase: SupabaseClient, profile: Profile): Promise<Session['mfa']> {
+  if (!OFFICE_ROLES.includes(profile.role)) {
+    return { step: null, enrolled: false, required: false }
+  }
+  const [{ data: level }, { data: needed, error }] = await Promise.all([
+    supabase.auth.mfa.getAuthenticatorAssuranceLevel(),
+    supabase.rpc('my_mfa_required'),
+  ])
+  const required = error ? DEFAULT_MFA_ROLES.includes(profile.role) : needed === true
+  const enrolled = level?.nextLevel === 'aal2'
+  return { step: mfaStep({ required, enrolled, aal: level?.currentLevel ?? null }), enrolled, required }
+}
 
 /** Page-level guard. Redirects rather than throwing. */
 export async function requireSession(roles?: UserRole[]): Promise<Session> {
@@ -77,6 +121,8 @@ export async function requireSession(roles?: UserRole[]): Promise<Session> {
   if (!session) redirect('/login')
   if (!session.profile.is_active) redirect('/deactivated')
   if (session.relogin) redirect(`/api/auth/expired?reason=${session.relogin}`)
+  if (session.mfa.step === 'challenge') redirect('/mfa')
+  if (session.mfa.step === 'setup') redirect('/mfa/setup')
   if (session.profile.must_change_password) redirect('/change-password')
   if (roles && !roles.includes(session.profile.role)) redirect('/')
   return session
@@ -99,7 +145,10 @@ export class ApiError extends Error {
  */
 export async function requireApiSession(
   roles?: UserRole[],
-  { allowDuringPasswordChange = false }: { allowDuringPasswordChange?: boolean } = {},
+  {
+    allowDuringPasswordChange = false,
+    allowBeforeMfa = false,
+  }: { allowDuringPasswordChange?: boolean; allowBeforeMfa?: boolean } = {},
 ): Promise<Session> {
   const session = await getSession()
   if (!session) throw new ApiError('Not authenticated', 401)
@@ -112,6 +161,12 @@ export async function requireApiSession(
       401,
       'relogin',
     )
+  }
+  if (!allowBeforeMfa && session.mfa.step === 'challenge') {
+    throw new ApiError('Enter the code from your authenticator app first.', 401, 'mfa')
+  }
+  if (!allowBeforeMfa && session.mfa.step === 'setup') {
+    throw new ApiError('Set up two-step sign-in first.', 403, 'mfa_setup')
   }
   if (passwordChangeBlocks(Boolean(session.profile.must_change_password), allowDuringPasswordChange)) {
     throw new ApiError(CHANGE_PASSWORD_MESSAGE, 403, CHANGE_PASSWORD_CODE)

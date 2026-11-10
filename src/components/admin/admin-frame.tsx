@@ -131,7 +131,13 @@ export function AdminFrame({
             </div>
           </div>
 
-          <div className="px-4 pb-5">
+          <div className="space-y-1 px-4 pb-5">
+            <Link
+              href="/mfa/setup"
+              className="flex h-10 items-center rounded-xl px-3 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              Two-step sign-in
+            </Link>
             <SignOutButton className="h-10 w-full justify-start px-3 text-sm" />
           </div>
         </aside>

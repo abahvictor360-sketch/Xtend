@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, dbErrorMessage, requireApiSession } from '@/lib/auth'
+import { requireRecentAuth } from '@/lib/reconfirm'
 import { audit } from '@/lib/audit'
 import { deliverCredentials, generateTempPassword } from '@/lib/credentials'
 import { emailAddress, optionalPhone, personName } from '@/lib/fields'
@@ -40,7 +41,7 @@ export interface ImportRowResult {
  */
 export async function POST(request: Request) {
   try {
-    await requireApiSession(['admin'])
+    await requireRecentAuth(await requireApiSession(['admin']))
     const parsed = bodySchema.safeParse(await request.json())
     if (!parsed.success) return Response.json({ error: 'Invalid import payload' }, { status: 400 })
 

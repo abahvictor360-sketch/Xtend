@@ -2,7 +2,7 @@
 
 # API routes
 
-123 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+125 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
 
 ## `POST /api/activity`
 
@@ -1164,6 +1164,8 @@ const patchSchema = z.object({
   reset_password: z.boolean().optional(),
   /** Lift a sign-in lock (0077) early. */
   unlock: z.boolean().optional(),
+  /** Admin only: remove their authenticator app so they set it up again (0080). */
+  reset_mfa: z.boolean().optional(),
 })
 ```
 
@@ -1258,6 +1260,22 @@ The server decides whether the login has expired, not the link: anyone
 can put this address in a page or a message, and opening it must not
 sign out somebody whose login is still good.
 
+## `POST /api/auth/mfa/done`
+
+- File: `src/app/api/auth/mfa/done/route.ts`
+- Who: public / own check
+
+After the browser finished a two-step step with Supabase (0080): the
+server checks this session really is two-step now, counts the fresh code
+as a recent confirmation for risky actions, and audits a new setup.
+
+```ts
+const schema = z.object({ event: z.enum(['enroll', 'verify']) })
+```
+
+- Database functions: `confirm_recent_auth`
+- Tables and views: `audit_log`
+
 ## `POST /api/auth/password`
 
 - File: `src/app/api/auth/password/route.ts`
@@ -1273,6 +1291,25 @@ const schema = z.object({
 })
 ```
 - Tables and views: `profiles`
+
+## `POST /api/auth/reconfirm`
+
+- File: `src/app/api/auth/reconfirm/route.ts`
+- Who: public / own check
+
+"Confirm it is you" before a risky action (0080): the password, and the
+code for an account with two-step sign-in, checked afresh on the server.
+A success counts for 10 minutes (requireRecentAuth) and is audited.
+
+```ts
+const schema = z.object({
+  password: z.string().min(1).max(200),
+  code: z.string().trim().max(6).optional().nullable(),
+})
+```
+
+- Database functions: `confirm_recent_auth`
+- Tables and views: `audit_log`
 
 ## `POST /api/auth/sign-in`
 
@@ -1290,7 +1327,7 @@ const schema = z.object({
 })
 ```
 
-- Database functions: `sign_in_lock_status`, `sign_in_succeeded`, `sign_in_failed`
+- Database functions: `sign_in_lock_status`, `sign_in_device_status`, `sign_in_succeeded`, `sign_in_failed`
 - Tables and views: `profiles`
 
 ## `POST /api/beacon`
