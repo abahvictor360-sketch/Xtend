@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-11-08, after several app containers behind the panel's load balancer with a shared Redis for attempt limits and cached answers (no migration); see earlier entries for 2026-11-05 and before._
+_Last updated: 2026-11-10, after zero trust: two-step sign-in for admins and HR, office sign-in limits, the origin check on changes, the password again before risky Staff actions and new-device alerts (0080); see earlier entries for 2026-11-08 and before._
 
 ---
 
@@ -665,6 +665,48 @@ the code lives.
   pause on the account); **Reset password** lifts them too
   (`sign_in_clear`). A test reset keeps both tables.
 
+- **Zero trust** (0080): every request proves who it is, whatever network
+  it came over. Five parts:
+  - **Two-step sign-in**: a 6-digit code from an authenticator app (Google
+    Authenticator, Microsoft Authenticator, any TOTP app; Supabase Auth
+    MFA). Needed by the roles in `system_settings.mfa_roles` (admin and HR
+    to begin with), offered to supervisors, never to field staff.
+    `requireSession` sends a person to `/mfa` (enter the code) or
+    `/mfa/setup` (scan the QR code, type the first code) from
+    `mfaStep()`; API routes answer 401 `mfa` or 403 `mfa_setup` until then.
+    In Postgres, `is_admin()` and `is_hr()` only count a session that
+    passed the code (`aal2`) and an active account, so a stolen password
+    gets no admin or HR power even if the app were bypassed. The sidebar's
+    **Two-step sign-in** link opens `/mfa/setup`. An admin's **Reset
+    two-step sign-in** on Staff (PATCH `{reset_mfa: true}`, audited
+    `user.mfa_reset`) removes a lost phone's app.
+  - **Office sign-in limits**: a supervisor, admin or HR sign-in lasts 12
+    hours at most and ends after 60 minutes with no request
+    (`officeRelogin()`; the middleware keeps the `xt_seen` cookie with the
+    time of the last request and hands the previous one to the app as
+    `x-xt-last-seen`; requests marked `x-xt-background: 1`, the version
+    check, do not count). Login then says why.
+  - **The password again for risky actions**: changing a role, staff role
+    or email, resetting two-step sign-in, deleting an account, a new
+    password or (de)activation for an office account, the login sheet
+    download and the CSV import need the password (and code) confirmed in
+    the last 10 minutes (`requireRecentAuth`, table `recent_auth`). The
+    server answers 403 `reconfirm`; the dashboard's `confirmedFetch` opens
+    the **Confirm it is you** box, checks through `/api/auth/reconfirm`
+    (10 tries per 15 minutes, audited `auth.reconfirm`) and sends the
+    action again once.
+  - **Origin check**: a change (`POST`, `PATCH`, `PUT`, `DELETE`) to
+    `/api/…` from another site's page is refused with 403 `origin`
+    (`originAllowed()`, in the middleware): the `Origin` host must be the
+    request's host, and with no `Origin`, `Sec-Fetch-Site` must not say
+    cross-site or same-site. The scheduled jobs and the native tracker
+    (`/api/cron/`, `/api/track/`) carry no cookies and are left out.
+  - **New-device alerts**: when an office account signs in on a phone or
+    computer it has never used while it already has a known one
+    (`sign_in_device_status`), the person and every other active admin are
+    notified and it is audited `auth.new_device` (`alertNewOfficeDevice`).
+    Never for field staff.
+
 ## 6. The database: every migration
 
 Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
@@ -745,6 +787,7 @@ Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
 | 0076 | `my_supervisor()` (id, full_name, avatar_path): the staff member's own supervisor, name and photo only, for the Messages page header (SECURITY DEFINER; staff cannot read the office's profiles) |
 | 0077 | Sign-in lockout that pauses the guessing device, not the account: `sign_in_lockouts` (lock_key, account, scope device/address/account, counts, locked_until; RLS on, no grants) and `sign_in_trusted_devices` (account, SHA-256 of the device token; forgotten after 180 days unused); service-role only `sign_in_lock_status(account, address, device)`, `sign_in_failed(…)` (5 per device or address, 20 per account from unknown devices, within 15 minutes → 15-minute pause), `sign_in_succeeded(…, new_device)`, `sign_in_clear(account)`; `can_unlock_sign_in(user)`, `unlock_sign_in(user)` (admins anyone, supervisors their team, HR anyone but admins; audited `user.unlock`); `locked_accounts()` for the Staff page |
 | 0079 | Security fixes: trigger `trg_profiles_zz_field_only_reporting` (`profiles_field_only_reporting()`, BEFORE insert or update, named to fire after the 0042 role sync) clears `supervisor_id` on anyone who is not a merchandiser or marketer, plus a one-off clear of existing links; `message_file_readable(name)` (uploader, or anyone `can_message` lets read a message carrying it) and policy `message_files_read` rewritten to use it, with index `messages_by_attachment_path`; `outlets_for_user(target)` now answers only for the caller, their team, admins, HR (not for admins) and the server (no signed-in user); storage policy `reports_update_own` dropped (photos in `reports` are never overwritten). No new table |
+| 0080 | Zero trust: `system_settings.mfa_roles` (default `{admin,hr}`); `session_aal()`, `mfa_required_for(role)`, `mfa_satisfied()`, `my_mfa_required()`; `is_admin()` and `is_hr()` now also need an active account and, for a role in `mfa_roles`, a session that passed the code step (`aal2`); table `recent_auth` (server only) with `confirm_recent_auth(user)` and `recent_auth_ok(user, minutes)` (service role only); `sign_in_device_status(account, device)` → `{known, any_known}` (service role only). Turn the code off for a role: `update public.system_settings set mfa_roles = '{hr}';` |
 | 0078 | Function grants: revokes EXECUTE from `public`, `anon` and `authenticated` on every trigger and event-trigger function in `public` (they fire without it) and on `place_is_recognised(lat, lng)` (only other database functions call it), after Supabase's security advisor found them callable signed out |
 | 0075 | Message attachments: `messages.attachment_path/name/mime/size_bytes/kind`; `messages_body_check` relaxed (words **or** an attachment); `messages_attachment_check` (all five columns together, picture or PDF ≤ 10 MB); private `message-files` bucket with `message_files_insert_own` + `message_files_read`; `send_message(uuid, text, jsonb)` (drops the 2-arg form, validates and stores the attachment); `conversation` returns the attachment columns; `message_inbox` preview shows "Attachment" for a file-only message |
 | 0074 | Office stock count: `xm_counts.source` (`'field'`/`'office'`, default `'field'`); `lat`, `lng`, `accuracy_m`, `photo_path` made nullable; the `photo_path` UNIQUE constraint replaced by a partial unique index (`xm_counts_photo_path_uniq`, where not null); check `xm_counts_source_shape_check` (field counts keep GPS + photo, office counts carry neither); `xm_office_count(outlet, lines)` (admin only, no GPS/photo, same line checks as `xm_submit_count`, recorded under `auth.uid()`) |
@@ -922,7 +965,7 @@ for s in check-allocate check-assistant-actions check-attendance check-audit \
          check-schedules-leave check-marketer-reports check-clock-out-reminder check-activity \
          check-xm-features check-report-files check-system-reset check-report-photos check-retention \
          check-places-usage check-shift-reminders check-follow-live check-bot-guard \
-         check-security-fixes check-assistant-cache check-redis; do
+         check-security-fixes check-assistant-cache check-redis check-zero-trust; do
   npx tsx --tsconfig tsconfig.scripts.json scripts/$s.ts | tail -1
 done
 ```
@@ -940,13 +983,14 @@ src/app/field/…           Staff app pages (home, count, report, metrics, histo
 src/app/admin/…           Dashboard pages, one folder per menu item
 src/app/api/…             Route handlers (field, admin, cron, track, version, push, support, messages)
 src/app/guide, download   Public staff guide and app download page
+src/app/mfa/…             Two-step sign-in: enter the code, set it up (office roles)
 src/components/field/…    Staff app components (clock panel, heartbeat, shift tracker, forms)
 src/components/admin/…    Dashboard components
 src/components/messages/  The staff ↔ supervisor conversation, shared by app and dashboard
 src/components/ui/…       Buttons, cards, inputs, badges, tables
 src/lib/…                 Shared logic: auth, audit, geo, integrity, movement, assistant,
                           exports (export/), X Metrics (metrics/), offline outbox (offline/)
-src/middleware.ts         Session refresh and sign-in redirects
+src/middleware.ts         Session refresh, sign-in redirects, origin check, last-request cookie
 public/sw.js              Service worker: offline shell, web push
 supabase/migrations/      The database, in order
 supabase/tests/           Database tests and the Supabase stand-in
@@ -1011,6 +1055,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-11-10 | **Zero trust** (section 5): two-step sign-in (authenticator app code, Supabase MFA) needed for admins and HR, offered to supervisors (`/mfa`, `/mfa/setup`, sidebar link, Staff **Reset two-step sign-in**); `is_admin()`/`is_hr()` need the code step and an active account; office sign-ins last 12 hours and end after 60 minutes idle (`xt_seen` cookie); changes to `/api/…` from another site refused (403 `origin`); risky Staff actions (role, email, delete, office password or (de)activation, two-step reset, login sheet, CSV import) need the password confirmed in the last 10 minutes (**Confirm it is you** box, `/api/auth/reconfirm`); office sign-ins from a new device notify the person and the admins. New check `scripts/check-zero-trust.ts`. Deploy the code first, then run 0080; TOTP must be on in Supabase → Authentication → Multi-Factor | 0080 |
 | 2026-11-08 | **Several containers and Redis**: the panel's Traefik is the load balancer for 2 or more app containers (Dokploy: application replicas, replaced one by one; or the new `docker-compose.yml` with `APP_REPLICAS` and a private Redis: password required, no port, nothing on disk, 256 MB, oldest dropped first). With `REDIS_URL` set, every attempt limit (`src/lib/rate-limit.ts`: sign-in, password change, photo checks, place lookups, support helper, Ask Xtend) is counted once for all containers, and the shared caches (`src/lib/ttl-cache.ts` `shared`: Ask Xtend answers and lookups, the version rows and roles, the app-release lookup, the X Metrics switches) are kept once in Redis under `xt:`. Redis is never required: commands give up after 300 ms, nothing queues while it is down, the first command after a start waits at most 500 ms once for the first connection, and every caller falls back to memory. `/api/health` with the job secret shows `redis` and `redis_reachable`. `allowAttempt` is now async (every caller awaits it). New check `scripts/check-redis.ts` (starts a throwaway `redis-server` if installed) | — |
 | 2026-11-05 | **Security fixes** (section 4.9): a supervisor can no longer reset the password of or deactivate somebody promoted above them (`/api/admin/users/<id>` asks `can_edit_staff` as the caller, `/api/admin/users` asks `can_create_staff`; only field staff keep a supervisor); message attachments readable only by the sender and whoever may read the message; `outlets_for_user` limited to the caller's reach; photos in `reports` never overwritten (the X Metrics shelf photo upload no longer upserts); every phone-sent storage path checked by `src/lib/storage-path.ts`; per-person hourly limits on photo checks (60), place lookups (120, field roles only), support helper replies (20; after 12 messages a conversation goes to the office) and Ask Xtend (60) (`src/lib/usage-limits.ts`); `GOOGLE_MONTHLY_LOOKUP_LIMIT` defaults to 20,000; API calls refused with 403 `change_password` until a forced password change is done; changing a password needs the current one (new field on the form, not on the first change); sign-in for an unknown phone takes as long as a wrong password; raw database and account-service errors replaced by plain words; every `[format]` download refuses an unknown format before auditing; CSV cells that start like a formula get a leading `'`; `/api/health` public answer is `{ ok, checked_at }` (details with the job secret); `/api/version/seen` uses the usual session checks; `.env.*` ignored, `.env.example` lists every setting, `.claudeignore`/`.cursorignore`/`.aiexclude`, a Secrets rule in `CLAUDE.md`. New check `scripts/check-security-fixes.ts` | 0079 |
 | 2026-11-03 | **Bots blocked** (section 4.8): `src/app/robots.ts` disallows everything; `X-Robots-Tag: noindex, nofollow, noarchive` on every response and a robots meta tag on every page; the middleware refuses empty and bot user agents (crawlers, AI bots, link previewers, curl/wget/scripting libraries, headless browsers) with a 403 via `src/lib/bot-guard.ts`, never the apps, browsers, `/api/cron/*`, `/api/track/*`, `/api/health`, `/api/version` or static files. Optional Cloudflare Turnstile on `/login` (`NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`; `src/lib/turnstile.ts`, `src/components/human-check.tsx`), confirmed in `/api/auth/sign-in` before the password. Docker build argument for the site key. New check `scripts/check-bot-guard.ts` | — |
@@ -1086,6 +1131,20 @@ Newest first. Dates are when the work landed on the main branch.
 | 2026-09-09 | First build: clock in and out, dashboard, marketer role, push, no-show alerts, place names | 0001–0008 |
 
 ## 15. Open items
+
+- **Two-step sign-in, before 0080 is run**: the app already asks admins
+  and HR for the code (default roles), skips the 10-minute password check
+  and sends no new-device alerts. Run 0080 after deploying the code, never
+  before (old code cannot reach `aal2`, so admins would lose their power).
+  Supabase → Authentication → Multi-Factor must allow TOTP. An admin who
+  lost their phone: another admin uses **Reset two-step sign-in**; if no
+  admin can sign in, run `update public.system_settings set mfa_roles =
+  '{hr}';` in the SQL editor (or delete the factor under Authentication →
+  Users), then set it back to `'{admin,hr}'`. There are no backup codes yet.
+- **Origin check and other front doors**: if Xtend is ever served on two
+  addresses at once (say a custom domain and the Vercel address), each
+  page only changes things on its own address, which is what a browser
+  does anyway.
 
 - **Several containers**: the IP-to-country cache behind the VPN check
   (`src/lib/audit-context.ts`) is still per container, so each one looks an

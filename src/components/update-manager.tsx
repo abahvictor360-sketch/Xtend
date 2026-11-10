@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Download, RefreshCw, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { callNative, hasPlugin, nativePlatform } from '@/lib/native'
+import { BACKGROUND_HEADER } from '@/lib/zero-trust'
 import {
   buildNumber,
   decideUpdate,
@@ -72,7 +73,7 @@ export function UpdateManager() {
     lastCheck.current = Date.now()
     let info: VersionInfo
     try {
-      const res = await fetch('/api/version', { cache: 'no-store' })
+      const res = await fetch('/api/version', { cache: 'no-store', headers: { [BACKGROUND_HEADER]: '1' } })
       if (!res.ok) return
       info = (await res.json()) as VersionInfo
     } catch {
@@ -102,7 +103,7 @@ export function UpdateManager() {
       reported.current = key
       void fetch('/api/version/seen', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', [BACKGROUND_HEADER]: '1' },
         body: JSON.stringify({ platform: platform ?? 'web', app_version: appVersion, app_build: appBuild, web_build: MY_BUILD || null }),
       }).catch(() => {})
     }

@@ -57,7 +57,7 @@ Whole page has class `admin-shell`, `min-h-dvh`, canvas background.
   - Lower card, hidden when the window is 1150 px tall or less (`[@media(max-height:1150px)]:hidden`):
     - When the assistant is configured: a black round icon with a sparkle, **"Ask Xtend"**, the line **"Who clocked in late? Who is off site? Ask in plain words."**, and a black full-width button **"Ask a question"** linking to `/admin/ask`.
     - Otherwise: a key icon, **"Your account"**, **"Keep your password private. Change it any time."**, button **"Change password"** to `/change-password`.
-  - Bottom: **"Sign out"** outline button (full width, left aligned). Sign out calls `supabase.auth.signOut()`, then `router.replace('/login')` and `router.refresh()`.
+  - Bottom: a plain link **"Two-step sign-in"** to `/mfa/setup` (0080), then the **"Sign out"** outline button (full width, left aligned). Sign out calls `supabase.auth.signOut()`, then `router.replace('/login')` and `router.refresh()`.
 - Right: the workspace on the grey canvas. When `testMode` is set, a full-width dark orange link to `/admin/system` reading **"Test mode: records can be reset"** (flask icon) sits at the very top, above the top bar on desktop and the sticky header on phones (see §28a).
   - Top bar (desktop only), padding 24 px sides, 20 px top:
     - Left: a search form, max width `sm` (384 px), that GETs `/admin/users` with field `q`. Search icon inside on the left; placeholder **"Find staff by name, email or phone"**; aria-label "Find staff"; 44 px tall; focus ring brand.
@@ -1589,7 +1589,7 @@ Files: `src/app/admin/users/page.tsx`, `src/app/admin/users/import/page.tsx`, `s
 
 Heading **"Staff"**. Admin intro: "Accounts are created here. Deactivation is a soft delete: attendance history is never destroyed." Supervisor intro: "Your team. People you add here report to you, and you can reset a password or deactivate an account."
 
-Admin-only buttons on the right: **Login details (Word)** (file icon; downloads `/api/admin/staff-logins`, admin only — a Word document "Xtend staff login details", built fresh each time: the Xtend title, "Staff login details and app installation", install steps for Android 7+ and iPhone iOS 15+, then each field worker's name, email, phone and temporary password, or a note when there is none to show, grouped by role including added roles), and **Bulk import CSV** (→ `/admin/users/import`).
+Admin-only buttons on the right: **Login details (Word)** (file icon; a button, `StaffLoginsButton`, that fetches `/api/admin/staff-logins` with `confirmedFetch` and saves the blob under the `Content-Disposition` name, "Making the sheet…" while busy, the error in small red text under it; admin only — a Word document "Xtend staff login details", built fresh each time: the Xtend title, "Staff login details and app installation", install steps for Android 7+ and iPhone iOS 15+, then each field worker's name, email, phone and temporary password, or a note when there is none to show, grouped by role including added roles), and **Bulk import CSV** (→ `/admin/users/import`).
 
 ### Controls
 
@@ -1611,7 +1611,7 @@ Success: a green alert **"Temporary password for `name`"** with the password in 
 
 - Admins edit Role, Outlet and Reports to inline with selects (each change PATCHes `/api/admin/users/<id>` immediately; Reports to only when there are supervisors, never offering the person themselves). Supervisors see plain text (role label, store or "No store", supervisor name or —).
 - Status badges: **Active** (success) / **Deactivated** (outline); **Temp password** (warning) while `must_change_password`; **Sign-in paused until HH:MM** (destructive) while `locked_accounts()` lists them (0077); for field staff **Notifications on** (success), **Notifications off: cannot clock in** (warning), or **Excused from notifications** (outline) when `push_exempt`.
-- Actions (ghost buttons): **Edit details**, **Reset password** (PATCH `{reset_password: true}` → shows the new temporary password the same way; errors from the account service are put in words by `authAdminError` in `src/lib/auth-admin-errors.ts`: a taken email → 409 "Somebody already uses that email.", anything unexpected → "The password could not be reset. Try again." / "The email could not be changed. Try again."), **Unlock** only while paused (PATCH `{unlock: true}` → `unlock_sign_in`, lifts every pause on the account, 403 with the database's message; a password reset also clears them via `sign_in_clear`), **Deactivate** / **Reactivate** (PATCH `{is_active}`, no confirmation), for admins on field staff **Excuse from notifications** / **Require notifications** (confirm "Let `name` clock in without notifications? Only do this for a phone that cannot receive them: their phone can then not be checked live."), **Schedule** (a link, for active merchandisers and marketers, to `/admin/schedules?user=<id>`; outline on phone cards), and for admins **Delete** (red; `confirm` "Delete `name`'s account for good? …" → DELETE `/api/admin/users/<id>`). Delete removes the auth account, which cascades the profile; it is refused with a 409 ("This person has attendance history … Deactivate it instead.") when they have attendance or any other ON DELETE RESTRICT history, and you cannot delete your own account. Supervisors do not see Delete.
+- Actions (ghost buttons): **Edit details**, **Reset password** (PATCH `{reset_password: true}` → shows the new temporary password the same way; errors from the account service are put in words by `authAdminError` in `src/lib/auth-admin-errors.ts`: a taken email → 409 "Somebody already uses that email.", anything unexpected → "The password could not be reset. Try again." / "The email could not be changed. Try again."), **Unlock** only while paused (PATCH `{unlock: true}` → `unlock_sign_in`, lifts every pause on the account, 403 with the database's message; a password reset also clears them via `sign_in_clear`), **Deactivate** / **Reactivate** (PATCH `{is_active}`, no confirmation), for admins on field staff **Excuse from notifications** / **Require notifications** (confirm "Let `name` clock in without notifications? Only do this for a phone that cannot receive them: their phone can then not be checked live."), for admins on office accounts **Reset two-step sign-in** (confirm "Reset two-step sign-in for `name`? Their authenticator app stops working for Xtend and they set it up again at their next sign-in. Do this when they lost or changed their phone." → PATCH `{reset_mfa: true}`: `auth.admin.mfa.listFactors` then `deleteFactor` for each, audited `user.mfa_reset`, success "Two-step sign-in was reset for `name`."), **Schedule** (a link, for active merchandisers and marketers, to `/admin/schedules?user=<id>`; outline on phone cards), and for admins **Delete** (red; `confirm` "Delete `name`'s account for good? …" → DELETE `/api/admin/users/<id>`). Delete removes the auth account, which cascades the profile; it is refused with a 409 ("This person has attendance history … Deactivate it instead.") when they have attendance or any other ON DELETE RESTRICT history, and you cannot delete your own account. Supervisors do not see Delete.
 
 **Phone cards** (< `md`): photo, name, email, phone ("No phone"), the badges on the right; Role / Outlet / Reports to as labelled selects (admins) or text; the same buttons (Edit details and Reset password as outline; Delete red for admins).
 
@@ -2210,3 +2210,40 @@ sign-out, menu links and Add staff have 44px minimum touch targets. Overview
 summary notes wrap rather than truncate; below 380px the three figures stack.
 
 Office document rows wrap full filenames and staff details on small screens. Document downloads, marketer export buttons and activity presets/exports have a minimum 44px height. Document and marketer export links have descriptive accessible names.
+
+
+## Zero trust in the dashboard (0080)
+
+- **`/mfa`** (enter the code) and **`/mfa/setup`** (set it up) use `MfaShell`
+  (the Xtend mark, a card, 390 px friendly). `/mfa` shows only when
+  `session.mfa.step === 'challenge'` (else redirect `/`): "Enter your code",
+  a 6-digit numeric input (one-time-code), **Confirm** →
+  `mfa.listFactors()` → first verified TOTP → `challengeAndVerify` → POST
+  `/api/auth/mfa/done {event: 'verify'}` → `router.replace('/')`; wrong code
+  "That code is not right. Type the code your app shows now."; a **Sign out**
+  button. `/mfa/setup` is for office roles only (others → `/`): required
+  ("Your role needs two-step sign-in") or optional intro; **Start** removes
+  any unverified TOTP, `enroll({factorType: 'totp', friendlyName: 'Xtend
+  <iso>'})`, shows the QR code (`<img src={qr_code}>`) and the secret to type
+  by hand, then the first code → `challengeAndVerify` → POST done `{event:
+  'enroll'}` (confirms `recent_auth`, audits `auth.mfa_enroll`). Already on:
+  "Two-step sign-in is on. Lost your phone? Ask an admin to reset it."; when
+  optional, a **Not now** button.
+- `requireSession` order: relogin (new day, clocked out, `office-time`,
+  `idle`) → MFA step (`/mfa` or `/mfa/setup`) → password change. Login
+  reasons: `office-time` "You have been signed in for 12 hours, so please log
+  in again."; `idle` "You were away for a while, so you were signed out. Log
+  in again to carry on." `requireApiSession` answers 401 `mfa` / 403
+  `mfa_setup` unless `allowBeforeMfa`.
+- **Confirm it is you** (`src/components/reconfirm.tsx`, mounted once in the
+  admin layout): `confirmedFetch(input, init)` sends the request; a 403 with
+  code `reconfirm` opens the box (window event `xt-reconfirm`), and after a
+  confirmation sends it once more. The box: shield icon, "Confirm it is
+  you", "This change needs your password again.", **Your password**, after a
+  `code_needed` answer **6-digit code from your authenticator app**,
+  **Cancel** / **Confirm** ("Checking…"). POST `/api/auth/reconfirm
+  {password, code}`: 10 per 15 minutes per person; `credentialsAreRight` on a
+  throwaway client (wrong → 401 "That password is not right."; code missing
+  or wrong → 401 `code_needed`); ok → `confirm_recent_auth`, audit
+  `auth.reconfirm`. Used by Staff (role, email, delete, office password or
+  activation, two-step reset), the login sheet and the CSV import.

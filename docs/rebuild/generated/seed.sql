@@ -462,6 +462,12 @@ INSERT INTO public.products VALUES ('00000000-0000-4000-8000-000000000237', 'Xpe
 
 
 --
+-- Data for Name: recent_auth; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
 -- Data for Name: reports; Type: TABLE DATA; Schema: public; Owner: -
 --
 
@@ -574,7 +580,7 @@ INSERT INTO public.support_quick_replies VALUES ('00000000-0000-4000-8000-000000
 -- Data for Name: system_settings; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.system_settings VALUES (true, true, NULL, NULL, NULL, NULL, NULL, '2026-01-01 00:00:00+00', 20);
+INSERT INTO public.system_settings VALUES (true, true, NULL, NULL, NULL, NULL, NULL, '2026-01-01 00:00:00+00', 20, '{admin,hr}');
 
 
 --

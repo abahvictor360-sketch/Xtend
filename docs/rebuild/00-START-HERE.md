@@ -77,6 +77,7 @@ default in the last column.
 | AI features | Anthropic Claude via the official SDK, model ids as in `40-platform-and-design.md` | Optional: show a setup notice without the key |
 | Phone apps | Capacitor shells loading the live site; native code only for location and push | Ship web changes without new app builds |
 | Records | Attendance, counts, supplies and audit rows are never edited or deleted | Void with a reason instead |
+| Zero trust (0080) | Every request proves who it is: two-step sign-in (TOTP) for admins and HR, enforced in `is_admin()`/`is_hr()`; office sign-ins 12 h / 60 min idle; the password again within 10 min for risky Staff actions; origin check on `/api/` changes; new-device alerts for office accounts | Field staff are never offered two-step sign-in; deploy the code before 0080 |
 
 ## 4. What only the owner can provide
 
@@ -91,6 +92,7 @@ Ask for these together, at stage 1 and stage 8:
 - Apple Developer account, APNs key, Team ID, Key ID (iPhone app and push).
 - Android signing keystore and passwords (or let the builder generate one).
 - The production domain, and the first admin's name, email and password.
+- Supabase → Authentication → Multi-Factor with TOTP allowed (two-step sign-in, 0080); the first admin sets up their authenticator app at first sign-in.
 
 Everything else (names, wording, colours, numbers, flows) is in the pack.
 

@@ -141,8 +141,36 @@ in force.
   the API roles allowed to use the field app routes (admins can test the
   phone app). Field-only database rules (tracking tokens, absence, push
   requirement) still apply only to merchandiser and marketer.
-- `is_admin()` = the caller's role is `admin`. `current_user_role()` returns
-  the caller's role. Both are `SECURITY DEFINER` to avoid RLS recursion.
+- `is_admin()` = the caller's role is `admin`, the account is active and
+  `mfa_satisfied()` (0080); `is_hr()` the same for `hr`. `current_user_role()`
+  returns the caller's role. All are `SECURITY DEFINER` to avoid RLS recursion.
+- **Zero trust (0080).** `system_settings.mfa_roles user_role[] not null
+  default '{admin,hr}'`. `session_aal()` = `coalesce(nullif(auth.jwt()->>'aal',''),'aal1')`;
+  `mfa_required_for(role)` = role is in `mfa_roles`; `mfa_satisfied()` =
+  `session_aal() = 'aal2'` or the caller's role does not need it;
+  `my_mfa_required()` for the app. Grants: authenticated and service_role.
+  Table `recent_auth(user_id uuid pk references profiles on delete cascade,
+  confirmed_at timestamptz default now())`, RLS on, no grants to anon or
+  authenticated (kept by a test reset). `confirm_recent_auth(user)` upserts
+  now(); `recent_auth_ok(user, minutes default 10)` = confirmed within
+  `greatest(1, least(minutes, 60))` minutes; both service_role only.
+  `sign_in_device_status(account, device)` → jsonb `{known:
+  sign_in_known_device(account, device), any_known: the account has any
+  trusted device}`, service_role only. App rules (`src/lib/zero-trust.ts`):
+  `OFFICE_ROLES` supervisor, admin, HR; `officeRelogin` → `'office-time'`
+  after 12 hours from `last_sign_in_at` (or no readable time), else `'idle'`
+  when the previous request was over 60 minutes ago, field roles never;
+  `mfaStep` → `'challenge'` when a verified factor exists and the session is
+  not aal2, `'setup'` when required and none, else null; `originAllowed`
+  (GET/HEAD/OPTIONS, non-`/api/` paths, `/api/cron/` and `/api/track/` pass;
+  an `Origin` must have the request's host, case-insensitive, `'null'` or
+  unreadable refused; without one, `Sec-Fetch-Site` cross-site or same-site
+  refused; no headers passes). Risky actions need `recent_auth_ok`
+  (`requireRecentAuth`, 403 code `reconfirm`; skipped when the function is
+  missing): PATCH `/api/admin/users/<id>` with `role`, `staff_role_id`,
+  `email` or `reset_mfa`, or with `reset_password`/`is_active` on an office
+  account; DELETE `/api/admin/users/<id>`; GET `/api/admin/staff-logins`;
+  POST `/api/admin/users/import`.
 - Merchandiser: one fixed store, the daily clock. Marketer: a round of
   stores recorded as store visits; also files the daily report.
 - Daily report (`can_file_report`, 0005): marketers and admins only

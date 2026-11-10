@@ -23,6 +23,12 @@ export const DEFAULT_MFA_ROLES: UserRole[] = ['admin', 'hr']
 export const LAST_SEEN_COOKIE = 'xt_seen'
 /** The header the middleware hands the app with the previous request's time. */
 export const LAST_SEEN_HEADER = 'x-xt-last-seen'
+/**
+ * A request the page makes on its own (the version check), not because the
+ * person did something: it does not count as being active, so a forgotten
+ * open tab still reaches the idle limit.
+ */
+export const BACKGROUND_HEADER = 'x-xt-background'
 
 export type OfficeRelogin = 'office-time' | 'idle'
 

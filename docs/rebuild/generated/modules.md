@@ -244,7 +244,9 @@ Exports: `authAdminError`
 
 ## `src/lib/auth.ts`
 
-Set when a merchandiser or marketer must log in again before going on.
+Set when the person must log in again before going on: a field
+sign-in from yesterday or after clocking out, or an office sign-in
+past 12 hours or idle for an hour (zero trust, lib/zero-trust.ts).
 
 Exports: `Session`, `ReloginReason`, `getSession`, `requireSession`, `ApiError`, `requireApiSession`, `apiError`, `dbErrorMessage`, `dbErrorResponse`, `FIELD_ROLES`, `REPORTING_ROLES`, `landingPathFor`
 
@@ -755,6 +757,17 @@ here is a no-op, so the site behaves exactly as before.
 
 Exports: `NativePlatform`, `nativePlatform`, `isNativeApp`, `hasPlugin`, `callNative`, `listenNative`, `NativeLocation`, `watchBackgroundLocation`, `ShiftTrackerState`, `hasShiftTracker`, `startShiftTracker`, `stopShiftTracker`, `followFast`, `shiftTrackerState`, `askAlwaysLocation`, `openBatterySettings`, `nativePostJson`, `NativePushPermission`, `nativePushPermission`, `registerNativePush`, `NativeFix`, `getNativeFix`, `nativeDeviceSignals`
 
+## `src/lib/new-device-alert.ts`
+
+An office account (supervisor, admin, HR) signed in from a phone or
+computer it has never used, while it already has one it uses (0080): the
+person and every admin are told, and it is audited. The very first device
+after an account starts using Xtend is not news, so it is not announced.
+Field staff are never told about this, nor is anyone about field staff's
+devices. Never holds up or fails the sign-in.
+
+Exports: `alertNewOfficeDevice`
+
 ## `src/lib/notification-log.ts`
 
 The notification history, audiences in plain words, reach figures and
@@ -804,7 +817,7 @@ throwaway client that keeps no session, so the person's own sign-in is
 untouched. The new session is ended straight away (locally: a global
 sign-out would end their other sessions too).
 
-Exports: `passwordIsRight`, `NO_SUCH_ACCOUNT`
+Exports: `passwordIsRight`, `credentialsAreRight`, `NO_SUCH_ACCOUNT`
 
 ## `src/lib/password-gate.ts`
 
@@ -925,6 +938,12 @@ while Redis is unreachable, in this server process, which still slows a
 guesser down. Never throws: a broken Redis falls back to memory.
 
 Exports: `allowAttempt`, `allowAttemptInMemory`, `clientAddress`
+
+## `src/lib/reconfirm.ts`
+
+The answer code the dashboard knows to open the "confirm it is you" box for.
+
+Exports: `RECONFIRM_CODE`, `requireRecentAuth`
 
 ## `src/lib/redis.ts`
 
@@ -1234,6 +1253,15 @@ downloads and scripts/check-visits-alerts.ts.
 
 Exports: `VisitRow`, `SHORT_MINUTES`, `FAR_M`, `HOP_KMH`, `HOP_MIN_M`, `VisitView`, `GAPS`, `VisitFilter`, `parseVisitFilter`, `visitQueryString`, `storeName`, `visitFigures`, `Breakdown`, `storeBreakdown`, `personBreakdown`, `Finding`, `hops`, `worthALook`, `visitFlags`, `FLAG_WORDS`, `CoverageRow`, `Covered`, `coverage`, `notVisitedIn`, `coverageCounts`, `movementHref`
 
+## `src/lib/zero-trust.ts`
+
+Zero trust: every request proves who it is and that it came from Xtend
+itself, whatever network it came over. The rules, kept pure so
+scripts/check-zero-trust.ts can check them; the database enforces the
+same ones for admin and HR power (migration 0080).
+
+Exports: `OFFICE_ROLES`, `OFFICE_SESSION_HOURS`, `OFFICE_IDLE_MINUTES`, `RECONFIRM_MINUTES`, `DEFAULT_MFA_ROLES`, `LAST_SEEN_COOKIE`, `LAST_SEEN_HEADER`, `BACKGROUND_HEADER`, `OfficeRelogin`, `officeRelogin`, `MfaStep`, `mfaStep`, `originAllowed`, `deviceLine`
+
 ## `src/components/activity-ping.tsx`
 
 At most one call from this page every few minutes; the database keeps one per 30.
@@ -1525,6 +1553,14 @@ Exports: `SchedulePerson`, `ScheduleChange`, `WeekToggles`, `ScheduleManager`
 0 to 100, or null when there is nothing to judge it on.
 
 Exports: `ScoreRow`, `ScoreBars`
+
+## `src/components/admin/staff-logins-button.tsx`
+
+The staff login sheet (Word, migration 041). It holds temporary
+passwords, so the server asks for the password again first (0080):
+fetched here so the "confirm it is you" box can open, then saved.
+
+Exports: `StaffLoginsButton`
 
 ## `src/components/admin/staff-manager.tsx`
 
@@ -1995,6 +2031,15 @@ Exports: `NativeBridge`
 Server-rendered feedback while the requested screen fetches its data.
 
 Exports: `PageLoading`
+
+## `src/components/reconfirm.tsx`
+
+"Confirm it is you" before a risky action (zero trust, 0080). The server
+answers 403 with code 'reconfirm' when the password (and code) were not
+confirmed in the last 10 minutes; confirmedFetch then opens this box,
+confirms through /api/auth/reconfirm and sends the action again once.
+
+Exports: `requestReconfirm`, `confirmedFetch`, `ReconfirmDialog`
 
 ## `src/components/role-switch.tsx`
 

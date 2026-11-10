@@ -165,6 +165,18 @@ sheet overlapping it (`-mt-10`, `rounded-t-[2rem]`).
   lockout, `verifyTurnstile(turnstile, address)`; not ok → **400**
   `{ error: 'Please confirm you are not a robot and try again.', human_check: true }`.
   Without both keys this step is skipped.
+- **New devices (0080)**: just before `sign_in_succeeded`, the route calls
+  `sign_in_device_status(account, device)`; when `any_known && !known` it
+  calls `alertNewOfficeDevice(userId, headers)` (`src/lib/new-device-alert.ts`)
+  after the sign-in: office roles only, a notification to the person
+  ("New sign-in to your account", url `/change-password`) and to every other
+  active admin ("New sign-in: name", url `/admin/users`), kind `new_device`,
+  and audit `auth.new_device` with the device line (`deviceLine`). It never
+  fails the sign-in. A successful sign-in also sets the `xt_seen` cookie.
+- **Origin check (0080)**: the middleware refuses a change to `/api/…` that
+  another site's page sent (403 `{ error: 'This request did not come from
+  Xtend, so it was refused.', code: 'origin' }`); field staff's own pages
+  and the app are the same site, so they never see it.
 - **Sign-in lockout (0077)**, kept in Postgres. Wrong passwords pause the **phone or computer making them, not the
   account**. A device that has signed in to the account before carries a
   random `xt_dev` cookie (httpOnly, path `/api/auth`, 180 days, a new token

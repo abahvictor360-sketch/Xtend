@@ -245,6 +245,17 @@ Tailwind's default `rounded-xl` (0.75rem), `rounded-2xl` (1rem), `rounded-3xl`
   `Cache-Control: no-store`, `X-Robots-Tag: noindex, nofollow, noarchive`,
   body `Xtend is a private staff app. Automated access is not allowed.`
   Nothing else runs (no Supabase call).
+- **Then, the origin check** (0080): `originAllowed({ method, path, host:
+  x-forwarded-host ?? host, origin, secFetchSite })` from
+  `src/lib/zero-trust.ts`; refused → **403** JSON `{ error: 'This request did
+  not come from Xtend, so it was refused.', code: 'origin' }`, `Cache-Control:
+  no-store`.
+- **Last request** (0080): any `x-xt-last-seen` the caller sent is deleted;
+  when the `xt_seen` cookie holds 10–16 digits it is copied into the
+  `x-xt-last-seen` request header for `requireSession`. When a user is signed
+  in and the request does not carry `x-xt-background: 1` (the version check
+  does), `xt_seen` is set to `Date.now()` (httpOnly, secure in production,
+  lax, path `/`, 12 hours).
 - `PUBLIC_PATHS = ['/login', '/deactivated', '/offline', '/download', '/guide']`
   (a path is public if it equals one or starts with `<p>/`).
 - Builds a `createServerClient` from `@supabase/ssr` with the anon key, whose

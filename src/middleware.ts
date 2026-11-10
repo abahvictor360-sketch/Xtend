@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { BOT_BLOCKED_BODY, botDecision } from '@/lib/bot-guard'
-import { LAST_SEEN_COOKIE, LAST_SEEN_HEADER, OFFICE_SESSION_HOURS, originAllowed } from '@/lib/zero-trust'
+import { BACKGROUND_HEADER, LAST_SEEN_COOKIE, LAST_SEEN_HEADER, OFFICE_SESSION_HOURS, originAllowed } from '@/lib/zero-trust'
 
 const PUBLIC_PATHS = ['/login', '/deactivated', '/offline', '/download', '/guide']
 
@@ -79,7 +79,7 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  if (user) {
+  if (user && request.headers.get(BACKGROUND_HEADER) !== '1') {
     response.cookies.set(LAST_SEEN_COOKIE, String(Date.now()), {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

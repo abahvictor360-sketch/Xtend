@@ -613,6 +613,13 @@ Policies:
 - `push_subs_own_select` SELECT to public: using `((user_id = auth.uid()) OR is_admin())`
 - `push_subs_own_update` UPDATE to public: using `(user_id = auth.uid())`; check `(user_id = auth.uid())`
 
+### `recent_auth`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| user_id | uuid(uuid) |  |  |
+| confirmed_at | timestamp with time zone(timestamptz) |  | now() |
+
 ### `report_files`
 
 | Column | Type | Null | Default |
@@ -940,6 +947,7 @@ Policies:
 | last_reset | jsonb(jsonb) | yes |  |
 | updated_at | timestamp with time zone(timestamptz) |  | now() |
 | follow_max_sessions | integer(int4) |  | 20 |
+| mfa_roles | ARRAY(_user_role) |  | '{admin,hr}'::user_role[] |
 
 Policies:
 - `system_settings_admin_read` SELECT to authenticated: using `is_admin()`
@@ -1367,6 +1375,7 @@ Policies:
 - `clock_timing(p_user uuid, p_captured timestamp with time zone, p_device jsonb, p_now timestamp with time zone)` → jsonb · definer · 0029_offline_positions.sql
 - `close_abandoned_visits()` → integer · definer · 0010_store_visits.sql
 - `close_count_request(p_request_id uuid)` → void · definer · 0020_count_requests.sql
+- `confirm_recent_auth(p_user uuid)` → void · definer · 0080_zero_trust.sql
 - `conversation(p_staff uuid)` → TABLE(id uuid, body text, created_at timestamp with time zone, sender_name text, from_staff boolean, mine boolean, attachment_mime text, attachment_name text, attachment_size_bytes integer, attachment_kind text) · definer · 0075_message_attachments.sql
 - `count_place_lookups(p_sources text[])` → void · definer · 0068_place_lookups.sql
 - `counted_product_names()` → TABLE(name text) · definer · 0021_counted_product_names.sql
@@ -1420,9 +1429,9 @@ Policies:
 - `hmac(bytea, bytea, text)` → bytea
 - `hmac(text, text, text)` → bytea
 - `hr_sees(target uuid)` → boolean · definer · 0072_hr_role.sql
-- `is_admin()` → boolean · definer · 0001_init.sql
+- `is_admin()` → boolean · definer · 0080_zero_trust.sql
 - `is_field_role(r user_role)` → boolean · 0013_harden_triggers.sql
-- `is_hr()` → boolean · definer · 0072_hr_role.sql
+- `is_hr()` → boolean · definer · 0080_zero_trust.sql
 - `is_month_end_window(d date)` → boolean · 0020_count_requests.sql
 - `is_working_day(p_user uuid, p_day date)` → boolean · definer · 0072_hr_role.sql
 - `issue_tracking_token(p_platform text)` → jsonb · definer · 0050_background_tracking.sql
@@ -1436,12 +1445,15 @@ Policies:
 - `mark_notifications_read()` → integer · definer · 0006_push_notifications.sql
 - `message_file_readable(p_name text)` → boolean · definer · 0079_security_fixes.sql
 - `message_inbox()` → TABLE(staff_id uuid, full_name text, role user_role, outlet_name text, supervisor_name text, last_message_at timestamp with time zone, last_body text, last_from_staff boolean, unread integer) · definer · 0075_message_attachments.sql
+- `mfa_required_for(p_role user_role)` → boolean · definer · 0080_zero_trust.sql
+- `mfa_satisfied()` → boolean · definer · 0080_zero_trust.sql
 - `minutes_label(p_minutes integer)` → text · 0036_supervisor_alerts.sql
 - `month_end_count_days()` → integer · 0020_count_requests.sql
 - `movement_trail(p_user uuid, p_date date)` → jsonb · definer · 0029_offline_positions.sql
 - `my_calendar(p_from date, p_to date)` → TABLE(day date, kind text, clocked_in boolean, missed boolean) · definer · 0059_schedules_leave.sql
 - `my_coverage()` → jsonb · definer · 0004_tracking_coverage.sql
 - `my_day()` → jsonb · definer · 0005_marketer_role.sql
+- `my_mfa_required()` → boolean · definer · 0080_zero_trust.sql
 - `my_notifications(p_limit integer)` → TABLE(id uuid, title text, body text, url text, sent_at timestamp with time zone, sender_name text, read_at timestamp with time zone) · definer · 0006_push_notifications.sql
 - `my_open_count_request()` → TABLE(id uuid, due_date date, note text, requested_by_name text) · definer · 0020_count_requests.sql
 - `my_outlets()` → SETOF outlets · definer · 0011_store_allocation.sql
@@ -1509,6 +1521,7 @@ Policies:
 - `realtime_notify_field_owner()` → trigger · definer · 0058_realtime_broadcast.sql
 - `realtime_notify_message()` → trigger · definer · 0073_messages.sql
 - `realtime_notify_support_message()` → trigger · definer · 0058_realtime_broadcast.sql
+- `recent_auth_ok(p_user uuid, p_minutes integer)` → boolean · definer · 0080_zero_trust.sql
 - `record_activity(p_user uuid, p_kind text, p_ip text, p_platform text, p_app_build integer, p_user_agent text, p_device jsonb, p_detail jsonb, p_at timestamp with time zone)` → boolean · definer · 0062_user_activity.sql
 - `record_background_pings(p_token text, p_points jsonb, p_sent_at timestamp with time zone)` → jsonb · definer · 0055_reject_post_clockout_tracking.sql
 - `record_beacon(p jsonb)` → jsonb · definer · 0026_phone_evidence.sql
@@ -1563,6 +1576,7 @@ Policies:
 - `selfie_check()` → trigger · definer · 0023_photo_checks.sql
 - `selfie_retention_status()` → jsonb · definer · 0067_report_photos_offline.sql
 - `send_message(p_staff uuid, p_body text, p_attachment jsonb)` → jsonb · definer · 0075_message_attachments.sql
+- `session_aal()` → text · definer · 0080_zero_trust.sql
 - `set_count_sheet_template(p_path text, p_file_name text)` → uuid · definer · 0035_store_count_sheets.sql
 - `set_my_avatar(p_path text)` → void · definer · 0062_user_activity.sql
 - `set_schedule_override(p_user uuid, p_day date, p_working boolean, p_note text)` → uuid · definer · 0059_schedules_leave.sql
@@ -1573,6 +1587,7 @@ Policies:
 - `sign_in_bump(p_key text, p_account text, p_scope text, p_limit integer)` → void · definer · 0077_sign_in_lockout.sql
 - `sign_in_clear(p_account text)` → integer · definer · 0077_sign_in_lockout.sql
 - `sign_in_device_key(p_account text, p_address text, p_device text)` → text · definer · 0077_sign_in_lockout.sql
+- `sign_in_device_status(p_account text, p_device text)` → jsonb · definer · 0080_zero_trust.sql
 - `sign_in_failed(p_account text, p_address text, p_device text)` → timestamp with time zone · definer · 0077_sign_in_lockout.sql
 - `sign_in_known_device(p_account text, p_device text)` → boolean · definer · 0077_sign_in_lockout.sql
 - `sign_in_lock_status(p_account text, p_address text, p_device text)` → timestamp with time zone · definer · 0077_sign_in_lockout.sql
