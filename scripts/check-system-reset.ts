@@ -64,6 +64,8 @@ const FIXTURE: Record<string, 'wipe' | 'admins-kept' | 'keep'> = {
   message_threads: 'wipe', messages: 'wipe', message_reads: 'wipe',
   // 0077: sign-in locks run out by themselves.
   sign_in_lockouts: 'keep', sign_in_trusted_devices: 'keep',
+  // 0080: re-confirmations expire in minutes.
+  recent_auth: 'keep',
 }
 
 // --- Typed confirmations.

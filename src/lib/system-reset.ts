@@ -168,6 +168,7 @@ export const KEPT_TABLES: { table: string; what: string }[] = [
   { table: 'place_lookup_stats', what: 'Counts of place lookups (Google use)' },
   { table: 'sign_in_lockouts', what: 'Sign-in pauses after wrong passwords (they lift by themselves)' },
   { table: 'sign_in_trusted_devices', what: 'Phones and computers that have signed in before' },
+  { table: 'recent_auth', what: 'Password re-confirmations for risky actions (they expire in minutes)' },
 ]
 
 /** What stays, for the page. */

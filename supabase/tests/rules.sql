@@ -19,7 +19,15 @@ end;
 $$;
 
 create or replace function act_as(p uuid) returns void
-language sql as $$ select set_config('request.jwt.claim.sub', p::text, false); $$;
+language sql as $$
+  -- A session that passed the two-step code (0080), as a real admin's
+  -- would; the 0080 block tests the other case. Reset each time because
+  -- the tracker functions (0050) set their own claims.
+  select set_config('request.jwt.claims', '{"aal":"aal2"}', false);
+  select set_config('request.jwt.claim.sub', p::text, false);
+$$;
+
+select set_config('request.jwt.claims', '{"aal":"aal2"}', false);
 
 -- Stands in for the app uploading a photo just now: the object exists in
 -- the signed-in person's folder, so the photo checks (migration 022) pass.
@@ -5380,6 +5388,58 @@ begin
     delete from public.audit_log where action = 'user.unlock';
   end;
 
+  -- Zero trust (0080): admin and HR power needs the code step and an active
+  -- account; risky actions need a recent confirmation; new devices noticed.
+  begin
+    perform act_as(boss);
+    perform assert(public.is_admin(), 'zero trust 0080: an admin after the code step is an admin');
+    perform set_config('request.jwt.claims', '{"aal":"aal1"}', false);
+    perform assert(not public.is_admin(), 'zero trust 0080: an admin with only a password has no admin power');
+    perform assert(not public.mfa_satisfied() and public.my_mfa_required(),
+      'zero trust 0080: and is told the code step is needed');
+    perform set_config('request.jwt.claims', '', false);
+    perform assert(not public.is_admin(), 'zero trust 0080: a session with no claims is treated as password only');
+    perform set_config('request.jwt.claims', '{"aal":"aal1"}', false);
+    update public.system_settings set mfa_roles = '{hr}';
+    perform assert(public.is_admin(), 'zero trust 0080: a role taken out of mfa_roles works with a password alone');
+    update public.system_settings set mfa_roles = '{admin,hr}';
+
+    perform act_as(ada);
+    perform assert(public.mfa_satisfied() and not public.my_mfa_required(),
+      'zero trust 0080: field staff never need the code step');
+    perform act_as(tunde);
+    perform assert(public.supervises_user(grace), 'zero trust 0080: supervisors work with a password (code optional)');
+
+    perform set_config('request.jwt.claims', '{"aal":"aal2"}', false);
+    perform act_as(boss);
+    update public.profiles set is_active = false where id = boss;
+    perform assert(not public.is_admin(), 'zero trust 0080: a deactivated admin loses admin power at once');
+    update public.profiles set is_active = true where id = boss;
+
+    -- Re-confirming.
+    perform assert(not public.recent_auth_ok(boss, 10), 'zero trust 0080: no confirmation yet');
+    perform public.confirm_recent_auth(boss);
+    perform assert(public.recent_auth_ok(boss, 10), 'zero trust 0080: a fresh confirmation counts');
+    update public.recent_auth set confirmed_at = now() - interval '11 minutes' where user_id = boss;
+    perform assert(not public.recent_auth_ok(boss, 10), 'zero trust 0080: one older than 10 minutes does not');
+
+    -- New devices.
+    perform assert(not (public.sign_in_device_status('boss@xpel.ng', repeat('d', 64)) ->> 'any_known')::boolean,
+      'zero trust 0080: an account with no known device yet');
+    perform public.sign_in_succeeded('boss@xpel.ng', '10.9.0.1', null, repeat('d', 64));
+    perform assert((public.sign_in_device_status('boss@xpel.ng', repeat('d', 64)) ->> 'known')::boolean,
+      'zero trust 0080: a device that signed in is known');
+    perform assert((public.sign_in_device_status('boss@xpel.ng', repeat('e', 64)) ->> 'any_known')::boolean
+                   and not (public.sign_in_device_status('boss@xpel.ng', repeat('e', 64)) ->> 'known')::boolean,
+      'zero trust 0080: another device is new for an account that has one');
+
+    perform set_config('request.jwt.claim.sub', '', false);
+    raise exception 'zt-0080-done';
+  exception when others then
+    if sqlerrm <> 'zt-0080-done' then raise; end if;
+  end;
+  perform set_config('request.jwt.claims', '{"aal":"aal2"}', false);
+
   -- Test mode and resetting the test run (066). Every case runs in its
   -- own block that is rolled back, so the data stays for the RLS tests.
   -- ---------------------------------------------------------------
@@ -5389,7 +5449,9 @@ begin
                                 'xm_settings_history', 'xm_policy_versions', 'app_releases', 'job_runs',
                                 'system_settings', 'place_addresses', 'place_lookup_stats',
                                 -- 0077: sign-in pauses run out by themselves; known devices stay known.
-                                'sign_in_lockouts', 'sign_in_trusted_devices'];
+                                'sign_in_lockouts', 'sign_in_trusted_devices',
+                                -- 0080: confirmations expire in minutes; staff deletions cascade.
+                                'recent_auth'];
     all_keys text[] := public.reset_category_keys();
     k text;
     cats text[];

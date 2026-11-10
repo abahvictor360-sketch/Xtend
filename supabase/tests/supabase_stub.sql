@@ -44,6 +44,13 @@ language sql stable as $$
   select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
 $$;
 
+-- The token's claims, as Supabase's auth.jwt(): the tests set
+-- request.jwt.claims (for example the assurance level, 'aal').
+create or replace function auth.jwt() returns jsonb
+language sql stable as $$
+  select coalesce(nullif(current_setting('request.jwt.claims', true), ''), '{}')::jsonb;
+$$;
+
 create table storage.buckets (
   id     text primary key,
   name   text not null,
