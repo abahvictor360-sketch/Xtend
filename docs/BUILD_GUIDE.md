@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-11-10, after Google first again with every event saving its place, OpenStreetMap first for new places, location required for store visits, a forgiving VAPID_SUBJECT (a typo no longer stops all push or the alerts job), the alerts job message, the staff guide's install questions, the move to www.withxtend.com, the phone app's No connection page fix, the Android signing key check, the Android install help on the download page and zero trust: two-step sign-in for admins and HR, office sign-in limits, the origin check on changes, the password again before risky Staff actions and new-device alerts (0080); see earlier entries for 2026-11-08 and before._
+_Last updated: 2026-11-10, after downloads in the Android app, Google first again with every event saving its place, OpenStreetMap first for new places, location required for store visits, a forgiving VAPID_SUBJECT (a typo no longer stops all push or the alerts job), the alerts job message, the staff guide's install questions, the move to www.withxtend.com, the phone app's No connection page fix, the Android signing key check, the Android install help on the download page and zero trust: two-step sign-in for admins and HR, office sign-in limits, the origin check on changes, the password again before risky Staff actions and new-device alerts (0080); see earlier entries for 2026-11-08 and before._
 
 ---
 
@@ -890,6 +890,13 @@ in `mobile/` changes.
   `mobile/ios/App/App/`. Registered in `MainActivity.java` and
   `XtendViewController.swift`. A new iOS Swift file must also be added to
   `App.xcodeproj/project.pbxproj`.
+- **Downloads (Android):** `XtendDownloads.java` hands every download link to
+  Android's download manager with the session cookie, so exports, the login
+  sheet, the count template, report documents and message attachments land
+  in Downloads with a notification. Files a page builds itself go through
+  `saveBlob` (`src/lib/save-file.ts`), which uses the app's `window.XtendFiles`
+  bridge; never a `blob:`/`data:` link, which the app cannot save
+  (`scripts/check-downloads.ts`).
 - **Builds:** `.github/workflows/mobile.yml` runs on **every push to every
   branch**: a debug APK always, a signed APK and Play bundle when the
   secrets are set, and an iOS simulator build (downloadable as a zip from the
@@ -970,7 +977,7 @@ for s in check-allocate check-assistant-actions check-attendance check-audit \
          check-xm-features check-report-files check-system-reset check-report-photos check-retention \
          check-places-usage check-shift-reminders check-follow-live check-bot-guard \
          check-security-fixes check-assistant-cache check-redis check-zero-trust \
-         check-location-required; do
+         check-location-required check-downloads; do
   npx tsx --tsconfig tsconfig.scripts.json scripts/$s.ts | tail -1
 done
 ```
@@ -1060,6 +1067,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-11-10 | **Downloads work in the Android app**: the app's WebView dropped every download, so the login sheet (Word), exports, the count template, report documents and message attachments did nothing when tapped in the app. `XtendDownloads.java` now hands them to Android's download manager with the session cookie (Downloads folder, notification); files a page builds (bulk-import CSV template and temporary passwords) save through the app's `XtendFiles` bridge (`saveBlob`, `src/lib/save-file.ts`). The login sheet is now confirmed first (`/api/admin/staff-logins?check=1`, 204) and then downloaded as a plain link, and its links use the address the admin is on (`x-forwarded-host`), not the container's. New check `scripts/check-downloads.ts`. Needs the new Android app build | — |
 | 2026-11-10 | **Google first again, and every event saves its place**: by the owner's choice (shop names matter), Google names a spot Xtend has never seen again, OpenStreetMap after (`PLACE_LOOKUP_ORDER=osm-first` keeps the cheaper order). Every clock-in, clock-out, store check-in and check-out already saved what was found with its position, so the next event within the learned radius asks no map; now one sent with no place (made offline, or the phone's lookup timed out) is named and saved on the server too (`placeForEvent`, `/api/attendance`, `/api/visits`, `/api/visits/<id>/end`). New cases in `scripts/check-places-usage.ts`; admin guide updated | — |
 | 2026-11-10 | **OpenStreetMap first for new places**: a spot Xtend has never seen (no store, learned place or saved address) is now named by OpenStreetMap, which is free; Google is asked only when OpenStreetMap names no business, and whatever either finds is saved as before, so the next clock-in there asks no map. `PLACE_LOOKUP_ORDER=google-first` restores the old order. Home-screen previews stay OpenStreetMap only. New cases in `scripts/check-places-usage.ts`; admin guide (Places) updated | — |
 | 2026-11-10 | **Location required for store visits too**: the Stores tab now sits inside the same location gate as the clock button, so with location off (permission, the phone's GPS, or no fix within 100 m) marketers see **Location required** instead of the Check in / Check out buttons; the gate re-checks by itself when Xtend comes back to the screen. Clock in/out, check-in and check-out each still read a fresh fix at the tap (and again if the camera stayed open over 90 s), and the server refuses any of them without lat, lng and accuracy. New check `scripts/check-location-required.ts`. Staff guide: keep location on all day | — |

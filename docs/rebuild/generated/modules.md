@@ -1031,6 +1031,14 @@ Pure on purpose (no Supabase), so scripts/check-retention.ts can test it.
 
 Exports: `RETENTION_DAYS`, `SELFIE_RETENTION_HOURS`, `SELFIE_RETENTION_NOTE`, `RetentionDue`, `RetentionMessage`, `retentionDateLabel`, `retentionMessage`, `groupRetentionNotices`
 
+## `src/lib/save-file.ts`
+
+Saves a file the page built itself (a Blob). In a browser that is a
+download link; inside the Android app, whose WebView cannot download a
+blob, the app's window.XtendFiles bridge writes it to Downloads.
+
+Exports: `downloadUrl`, `saveBlob`
+
 ## `src/lib/schedule-server.ts`
 
 Every row of a query, a page at a time (PostgREST stops at 1000).
@@ -1562,8 +1570,9 @@ Exports: `ScoreRow`, `ScoreBars`
 ## `src/components/admin/staff-logins-button.tsx`
 
 The staff login sheet (Word, migration 041). It holds temporary
-passwords, so the server asks for the password again first (0080):
-fetched here so the "confirm it is you" box can open, then saved.
+passwords, so the server asks for the password again first (0080): a
+check call lets the "confirm it is you" box open, then the sheet is a
+plain download, which browsers and the Android app both save.
 
 Exports: `StaffLoginsButton`
 
