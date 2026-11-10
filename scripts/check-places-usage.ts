@@ -190,43 +190,81 @@ async function main() {
       'the home screen preview uses OpenStreetMap and learns nothing', a)
   }
 
-  // --- OpenStreetMap first, Google only when it cannot name the place.
+  // --- osm-first (PLACE_LOOKUP_ORDER=osm-first): OpenStreetMap first,
+  //     Google only when it cannot name the place.
   {
     const w = world()
-    const a = await resolveWith(w.p, 6.4991, 3.3551, null, { learn: true })
+    const a = await resolveWith(w.p, 6.4991, 3.3551, null, { learn: true, order: 'osm-first' })
     check(a.source === 'osm' && a.name === 'Shoprite Surulere' && w.calls.google === 0 && w.calls.osm === 1,
       'a new spot OpenStreetMap can name: no Google request at all', { a, calls: w.calls })
     check(w.known.length === 1 && w.known[0].name === 'Shoprite Surulere', 'and the shop is saved', w.known)
-    const b = await resolveWith(w.p, 6.49915, 3.35515, null, { learn: true })
+    const b = await resolveWith(w.p, 6.49915, 3.35515, null, { learn: true, order: 'osm-first' })
     check(b.source === 'known' && w.calls.osm === 1 && w.calls.google === 0,
       'the next clock-in there is named from the saved place: no map asked', { b, calls: w.calls })
 
     // Bariga: OpenStreetMap has only a road, so Google is asked once.
-    const c = await resolveWith(w.p, 6.5395, 3.3870, null, { learn: true })
+    const c = await resolveWith(w.p, 6.5395, 3.3870, null, { learn: true, order: 'osm-first' })
     check(c.name === 'Justrite Superstore Bariga' && w.calls.osm === 2 && w.calls.google === 1,
       'OpenStreetMap names no business: Google is asked, once', { c, calls: w.calls })
-    await resolveWith(w.p, 6.53955, 3.38705, null, { learn: true })
+    await resolveWith(w.p, 6.53955, 3.38705, null, { learn: true, order: 'osm-first' })
     check(w.calls.google === 1 && w.calls.osm === 2, 'and never again at that spot', w.calls)
 
     // Nowhere Google knows either: OpenStreetMap's street is the answer.
-    const d = await resolveWith(w.p, 6.70, 3.20, null, { learn: true })
+    const d = await resolveWith(w.p, 6.70, 3.20, null, { learn: true, order: 'osm-first' })
     check(d.source === 'osm' && d.address === 'Some Road, Lagos' && w.calls.google === 2,
       'neither names a business: OpenStreetMap’s address is used', d)
 
     // Google switched off or over its limit: OpenStreetMap alone.
     const off = world({ googleKey: false })
-    const e = await resolveWith(off.p, 6.5395, 3.3870, null, { learn: true })
+    const e = await resolveWith(off.p, 6.5395, 3.3870, null, { learn: true, order: 'osm-first' })
     check(e.source === 'osm' && off.calls.google === 0, 'with no Google key: OpenStreetMap only', e)
   }
   {
+    // The default: Google first, for the shop's name, even where
+    // OpenStreetMap knows one.
     const w = world()
-    const a = await resolveWith(w.p, 6.4991, 3.3551, null, { learn: true, order: 'google-first' })
-    check(w.calls.google === 1 && w.calls.osm === 1 && a.source === 'osm',
-      'google-first: Google is asked before OpenStreetMap (here Google has nothing, so OpenStreetMap answers)', { a, calls: w.calls })
+    const a = await resolveWith(w.p, 6.5395, 3.3870, null, { learn: true })
+    check(a.source === 'google' && a.name === 'Justrite Superstore Bariga' && w.calls.google === 1 && w.calls.osm === 0,
+      'by default Google names a new spot, and OpenStreetMap is not asked', { a, calls: w.calls })
+    const b = await resolveWith(w.p, 6.4991, 3.3551, null, { learn: true })
+    check(w.calls.google === 2 && w.calls.osm === 1 && b.name === 'Shoprite Surulere',
+      'by default OpenStreetMap is asked only when Google finds nothing', { b, calls: w.calls })
   }
-  check(parseMapOrder(undefined) === 'osm-first' && parseMapOrder('') === 'osm-first'
-    && parseMapOrder('Google-First ') === 'google-first' && parseMapOrder('osm') === 'osm-first',
-    'PLACE_LOOKUP_ORDER: OpenStreetMap first unless it says google-first')
+  check(parseMapOrder(undefined) === 'google-first' && parseMapOrder('') === 'google-first'
+    && parseMapOrder(' OSM-First ') === 'osm-first' && parseMapOrder('osm') === 'google-first',
+    'PLACE_LOOKUP_ORDER: Google first unless it says osm-first')
+
+  // --- Every clock-in, clock-out, check-in and check-out saves its place:
+  //     the phone asks /api/geocode without purpose=preview, which learns.
+  {
+    const clock = read('src/components/field/clock-panel.tsx')
+    const visits = read('src/components/field/store-visits.tsx')
+    const route = read('src/app/api/geocode/route.ts')
+    check(/fetch\(`\/api\/geocode\?lat=\$\{lat\}&lng=\$\{lng\}`/.test(clock)
+      && (clock.match(/reverseGeocode\(fix\.lat, fix\.lng\)/g) ?? []).length >= 2,
+      'clock in and out name the spot through /api/geocode, without preview')
+    check(/fetch\(`\/api\/geocode\?lat=\$\{lat\}&lng=\$\{lng\}`\)/.test(visits)
+      && (visits.match(/namePlace\(fix\.lat, fix\.lng\)/g) ?? []).length >= 3,
+      'store check-in and check-out name the spot through /api/geocode, without preview')
+    check(/learn: !preview/.test(route) && /google: !preview/.test(route),
+      '/api/geocode saves what it finds unless it is only a preview')
+
+    // Sent with no place (offline, or the lookup timed out): the server
+    // names and saves it, and what the phone did send always wins.
+    const geocode = read('src/lib/geocode.ts')
+    check(/export async function placeForEvent[\s\S]*?if \(given\.address \|\| given\.place_name\) return null[\s\S]*?resolvePlace\(lat, lng, null, \{ supabase, learn: true \}\)/.test(geocode),
+      'placeForEvent: only when the phone sent no place, and it saves what it finds')
+    const events: [string, string, RegExp][] = [
+      ['clock in and out', 'src/app/api/attendance/route.ts', /place_name: input\.place_name \?\? found\?\.name \?\? null/],
+      ['store check-in', 'src/app/api/visits/route.ts', /arrived_place_name: input\.place_name \?\? found\?\.name \?\? null/],
+      ['store check-out', 'src/app/api/visits/[id]/end/route.ts', /p_place_name: parsed\.data\.place_name \?\? found\?\.name \?\? null/],
+    ]
+    for (const [name, path, uses] of events) {
+      const src = read(path)
+      check(/await placeForEvent\(supabase, /.test(src) && uses.test(src),
+        `${name}: sent with no place, the server names and saves it`)
+    }
+  }
 
   // --- The monthly limit.
   check(parseLimit(undefined) === 20000 && parseLimit('') === 20000 && parseLimit('abc') === 20000

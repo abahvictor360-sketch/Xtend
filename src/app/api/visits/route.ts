@@ -5,6 +5,7 @@ import { notifyWatchers } from '@/lib/notify'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
 import { mapText } from '@/lib/fields'
 import { isOwnStoragePath } from '@/lib/storage-path'
+import { placeForEvent } from '@/lib/geocode'
 
 /**
  * Check in to a store. Naming the store is optional: left out, the
@@ -44,6 +45,8 @@ export async function POST(request: Request) {
     }
 
     const supabase = await createServerSupabase()
+    // The phone could not name the spot: name and save it here.
+    const found = await placeForEvent(supabase, input.lat, input.lng, input)
     const { data, error } = await supabase
       .from('store_visits')
       .insert({
@@ -53,8 +56,8 @@ export async function POST(request: Request) {
         arrived_lat: input.lat,
         arrived_lng: input.lng,
         arrived_accuracy_m: input.accuracy_m,
-        arrived_address: input.address ?? null,
-        arrived_place_name: input.place_name ?? null,
+        arrived_address: input.address ?? found?.address ?? null,
+        arrived_place_name: input.place_name ?? found?.name ?? null,
         selfie_path: input.selfie_path ?? null,
         thumb_path: input.thumb_path ?? null,
         device_info: input.device_info,

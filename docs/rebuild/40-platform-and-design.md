@@ -761,9 +761,9 @@ the pure `resolveWith` (`src/lib/place-resolve.ts`) and resolves in this order:
    then `rpc('known_place_at', …)` → learned place (source `known`); with `learn`, `rpc('note_place_visit', { p_id })`
    (or `note_place_visit_for { p_user: person, p_id }` when `person` is given).
 3. **Saved address** (service client): `rpc('address_at', { p_lat, p_lng })` → `{ name: null, address, label: address, source: 'google' }`.
-4. **OpenStreetMap**, used at once when it returns a `name` (a business).
-5. **Google**, only when step 4 named no business (and only if `google !== false`, `GOOGLE_MAPS_API_KEY` set and `google_calls_this_month()` < the limit from `parseLimit(GOOGLE_MONTHLY_LOOKUP_LIMIT)`: a whole number above zero; blank or anything else 20,000; `0` or `none` no limit), cached; if it finds nothing, step 4's address.
-   `PLACE_LOOKUP_ORDER=google-first` (`parseMapOrder`) swaps 4 and 5: Google first, OpenStreetMap after.
+4. **Google** (only if `google !== false`, `GOOGLE_MAPS_API_KEY` set and `google_calls_this_month()` < the limit from `parseLimit(GOOGLE_MONTHLY_LOOKUP_LIMIT)`: a whole number above zero; blank or anything else 20,000; `0` or `none` no limit), cached.
+5. **OpenStreetMap**.
+   `PLACE_LOOKUP_ORDER=osm-first` (`parseMapOrder`; default `google-first`) asks OpenStreetMap first and uses it when it returns a `name`; Google only when it named no business; then OpenStreetMap's address.
 6. Fallback label `"<lat.toFixed(5)>, <lng.toFixed(5)>"`, source `coordinates`.
 
 With `learn`: a map name → `rpc('learn_place', { p_lat, p_lng, p_name, p_address, p_source })` on the caller's client,
