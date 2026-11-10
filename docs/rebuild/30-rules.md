@@ -956,8 +956,10 @@ up, and only for as long as someone is watching.
 
 The app names where someone is (`src/lib/geocode.ts`, order in
 `src/lib/place-resolve.ts`): inside their store → the outlet; else any store;
-else a known place; else an address Google gave before (0068); else Google
-Places (if configured and under the monthly limit) or OpenStreetMap; else
+else a known place; else an address Google gave before (0068); else
+OpenStreetMap when it names a business; else Google Places (if configured and
+under the monthly limit); else OpenStreetMap's address
+(`PLACE_LOOKUP_ORDER=google-first` asks Google before OpenStreetMap); else
 coordinates (`place_source`; a saved address reads as `google`). Labels read "premises,
 street" and fall back to the address, then `lat, lng` to 5 decimals
 (`location_label` in `attendance_detail`).
@@ -1029,8 +1031,11 @@ street" and fall back to the address, then `lat, lng` to 5 decimals
   answers; logged once a month); a counter that cannot be read leaves Google
   on. The store importer's searches count and obey it too.
 - Order and learning (`resolveWith`): own store → any store → known place
-  (visit counted when learning) → saved address → Google (unless a preview
-  or the limit) → OpenStreetMap → coordinates. With `learn`: a map name →
+  (visit counted when learning) → saved address → OpenStreetMap if it names
+  a business → Google (unless a preview or the limit) → OpenStreetMap's
+  address → coordinates (`order: 'google-first'`, from
+  `PLACE_LOOKUP_ORDER=google-first` via `parseMapOrder`: Google before
+  OpenStreetMap). With `learn`: a map name →
   `learn_place` (signed-in caller) or `learn_place_for` (tracker); a Google
   address with no name → `remember_address`. A provider error never stops
   naming. Counted once per lookup after the response (`after()`).

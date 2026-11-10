@@ -871,13 +871,18 @@ src/lib/geocode.ts supplies the real ones.
   2. any store Xtend knows;
   3. a place Xtend learned before (named by a map or by staff);
   4. an address Google gave before for this spot (no shop there);
-  5. Google (its answers are also kept 30 days per spot in the server's
-     cache), unless this is only a preview or this month's limit is used;
-  6. OpenStreetMap, free.
+  5. OpenStreetMap, free: its answer is used when it names a business;
+  6. Google, only when OpenStreetMap could not name one (its answers are
+     also kept 30 days per spot in the server's cache), unless this is only
+     a preview or this month's limit is used;
+  7. OpenStreetMap's street address, when Google found nothing either.
+
+`order: 'google-first'` (PLACE_LOOKUP_ORDER=google-first) asks Google
+before OpenStreetMap instead, as Xtend did before November 2026.
 
 What a map finds is learned, so the next lookup there stops at 3 or 4.
 
-Exports: `PlaceSource`, `ResolvedPlace`, `OutletAnchor`, `LookupAnswer`, `GoogleCall`, `LookupCount`, `OWN_LIST`, `GoogleAnswer`, `PlaceProviders`, `join`, `metresBetween`, `parseLimit`, `withinLimit`, `resolveWith`, `lookupSummary`
+Exports: `PlaceSource`, `ResolvedPlace`, `MapOrder`, `parseMapOrder`, `OutletAnchor`, `LookupAnswer`, `GoogleCall`, `LookupCount`, `OWN_LIST`, `GoogleAnswer`, `PlaceProviders`, `join`, `metresBetween`, `parseLimit`, `withinLimit`, `resolveWith`, `lookupSummary`
 
 ## `src/lib/platform.ts`
 

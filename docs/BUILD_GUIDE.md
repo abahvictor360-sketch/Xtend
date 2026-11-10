@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-11-10, after location required for store visits, a forgiving VAPID_SUBJECT (a typo no longer stops all push or the alerts job), the alerts job message, the staff guide's install questions, the move to www.withxtend.com, the phone app's No connection page fix, the Android signing key check, the Android install help on the download page and zero trust: two-step sign-in for admins and HR, office sign-in limits, the origin check on changes, the password again before risky Staff actions and new-device alerts (0080); see earlier entries for 2026-11-08 and before._
+_Last updated: 2026-11-10, after OpenStreetMap first for new places, location required for store visits, a forgiving VAPID_SUBJECT (a typo no longer stops all push or the alerts job), the alerts job message, the staff guide's install questions, the move to www.withxtend.com, the phone app's No connection page fix, the Android signing key check, the Android install help on the download page and zero trust: two-step sign-in for admins and HR, office sign-in limits, the origin check on changes, the password again before risky Staff actions and new-device alerts (0080); see earlier entries for 2026-11-08 and before._
 
 ---
 
@@ -538,8 +538,11 @@ the code lives.
   paths actually removed (`forget_selfie_paths`).
 - **Google only for places Xtend has never seen** (0068): a spot is named,
   best first, by the person's own store, any store, a learned place, an
-  address Google gave before (`place_addresses`, 40 m), Google (server
-  cache 30 days per ~11 m spot), then OpenStreetMap; the order lives in
+  address Google gave before (`place_addresses`, 40 m), OpenStreetMap when
+  it names a business, Google only when it does not (server cache 30 days
+  per ~11 m spot), then OpenStreetMap's address (since 2026-11-10;
+  `PLACE_LOOKUP_ORDER=google-first` restores Google before OpenStreetMap);
+  the order lives in
   `src/lib/place-resolve.ts` (pure) and `src/lib/geocode.ts` supplies the
   providers. The phone's background tracker now learns the "left the store"
   spots it names, for the person (`learn_place_for`, `note_place_visit_for`,
@@ -811,6 +814,7 @@ Set in `.env.local` for development, and for production in Vercel or, on the VPS
 | `GOOGLE_MONTHLY_LOOKUP_LIMIT` | Optional | Most Google place requests a month (Lagos time); once reached, OpenStreetMap until the next month, logged once. Unset (or not a whole number) = 20,000; `0` or `none` = no limit. Shown on the Places page |
 | `NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY` | Optional | Google's map (Map / Satellite) on Movement and Attendance. A **separate** key, visible in the browser: restrict it to HTTP referrers (the site's addresses, e.g. `https://your-domain/*`) and to the **Maps JavaScript API** only. Without it, or whenever Google fails, the maps use OpenStreetMap. Needs a deploy. No CSP is set, so no header change is needed; if one is added, allow `maps.googleapis.com`, `maps.gstatic.com`, `*.googleapis.com`, `unpkg.com` (scripts) and `*.googleusercontent.com`, `*.gstatic.com`, `*.google.com` (images) |
 | `GEOCODER_USER_AGENT` | Recommended | Contact string for OpenStreetMap's policy |
+| `PLACE_LOOKUP_ORDER` | Optional | Which map names a spot Xtend has never seen. Unset: OpenStreetMap (free) first, Google only when OpenStreetMap names no business. `google-first`: Google first, OpenStreetMap after |
 | `FIREBASE_SERVICE_ACCOUNT` | For Android push | Firebase service account JSON |
 | `APNS_KEY`, `APNS_KEY_ID`, `APNS_TEAM_ID` (`APNS_BUNDLE_ID`, `APNS_SANDBOX`) | For iPhone push | Apple push key |
 | `IOS_APP_URL`, `IOS_LATEST_BUILD` | When the iPhone app is out | Download link and newest build for update prompts |
@@ -1056,6 +1060,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-11-10 | **OpenStreetMap first for new places**: a spot Xtend has never seen (no store, learned place or saved address) is now named by OpenStreetMap, which is free; Google is asked only when OpenStreetMap names no business, and whatever either finds is saved as before, so the next clock-in there asks no map. `PLACE_LOOKUP_ORDER=google-first` restores the old order. Home-screen previews stay OpenStreetMap only. New cases in `scripts/check-places-usage.ts`; admin guide (Places) updated | — |
 | 2026-11-10 | **Location required for store visits too**: the Stores tab now sits inside the same location gate as the clock button, so with location off (permission, the phone's GPS, or no fix within 100 m) marketers see **Location required** instead of the Check in / Check out buttons; the gate re-checks by itself when Xtend comes back to the screen. Clock in/out, check-in and check-out each still read a fresh fix at the tap (and again if the camera stayed open over 90 s), and the server refuses any of them without lat, lng and accuracy. New check `scripts/check-location-required.ts`. Staff guide: keep location on all day | — |
 | 2026-11-10 | **A mistyped `VAPID_SUBJECT` no longer stops every push**: the Dokploy setting was `mailto: <address>` (a space and angle brackets), the push library refused it (`Vapid subject is not a valid URL`), and `/api/cron/alerts` answered 500 on every run, so no push went out. `cleanVapidSubject()` (`src/lib/push-endpoint.ts`, used by `push.ts` for sending and for the Setup check) trims, drops quotes, angle brackets and spaces, adds `mailto:` to a bare address, and falls back to `mailto:ops@xpelbeauty.ng` when nothing usable is left; 10 cases added to `scripts/check-push-endpoints.ts`. Also: on a Nixpacks-built container the scheduled-job file is `docker/run-job.mjs` (not `run-job.mjs`), so Dokploy Schedules run `node docker/run-job.mjs <job>` there | — |
 | 2026-11-10 | **Alerts job message**: a 401 from the GitHub alerts job now says the `CRON_SECRET` secret does not match the one on the server at `APP_URL` (it named Vercel) | — |
