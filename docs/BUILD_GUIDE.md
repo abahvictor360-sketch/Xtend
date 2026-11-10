@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-11-10, after the Android signing key check, the Android install help on the download page and zero trust: two-step sign-in for admins and HR, office sign-in limits, the origin check on changes, the password again before risky Staff actions and new-device alerts (0080); see earlier entries for 2026-11-08 and before._
+_Last updated: 2026-11-10, after the phone app's No connection page fix, the Android signing key check, the Android install help on the download page and zero trust: two-step sign-in for admins and HR, office sign-in limits, the origin check on changes, the password again before risky Staff actions and new-device alerts (0080); see earlier entries for 2026-11-08 and before._
 
 ---
 
@@ -1055,6 +1055,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-11-10 | **Phone app "No connection" page**: its **Try again** button went to `/` on the app's own address (`https://localhost`), which the app opened in Chrome ("localhost refused to connect"). It now goes back to the site: `mobile/capacitor.config.ts` writes `www/home.js` (`window.XTEND_HOME` = `XTEND_URL`) on every `cap sync`. Needs the new app build | — |
 | 2026-11-10 | **Android signing key check**: the mobile workflow removes spaces and line breaks from `ANDROID_KEYSTORE_BASE64` (they creep in when the key is copied on a phone), and stops with a plain error if the key is not complete base64 or cannot be opened with `ANDROID_KEYSTORE_PASSWORD` and `ANDROID_KEY_ALIAS` | — |
 | 2026-11-10 | **Android install help**: the download page's Android steps add what to do when the phone says "App not installed" or "package appears to be invalid" (uninstall the old Xtend, then install again). Cause: until the Android signing secrets are set, each published APK is a debug build signed with a new key, so it cannot replace the copy already on the phone (section 15) | — |
 | 2026-11-10 | **Zero trust** (section 5): two-step sign-in (authenticator app code, Supabase MFA) needed for admins and HR, offered to supervisors (`/mfa`, `/mfa/setup`, sidebar link, Staff **Reset two-step sign-in**); `is_admin()`/`is_hr()` need the code step and an active account; office sign-ins last 12 hours and end after 60 minutes idle (`xt_seen` cookie); changes to `/api/…` from another site refused (403 `origin`); risky Staff actions (role, email, delete, office password or (de)activation, two-step reset, login sheet, CSV import) need the password confirmed in the last 10 minutes (**Confirm it is you** box, `/api/auth/reconfirm`); office sign-ins from a new device notify the person and the admins. New check `scripts/check-zero-trust.ts`. Deploy the code first, then run 0080; TOTP must be on in Supabase → Authentication → Multi-Factor | 0080 |

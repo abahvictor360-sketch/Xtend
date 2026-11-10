@@ -1,3 +1,5 @@
+import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import type { CapacitorConfig } from '@capacitor/cli'
 
 /**
@@ -9,6 +11,14 @@ import type { CapacitorConfig } from '@capacitor/cli'
  * off, and real push notifications. See mobile/README.md.
  */
 const url = process.env.XTEND_URL ?? 'https://xtend-brown.vercel.app'
+
+// The "No connection" page (www/index.html) is served from the app's own
+// address (https://localhost). Its Try again button must go back to the
+// site, not to "/" there: any other address opens in the phone's browser.
+writeFileSync(
+  join(__dirname, 'www', 'home.js'),
+  `window.XTEND_HOME = ${JSON.stringify(url)}\n`,
+)
 
 const config: CapacitorConfig = {
   appId: 'ng.xpelbeauty.xtend',

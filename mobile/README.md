@@ -197,7 +197,7 @@ buttons; otherwise the release's version is used).
 
 - `capacitor.config.ts`: app id `ng.xpelbeauty.xtend`, name, the site URL
   (override with `XTEND_URL` for a staging build).
-- `www/index.html`: shown only when the site cannot be reached at all.
+- `www/index.html`: shown only when the site cannot be reached at all. Its Try again button goes to `XTEND_URL`, from `www/home.js`, which `capacitor.config.ts` writes on every `cap sync`.
 - `android/`, `ios/`: the native projects (permissions, notification icon,
   push hand-off in `AppDelegate.swift`, `App.entitlements`).
 - Background location: `@capacitor-community/background-geolocation`,
