@@ -98,10 +98,22 @@ jobs:
         id: key
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
-            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/xtend.keystore"
-            echo "path=$RUNNER_TEMP/xtend.keystore" >> "$GITHUB_OUTPUT"
+            keystore="$RUNNER_TEMP/xtend.keystore"
+            # Spaces and line breaks creep in when the key is copied on a
+            # phone; base64 never contains them, so drop them.
+            if ! printf '%s' "$KEYSTORE_BASE64" | tr -d ' \t\r\n' | base64 -d > "$keystore" 2>/dev/null; then
+              echo "::error::ANDROID_KEYSTORE_BASE64 is not a complete base64 key: copy all of key.txt (base64 -w0 xtend.keystore) into the secret again"
+              exit 1
+            fi
+            if ! keytool -list -keystore "$keystore" -storepass "$KEYSTORE_PASSWORD" -alias "$KEY_ALIAS" >/dev/null 2>&1; then
+              echo "::error::The keystore cannot be opened with ANDROID_KEYSTORE_PASSWORD, or has no key named ANDROID_KEY_ALIAS: check those two secrets, or that ANDROID_KEYSTORE_BASE64 holds all of key.txt"
+              exit 1
+            fi
+            echo "path=$keystore" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Signed release APK and Play bundle
