@@ -8,6 +8,9 @@ import { generateTempPassword } from '@/lib/credentials'
 import { emailAddress, personName, phoneNumber } from '@/lib/fields'
 import { rememberTempPassword } from '@/lib/staff-logins'
 import { authAdminError } from '@/lib/auth-admin-errors'
+import { requireRecentAuth } from '@/lib/reconfirm'
+import { OFFICE_ROLES } from '@/lib/zero-trust'
+import type { UserRole } from '@/lib/types'
 
 const patchSchema = z.object({
   full_name: personName.optional(),
@@ -26,6 +29,8 @@ const patchSchema = z.object({
   reset_password: z.boolean().optional(),
   /** Lift a sign-in lock (0077) early. */
   unlock: z.boolean().optional(),
+  /** Admin only: remove their authenticator app so they set it up again (0080). */
+  reset_mfa: z.boolean().optional(),
 })
 
 export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -120,6 +125,55 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
           return Response.json({ error: 'Pick an active supervisor.' }, { status: 400 })
         }
       }
+    }
+
+    // Zero trust (0080): a change that hands out power or a way in needs the
+    // password confirmed in the last few minutes. That is any role or login
+    // change, a reset of two-step sign-in, and a new password or
+    // (de)activation for an office account.
+    let targetIsOffice = false
+    if (input.reset_password || input.is_active !== undefined || input.reset_mfa) {
+      const { data: target } = await admin
+        .from('profiles')
+        .select('role')
+        .eq('id', id)
+        .maybeSingle<{ role: UserRole }>()
+      targetIsOffice = Boolean(target && OFFICE_ROLES.includes(target.role))
+    }
+    if (
+      input.role !== undefined ||
+      input.staff_role_id !== undefined ||
+      input.email !== undefined ||
+      input.reset_mfa ||
+      ((input.reset_password || input.is_active !== undefined) && targetIsOffice)
+    ) {
+      await requireRecentAuth(session)
+    }
+
+    // Two-step sign-in reset (0080): an admin removes the person's
+    // authenticator app, for a lost or new phone. They set one up again at
+    // their next sign-in if their role needs it.
+    if (input.reset_mfa) {
+      if (session.profile.role !== 'admin') {
+        return Response.json({ error: 'Only an admin can reset two-step sign-in.' }, { status: 403 })
+      }
+      if (!targetIsOffice) {
+        return Response.json({ error: 'Only office accounts use two-step sign-in.' }, { status: 400 })
+      }
+      const { data: listed, error: listError } = await admin.auth.admin.mfa.listFactors({ userId: id })
+      if (listError) {
+        return Response.json({ error: 'Two-step sign-in could not be reset. Try again.' }, { status: 502 })
+      }
+      for (const factor of listed?.factors ?? []) {
+        const { error } = await admin.auth.admin.mfa.deleteFactor({ id: factor.id, userId: id })
+        if (error) {
+          return Response.json({ error: 'Two-step sign-in could not be reset. Try again.' }, { status: 502 })
+        }
+      }
+      await audit(await createServerSupabase(), 'user.mfa_reset', 'profiles', id, {
+        removed: listed?.factors?.length ?? 0,
+      })
+      return Response.json({ ok: true })
     }
 
     // A sign-in lock (0077): Postgres checks who may lift it and audits it.
@@ -248,6 +302,7 @@ export async function DELETE(_request: Request, ctx: { params: Promise<{ id: str
     if (id === session.userId) {
       return Response.json({ error: 'You cannot delete your own account.' }, { status: 400 })
     }
+    await requireRecentAuth(session)
 
     const admin = createAdminSupabase()
 

@@ -6,6 +6,8 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { allowAttempt, clientAddress } from '@/lib/rate-limit'
 import { NO_SUCH_ACCOUNT, passwordIsRight } from '@/lib/password-check'
 import { recordActivity } from '@/lib/activity-server'
+import { alertNewOfficeDevice } from '@/lib/new-device-alert'
+import { LAST_SEEN_COOKIE, OFFICE_SESSION_HOURS } from '@/lib/zero-trust'
 import { formatLagos } from '@/lib/utils'
 import { TURNSTILE_ERROR, turnstileEnabled, verifyTurnstile } from '@/lib/turnstile'
 
@@ -80,6 +82,15 @@ export async function POST(request: Request) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) return wrongPassword(service, attempt)
 
+  // Whether this device was known to the account before (0080): a new one
+  // for an office account is announced below. Asked before it is recorded.
+  const { data: deviceStatus } = await service.rpc('sign_in_device_status', {
+    p_account: attempt.p_account,
+    p_device: attempt.p_device,
+  })
+  const status = deviceStatus as { known?: boolean; any_known?: boolean } | null
+  const newDevice = Boolean(status && status.any_known && !status.known)
+
   // This device is now known to this account: a new token each sign-in.
   const token = randomBytes(32).toString('base64url')
   const { error: trustError } = await service.rpc('sign_in_succeeded', {
@@ -96,8 +107,18 @@ export async function POST(request: Request) {
     })
   }
 
+  // A fresh sign-in starts the office idle clock afresh (lib/zero-trust.ts).
+  ;(await cookies()).set(LAST_SEEN_COOKIE, String(Date.now()), {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    path: '/',
+    maxAge: OFFICE_SESSION_HOURS * 3600,
+  })
+
   // For the office's activity log (062); never holds up the sign-in.
   if (data.user) await recordActivity(data.user.id, 'sign_in', request.headers)
+  if (data.user && newDevice) await alertNewOfficeDevice(data.user.id, request.headers)
 
   return Response.json({ ok: true })
 }

@@ -23,7 +23,8 @@ export async function GET(request: Request) {
     await supabase.auth.signOut()
   }
   // Already signed out: only the wording on the login page is at stake.
-  const asked = url.searchParams.get('reason') === 'clocked-out' ? 'clocked-out' : 'new-day'
+  const given = url.searchParams.get('reason')
+  const asked = given === 'clocked-out' || given === 'office-time' || given === 'idle' ? given : 'new-day'
   const reason = session?.relogin ?? asked
   return NextResponse.redirect(new URL(`/login?reason=${reason}`, url.origin))
 }
