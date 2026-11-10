@@ -161,6 +161,7 @@ const COPY: Record<
       'Tap the button. Your phone downloads the Xtend app file.',
       'Open the downloaded file. If asked, allow your browser to install apps.',
       'Tap Install, then open Xtend and sign in.',
+      'Says “App not installed” or “package appears to be invalid”? Uninstall the old Xtend first (hold its icon, then Uninstall), then open the file again.',
     ],
     note: 'Android 7 or newer.',
   },
