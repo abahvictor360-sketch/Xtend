@@ -33,7 +33,7 @@ jobs:
       - name: Hit the alerts endpoint
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          APP_URL: ${{ vars.APP_URL || 'https://xtend-brown.vercel.app' }}
+          APP_URL: ${{ vars.APP_URL || 'https://www.withxtend.com' }}
         run: |
           if [ -z "$CRON_SECRET" ]; then
             echo "::error::CRON_SECRET repository secret is not set"

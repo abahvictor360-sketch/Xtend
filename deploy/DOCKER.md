@@ -119,7 +119,7 @@ server is live.
 2. Supabase → Authentication → URL configuration: set the Site URL to the
    new domain.
 3. The phone apps open the address in the repository variable `APP_URL`
-   (default `https://xtend-brown.vercel.app`). Set `APP_URL` to the new
+   (default `https://www.withxtend.com`). Set `APP_URL` to the new
    domain and let the mobile workflow build new apps; keep the old address
    working until staff have the new app.
 4. Check: `https://app.example.com/api/health` shows `"ok": true`. Sent

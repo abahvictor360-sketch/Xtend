@@ -10,7 +10,8 @@ import type { CapacitorConfig } from '@capacitor/cli'
  * is added natively: location while the app is closed or the screen is
  * off, and real push notifications. See mobile/README.md.
  */
-const url = process.env.XTEND_URL ?? 'https://xtend-brown.vercel.app'
+const url = process.env.XTEND_URL ?? 'https://www.withxtend.com'
+const host = new URL(url).host
 
 // The "No connection" page (www/index.html) is served from the app's own
 // address (https://localhost). Its Try again button must go back to the
@@ -32,7 +33,8 @@ const config: CapacitorConfig = {
     url,
     cleartext: false,
     // Sign-in goes to Supabase; everything else stays on the Xtend site.
-    allowNavigation: [new URL(url).host, '*.supabase.co'],
+    // With and without "www.", in case the site redirects between them.
+    allowNavigation: [host, host.startsWith('www.') ? host.slice(4) : `www.${host}`, '*.supabase.co'],
     errorPath: 'index.html',
   },
   android: {

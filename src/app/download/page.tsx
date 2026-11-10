@@ -46,7 +46,7 @@ export default async function DownloadPage() {
   const version = process.env.APP_VERSION || published?.version || null
   const inApp = isAppUserAgent(ua)
 
-  const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'xtend-brown.vercel.app'
+  const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'www.withxtend.com'
   const pageUrl = `https://${host}/download`
   const qr =
     device === 'desktop'

@@ -1151,13 +1151,13 @@ A new app build is only needed when `mobile/` changes. `mobile/` is excluded fro
 ### 5.1 `mobile/capacitor.config.ts`
 
 ```ts
-const url = process.env.XTEND_URL ?? 'https://xtend-brown.vercel.app'
+const url = process.env.XTEND_URL ?? 'https://www.withxtend.com'
 const config: CapacitorConfig = {
   appId: 'ng.xpelbeauty.xtend',
   appName: 'Xtend',
   webDir: 'www',                       // offline fallback page only
   appendUserAgent: 'XtendApp',         // lets the site detect the app (src/lib/app-agent.ts)
-  server: { url, cleartext: false, allowNavigation: [new URL(url).host, '*.supabase.co'], errorPath: 'index.html' },
+  server: { url, cleartext: false, allowNavigation: [host, host with or without "www.", '*.supabase.co'], errorPath: 'index.html' },
   android: { allowMixedContent: false, useLegacyBridge: true },
   ios: { contentInset: 'never', limitsNavigationsToAppBoundDomains: false },
   plugins: { PushNotifications: { presentationOptions: ['badge', 'sound', 'alert'] } },
@@ -1169,7 +1169,7 @@ background. `mobile/www/index.html` is a small branded "cannot reach Xtend" page
 (background `#f9f6f3`, text `#2b211c`, system font). Capacitor serves it from the app's own
 address (`https://localhost`), so its **Try again** button goes to `window.XTEND_HOME`, set by
 `www/home.js`, which `capacitor.config.ts` writes from `XTEND_URL` on every `cap sync` (git-ignored;
-fallback `https://xtend-brown.vercel.app`). Never link to `/` there: any address other than the site
+fallback `https://www.withxtend.com`). Never link to `/` there: any address other than the site
 opens in the phone's browser.
 
 ### 5.2 `mobile/package.json` (exact pins)
@@ -1349,7 +1349,7 @@ version set by a "Version" step: `XTEND_VERSION_CODE = 100 + git rev-list --coun
 10. If a key: `./gradlew assembleRelease bundleRelease --no-daemon` with `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`
 11. `actions/upload-artifact@v4` name `xtend-android-<run>`, APKs and AABs, `if-no-files-found: error`
 12. On the default branch: copy the signed release APK (or the debug APK) to `xtend.apk`; create or edit release
-    tag `android` titled `Xtend for Android 1.0.<code>` with notes `Built from <sha7>, run <run> (<kind>). Install from ${XTEND_URL}/download` (`XTEND_URL` = repository variable `APP_URL`, default `https://xtend-brown.vercel.app`);
+    tag `android` titled `Xtend for Android 1.0.<code>` with notes `Built from <sha7>, run <run> (<kind>). Install from ${XTEND_URL}/download` (`XTEND_URL` = repository variable `APP_URL`, default `https://www.withxtend.com`);
     `gh release upload android xtend.apk --clobber`.
 
 **Job `ios`** (macos-latest): checkout, node 22, select newest `/Applications/Xcode_*.app`,

@@ -1,6 +1,6 @@
 # Xtend for Android and iOS
 
-The apps are the live Xtend site (`XTEND_URL`: the repository variable `APP_URL`, default `https://xtend-brown.vercel.app`) inside a
+The apps are the live Xtend site (`XTEND_URL`: the repository variable `APP_URL`, default `https://www.withxtend.com`) inside a
 native shell built with [Capacitor](https://capacitorjs.com). Every web
 release reaches the apps at once; a new store build is needed only when
 something in this folder changes.
@@ -171,7 +171,7 @@ it is used during a shift to confirm the person is at their store.
 
 ### 5. The download page
 
-Staff install the apps from `https://xtend-brown.vercel.app/download`.
+Staff install the apps from `https://www.withxtend.com/download`.
 
 **Android works by itself.** Each time the production branch is built
 (after every merge, or **Actions → Mobile apps → Run
