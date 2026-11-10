@@ -531,7 +531,9 @@ export default async function AdminGuidePage() {
             <Ui>Add staff</Ui> creates an account with a temporary password; the person picks their own at
             first sign-in. From the list you reset a password, change a store or supervisor, or deactivate
             someone (their history stays). <Ui>Login details (Word)</Ui> downloads every field worker&apos;s
-            sign-in with how to install the app.
+            sign-in with how to install the app. It asks for your password again first. In the Xtend phone
+            app, downloads (this sheet, exports, report documents) go to the phone&apos;s{' '}
+            <Ui>Downloads</Ui> folder, with a notification when they are ready.
           </p>
           <GuideShot src="/guide/admin-add-staff.png" alt="The Add staff form" width={1932} height={504} caption="Staff → Add staff" />
           <p>

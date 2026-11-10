@@ -1216,7 +1216,21 @@ platform iOS 15, `capacitor-swift-pm` exact 8.5.2 plus the three plugins from `n
 
 Native classes (`android/app/src/main/java/ng/xpelbeauty/xtend/`):
 
-- **`MainActivity`** extends `BridgeActivity`; registers `LocationIntegrity` and `ShiftTracker` before `super.onCreate`.
+- **`MainActivity`** extends `BridgeActivity`; registers `LocationIntegrity` and `ShiftTracker` before `super.onCreate`,
+  then `XtendDownloads.attach(this, getBridge().getWebView())`.
+- **`XtendDownloads`** (a WebView drops downloads unless told): `setDownloadListener` hands every `http(s)` download
+  to `DownloadManager` with the `CookieManager` cookie and the WebView's User-Agent, file name
+  `safeName(URLUtil.guessFileName(url, contentDisposition, mimeType))` (no `\ / : * ? " < > |` or control
+  characters, never empty or starting with `.`, at most 120 characters), notification shown when complete, public
+  Downloads on Android 10+ (`setDestinationInExternalPublicDir`), the app's own Downloads folder before
+  (`setDestinationInExternalFilesDir`, no storage permission), toast "Downloading <name>…". `blob:`/`data:` are
+  ignored there; `addJavascriptInterface(new Bridge(activity), "XtendFiles")` exposes `save(base64, name, mimeType)`
+  → `boolean` (empty or over `MAX_BYTES = 25 MB` refused; MediaStore `Downloads` on 10+, else the app's Downloads
+  folder), toast "Saved <name> in Downloads". The site's `saveBlob(blob, name)` (`src/lib/save-file.ts`) uses
+  `window.XtendFiles` when present, else an `<a download>`; `downloadUrl(url)` clicks a plain same-site link. Files a page
+  builds (the CSV template and temporary passwords on bulk import) go through `saveBlob`; the login sheet is
+  `confirmedFetch('/api/admin/staff-logins?check=1')` (204 after the admin and recent-password checks, nothing
+  built) then `downloadUrl('/api/admin/staff-logins')`. `scripts/check-downloads.ts` guards this.
 - **`LocationIntegrity`** plugin, method `getFix`. Requests `ACCESS_FINE_LOCATION` (alias `location`) if needed.
   Provider GPS, else network, else reject "Location is turned off". Reuses last known if < `FRESH_MS = 30_000`;
   otherwise `requestSingleUpdate` with a `TIMEOUT_MS = 25_000` reject "No location fix in time".

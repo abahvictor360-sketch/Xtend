@@ -8,6 +8,7 @@ import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { confirmedFetch } from '@/components/reconfirm'
+import { saveBlob } from '@/lib/save-file'
 
 interface RowResult {
   line: number
@@ -119,12 +120,7 @@ export function CsvImporter({ outletNames }: { outletNames: string[] }) {
         .map((row) => `"${row.full_name}","${row.email}","${row.temp_password}"`),
     ].join('\r\n')
 
-    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'xtend-temporary-passwords.csv'
-    link.click()
-    URL.revokeObjectURL(url)
+    void saveBlob(new Blob([csv], { type: 'text/csv' }), 'xtend-temporary-passwords.csv')
   }
 
   return (
@@ -136,13 +132,13 @@ export function CsvImporter({ outletNames }: { outletNames: string[] }) {
           Choose CSV
           <input type="file" accept=".csv,text/csv" className="hidden" onChange={onFile} />
         </label>
-        <a
+        <button
+          type="button"
           className="text-sm text-primary"
-          href={`data:text/csv;charset=utf-8,${encodeURIComponent(TEMPLATE)}`}
-          download="xtend-staff-template.csv"
+          onClick={() => void saveBlob(new Blob([TEMPLATE], { type: 'text/csv' }), 'xtend-staff-template.csv')}
         >
           Download template
-        </a>
+        </button>
         <span className="text-xs text-muted-foreground">
           Known outlets: {outletNames.length ? outletNames.join(', ') : 'none yet — create outlets first'}
         </span>

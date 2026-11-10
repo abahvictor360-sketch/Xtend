@@ -14,8 +14,16 @@ export async function GET(request: Request) {
   try {
     // It holds temporary passwords: the password again first (0080).
     await requireRecentAuth(await requireApiSession(['admin']))
+    const url = new URL(request.url)
+    // The button asks first, so the "confirm it is you" box can open; the
+    // download itself is a plain link the browser or the app saves.
+    if (url.searchParams.get('check') === '1') return new Response(null, { status: 204 })
     const staff = await staffLogins(createAdminSupabase())
-    const site = new URL(request.url).origin
+    // The address staff are told to open: the one the admin is using, as the
+    // proxy saw it (behind Dokploy request.url is the container's own).
+    const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host') ?? url.host
+    const proto = request.headers.get('x-forwarded-proto') ?? url.protocol.replace(':', '')
+    const site = `${proto.split(',')[0].trim()}://${host.split(',')[0].trim()}`
     const file = await buildStaffLoginDoc(staff, site)
 
     await audit(await createServerSupabase(), 'staff_logins.download', 'profiles', null, {

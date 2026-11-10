@@ -4,11 +4,15 @@ import { useState } from 'react'
 import { FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { confirmedFetch } from '@/components/reconfirm'
+import { downloadUrl } from '@/lib/save-file'
+
+const SHEET = '/api/admin/staff-logins'
 
 /**
  * The staff login sheet (Word, migration 041). It holds temporary
- * passwords, so the server asks for the password again first (0080):
- * fetched here so the "confirm it is you" box can open, then saved.
+ * passwords, so the server asks for the password again first (0080): a
+ * check call lets the "confirm it is you" box open, then the sheet is a
+ * plain download, which browsers and the Android app both save.
  */
 export function StaffLoginsButton() {
   const [busy, setBusy] = useState(false)
@@ -18,23 +22,13 @@ export function StaffLoginsButton() {
     setBusy(true)
     setError(null)
     try {
-      const res = await confirmedFetch('/api/admin/staff-logins')
+      const res = await confirmedFetch(`${SHEET}?check=1`)
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string }
         setError(body.error ?? 'The login sheet could not be made. Try again.')
         return
       }
-      const blob = await res.blob()
-      const name =
-        /filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') ?? '')?.[1] ?? 'Xtend-staff-login-details.docx'
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = name
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      setTimeout(() => URL.revokeObjectURL(url), 10_000)
+      downloadUrl(SHEET)
     } catch {
       setError('No connection. Try again.')
     } finally {
