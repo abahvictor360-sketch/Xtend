@@ -11,6 +11,8 @@ import {
   type NoticeStore,
 } from '@/lib/report-file-queue'
 import { REPORT_PHOTO_BUCKET, queuedPhotos, uploadQueuedPhotos } from '@/lib/report-photo-queue'
+import { addClockNotice, clockNotice } from '@/lib/clock-notices'
+import { formatLagos } from '@/lib/utils'
 import {
   dropOutbox,
   enqueue,
@@ -365,6 +367,21 @@ function noteAbandoned(record: OutboxRecord) {
   )
 }
 
+/**
+ * A clock-in or clock-out made with no signal that the server then refused,
+ * or that could not be sent in time, is deleted from the phone. Without a
+ * notice the person still believes they clocked in, so one waits for Home to
+ * show it (lib/clock-notices.ts).
+ */
+function noteClockFailed(record: OutboxRecord, reason: string | null) {
+  if (record.kind !== 'clock') return
+  const job = record.job as { type?: string; client_captured_at: string }
+  addClockNotice(
+    noticeStore(),
+    clockNotice(job.type ?? 'opening', formatLagos(job.client_captured_at, false), reason),
+  )
+}
+
 /** Drains the outbox oldest-first. Safe to call on every reconnect. */
 export async function flushOutbox(): Promise<FlushResult> {
   if (flushing) return { sent: 0, failed: 0, dropped: 0, remaining: (await listOutbox()).length }
@@ -414,6 +431,7 @@ export async function flushOutbox(): Promise<FlushResult> {
         await dropOutbox(record.id!)
         result.dropped += 1
         noteAbandoned(record)
+        noteClockFailed(record, null)
         continue
       }
 
@@ -426,6 +444,7 @@ export async function flushOutbox(): Promise<FlushResult> {
           await dropOutbox(record.id!)
           result.dropped += 1
           noteAbandoned(record)
+          noteClockFailed(record, error.message)
           continue
         }
         await markAttempt(record, error instanceof Error ? error.message : 'Unknown error')

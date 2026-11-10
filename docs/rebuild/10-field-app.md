@@ -676,6 +676,17 @@ Component: `src/components/field/clock-panel.tsx`.
   `openBatterySettings`); a done setting shows a tick; it clears itself. The
   "Clock out now" prompt (`CLOCK_OUT_EVENT`) is held back too: `start()`
   refuses while it is shown.
+- Done only when it is recorded: after `POST /api/attendance` answers, the
+  panel reads the new row back (`confirmRecorded`, the person's own
+  `attendance` row) before showing "Clocked in"/"Clocked out"; found or
+  unreadable shows the result, found-missing shows "not confirmed, check Home".
+  Offline, the card is warning-coloured "Not recorded yet: clock-in saved on
+  your phone" and says it is NOT recorded until Home says so. A queued
+  clock event the server later refuses or gives up on (`noteClockFailed` in
+  `sync.ts`) leaves a notice in `localStorage` (`xtend.clock-notices`, five
+  kept; `src/lib/clock-notices.ts`) that the panel shows as a red alert with
+  the reason and "Clock in again now" (or "Clock out again now") and an OK
+  button, polled on mount, on `online` and every 5 s.
 
 ### 5.2 Step 1: location first (`requireFix` → `bestFix`, `src/lib/geo.ts`)
 

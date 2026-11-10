@@ -26,7 +26,9 @@ import {
   type LocationProbe,
   type SampledFix,
 } from '@/lib/geo'
-import { submitOrQueue, PermanentJobError } from '@/lib/offline/sync'
+import { submitOrQueue, PermanentJobError, noticeStore } from '@/lib/offline/sync'
+import { takeClockNotices } from '@/lib/clock-notices'
+import { supabase } from '@/lib/supabase/client'
 import { formatLagos, metres } from '@/lib/utils'
 import type { AttendanceType, DayState } from '@/lib/types'
 
@@ -100,6 +102,24 @@ function useClockLocationGate() {
   }
 }
 
+/**
+ * Reads a clock-in or clock-out back from the database. The server answered
+ * that it saved it, but the person is only told so once the row is really
+ * there (people read their own rows). True: found. False: the server said
+ * saved yet no such row. Null: it could not be checked (no answer, an old
+ * server), which is not a reason to doubt the server's own answer.
+ */
+async function confirmRecorded(id: string | undefined): Promise<boolean | null> {
+  if (!id) return null
+  try {
+    const { data, error } = await supabase().from('attendance').select('id').eq('id', id).maybeSingle()
+    if (error) return null
+    return Boolean(data)
+  } catch {
+    return null
+  }
+}
+
 export function ClockPanel({
   day,
   notificationsRequired = true,
@@ -126,6 +146,22 @@ export function ClockPanel({
   const [busyStep, setBusyStep] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [outcome, setOutcome] = useState<Outcome | null>(null)
+  // Clock-ins and clock-outs made with no signal that the server then
+  // refused: told here, since the saved copy has been deleted by then.
+  const [notices, setNotices] = useState<string[]>([])
+  useEffect(() => {
+    const check = () => {
+      const fresh = takeClockNotices(noticeStore())
+      if (fresh.length) setNotices((current) => [...current, ...fresh.filter((n) => !current.includes(n))])
+    }
+    check()
+    window.addEventListener('online', check)
+    const timer = window.setInterval(check, 5000)
+    return () => {
+      window.removeEventListener('online', check)
+      window.clearInterval(timer)
+    }
+  }, [])
   // Set after a clock-out: the day's login is over.
   const [endsLogin, setEndsLogin] = useState(false)
 
@@ -263,18 +299,20 @@ export function ClockPanel({
             day.outlet?.lat != null &&
             day.outlet.lng != null &&
             haversineMetres(fix.lat, fix.lng, day.outlet.lat, day.outlet.lng)
+          const what = type === 'opening' ? 'clock-in' : 'clock-out'
           setOutcome({
-            tone: 'info',
-            title: 'Saved on your phone',
-            detail: `No data right now. This ${type === 'opening' ? 'clock-in' : 'clock-out'} is queued from ${where} at ${formatLagos(fix.captured_at, false)}${
+            tone: 'warning',
+            title: `Not recorded yet: ${what} saved on your phone`,
+            detail: `No signal right now. Your ${what} from ${where} at ${formatLagos(fix.captured_at, false)}${
               guess ? `, about ${metres(guess)} from your outlet` : ''
-            }, and will send itself when you get signal.`,
+            } is kept on this phone but is NOT recorded yet. It sends itself when you get signal. Do not count it as done until Home says you are ${type === 'opening' ? 'clocked in' : 'clocked out'}; if it is refused, you will be told.`,
           })
         } else {
           const signOut = (result.data as { sign_out?: boolean }).sign_out === true
           const record = (
             result.data as {
               attendance: {
+                id?: string
                 status: string | null
                 accuracy_m: number
                 distance_m: number | null
@@ -283,6 +321,16 @@ export function ClockPanel({
               }
             }
           ).attendance
+          // The server says it saved it. Say so only once it is really there.
+          if ((await confirmRecorded(record.id)) === false) {
+            setOutcome({
+              tone: 'warning',
+              title: `${type === 'opening' ? 'Clock-in' : 'Clock-out'} not confirmed`,
+              detail: `The server answered, but the record could not be found. Check that Home says you are ${type === 'opening' ? 'clocked in' : 'clocked out'}. If it does not, try again.`,
+            })
+            router.refresh()
+            return
+          }
           // Whichever store the server measured against — for a marketer on
           // a round that is rarely the home outlet.
           const against = record.outlet_name ?? day.outlet?.name ?? 'your outlet'
@@ -336,6 +384,20 @@ export function ClockPanel({
 
   return (
     <div className="space-y-3">
+      {notices.map((n) => (
+        <Alert key={n} variant="destructive" className="flex items-start justify-between gap-2">
+          <span>{n}</span>
+          <button
+            type="button"
+            aria-label="Dismiss"
+            className="shrink-0 text-sm font-semibold underline"
+            onClick={() => setNotices((current) => current.filter((x) => x !== n))}
+          >
+            OK
+          </button>
+        </Alert>
+      ))}
+
       {error && <Alert variant="destructive">{error}</Alert>}
 
       {outcome && (
