@@ -28,7 +28,7 @@ concurrency:
 # example https://app.example.com) when the site moves, e.g. to the VPS;
 # phones pick up the new address with their next app update.
 env:
-  XTEND_URL: ${{ vars.APP_URL || 'https://xtend-brown.vercel.app' }}
+  XTEND_URL: ${{ vars.APP_URL || 'https://www.withxtend.com' }}
 
 jobs:
   android:
