@@ -90,7 +90,7 @@ begin
            union all select unnest(array['products', 'staff_roles', 'role_store_counts', 'count_sheet_templates',
                                          'notification_templates', 'support_quick_replies', 'xm_settings',
                                          'xm_settings_history', 'xm_policy_versions', 'app_releases', 'job_runs',
-                                         'system_settings']) loop
+                                         'system_settings', 'known_places', 'place_addresses']) loop
     execute format('select count(*) from public.%I', t) into n;
     out := out || jsonb_build_object(t, n);
   end loop;
@@ -5451,7 +5451,9 @@ begin
                                 -- 0077: sign-in pauses run out by themselves; known devices stay known.
                                 'sign_in_lockouts', 'sign_in_trusted_devices',
                                 -- 0080: confirmations expire in minutes; staff deletions cascade.
-                                'recent_auth'];
+                                'recent_auth',
+                                -- 0081: the places Xtend learned survive every reset.
+                                'known_places'];
     all_keys text[] := public.reset_category_keys();
     k text;
     cats text[];
@@ -5462,6 +5464,8 @@ begin
     template_path text;
     boss_avatar text := boss || '/me.jpg';
     ada_avatar text := ada || '/me.jpg';
+    place_photo text := ada || '/place-shop.jpg';
+    place_selfie text := ada || '/place-selfie.jpg';
   begin
     perform set_config('request.jwt.claim.sub', '', false);
     -- Rows for the two tables the earlier tests leave empty.
@@ -5474,6 +5478,11 @@ begin
     alter table public.xm_monthly_grades enable trigger trg_xm_monthly_grades_feature_guard;
     insert into storage.objects (bucket_id, name) values ('avatars', boss_avatar), ('avatars', ada_avatar);
     select path into template_path from public.count_sheet_templates limit 1;
+    -- A place Ada named during the test run, with her photos of it (0081).
+    insert into public.known_places (name, lat, lng, source, named_by, photo_path, selfie_path)
+    values ('Test Run Supermarket', 6.4321, 3.4567, 'staff', ada, place_photo, place_selfie);
+    insert into storage.objects (bucket_id, name) values ('selfies', place_photo), ('selfies', place_selfie);
+    insert into public.app_update_notices (user_id, platform, build) values (ada, 'android', 999);
 
     perform assert((select test_mode from public.system_settings), 'reset: test mode starts on');
     perform assert((select count(*) from public.system_settings) = 1, 'reset: there is one system settings row');
@@ -5602,6 +5611,17 @@ begin
       if sqlerrm <> 'reset-case-done' then raise; end if;
     end;
     begin
+      before := reset_counts();
+      perform public.reset_test_data(boss, array['visits_places']);
+      perform assert((select count(*) from public.store_visits) = 0
+                       and (select count(*) from public.known_places) = (before->>'known_places')::bigint
+                       and not exists (select 1 from public.system_reset_files where name in (place_photo, place_selfie)),
+        'reset store visits: the visits go, the learned places and their photos stay (0081)');
+      raise exception 'reset-case-done';
+    exception when others then
+      if sqlerrm <> 'reset-case-done' then raise; end if;
+    end;
+    begin
       perform public.reset_test_data(boss, array['reports']);
       perform assert(exists (select 1 from public.system_reset_files where bucket = 'report-files')
                        and not exists (select 1 from public.system_reset_files where bucket in ('selfies', 'avatars')),
@@ -5646,6 +5666,13 @@ begin
       perform assert((select last_reset_by = boss and last_reset_at is not null and test_mode
                       from public.system_settings),
         'reset everything: the last reset is noted and test mode stays on');
+      perform assert((after->>'known_places')::bigint = (before->>'known_places')::bigint
+                       and (before->>'known_places')::bigint > 0
+                       and exists (select 1 from public.known_places where name = 'Test Run Supermarket'
+                                   and named_by is null),
+        'reset everything: every learned place stays, also one named by someone removed (0081)');
+      perform assert(not exists (select 1 from public.system_reset_files where name in (place_photo, place_selfie)),
+        'reset everything: a learned place keeps its photos, though its namer''s folder is cleared (0081)');
       raise exception 'reset-case-done';
     exception when others then
       if sqlerrm <> 'reset-case-done' then raise; end if;
@@ -5971,6 +5998,58 @@ begin
     end;
   end;
   perform set_config('request.jwt.claim.sub', '', false);
+
+  -- New phone app notices (0082): once when a build comes out, then every two
+  -- days while still on an older one, three times in all; never to anyone
+  -- already up to date, inactive, or not seen for a month.
+  begin
+    declare
+      told record;
+      n integer;
+    begin
+      delete from public.app_installs;
+      insert into public.app_installs (user_id, platform, app_build, last_seen) values
+        (ada, 'android', 120, now()),
+        (bala, 'android', 150, now()),
+        (boss, 'ios', 3, now() - interval '40 days');
+      select count(*) into n from public.claim_app_update_notices(150, null);
+      perform assert(n = 1 and exists (select 1 from public.app_update_notices
+                                       where user_id = ada and platform = 'android' and build = 150 and times = 1),
+        'app update 0082: only the person on an older Android app is told, once');
+      select count(*) into n from public.claim_app_update_notices(150, null);
+      perform assert(n = 0, 'app update 0082: not again straight away');
+      update public.app_update_notices set last_at = now() - interval '3 days' where user_id = ada;
+      select * into told from public.claim_app_update_notices(150, null);
+      perform assert(told.user_id = ada and told.times = 2, 'app update 0082: reminded after two days');
+      update public.app_update_notices set last_at = now() - interval '3 days' where user_id = ada;
+      perform public.claim_app_update_notices(150, null);
+      update public.app_update_notices set last_at = now() - interval '3 days' where user_id = ada;
+      select count(*) into n from public.claim_app_update_notices(150, null);
+      perform assert(n = 0 and (select times from public.app_update_notices where user_id = ada and build = 150) = 3,
+        'app update 0082: three times in all per build');
+      select count(*) into n from public.claim_app_update_notices(160, null);
+      perform assert(n = 2, 'app update 0082: a newer build is news again, for everyone still behind');
+      update public.app_installs set app_build = 160 where user_id = ada;
+      update public.app_update_notices set last_at = now() - interval '3 days';
+      select count(*) into n from public.claim_app_update_notices(160, null);
+      perform assert(n = 1 and not exists (select 1 from public.app_update_notices
+                                           where user_id = ada and build = 160 and times > 1),
+        'app update 0082: updating stops the reminders');
+      select count(*) into n from public.claim_app_update_notices(null, 5);
+      perform assert(n = 0, 'app update 0082: a phone not seen for a month is not told');
+      update public.profiles set is_active = false where id = bala;
+      update public.app_update_notices set last_at = now() - interval '3 days';
+      select count(*) into n from public.claim_app_update_notices(170, null);
+      perform assert(n = 1 and not exists (select 1 from public.app_update_notices where user_id = bala and build = 170),
+        'app update 0082: nobody inactive is told');
+      perform assert(not has_function_privilege('authenticated',
+                       'public.claim_app_update_notices(integer, integer, integer, interval)', 'execute'),
+        'app update 0082: only the server may claim');
+      raise exception 'app-update-0082-done';
+    end;
+  exception when others then
+    if sqlerrm <> 'app-update-0082-done' then raise; end if;
+  end;
 
   raise notice 'ALL RULES PASSED';
 end $$;

@@ -40,6 +40,20 @@ Policies:
 - `app_releases_admin_update` UPDATE to authenticated: using `is_admin()`; check `is_admin()`
 - `app_releases_read` SELECT to authenticated: using `((withdrawn_at IS NULL) OR is_admin())`
 
+### `app_update_notices`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| user_id | uuid(uuid) |  |  |
+| platform | text(text) |  |  |
+| build | integer(int4) |  |  |
+| times | integer(int4) |  | 1 |
+| first_at | timestamp with time zone(timestamptz) |  | now() |
+| last_at | timestamp with time zone(timestamptz) |  | now() |
+
+Policies:
+- `app_update_notices_read` SELECT to authenticated: using `is_admin()`
+
 ### `assistant_conversations`
 
 | Column | Type | Null | Default |
@@ -1365,6 +1379,7 @@ Policies:
 - `check_excuse(p_user uuid, p_from timestamp with time zone, p_to timestamp with time zone)` → jsonb · definer · 0048_excuse_check_advanced.sql
 - `check_excuse_more(p_user uuid, p_from timestamp with time zone, p_to timestamp with time zone)` → jsonb · definer · 0048_excuse_check_advanced.sql
 - `check_store_count(p_outlet_id uuid, today date)` → void · definer · 0040_xpel_count_sheet.sql
+- `claim_app_update_notices(p_android integer, p_ios integer, p_max_times integer, p_every interval)` → TABLE(user_id uuid, platform text, build integer, times integer) · definer · 0082_app_update_notices.sql
 - `claim_clock_out_reminders(p_now timestamp with time zone)` → TABLE(user_id uuid, reminder_date date, stage smallint, shift_end text) · definer · 0069_shift_soon_reminders.sql
 - `claim_due_notifications(p_limit integer)` → SETOF scheduled_notifications · definer · 0053_support_notifications.sql
 - `claim_flag_alerts(p_limit integer)` → TABLE(id uuid, user_id uuid, staff_name text, kind text, severity text, summary text, outlet_name text, created_at timestamp with time zone) · definer · 0036_supervisor_alerts.sql
@@ -1550,13 +1565,13 @@ Policies:
 - `request_phone_check(p_user uuid)` → uuid · definer · 0026_phone_evidence.sql
 - `request_store_count(p_user_ids uuid[], p_due_date date, p_note text)` → uuid · definer · 0046_role_store_counts.sql
 - `reset_category_keys()` → text[] · 0066_test_mode_reset.sql
-- `reset_category_tables()` → TABLE(category text, table_name text, step integer) · 0073_messages.sql
+- `reset_category_tables()` → TABLE(category text, table_name text, step integer) · 0082_app_update_notices.sql
 - `reset_files_done(p_bucket text, p_names text[])` → integer · definer · 0066_test_mode_reset.sql
 - `reset_files_next(p_limit integer)` → TABLE(bucket text, name text) · definer · 0066_test_mode_reset.sql
 - `reset_files_pending()` → integer · definer · 0066_test_mode_reset.sql
 - `reset_resolve_categories(p_categories text[])` → text[] · 0066_test_mode_reset.sql
 - `reset_staff_tables()` → text[] · 0066_test_mode_reset.sql
-- `reset_test_data(p_actor uuid, p_categories text[])` → jsonb · definer · 0066_test_mode_reset.sql
+- `reset_test_data(p_actor uuid, p_categories text[])` → jsonb · definer · 0081_reset_keeps_places.sql
 - `resolve_alert(p_alert_id uuid, p_note text)` → void · definer · 0002_logic.sql
 - `resolve_alerts(p_alert_ids uuid[], p_note text)` → integer · definer · 0052_visits_alerts.sql
 - `resolve_notification_targets(p_audience notification_audience, p_detail jsonb)` → TABLE(user_id uuid, full_name text, role user_role, outlet_name text, devices integer) · definer · 0006_push_notifications.sql

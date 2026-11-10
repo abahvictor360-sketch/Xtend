@@ -51,6 +51,12 @@ SET row_security = off;
 
 
 --
+-- Data for Name: app_update_notices; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
 -- Data for Name: assistant_conversations; Type: TABLE DATA; Schema: public; Owner: -
 --
 

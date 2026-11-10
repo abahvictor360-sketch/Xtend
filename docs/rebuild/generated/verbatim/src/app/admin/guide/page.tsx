@@ -646,7 +646,10 @@ export default async function AdminGuidePage() {
             live and moves to it with one tap. Publish a short <Ui>What&apos;s new</Ui> (each person sees it
             once); tick <Ui>Required</Ui> when an old version must not be used; set the lowest Android or
             iPhone build to make people install a new phone app. The page shows who is on which version and
-            reminds those on an older app.
+            reminds those on an older app. When a new phone app is published, everyone on an older one also
+            gets a phone notification (in the day, Lagos time), and again every two days while they stay on
+            it, three times in all. In Xtend, <Ui>Later</Ui> hides the update bar only until Xtend is opened
+            again.
           </p>
           <p>
             <Ui>System</Ui> (admins only): <strong>test mode</strong>, for a test run before real work. While
@@ -661,7 +664,7 @@ export default async function AdminGuidePage() {
               </>,
               <>
                 <strong>Reset.</strong> On <Ui>System</Ui>, tick what to clear: <Ui>Clock-ins and locations</Ui>,{' '}
-                <Ui>Store visits and places</Ui>, <Ui>Daily reports</Ui>, <Ui>Stock counts and count sheets</Ui>,{' '}
+                <Ui>Store visits</Ui>, <Ui>Daily reports</Ui>, <Ui>Stock counts and count sheets</Ui>,{' '}
                 <Ui>X Metrics records</Ui>, <Ui>Leave and schedules</Ui>, <Ui>Support chats</Ui> (with Messages),{' '}
                 <Ui>Notifications</Ui>, <Ui>Activity log</Ui>, <Ui>Ask Xtend chats</Ui>,{' '}
                 <Ui>Teams and store allocations</Ui>, <Ui>Stores (outlets)</Ui>, <Ui>Staff accounts</Ui> or{' '}
@@ -687,8 +690,9 @@ export default async function AdminGuidePage() {
             A reset cannot be undone, and test mode cannot be turned back on once it is off — not by any admin,
             not even directly in the database. What always stays: admin accounts (with their sign-ins and
             profile photos), the product list, X Metrics settings and switches, the scoring policy, roles and
-            which roles count stock, notification templates, support quick replies, the count sheet template and
-            Updates. Admins&apos; own activity (clock-ins, chats, notifications, audit rows) is cleared with the
+            which roles count stock, notification templates, support quick replies, the count sheet template,
+            Updates, and <strong>every place Xtend learned</strong> from clock-ins and visits (shop name,
+            address and where it is, with its photos), so the next clock-in there needs no Google lookup. Admins&apos; own activity (clock-ins, chats, notifications, audit rows) is cleared with the
             rest when you tick it. The audit log keeps one row for every reset (who, when, where, what and how
             many); when you clear the audit log, that row is all it holds. Staff whose accounts are removed are
             signed out and must be added again.

@@ -44,8 +44,8 @@ const FIXTURE: Record<string, 'wipe' | 'admins-kept' | 'keep'> = {
   app_installs: 'admins-kept', app_releases: 'keep', assistant_conversations: 'wipe', attendance: 'wipe',
   audit_log: 'wipe', clock_out_reminders: 'wipe', count_request_targets: 'wipe', count_requests: 'wipe',
   count_sheet_templates: 'keep', device_beacons: 'wipe', excuse_checks: 'wipe', integrity_flags: 'wipe',
-  job_runs: 'keep', known_places: 'wipe', leave_requests: 'wipe', location_alerts: 'wipe', location_pings: 'wipe',
-  notification_deliveries: 'wipe', notification_templates: 'keep', notifications: 'wipe', outlets: 'wipe',
+  job_runs: 'keep', known_places: 'keep', leave_requests: 'wipe', location_alerts: 'wipe', location_pings: 'wipe',
+  notification_deliveries: 'wipe', app_update_notices: 'wipe', notification_templates: 'keep', notifications: 'wipe', outlets: 'wipe',
   phone_checks: 'wipe', photo_checks: 'wipe', place_naming_due: 'wipe', products: 'keep', profiles: 'admins-kept',
   push_subscriptions: 'admins-kept', report_files: 'wipe', report_photos: 'wipe', reports: 'wipe',
   role_store_counts: 'keep', schedule_overrides: 'wipe', scheduled_notifications: 'wipe', staff_outlets: 'wipe',
@@ -91,8 +91,10 @@ check(kept.every((t) => FIXTURE[t] === 'keep'), 'the kept tables are kept')
 check(RESET_CATEGORIES.every((c) => c.tables.length > 0), 'every category clears something')
 
 const sql = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '0066_test_mode_reset.sql'), 'utf8').replace(/\r\n/g, '\n')
-// The table list as last redefined (0073 added the three messages tables).
-const tablesSql = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '0073_messages.sql'), 'utf8')
+// The table list as last redefined (0073 added the three messages tables;
+// 0081 took known_places out: learned places survive every reset; 0082
+// added app_update_notices to notifications).
+const tablesSql = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '0082_app_update_notices.sql'), 'utf8')
   .replace(/\r\n/g, '\n')
   .split('create or replace function public.reset_category_tables()')[1]
 const fromSql = new Map<string, string>()

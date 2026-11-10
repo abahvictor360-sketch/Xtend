@@ -2169,13 +2169,13 @@ calculation.
 | Key | Label | Tables emptied | Stored files queued |
 |---|---|---|---|
 | `clock_ins` | Clock-ins and locations | attendance, location_pings, location_alerts, integrity_flags, excuse_checks, phone_checks, photo_checks, device_beacons, clock_out_reminders, tracking_tokens, follow_sessions (0070) | attendance selfie/thumb |
-| `visits_places` | Store visits and places | store_visits, known_places, place_naming_due | visit selfie/thumb, place photo/selfie |
+| `visits_places` | Store visits | store_visits, place_naming_due (0081: never known_places) | visit selfie/thumb |
 | `reports` | Daily reports | reports, report_photos, report_files | report photos, report documents |
 | `stock_counts` | Stock counts and count sheets | store_counts, count_requests, count_request_targets, store_count_sheets | count photos, count sheets |
 | `xm` | X Metrics records | xm_counts, xm_count_lines, xm_sales, xm_sale_lines, xm_supplies, xm_supply_imports, xm_reconciliations, xm_monthly_grades, xm_expiry_alerts, xm_targets, xm_policy_reads | count and sales photos |
 | `leave_schedules` | Leave and schedules | leave_requests, schedule_overrides, work_patterns | — |
 | `support` | Support chats | support_threads, support_messages | — |
-| `notifications` | Notifications | notifications, notification_deliveries, scheduled_notifications | — |
+| `notifications` | Notifications | notifications, notification_deliveries, scheduled_notifications, app_update_notices (0082) | — |
 | `activity` | Activity log | user_activity | — |
 | `ask` | Ask Xtend chats | assistant_conversations | — |
 | `teams` | Teams and store allocations | staff_outlets; also sets every `profiles.supervisor_id` and `outlet_id` to null | — |
@@ -2183,7 +2183,7 @@ calculation.
 | `staff` | Staff accounts | every non-admin account: `auth.users` (cascading to `profiles`), so their rows in push_subscriptions, app_installs, staff_temp_passwords, and their own leave, support, notification deliveries, activity, chats and allocations go too; admins keep theirs | everything under `<uid>/` in every bucket, profile photos included |
 | `audit` | Audit log | audit_log (then the single reset row is written) | — |
 
-**KEEP** (never touched): place_addresses, place_lookup_stats (0068), products, staff_roles, role_store_counts, count_sheet_templates (and the template file), notification_templates, support_quick_replies, xm_settings, xm_settings_history, xm_policy_versions, app_releases, job_runs, system_settings, system_reset_files. **Admins kept**: profiles, push_subscriptions, app_installs, staff_temp_passwords (only the people removed lose rows).
+**KEEP** (never touched): known_places and the stored photo/selfie of every learned place, also inside a removed person's folder or when everything is reset (0081), place_addresses, place_lookup_stats (0068), products, staff_roles, role_store_counts, count_sheet_templates (and the template file), notification_templates, support_quick_replies, xm_settings, xm_settings_history, xm_policy_versions, app_releases, job_runs, system_settings, system_reset_files. **Admins kept**: profiles, push_subscriptions, app_installs, staff_temp_passwords (only the people removed lose rows).
 
 **Dependencies** (`reset_resolve_categories(text[])`, same in `resolveCategories`): unknown keys raise "Unknown thing to reset: …"; an empty list raises "Choose at least one thing to reset"; `everything` = all 14; `staff` adds clock_ins, visits_places, reports, stock_counts, xm (their records reference the accounts with ON DELETE RESTRICT); `stores` adds visits_places, stock_counts, xm, teams (store references). Returned in the canonical order.
 
@@ -2397,3 +2397,10 @@ Testable statements, grouped by area. They mirror the assertions in
 - Files are queued only for what was chosen (none for support; only selfies for clock-ins; report files for reports); a full reset queues every test file except admins' profile photos and the count sheet template.
 - Going live: admins only, audited, once; afterwards no reset, and test mode cannot be turned back on even by a direct update.
 - The browser cannot call the reset, going live or the file queue (service role only).
+
+
+### New phone app notices (0082)
+
+- Table `app_update_notices (user_id → profiles ON DELETE CASCADE, platform 'android'|'ios', build ≥ 0, times 1–10 default 1, first_at, last_at; PK (user_id, platform, build))`, RLS: admins read (`is_admin()`), nobody writes directly.
+- `claim_app_update_notices(p_android int, p_ios int, p_max_times int = 3, p_every interval = '2 days')` (SECURITY DEFINER, `#variable_conflict use_column`, service role only): due = `app_installs` rows with `app_build` set, `last_seen` within 30 days, an active profile, and `app_build` below the newest for its platform (null newest: never due). Inserts (user, platform, newest) with times 1, or on conflict adds 1 to `times` and sets `last_at` only when `times < greatest(p_max_times, 1)` and `last_at <= now() - p_every`; returns the rows inserted or bumped.
+- `flushAppUpdateNotices()` (`src/lib/app-update-notices.ts`), in `/api/cron/alerts` after the clock-out reminders: only when `noticeHour()` (Lagos 07:00–19:59, `src/lib/app-update-notice.ts`); newest Android = `ANDROID_LATEST_BUILD` or the published `android` release's build (none when `ANDROID_APK_URL` is set without `ANDROID_LATEST_BUILD`), iPhone = `IOS_LATEST_BUILD`; groups by platform, build and first/again; `notifyUsers(ids, { title, body, url: '/download', detail: { kind: 'app_update', system: true, platform, build } })`. Messages (`updateNoticeMessage`): first "A new Xtend app is ready", again "Please update Xtend"; body "Xtend <version> is ready to install." (or "A new Xtend app is ready to install.") + Android "Open Xtend and tap Get it, or download it from the Xtend download page." / iPhone "Open TestFlight and tap Update." + " Your account and anything waiting to send are kept."

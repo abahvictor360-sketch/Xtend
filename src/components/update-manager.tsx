@@ -16,8 +16,12 @@ import {
 
 const MY_BUILD = process.env.NEXT_PUBLIC_BUILD_ID ?? ''
 const CHECK_EVERY_MS = 10 * 60_000
-const SNOOZE_SITE_MS = 30 * 60_000
-const SNOOZE_APP_MS = 24 * 3_600_000
+/**
+ * "Later" hides the bar for this sitting only: it is back the next time Xtend
+ * opens or comes back to the screen, and after this long at the latest, so
+ * nobody stays on an old version without being told.
+ */
+const SNOOZE_MS = 15 * 60_000
 
 function read(key: string) {
   try {
@@ -59,12 +63,17 @@ async function applySiteUpdate() {
  * build with the newest and offers the download; below the lowest build an
  * admin allows, it must be installed before carrying on.
  *
+ * "Later" only hides the bar until Xtend next opens or returns to the
+ * screen (15 minutes at most); the five-minute job also sends a phone
+ * notification about a new app (0082).
+ *
  * After an update, the admin's "What's new" note is shown once.
  */
 export function UpdateManager() {
   const [state, setState] = useState<UpdateState | null>(null)
   const [note, setNote] = useState<ReleaseNote | null>(null)
-  const [, force] = useState(0)
+  // When "Later" was tapped, this sitting only (never kept across opens).
+  const [snoozed, setSnoozed] = useState<{ site: number; app: number }>({ site: 0, app: 0 })
   const lastCheck = useRef(0)
   const reported = useRef<string | null>(null)
 
@@ -113,7 +122,11 @@ export function UpdateManager() {
     void check()
     const timer = window.setInterval(() => void check(), CHECK_EVERY_MS)
     const onVisible = () => {
-      if (document.visibilityState === 'visible') void check()
+      if (document.visibilityState !== 'visible') return
+      // Back on the screen: any update is shown again.
+      setSnoozed({ site: 0, app: 0 })
+      lastCheck.current = 0
+      void check()
     }
     document.addEventListener('visibilitychange', onVisible)
     window.addEventListener('online', onVisible)
@@ -174,8 +187,8 @@ export function UpdateManager() {
     )
   }
 
-  const siteSnoozed = now - Number(read('xt_snooze_site') ?? 0) < SNOOZE_SITE_MS
-  const appSnoozed = now - Number(read('xt_snooze_app') ?? 0) < SNOOZE_APP_MS
+  const siteSnoozed = now - snoozed.site < SNOOZE_MS
+  const appSnoozed = now - snoozed.app < SNOOZE_MS
 
   return (
     <>
@@ -188,10 +201,7 @@ export function UpdateManager() {
               Update now
             </Button>
           }
-          onClose={() => {
-            write('xt_snooze_site', String(Date.now()))
-            force((n) => n + 1)
-          }}
+          onClose={() => setSnoozed((s) => ({ ...s, site: Date.now() }))}
         />
       )}
       {state.site === 'current' && state.app === 'available' && !appSnoozed && (
@@ -203,10 +213,7 @@ export function UpdateManager() {
               Get it
             </a>
           }
-          onClose={() => {
-            write('xt_snooze_app', String(Date.now()))
-            force((n) => n + 1)
-          }}
+          onClose={() => setSnoozed((s) => ({ ...s, app: Date.now() }))}
         />
       )}
       {note && (

@@ -50,10 +50,10 @@ export const RESET_CATEGORIES: ResetCategory[] = [
   },
   {
     key: 'visits_places',
-    label: 'Store visits and places',
-    line: 'Marketers’ store visits and the places Xtend learned (with their photos).',
-    tables: ['store_visits', 'known_places', 'place_naming_due'],
-    files: 'visit selfies and place photos',
+    label: 'Store visits',
+    line: 'Marketers’ store visits and the places still waiting to be named. The places Xtend learned are always kept.',
+    tables: ['store_visits', 'place_naming_due'],
+    files: 'visit selfies',
   },
   {
     key: 'reports',
@@ -94,8 +94,8 @@ export const RESET_CATEGORIES: ResetCategory[] = [
   {
     key: 'notifications',
     label: 'Notifications',
-    line: 'Notifications sent and scheduled, and who received them.',
-    tables: ['notifications', 'notification_deliveries', 'scheduled_notifications'],
+    line: 'Notifications sent and scheduled, who received them, and who was told about a new app.',
+    tables: ['notifications', 'notification_deliveries', 'scheduled_notifications', 'app_update_notices'],
   },
   {
     key: 'activity',
@@ -164,6 +164,7 @@ export const KEPT_TABLES: { table: string; what: string }[] = [
   { table: 'job_runs', what: 'Scheduled job bookkeeping' },
   { table: 'system_settings', what: 'Test mode itself' },
   { table: 'system_reset_files', what: 'Files a reset is still removing' },
+  { table: 'known_places', what: 'Places Xtend learned from clock-ins and visits (name, address, where it is, photos)' },
   { table: 'place_addresses', what: 'Street addresses Google gave for spots with no shop' },
   { table: 'place_lookup_stats', what: 'Counts of place lookups (Google use)' },
   { table: 'sign_in_lockouts', what: 'Sign-in pauses after wrong passwords (they lift by themselves)' },
@@ -178,6 +179,7 @@ export const ALWAYS_KEPT = [
   'Settings: X Metrics switches and settings, scoring policy, roles, which roles count stock',
   'Notification templates, support quick replies, the count sheet template',
   'Updates and What’s new',
+  'Every place Xtend learned from clock-ins and visits (shop name, address and where it is, with its photos), so the next clock-in there needs no Google lookup',
 ]
 
 export function isResetKey(k: string): k is ResetCategoryKey {

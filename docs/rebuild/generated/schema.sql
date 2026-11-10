@@ -1656,6 +1656,39 @@ $$;
 
 
 --
+-- Name: claim_app_update_notices(integer, integer, integer, interval); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.claim_app_update_notices(p_android integer, p_ios integer, p_max_times integer DEFAULT 3, p_every interval DEFAULT '2 days'::interval) RETURNS TABLE(user_id uuid, platform text, build integer, times integer)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+#variable_conflict use_column
+begin
+  return query
+  with due as (
+    select i.user_id, i.platform,
+           case i.platform when 'android' then p_android else p_ios end as latest
+    from public.app_installs i
+    join public.profiles p on p.id = i.user_id and p.is_active
+    where i.app_build is not null
+      and i.last_seen > now() - interval '30 days'
+      and ((i.platform = 'android' and p_android is not null and i.app_build < p_android)
+        or (i.platform = 'ios' and p_ios is not null and i.app_build < p_ios))
+  ), told as (
+    insert into public.app_update_notices as n (user_id, platform, build)
+    select d.user_id, d.platform, d.latest from due d
+    on conflict on constraint app_update_notices_pkey do update
+      set times = n.times + 1, last_at = now()
+      where n.times < greatest(p_max_times, 1) and n.last_at <= now() - p_every
+    returning n.user_id, n.platform, n.build, n.times
+  )
+  select t.user_id, t.platform, t.build, t.times from told t;
+end;
+$$;
+
+
+--
 -- Name: claim_clock_out_reminders(timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5843,7 +5876,7 @@ CREATE FUNCTION public.reset_category_tables() RETURNS TABLE(category text, tabl
     'stock_counts:store_count_sheets', 'stock_counts:store_counts',
     'stock_counts:count_request_targets', 'stock_counts:count_requests', 'reports:report_files',
     'reports:report_photos', 'reports:reports', 'visits_places:place_naming_due',
-    'visits_places:store_visits', 'visits_places:known_places', 'clock_ins:follow_sessions',
+    'visits_places:store_visits', 'clock_ins:follow_sessions',
     'clock_ins:location_alerts',
     'clock_ins:location_pings', 'clock_ins:excuse_checks', 'clock_ins:phone_checks',
     'clock_ins:photo_checks', 'clock_ins:device_beacons', 'clock_ins:clock_out_reminders',
@@ -5851,7 +5884,7 @@ CREATE FUNCTION public.reset_category_tables() RETURNS TABLE(category text, tabl
     'leave_schedules:leave_requests', 'leave_schedules:schedule_overrides',
     'leave_schedules:work_patterns', 'support:message_reads', 'support:messages',
     'support:message_threads', 'support:support_messages', 'support:support_threads',
-    'notifications:notification_deliveries', 'notifications:scheduled_notifications',
+    'notifications:app_update_notices', 'notifications:notification_deliveries', 'notifications:scheduled_notifications',
     'notifications:notifications', 'activity:user_activity', 'ask:assistant_conversations',
     'stores:xm_stores', 'stores:outlets', 'audit:audit_log'
   ]) with ordinality as v(x, n);
@@ -6003,8 +6036,7 @@ begin
     paths := paths || array(select unnest(array[selfie_path, thumb_path]) from public.attendance);
   end if;
   if 'visits_places' = any(cats) then
-    paths := paths || array(select unnest(array[selfie_path, thumb_path]) from public.store_visits)
-                   || array(select unnest(array[photo_path, selfie_path]) from public.known_places);
+    paths := paths || array(select unnest(array[selfie_path, thumb_path]) from public.store_visits);
   end if;
   if 'reports' = any(cats) then
     paths := paths || array(select storage_path from public.report_photos)
@@ -6024,6 +6056,10 @@ begin
   from storage.objects o
   where o.bucket_id in ('selfies', 'reports', 'report-files', 'avatars')
     and not exists (select 1 from public.count_sheet_templates ct where ct.path = o.name)
+    -- The places Xtend learned stay, so their photos stay too, even when
+    -- the person who named one is removed or everything else goes (0081).
+    and not exists (select 1 from public.known_places kp
+                    where o.name = kp.photo_path or o.name = kp.selfie_path)
     and (
       (o.bucket_id <> 'avatars' and o.name = any(paths))
       -- Everything in the folders of the people removed.
@@ -9144,6 +9180,23 @@ CREATE VIEW public.app_minimum_builds WITH (security_invoker='true') AS
 
 
 --
+-- Name: app_update_notices; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.app_update_notices (
+    user_id uuid NOT NULL,
+    platform text NOT NULL,
+    build integer NOT NULL,
+    times integer DEFAULT 1 NOT NULL,
+    first_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT app_update_notices_build_check CHECK ((build >= 0)),
+    CONSTRAINT app_update_notices_platform_check CHECK ((platform = ANY (ARRAY['android'::text, 'ios'::text]))),
+    CONSTRAINT app_update_notices_times_check CHECK (((times >= 1) AND (times <= 10)))
+);
+
+
+--
 -- Name: assistant_conversations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -11051,6 +11104,14 @@ ALTER TABLE ONLY public.app_releases
 
 
 --
+-- Name: app_update_notices app_update_notices_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.app_update_notices
+    ADD CONSTRAINT app_update_notices_pkey PRIMARY KEY (user_id, platform, build);
+
+
+--
 -- Name: assistant_conversations assistant_conversations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -12719,6 +12780,14 @@ ALTER TABLE ONLY public.app_releases
 
 
 --
+-- Name: app_update_notices app_update_notices_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.app_update_notices
+    ADD CONSTRAINT app_update_notices_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
 -- Name: assistant_conversations assistant_conversations_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -13738,6 +13807,19 @@ CREATE POLICY app_releases_admin_update ON public.app_releases FOR UPDATE TO aut
 --
 
 CREATE POLICY app_releases_read ON public.app_releases FOR SELECT TO authenticated USING (((withdrawn_at IS NULL) OR public.is_admin()));
+
+
+--
+-- Name: app_update_notices; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.app_update_notices ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: app_update_notices app_update_notices_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY app_update_notices_read ON public.app_update_notices FOR SELECT TO authenticated USING (public.is_admin());
 
 
 --
@@ -15189,6 +15271,14 @@ GRANT ALL ON FUNCTION public.check_excuse_more(p_user uuid, p_from timestamp wit
 --
 
 REVOKE ALL ON FUNCTION public.check_store_count(p_outlet_id uuid, today date) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION claim_app_update_notices(p_android integer, p_ios integer, p_max_times integer, p_every interval); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.claim_app_update_notices(p_android integer, p_ios integer, p_max_times integer, p_every interval) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.claim_app_update_notices(p_android integer, p_ios integer, p_max_times integer, p_every interval) TO service_role;
 
 
 --
@@ -17053,6 +17143,13 @@ GRANT SELECT,INSERT,UPDATE ON TABLE public.app_releases TO authenticated;
 --
 
 GRANT SELECT ON TABLE public.app_minimum_builds TO authenticated;
+
+
+--
+-- Name: TABLE app_update_notices; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT ON TABLE public.app_update_notices TO authenticated;
 
 
 --

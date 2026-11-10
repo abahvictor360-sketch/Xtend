@@ -179,6 +179,20 @@ select assert(not exists (select 1 from public.app_installs where user_id <> :'a
 select set_config('request.jwt.claim.sub', :'tunde', false);
 select assert(not exists (select 1 from public.app_installs i where i.user_id <> :'tunde' and not public.supervises_user(i.user_id)),
   'rls: a supervisor sees their own team''s app versions only');
+-- New app notices (0082): only admins read who was told; nobody writes.
+reset role;
+insert into public.app_update_notices (user_id, platform, build) values (:'ada', 'android', 9999);
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'ada', false);
+select assert((select count(*) from public.app_update_notices) = 0,
+  'rls: staff do not see who was told about a new app');
+do $$
+begin
+  insert into public.app_update_notices (user_id, platform, build) values (auth.uid(), 'android', 1);
+  perform assert(false, 'rls: nobody records an app notice directly');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: nobody records an app notice directly');
+end $$;
 select set_config('request.jwt.claim.sub', :'boss', false);
 insert into public.app_releases (title, notes) values ('Published by an admin', 'Notes');
 select assert(exists (select 1 from public.app_releases where title = 'Published by an admin' and created_by = :'boss'),

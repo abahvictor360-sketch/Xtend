@@ -99,6 +99,8 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0078_function_grants.sql             # nobody signed out can run trigger functions or place_is_recognised
    supabase/migrations/0079_security_fixes.sql              # only field staff have a supervisor; attachments follow the message; outlets_for_user limited; report photos never overwritten
    supabase/migrations/0080_zero_trust.sql                  # two-step sign-in for admin/HR in is_admin/is_hr; recent password confirmations; sign-in device status
+   supabase/migrations/0081_reset_keeps_places.sql          # a test-run reset keeps every learned place and its photos
+   supabase/migrations/0082_app_update_notices.sql          # phone notifications about a new app, recorded once per build
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
