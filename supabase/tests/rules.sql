@@ -1714,7 +1714,15 @@ begin
     perform assert(
       (select not push_exempt and outlet_id = mall_id from public.profiles where id = femi),
       'nobody excuses themselves, or moves their own store');
+    -- 0084: whether someone must use the phone app is an admin's decision too.
+    update public.profiles set app_only = true where id = femi;
+    perform assert((select not app_only from public.profiles where id = femi),
+      'nobody makes themselves app-only, or clears it');
     perform act_as(boss);
+    update public.profiles set app_only = true where id = femi;
+    perform assert((select app_only from public.profiles where id = femi),
+      'an admin can require someone to use the phone app');
+    update public.profiles set app_only = false where id = femi;
     update public.profiles set push_exempt = true where id = femi;
     perform assert((select push_exempt from public.profiles where id = femi),
       'an admin can excuse a phone that cannot take notifications');

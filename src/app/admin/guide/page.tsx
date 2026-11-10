@@ -542,6 +542,13 @@ export default async function AdminGuidePage() {
             app, downloads (this sheet, exports, report documents) go to the phone&apos;s{' '}
             <Ui>Downloads</Ui> folder, with a notification when they are ready.
           </p>
+          <p>
+            To make people use the phone app instead of a browser, press <Ui>App only</Ui> on a
+            merchandiser&apos;s or marketer&apos;s row, or <Ui>Require the app for all field staff</Ui> at the
+            top of the page (<Ui>Allow the web again</Ui> undoes it). They can then no longer sign in or use
+            Xtend in a browser: they are told to download the app and sign in there. The apps are not
+            affected, and office accounts always use the web.
+          </p>
           <GuideShot src="/guide/admin-add-staff.png" alt="The Add staff form" width={1932} height={504} caption="Staff → Add staff" />
           <p>
             <Ui>Teams</Ui>: pick a category, tick people (or <Ui>Select all shown</Ui>), choose a supervisor

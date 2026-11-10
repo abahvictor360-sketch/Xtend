@@ -609,6 +609,11 @@ export function StaffManager({
                       className="ml-1"
                     />
                   )}
+                  {isField(person.role) && person.app_only && (
+                    <Badge variant="outline" className="ml-1">
+                      App only
+                    </Badge>
+                  )}
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
                   <Button
@@ -657,6 +662,9 @@ export function StaffManager({
                   )}
                   {isAdmin && isField(person.role) && (
                     <ExemptButton person={person} busy={busy} patch={patch} />
+                  )}
+                  {isAdmin && isField(person.role) && (
+                    <AppOnlyButton person={person} busy={busy} patch={patch} />
                   )}
                   {isField(person.role) && person.is_active && (
                     <Link
@@ -709,6 +717,7 @@ export function StaffManager({
                   {isField(person.role) && (
                     <NotificationBadge on={hasPush.has(person.id)} exempt={Boolean(person.push_exempt)} />
                   )}
+                  {isField(person.role) && person.app_only && <Badge variant="outline">App only</Badge>}
                 </div>
               </div>
 
@@ -821,6 +830,9 @@ export function StaffManager({
                 {isAdmin && isField(person.role) && (
                   <ExemptButton person={person} busy={busy} patch={patch} />
                 )}
+                {isAdmin && isField(person.role) && (
+                  <AppOnlyButton person={person} busy={busy} patch={patch} />
+                )}
                 {isField(person.role) && person.is_active && (
                   <Link
                     href={`/admin/schedules?user=${person.id}`}
@@ -891,6 +903,38 @@ function ExemptButton({
       }}
     >
       {person.push_exempt ? 'Require notifications' : 'Excuse from notifications'}
+    </Button>
+  )
+}
+
+/** Requires this person to use the phone app, not a browser (migration 0084). */
+function AppOnlyButton({
+  person,
+  busy,
+  patch,
+}: {
+  person: Profile
+  busy: boolean
+  patch: (id: string, body: Record<string, unknown>) => Promise<unknown>
+}) {
+  return (
+    <Button
+      size="sm"
+      variant="ghost"
+      disabled={busy}
+      onClick={() => {
+        const require = !person.app_only
+        if (
+          require &&
+          !confirm(
+            `Make ${person.full_name} use the Xtend app only? They can no longer sign in or use Xtend in a browser, and are told to download the app.`,
+          )
+        )
+          return
+        void patch(person.id, { app_only: require })
+      }}
+    >
+      {person.app_only ? 'Allow the web again' : 'App only'}
     </Button>
   )
 }

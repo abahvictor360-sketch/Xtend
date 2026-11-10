@@ -31,6 +31,8 @@ export interface Profile {
   must_change_password: boolean
   /** Excused by an admin from needing notifications on to clock in (027). */
   push_exempt?: boolean
+  /** An admin requires this person to use the phone app, not a browser (0084). */
+  app_only?: boolean
   /** When they finished the first-run walkthrough (037); null until then. */
   onboarded_at?: string | null
   /** A role an admin added (042), shown by its name; role is its base. */

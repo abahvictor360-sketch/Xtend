@@ -6,6 +6,7 @@ import type { Profile, UserRole } from '@/lib/types'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { lagosDateString } from '@/lib/utils'
 import { CHANGE_PASSWORD_CODE, CHANGE_PASSWORD_MESSAGE, passwordChangeBlocks } from '@/lib/password-gate'
+import { APP_ONLY_CODE, APP_ONLY_MESSAGE, APP_ONLY_PATH, appOnlyBlocks } from '@/lib/app-only'
 import {
   DEFAULT_MFA_ROLES,
   LAST_SEEN_HEADER,
@@ -120,6 +121,9 @@ export async function requireSession(roles?: UserRole[]): Promise<Session> {
   const session = await getSession()
   if (!session) redirect('/login')
   if (!session.profile.is_active) redirect('/deactivated')
+  // An admin made this account app-only (0084): a browser is sent to the page
+  // that says so. The apps announce themselves in their user agent.
+  if (appOnlyBlocks(session.profile, (await headers()).get('user-agent'))) redirect(APP_ONLY_PATH)
   if (session.relogin) redirect(`/api/auth/expired?reason=${session.relogin}`)
   if (session.mfa.step === 'challenge') redirect('/mfa')
   if (session.mfa.step === 'setup') redirect('/mfa/setup')
@@ -153,6 +157,9 @@ export async function requireApiSession(
   const session = await getSession()
   if (!session) throw new ApiError('Not authenticated', 401)
   if (!session.profile.is_active) throw new ApiError('Account deactivated', 403)
+  if (appOnlyBlocks(session.profile, (await headers()).get('user-agent'))) {
+    throw new ApiError(APP_ONLY_MESSAGE, 403, APP_ONLY_CODE)
+  }
   if (session.relogin) {
     throw new ApiError(
       session.relogin === 'clocked-out'

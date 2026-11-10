@@ -102,6 +102,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0081_reset_keeps_places.sql          # a test-run reset keeps every learned place and its photos
    supabase/migrations/0082_app_update_notices.sql          # phone notifications about a new app, recorded once per build
    supabase/migrations/0083_team_photo_access.sql           # supervisors (own team), HR and admins can open clock-in, shelf and profile photos
+   supabase/migrations/0084_app_only.sql                    # profiles.app_only: an admin can require merchandisers and marketers to use the phone app
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

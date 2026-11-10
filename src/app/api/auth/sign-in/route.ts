@@ -10,6 +10,7 @@ import { alertNewOfficeDevice } from '@/lib/new-device-alert'
 import { LAST_SEEN_COOKIE, OFFICE_SESSION_HOURS } from '@/lib/zero-trust'
 import { formatLagos } from '@/lib/utils'
 import { TURNSTILE_ERROR, turnstileEnabled, verifyTurnstile } from '@/lib/turnstile'
+import { APP_ONLY_CODE, APP_ONLY_MESSAGE, appOnlyBlocks } from '@/lib/app-only'
 
 const schema = z.object({
   identifier: z.string().trim().min(3).max(120),
@@ -81,6 +82,20 @@ export async function POST(request: Request) {
   const supabase = await createServerSupabase()
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) return wrongPassword(service, attempt)
+
+  // An account an admin made app-only (0084) cannot sign in from a browser:
+  // sign the session straight back out and say why. The apps get through.
+  if (data.user) {
+    const { data: who } = await service
+      .from('profiles')
+      .select('role, app_only')
+      .eq('id', data.user.id)
+      .maybeSingle<{ role: string; app_only: boolean | null }>()
+    if (appOnlyBlocks(who, request.headers.get('user-agent'))) {
+      await supabase.auth.signOut()
+      return Response.json({ error: APP_ONLY_MESSAGE, code: APP_ONLY_CODE }, { status: 403 })
+    }
+  }
 
   // Whether this device was known to the account before (0080): a new one
   // for an office account is announced below. Asked before it is recorded.

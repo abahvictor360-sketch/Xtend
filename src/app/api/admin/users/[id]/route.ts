@@ -26,6 +26,8 @@ const patchSchema = z.object({
   is_active: z.boolean().optional(),
   /** Admin only: may clock in without notifications on (migration 027). */
   push_exempt: z.boolean().optional(),
+  /** Admin only: must use the phone app, not a browser (migration 0084). */
+  app_only: z.boolean().optional(),
   reset_password: z.boolean().optional(),
   /** Lift a sign-in lock (0077) early. */
   unlock: z.boolean().optional(),
@@ -82,10 +84,11 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
         input.email !== undefined ||
         input.outlet_id !== undefined ||
         input.supervisor_id !== undefined ||
-        input.push_exempt !== undefined
+        input.push_exempt !== undefined ||
+        input.app_only !== undefined
       ) {
         return Response.json(
-          { error: "Only an admin can change somebody's email, role, store, supervisor or notification rule." },
+          { error: "Only an admin can change somebody's email, role, store, supervisor, notification rule or app-only setting." },
           { status: 403 },
         )
       }
@@ -108,10 +111,11 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
         input.role !== undefined ||
         input.staff_role_id !== undefined ||
         input.email !== undefined ||
-        input.push_exempt !== undefined
+        input.push_exempt !== undefined ||
+        input.app_only !== undefined
       ) {
         return Response.json(
-          { error: "Only an admin can change somebody's email, role or notification rule." },
+          { error: "Only an admin can change somebody's email, role, notification rule or app-only setting." },
           { status: 403 },
         )
       }
@@ -194,6 +198,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       'supervisor_id',
       'is_active',
       'push_exempt',
+      'app_only',
     ] as const) {
       if (input[key] !== undefined) changes[key] = input[key]
     }

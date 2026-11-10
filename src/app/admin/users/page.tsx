@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { AppOnlyBulk } from '@/components/admin/app-only-bulk'
 import { StaffLoginsButton } from '@/components/admin/staff-logins-button'
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
@@ -90,6 +91,8 @@ export default async function UsersPage({
           </div>
         )}
       </div>
+
+      {isAdmin && <AppOnlyBulk />}
 
       <StaffManager
         staff={(staff ?? []) as Profile[]}
