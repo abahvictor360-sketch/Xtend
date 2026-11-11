@@ -1072,6 +1072,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-11-11 | Splash screen (`src/components/splash-screen.tsx`): drawn with the first page so there is no white gap after the phone's launch screen, fades out after 0.7 s, once per session; matches `mobile/assets/splash.png` | none |
 | 2026-11-11 | Location fix is quicker: stops at 30 m (was 20 m), waits at most 4 s after the first reading (was 8 s), and takes a 50 m reading after 1.5 s; the 100 m ceiling is unchanged | none |
 | 2026-11-11 | Attendance: a staff name opens a one-page overview of their day (`/admin/attendance/day?person=&date=`): clock records, store visits, day report, movement count, alerts, flags | none |
 | 2026-11-11 | Sign-out redirects use the public address (`src/lib/origin.ts`) instead of the container's `localhost:3000`; field pages keep clear of the bottom bar and never scroll sideways; camera opens at 960x720 so it starts faster | none |
