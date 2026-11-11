@@ -1,9 +1,8 @@
 import Link from 'next/link'
-import { headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { Smartphone } from 'lucide-react'
-import { getSession } from '@/lib/auth'
-import { appOnlyBlocks } from '@/lib/app-only'
+import { appOnlyHere, getSession } from '@/lib/auth'
+import { AppOnlyRecheck } from '@/components/app-only-recheck'
 import { buttonVariants } from '@/components/ui/button'
 import { SignOutButton } from '@/components/sign-out-button'
 
@@ -18,7 +17,7 @@ export const metadata = { title: 'Use the Xtend app — Xtend' }
 export default async function AppOnlyPage() {
   const session = await getSession()
   if (!session) redirect('/login')
-  if (!appOnlyBlocks(session.profile, (await headers()).get('user-agent'))) redirect('/')
+  if (!(await appOnlyHere(session.profile))) redirect('/')
 
   return (
     <main className="mx-auto flex min-h-dvh w-full max-w-sm flex-col justify-center gap-4 px-6 pb-[10vh] text-center">
@@ -34,6 +33,7 @@ export default async function AppOnlyPage() {
         Download the app
       </Link>
       <SignOutButton />
+      <AppOnlyRecheck />
     </main>
   )
 }

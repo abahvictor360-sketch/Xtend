@@ -3885,7 +3885,8 @@ CREATE TABLE public.profiles (
     supervisor_id uuid,
     push_exempt boolean DEFAULT false NOT NULL,
     onboarded_at timestamp with time zone,
-    staff_role_id uuid
+    staff_role_id uuid,
+    app_only boolean DEFAULT false NOT NULL
 );
 
 
@@ -4736,6 +4737,7 @@ begin
   new.supervisor_id := old.supervisor_id;
   new.is_active     := old.is_active;
   new.push_exempt   := old.push_exempt;
+  new.app_only      := old.app_only;
   if coalesce(current_setting('xtend.own_photo', true), '') <> 'on' then
     new.avatar_path := old.avatar_path;
   end if;
@@ -5057,26 +5059,54 @@ declare
   alert_before timestamptz;
   alert record;
   open_shift boolean;
+  late boolean := false;
+  shift_day date;
+  opened_at timestamptz;
+  closed_at timestamptz;
 begin
   select * into t from public.tracking_tokens
   where token_hash = encode(sha256(convert_to(coalesce(p_token, ''), 'utf8')), 'hex');
-  if t.id is null or t.revoked_at is not null or t.expires_at < now() then
+  if t.id is null then
     return jsonb_build_object('ok', false, 'reason', 'token');
   end if;
   if not exists (select 1 from public.profiles where id = t.user_id and is_active) then
     return jsonb_build_object('ok', false, 'reason', 'token');
   end if;
 
-  open_shift := exists (
-    select 1 from public.attendance
-    where user_id = t.user_id and attendance_date = public.business_date() and type = 'opening'
-  ) and not exists (
-    select 1 from public.attendance
-    where user_id = t.user_id and attendance_date = public.business_date() and type = 'closing'
-  );
-  if not open_shift then
-    update public.tracking_tokens set revoked_at = now() where id = t.id;
-    return jsonb_build_object('ok', false, 'stop', true, 'shift_open', false);
+  -- When the shift this token was issued for began and ended (Lagos day).
+  shift_day := (t.created_at at time zone 'Africa/Lagos')::date;
+  select min(coalesce(a.client_captured_at, a.created_at)) filter (where a.type = 'opening'),
+         max(coalesce(a.client_captured_at, a.created_at)) filter (where a.type = 'closing')
+    into opened_at, closed_at
+  from public.attendance a
+  where a.user_id = t.user_id and a.attendance_date = shift_day;
+
+  if t.revoked_at is not null or t.expires_at < now() then
+    -- An ended token. It still delivers what was taken during a shift that
+    -- has since finished, for 24 hours; a token made after the clock-out,
+    -- or for a shift that never ended, is refused as before.
+    if opened_at is not null and closed_at is not null and t.created_at < closed_at
+       and coalesce(t.revoked_at, t.expires_at) > now() - interval '24 hours' then
+      late := true;
+    else
+      return jsonb_build_object('ok', false, 'reason', 'token');
+    end if;
+  else
+    open_shift := exists (
+      select 1 from public.attendance
+      where user_id = t.user_id and attendance_date = public.business_date() and type = 'opening'
+    ) and not exists (
+      select 1 from public.attendance
+      where user_id = t.user_id and attendance_date = public.business_date() and type = 'closing'
+    );
+    if not open_shift then
+      if opened_at is not null and closed_at is not null and t.created_at < closed_at then
+        late := true;
+      else
+        update public.tracking_tokens set revoked_at = now() where id = t.id;
+        return jsonb_build_object('ok', false, 'stop', true, 'shift_open', false);
+      end if;
+    end if;
   end if;
 
   if jsonb_typeof(p_points) <> 'array' or jsonb_array_length(p_points) > 500 then
@@ -5093,6 +5123,7 @@ begin
     taken := public.safe_ts(point->>'captured_at') - make_interval(secs => offset_s);
     if taken is null or taken > now() + interval '2 minutes' or taken < now() - interval '24 hours'
        or taken < t.created_at - interval '5 minutes'
+       or (late and (taken > closed_at or taken < opened_at - interval '5 minutes'))
        or jsonb_typeof(point->'lat') <> 'number' or jsonb_typeof(point->'lng') <> 'number'
        or jsonb_typeof(point->'accuracy_m') <> 'number' then
       continue;
@@ -5107,7 +5138,9 @@ begin
       where l.user_id = t.user_id and l.created_at between taken - interval '1 second' and taken + interval '1 second'
     ) then continue; end if;
 
-    if now() - taken <= interval '2 minutes' then
+    -- After the shift every position is stored as the offline one it is, at
+    -- the time it was taken, so none can raise a movement alert.
+    if not late and now() - taken <= interval '2 minutes' then
       perform set_config('xtend.offline_ping', 'off', true);
       insert into public.location_pings (lat, lng, accuracy_m) values (la, ln, acc);
     else
@@ -5131,6 +5164,16 @@ begin
   end if;
 
   update public.tracking_tokens set last_used_at = now(), points = points + kept where id = t.id;
+
+  if late then
+    -- The shift is over: retire the token (the route tells the phone to stop
+    -- unless this was a full batch, so a longer queue is sent in full).
+    if t.revoked_at is null then
+      update public.tracking_tokens set revoked_at = now() where id = t.id;
+    end if;
+    return jsonb_build_object('ok', true, 'user_id', t.user_id, 'kept', kept,
+                              'shift_open', false, 'late', true, 'alert', null);
+  end if;
 
   select a.id, a.distance_m, l.id as ping_id, l.lat, l.lng into alert
   from public.location_alerts a

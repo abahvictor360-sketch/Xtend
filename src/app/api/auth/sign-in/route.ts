@@ -11,6 +11,7 @@ import { LAST_SEEN_COOKIE, OFFICE_SESSION_HOURS } from '@/lib/zero-trust'
 import { formatLagos } from '@/lib/utils'
 import { TURNSTILE_ERROR, turnstileEnabled, verifyTurnstile } from '@/lib/turnstile'
 import { APP_ONLY_CODE, APP_ONLY_MESSAGE, appOnlyBlocks } from '@/lib/app-only'
+import { APP_COOKIE } from '@/lib/app-agent'
 
 const schema = z.object({
   identifier: z.string().trim().min(3).max(120),
@@ -91,7 +92,7 @@ export async function POST(request: Request) {
       .select('role, app_only')
       .eq('id', data.user.id)
       .maybeSingle<{ role: string; app_only: boolean | null }>()
-    if (appOnlyBlocks(who, request.headers.get('user-agent'))) {
+    if (appOnlyBlocks(who, request.headers.get('user-agent'), readCookie(request, APP_COOKIE))) {
       await supabase.auth.signOut()
       return Response.json({ error: APP_ONLY_MESSAGE, code: APP_ONLY_CODE }, { status: 403 })
     }
@@ -182,4 +183,13 @@ async function emailForPhone(identifier: string): Promise<string | null> {
     .limit(1)
     .maybeSingle<{ email: string | null }>()
   return data?.email ?? null
+}
+
+/** One cookie from the request, or null. */
+function readCookie(request: Request, name: string) {
+  for (const part of (request.headers.get('cookie') ?? '').split(';')) {
+    const [key, ...rest] = part.trim().split('=')
+    if (key === name) return rest.join('=')
+  }
+  return null
 }

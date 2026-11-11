@@ -1,4 +1,4 @@
-import { headers } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { cache } from 'react'
 import { createServerSupabase } from '@/lib/supabase/server'
@@ -7,6 +7,7 @@ import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { lagosDateString } from '@/lib/utils'
 import { CHANGE_PASSWORD_CODE, CHANGE_PASSWORD_MESSAGE, passwordChangeBlocks } from '@/lib/password-gate'
 import { APP_ONLY_CODE, APP_ONLY_MESSAGE, APP_ONLY_PATH, appOnlyBlocks } from '@/lib/app-only'
+import { APP_COOKIE } from '@/lib/app-agent'
 import {
   DEFAULT_MFA_ROLES,
   LAST_SEEN_HEADER,
@@ -116,6 +117,16 @@ async function mfaState(supabase: SupabaseClient, profile: Profile): Promise<Ses
   return { step: mfaStep({ required, enrolled, aal: level?.currentLevel ?? null }), enrolled, required }
 }
 
+/**
+ * Whether this request must be sent to the app (0084): the app's user agent,
+ * or the xt_app cookie it left for the page loads Android's service worker
+ * makes without that user agent.
+ */
+export async function appOnlyHere(profile: Session['profile']) {
+  const [h, c] = await Promise.all([headers(), cookies()])
+  return appOnlyBlocks(profile, h.get('user-agent'), c.get(APP_COOKIE)?.value)
+}
+
 /** Page-level guard. Redirects rather than throwing. */
 export async function requireSession(roles?: UserRole[]): Promise<Session> {
   const session = await getSession()
@@ -123,7 +134,7 @@ export async function requireSession(roles?: UserRole[]): Promise<Session> {
   if (!session.profile.is_active) redirect('/deactivated')
   // An admin made this account app-only (0084): a browser is sent to the page
   // that says so. The apps announce themselves in their user agent.
-  if (appOnlyBlocks(session.profile, (await headers()).get('user-agent'))) redirect(APP_ONLY_PATH)
+  if (await appOnlyHere(session.profile)) redirect(APP_ONLY_PATH)
   if (session.relogin) redirect(`/api/auth/expired?reason=${session.relogin}`)
   if (session.mfa.step === 'challenge') redirect('/mfa')
   if (session.mfa.step === 'setup') redirect('/mfa/setup')
@@ -157,7 +168,7 @@ export async function requireApiSession(
   const session = await getSession()
   if (!session) throw new ApiError('Not authenticated', 401)
   if (!session.profile.is_active) throw new ApiError('Account deactivated', 403)
-  if (appOnlyBlocks(session.profile, (await headers()).get('user-agent'))) {
+  if (await appOnlyHere(session.profile)) {
     throw new ApiError(APP_ONLY_MESSAGE, 403, APP_ONLY_CODE)
   }
   if (session.relogin) {

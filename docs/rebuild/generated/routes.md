@@ -2,7 +2,7 @@
 
 # API routes
 
-125 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+126 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
 
 ## `POST /api/activity`
 
@@ -61,6 +61,23 @@ const schema = z.object({
 ```
 
 - Database functions: `resolve_alerts`, `resolve_alert`
+
+## `POST /api/admin/app-only`
+
+- File: `src/app/api/admin/app-only/route.ts`
+- Who: ['admin']
+
+True: must use the phone app. False: may use a browser again.
+
+```ts
+const schema = z.object({
+  /** True: must use the phone app. False: may use a browser again. */
+  value: z.boolean(),
+  /** Whom it applies to; everyone who works in the field by default. */
+  role: z.enum(['merchandiser', 'marketer', 'all']).default('all'),
+})
+```
+- Tables and views: `profiles`
 
 ## `POST /api/admin/ask/act`
 
@@ -1161,6 +1178,8 @@ const patchSchema = z.object({
   is_active: z.boolean().optional(),
   /** Admin only: may clock in without notifications on (migration 027). */
   push_exempt: z.boolean().optional(),
+  /** Admin only: must use the phone app, not a browser (migration 0084). */
+  app_only: z.boolean().optional(),
   reset_password: z.boolean().optional(),
   /** Lift a sign-in lock (0077) early. */
   unlock: z.boolean().optional(),
@@ -2075,5 +2094,5 @@ const schema = z.object({
   client_captured_at: z.string().datetime({ offset: true }),
 })
 ```
-- Tables and views: `store_visits`, `store_visit_detail`
+- Tables and views: `attendance`, `store_visits`, `store_visit_detail`
 

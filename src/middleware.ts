@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { BOT_BLOCKED_BODY, botDecision } from '@/lib/bot-guard'
+import { APP_COOKIE, APP_COOKIE_MAX_AGE, isAppUserAgent } from '@/lib/app-agent'
 import { BACKGROUND_HEADER, LAST_SEEN_COOKIE, LAST_SEEN_HEADER, OFFICE_SESSION_HOURS, originAllowed } from '@/lib/zero-trust'
 
 const PUBLIC_PATHS = ['/login', '/deactivated', '/offline', '/download', '/guide']
@@ -14,6 +15,23 @@ const PUBLIC_PATHS = ['/login', '/deactivated', '/offline', '/download', '/guide
  * the project root when the app is under src/.
  */
 export async function middleware(request: NextRequest) {
+  const response = await route(request)
+  // A request from the Xtend app leaves a mark, so the page loads Android's
+  // service worker makes without the app's user agent are still known to
+  // come from the app (src/lib/app-agent.ts).
+  if (isAppUserAgent(request.headers.get('user-agent')) && response.status < 400) {
+    response.cookies.set(APP_COOKIE, '1', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: APP_COOKIE_MAX_AGE,
+    })
+  }
+  return response
+}
+
+async function route(request: NextRequest): Promise<NextResponse> {
   // Crawlers, scrapers, AI bots and scripts are turned away before anything
   // else (lib/bot-guard.ts). Scheduled jobs, the phone's tracker, health
   // checks and static files are never refused. Off under `next dev`, so

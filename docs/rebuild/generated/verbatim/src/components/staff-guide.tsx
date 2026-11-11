@@ -81,7 +81,9 @@ export function StaffGuide() {
             <>
               <Ui>Location:</Ui> when asked, tap Allow (choose <Ui>Allow all the time</Ui> or{' '}
               <Ui>Always</Ui> if your phone offers it). In your phone’s settings, set location to{' '}
-              <Ui>High accuracy</Ui>.
+              <Ui>High accuracy</Ui>. In the Xtend app, you also need <Ui>Battery: Unrestricted</Ui>{' '}
+              (turn off battery saving for Xtend). Xtend will not let you clock in or out until both
+              are set, and it shows you where to change them.
             </>,
             <>
               <Ui>Camera:</Ui> allow it when asked. Clocking in and out takes a selfie with
@@ -135,7 +137,11 @@ export function StaffGuide() {
       <GuideSection topic={T.visits} intro="Marketers who move between stores check in at each one.">
         <Steps
           items={[
-            <>Clock in at the start of your day as above.</>,
+            <>
+              Clock in at the start of your day as above. You cannot check in at a store until you have
+              clocked in, and with no signal a check-in or check-out is not recorded: try again when you
+              have signal.
+            </>,
             <>
               Keep your phone’s location on all day. Without it, Xtend shows{' '}
               <Ui>Location required</Ui> and you cannot clock in or out, or check in or out of a

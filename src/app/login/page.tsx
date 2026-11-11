@@ -1,11 +1,11 @@
 import { Suspense } from 'react'
 import Link from 'next/link'
-import { headers } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { Smartphone } from 'lucide-react'
 import { LoginForm } from '@/app/login/login-form'
 import { Skeleton } from '@/components/ui/skeleton'
 import { XpelLockup, XpelTile } from '@/components/brand/logo'
-import { isAppUserAgent } from '@/lib/app-agent'
+import { APP_COOKIE, isAppRequest } from '@/lib/app-agent'
 import { turnstileSiteKey } from '@/lib/turnstile'
 
 export const metadata = { title: 'Sign in — Xtend' }
@@ -24,7 +24,7 @@ export default async function LoginPage({
 }) {
   const reason = (await searchParams).reason
   const notice = typeof reason === 'string' ? REASONS[reason] : undefined
-  const inApp = isAppUserAgent((await headers()).get('user-agent'))
+  const inApp = isAppRequest((await headers()).get('user-agent'), (await cookies()).get(APP_COOKIE)?.value)
   // The human check (Turnstile) shows only when both of its keys are set.
   const humanCheckKey = turnstileSiteKey()
 

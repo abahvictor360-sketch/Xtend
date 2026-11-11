@@ -245,6 +245,12 @@ export default async function SupervisorGuidePage() {
             together).
           </p>
           <p>
+            A <Ui>Photo not checked</Ui> flag means the automatic photo check was not available, so the
+            photo was let through unseen. Open the flag and press <Ui>Show photo</Ui> to look at it
+            yourself: is it a live face, taken now, at the place? Then mark it reviewed with what you found.
+            You can open the photos of your own team only.
+          </p>
+          <p>
             <Ui>Check an excuse</Ui>: someone says their network was bad, their phone was off, or the app
             would not let them clock in? Pick who, what they said and when. Xtend says whether it holds up,
             with a timeline. <Ui>Keep on record</Ui> with a note when it matters.

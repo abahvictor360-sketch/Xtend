@@ -1341,7 +1341,15 @@ Talks to `window.Capacitor` directly (no `@capacitor/*` import in the web app):
 `NativeBridge` component (field and admin frames): listens to `pushNotificationReceived`
 (ack `delivered`) and `pushNotificationActionPerformed` (ack `opened`, then `router.push(url)` only
 if the url matches `/^\/(?![/\\])/`). `APP_AGENT_MARK = 'XtendApp'` (`src/lib/app-agent.ts`) lets
-server pages hide "Get the app" inside the app.
+server pages hide "Get the app" inside the app. Android's WebView sends the page loads its service
+worker makes (`public/sw.js` answers every navigation with `fetch(request)`) with the plain WebView
+user agent, without the mark, so the middleware also sets `APP_COOKIE = 'xt_app'` = `1` (httpOnly,
+Secure in production, SameSite Lax, path `/`, `APP_COOKIE_MAX_AGE` = 1 year) on every response
+under 400 to a request carrying the mark, and `isAppRequest(ua, cookie)` (mark or cookie `1`) is
+what the login page, download page, `appOnlyBlocks(profile, ua, cookie)` (via `appOnlyHere(profile)`
+in `src/lib/auth.ts` for pages and API routes) and the sign-in route use. On `/app-only`,
+`AppOnlyRecheck` (inside the app only, once per sitting through `sessionStorage` `xt_app_recheck`)
+fetches `/api/version` to leave the cookie and goes to `/`. Not a security signal.
 
 ### 5.6 GitHub Actions (`.github/workflows/mobile.yml`)
 

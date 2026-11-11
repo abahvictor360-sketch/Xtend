@@ -22,8 +22,8 @@ create policy avatars_insert_own on storage.objects as PERMISSIVE for INSERT to 
   with check (((bucket_id = 'avatars'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text)));
 
 drop policy if exists avatars_read on storage.objects;
-create policy avatars_read on storage.objects as PERMISSIVE for SELECT to public
-  using (((bucket_id = 'avatars'::text) AND (((storage.foldername(name))[1] = (auth.uid())::text) OR is_admin() OR supervises_user(((storage.foldername(name))[1])::uuid))));
+create policy avatars_read on storage.objects as PERMISSIVE for SELECT to authenticated
+  using (((bucket_id = 'avatars'::text) AND (((storage.foldername(name))[1] = (auth.uid())::text) OR is_admin() OR supervises_user(safe_uuid((storage.foldername(name))[1])) OR hr_sees(safe_uuid((storage.foldername(name))[1])))));
 
 drop policy if exists message_files_insert_own on storage.objects;
 create policy message_files_insert_own on storage.objects as PERMISSIVE for INSERT to authenticated
@@ -54,16 +54,16 @@ create policy reports_insert_own on storage.objects as PERMISSIVE for INSERT to 
   with check (((bucket_id = 'reports'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text)));
 
 drop policy if exists reports_read on storage.objects;
-create policy reports_read on storage.objects as PERMISSIVE for SELECT to public
-  using (((bucket_id = 'reports'::text) AND (((storage.foldername(name))[1] = (auth.uid())::text) OR is_admin())));
+create policy reports_read on storage.objects as PERMISSIVE for SELECT to authenticated
+  using (((bucket_id = 'reports'::text) AND (((storage.foldername(name))[1] = (auth.uid())::text) OR is_admin() OR supervises_user(safe_uuid((storage.foldername(name))[1])) OR hr_sees(safe_uuid((storage.foldername(name))[1])))));
 
 drop policy if exists selfies_insert_own on storage.objects;
 create policy selfies_insert_own on storage.objects as PERMISSIVE for INSERT to public
   with check (((bucket_id = 'selfies'::text) AND ((storage.foldername(name))[1] = (auth.uid())::text)));
 
 drop policy if exists selfies_read on storage.objects;
-create policy selfies_read on storage.objects as PERMISSIVE for SELECT to public
-  using (((bucket_id = 'selfies'::text) AND (((storage.foldername(name))[1] = (auth.uid())::text) OR is_admin())));
+create policy selfies_read on storage.objects as PERMISSIVE for SELECT to authenticated
+  using (((bucket_id = 'selfies'::text) AND (((storage.foldername(name))[1] = (auth.uid())::text) OR is_admin() OR supervises_user(safe_uuid((storage.foldername(name))[1])) OR hr_sees(safe_uuid((storage.foldername(name))[1])))));
 
 
 

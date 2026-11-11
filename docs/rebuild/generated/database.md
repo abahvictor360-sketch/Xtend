@@ -598,6 +598,7 @@ Policies:
 | push_exempt | boolean(bool) |  | false |
 | onboarded_at | timestamp with time zone(timestamptz) | yes |  |
 | staff_role_id | uuid(uuid) | yes |  |
+| app_only | boolean(bool) |  | false |
 
 Policies:
 - `profiles_admin_all` ALL to public: using `is_admin()`; check `is_admin()`
@@ -1526,7 +1527,7 @@ Policies:
 - `post_support_message(p_thread uuid, p_body text)` → uuid · definer · 0053_support_notifications.sql
 - `product_key(p_name text)` → text · 0021_counted_product_names.sql
 - `profiles_field_only_reporting()` → trigger · definer · 0079_security_fixes.sql
-- `profiles_self_guard()` → trigger · definer · 0042_staff_roles.sql
+- `profiles_self_guard()` → trigger · definer · 0084_app_only.sql
 - `profiles_staff_role_sync()` → trigger · definer · 0042_staff_roles.sql
 - `profiles_supervisor_check()` → trigger · definer · 0017_supervisor_manages_staff.sql
 - `punctuality_grace_minutes()` → integer · 0036_supervisor_alerts.sql
@@ -1538,7 +1539,7 @@ Policies:
 - `realtime_notify_support_message()` → trigger · definer · 0058_realtime_broadcast.sql
 - `recent_auth_ok(p_user uuid, p_minutes integer)` → boolean · definer · 0080_zero_trust.sql
 - `record_activity(p_user uuid, p_kind text, p_ip text, p_platform text, p_app_build integer, p_user_agent text, p_device jsonb, p_detail jsonb, p_at timestamp with time zone)` → boolean · definer · 0062_user_activity.sql
-- `record_background_pings(p_token text, p_points jsonb, p_sent_at timestamp with time zone)` → jsonb · definer · 0055_reject_post_clockout_tracking.sql
+- `record_background_pings(p_token text, p_points jsonb, p_sent_at timestamp with time zone)` → jsonb · definer · 0085_late_tracking_points.sql
 - `record_beacon(p jsonb)` → jsonb · definer · 0026_phone_evidence.sql
 - `record_excuse_check(p_user uuid, p_claim text, p_from timestamp with time zone, p_to timestamp with time zone, p_verdict text, p_headline text, p_note text)` → uuid · definer · 0048_excuse_check_advanced.sql
 - `record_offline_pings(p_points jsonb, p_sent_at timestamp with time zone)` → integer · definer · 0029_offline_positions.sql
