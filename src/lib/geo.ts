@@ -109,7 +109,10 @@ export interface SampledFix extends Fix {
   spread_m: number
 }
 
-const DEFAULTS: Required<FixOptions> = { targetAccuracyM: 20, settleMs: 8000, minSamples: 1, timeoutMs: 20000 }
+const DEFAULTS: Required<FixOptions> = { targetAccuracyM: 30, settleMs: 4000, minSamples: 1, timeoutMs: 20000 }
+/** A reading this good, held for GOOD_HOLD_MS, is taken without waiting out the full settle time. */
+const GOOD_ENOUGH_M = 50
+const GOOD_HOLD_MS = 1500
 
 function fromPosition(pos: GeolocationPosition): Fix {
   return {
@@ -218,7 +221,8 @@ function browserReadings(o: Required<FixOptions>): Promise<Fix[]> {
     )
     const timer = setInterval(() => {
       const now = Date.now()
-      if (firstAt && now - firstAt >= o.settleMs) finish()
+      const bestNow = readings.length ? Math.min(...readings.map((r) => r.accuracy_m)) : Infinity
+      if (firstAt && (now - firstAt >= o.settleMs || (bestNow <= GOOD_ENOUGH_M && now - firstAt >= GOOD_HOLD_MS))) finish()
       else if (!firstAt && now - started >= o.timeoutMs) {
         done = true
         navigator.geolocation.clearWatch(watch)
@@ -250,7 +254,8 @@ async function nativeReadings(o: Required<FixOptions>): Promise<Fix[] | null> {
     })
     const best = Math.min(...readings.map((r) => r.accuracy_m))
     if (readings.length >= o.minSamples && best <= o.targetAccuracyM) break
-    if (Date.now() - started >= o.settleMs) break
+    const spent = Date.now() - started
+    if (spent >= o.settleMs || (best <= GOOD_ENOUGH_M && spent >= GOOD_HOLD_MS)) break
   }
   return readings.length ? readings : null
 }
