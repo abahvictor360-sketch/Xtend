@@ -1072,6 +1072,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-11-11 | Two-step sign-in set-up passes `issuer: 'Xtend'`, so the authenticator app shows Xtend and not the server address; self-hosted Auth needs SITE_URL and API_EXTERNAL_URL set to the real addresses | none |
 | 2026-11-11 | Android app: `adjustMarginsForEdgeToEdge: 'force'` so the bottom menu sits above the phone's navigation buttons (needs a new APK) | none |
 | 2026-11-11 | Splash screen (`src/components/splash-screen.tsx`): drawn with the first page so there is no white gap after the phone's launch screen, fades out after 0.7 s, once per session; matches `mobile/assets/splash.png` | none |
 | 2026-11-11 | Location fix is quicker: stops at 30 m (was 20 m), waits at most 4 s after the first reading (was 8 s), and takes a 50 m reading after 1.5 s; the 100 m ceiling is unchanged | none |

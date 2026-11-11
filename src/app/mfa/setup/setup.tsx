@@ -37,6 +37,8 @@ export function MfaSetup({ alreadyOn, required }: { alreadyOn: boolean; required
         }
         const { data, error: enrollError } = await client.auth.mfa.enroll({
           factorType: 'totp',
+          // The name the authenticator app shows, instead of the server's address.
+          issuer: 'Xtend',
           friendlyName: `Xtend ${new Date().toISOString().slice(0, 16)}`,
         })
         if (cancelled) return
