@@ -1,10 +1,10 @@
 import Link from 'next/link'
-import { headers } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import QRCode from 'qrcode'
 import { ArrowRight, BellRing, Download, Smartphone, WifiOff, Zap } from 'lucide-react'
 import { XpelLockup, XpelTile } from '@/components/brand/logo'
 import { cn } from '@/lib/utils'
-import { isAppUserAgent } from '@/lib/app-agent'
+import { APP_COOKIE, isAppRequest } from '@/lib/app-agent'
 import { publishedAndroidApk } from '@/lib/app-release'
 
 export const dynamic = 'force-dynamic'
@@ -44,7 +44,7 @@ export default async function DownloadPage() {
     ios: process.env.IOS_APP_URL || null,
   }
   const version = process.env.APP_VERSION || published?.version || null
-  const inApp = isAppUserAgent(ua)
+  const inApp = isAppRequest(ua, (await cookies()).get(APP_COOKIE)?.value)
 
   const host = h.get('x-forwarded-host') ?? h.get('host') ?? 'www.withxtend.com'
   const pageUrl = `https://${host}/download`

@@ -389,6 +389,13 @@ export default async function AdminGuidePage() {
               In a browser instead of the app, Xtend must stay open on screen. Some Android phones stop
               apps to save battery; the app asks staff to change that setting, without saying why.
             </li>
+            <li>
+              In the Android and iPhone apps, clocking in or out is held back until location is set to{' '}
+              <Ui>Allow all the time</Ui> (iPhone: <Ui>Always</Ui>) and, on Android, battery saving is off
+              for Xtend. Staff see a card with the steps and a button for each phone screen, and it clears
+              by itself when they come back. An app that does not report these settings (an old version, or a
+              browser) is not held back, so ask staff to keep the app updated.
+            </li>
           </ul>
         </GuideSection>
 
@@ -534,6 +541,13 @@ export default async function AdminGuidePage() {
             sign-in with how to install the app. It asks for your password again first. In the Xtend phone
             app, downloads (this sheet, exports, report documents) go to the phone&apos;s{' '}
             <Ui>Downloads</Ui> folder, with a notification when they are ready.
+          </p>
+          <p>
+            To make people use the phone app instead of a browser, press <Ui>App only</Ui> on a
+            merchandiser&apos;s or marketer&apos;s row, or <Ui>Require the app for all field staff</Ui> at the
+            top of the page (<Ui>Allow the web again</Ui> undoes it). They can then no longer sign in or use
+            Xtend in a browser: they are told to download the app and sign in there. The apps are not
+            affected, and office accounts always use the web.
           </p>
           <GuideShot src="/guide/admin-add-staff.png" alt="The Add staff form" width={1932} height={504} caption="Staff → Add staff" />
           <p>

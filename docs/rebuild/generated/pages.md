@@ -2,7 +2,7 @@
 
 # Pages
 
-62 pages. "Who" is what `requireSession` admits (field pages are also guarded by their layout).
+64 pages. "Who" is what `requireSession` admits (field pages are also guarded by their layout).
 
 ## `/admin/activity` — Activity log — Xtend
 
@@ -47,6 +47,14 @@ On screen: Ask in plain words about attendance, store visits, stock counts, X Me
 - Components: `admin/outlet-allocator`
 
 On screen: Choose which stores each person works. A marketer with stores here can only check in at those (and their home store), and the app lists only those; with none, they check in wherever they are. A merchandiser is measured against their store. Allocating also puts someone on a supervisor&rsquo;s team.
+
+## `/admin/attendance/day` — Day overview — Xtend
+
+- File: `src/app/admin/attendance/day/page.tsx`
+- Who: ['admin', 'supervisor', 'hr']
+- Components: `ui/alert`, `ui/badge`
+
+One person, one day: everything Xtend recorded about it, on a single page.
 
 ## `/admin/attendance` — Attendance — Xtend
 
@@ -342,7 +350,7 @@ On screen: Upload a CSV with the columns
 
 - File: `src/app/admin/users/page.tsx`
 - Who: ['admin', 'supervisor', 'hr']
-- Components: `admin/staff-logins-button`, `ui/button`, `admin/staff-manager`
+- Components: `admin/app-only-bulk`, `admin/staff-logins-button`, `ui/button`, `admin/staff-manager`
 
 ## `/admin/visits` — Store visits — Xtend
 
@@ -351,6 +359,18 @@ On screen: Upload a CSV with the columns
 - Components: `admin/visit-filters`, `admin/visit-views`, `ui/alert`, `ui/badge`, `ui/card`
 
 On screen: No store visits recorded for that period.
+
+## `/app-only` — Use the Xtend app — Xtend
+
+- File: `src/app/app-only/page.tsx`
+- Who: public / own check
+- Components: `app-only-recheck`, `ui/button`, `sign-out-button`
+
+Where someone an admin made app-only (migration 0084) lands when they open
+Xtend in a browser. Anyone else, and anyone in the app, is sent on.
+Uses getSession (not requireSession), which would send them straight back.
+
+On screen: Your account works in the Xtend phone app only. Download it, open it, and sign in there with the same phone number and password.
 
 ## `/change-password` — Set your password — Xtend
 

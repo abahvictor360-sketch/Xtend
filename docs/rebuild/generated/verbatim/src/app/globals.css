@@ -58,10 +58,14 @@
 
   html {
     -webkit-text-size-adjust: 100%;
+    overflow-x: hidden;
   }
 
   body {
     @apply bg-background text-foreground antialiased;
+    max-width: 100vw;
+    overflow-x: hidden;
+    overflow-wrap: break-word;
     font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   }
 

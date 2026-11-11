@@ -55,7 +55,22 @@ Exports: `ALERT_LABEL`, `ALERT_SHORT`, `ALERT_TYPES`, `isAlertType`, `alertLabel
 The Xtend apps (mobile/) add this to their user agent, so a server page
 can tell them from a browser. Not a security signal: anyone can send it.
 
-Exports: `APP_AGENT_MARK`, `isAppUserAgent`
+Exports: `APP_AGENT_MARK`, `isAppUserAgent`, `APP_COOKIE`, `APP_COOKIE_MAX_AGE`, `isAppRequest`
+
+## `src/lib/app-only.ts`
+
+"Use the app" (migration 0084): an admin can require a merchandiser or
+marketer to use the Xtend phone app. In a browser (or an installed web
+page) they are sent to a page that tells them to download it, and signing
+in from a browser is refused. Pure on purpose, so
+scripts/check-app-only.ts can test it.
+
+The apps put "XtendApp" in their user agent, and the middleware leaves the
+xt_app cookie for the page loads Android's service worker makes without it
+(src/lib/app-agent.ts). Anyone can send either, so this steers people to
+the app; it is not a security control.
+
+Exports: `APP_ONLY_ROLES`, `APP_ONLY_MESSAGE`, `APP_ONLY_CODE`, `APP_ONLY_PATH`, `appOnlyBlocks`
 
 ## `src/lib/app-release.ts`
 
@@ -266,13 +281,27 @@ Set when the person must log in again before going on: a field
 sign-in from yesterday or after clocking out, or an office sign-in
 past 12 hours or idle for an hour (zero trust, lib/zero-trust.ts).
 
-Exports: `Session`, `ReloginReason`, `getSession`, `requireSession`, `ApiError`, `requireApiSession`, `apiError`, `dbErrorMessage`, `dbErrorResponse`, `FIELD_ROLES`, `REPORTING_ROLES`, `landingPathFor`
+Exports: `Session`, `ReloginReason`, `getSession`, `appOnlyHere`, `requireSession`, `ApiError`, `requireApiSession`, `apiError`, `dbErrorMessage`, `dbErrorResponse`, `FIELD_ROLES`, `REPORTING_ROLES`, `landingPathFor`
 
 ## `src/lib/avatars.ts`
 
 Sign the photo path already read by the session guard, without querying the profile again.
 
 Exports: `profileAvatarUrl`, `avatarUrls`, `withAvatars`
+
+## `src/lib/background-gate.ts`
+
+What the phone app must be allowed to do before someone can clock in or
+out: location "all the time" (iPhone: "Always") and, on Android, no battery
+saving for Xtend. Pure on purpose, so scripts/check-background-required.ts
+can test it.
+
+Only a setting the app clearly reports as OFF is demanded. A browser, an
+app build without the tracker, or one that does not report a setting says
+nothing (null or undefined), and is never locked out: the gate must not
+stop someone whose phone it cannot read.
+
+Exports: `BackgroundState`, `BackgroundNeeds`, `backgroundNeeds`
 
 ## `src/lib/base-map.ts`
 
@@ -328,6 +357,20 @@ Without the header (a request straight to Node), X-Real-IP, which Nginx
 sets from the connection itself.
 
 Exports: `requestIp`
+
+## `src/lib/clock-notices.ts`
+
+Telling someone that a clock-in or clock-out they made with no signal was
+NOT recorded after all. Saved on the phone while offline, it is sent when
+the signal returns; if the server then refuses it (for example the photo
+had gone stale, or notifications were off), or it could not be sent in
+time, the saved copy is deleted. Without a notice the person believes they
+clocked in. The notice waits on this phone until Home shows it.
+
+Pure on purpose (no browser APIs: the store is passed in), so
+scripts/check-clock-notices.ts can test it.
+
+Exports: `NoticeStore`, `CLOCK_NOTICES_KEY`, `clockNotice`, `addClockNotice`, `takeClockNotices`
 
 ## `src/lib/clock-out-reminder.ts`
 
@@ -827,6 +870,16 @@ A capture older than this can never be accepted by the server, so it is
 dropped locally instead of retried forever.
 
 Exports: `PermanentJobError`, `NamePlaceFirstError`, `checkPhoto`, `noticeStore`, `queuedRemovals`, `runJob`, `FlushResult`, `flushOutbox`, `submitOrQueue`
+
+## `src/lib/origin.ts`
+
+The address people actually use to reach the site. Behind Dokploy's proxy
+`request.url` is the container's own (http://localhost:3000), so a redirect
+built from it sends the person to a page that does not exist for them.
+The proxy's forwarded headers carry the real host; NEXT_PUBLIC_SITE_URL
+(when set) wins.
+
+Exports: `publicOrigin`
 
 ## `src/lib/password-check.ts`
 
@@ -1339,6 +1392,14 @@ Under the column, e.g. "Mon" or "14".
 
 Exports: `StackPart`, `StackColumn`, `StackChart`, `ChartKey`, `RankRow`, `RankList`
 
+## `src/components/admin/app-only-bulk.tsx`
+
+Requires the phone app for every active merchandiser and marketer, or lets
+them use a browser again, in one go (migration 0084). One person at a time
+is the button on their own row. Admins only.
+
+Exports: `AppOnlyBulk`
+
 ## `src/components/admin/assistant-action-card.tsx`
 
 Something Ask Xtend offers to do, shown in full first. Nothing happens
@@ -1702,6 +1763,16 @@ Calls an X Metrics admin route; throws the message it sends back.
 
 Exports: `xmCall`, `XmTabs`, `XmHeader`, `ActionButton`, `RunChecksButton`, `NoteAction`, `VoidButton`, `ExportLinks`, `MonthPicker`
 
+## `src/components/app-only-recheck.tsx`
+
+On the "Use the Xtend app" page, inside the app itself: the page load came
+through Android's service worker without the app's user agent. Any fetch
+from the page carries it, so one request leaves the xt_app mark
+(middleware) and the app goes on to Xtend. Once per sitting, so a
+browser that only claims to be the app cannot loop.
+
+Exports: `AppOnlyRecheck`
+
 ## `src/components/brand/logo.tsx`
 
 The Xpel X, redrawn as two bowed strokes so it stays legible at 20px where
@@ -1710,6 +1781,16 @@ gradient of the printed logo; `tone="light"` is the flat white version for
 use on the brand block.
 
 Exports: `XpelMark`, `XpelTile`, `XpelLockup`
+
+## `src/components/field/background-gate.tsx`
+
+Reads the phone app's settings and keeps them current: when the page opens,
+when the app comes back to the screen (from the phone's Settings), and
+every few seconds while something is still missing, since some phones do
+not announce the return. Nothing in a browser or an app without the
+tracker: `checked` is true and nothing is demanded.
+
+Exports: `useBackgroundNeeds`, `BackgroundGate`
 
 ## `src/components/field/calendar-marks.tsx`
 
@@ -2092,6 +2173,12 @@ Exports: `ServiceWorker`
 ## `src/components/sign-out-button.tsx`
 
 Exports: `SignOutButton`
+
+## `src/components/splash-screen.tsx`
+
+Shortest time the splash stays up, so it reads as a splash and not a flicker.
+
+Exports: `SplashScreen`
 
 ## `src/components/staff-guide.tsx`
 
