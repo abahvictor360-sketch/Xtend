@@ -40,6 +40,9 @@ const config: CapacitorConfig = {
   android: {
     // Photos and the map are served over HTTPS only.
     allowMixedContent: false,
+    // Android 15+ draws apps edge to edge, which put the bottom menu under
+    // the phone's back/home buttons. This keeps the page above the system bars.
+    adjustMarginsForEdgeToEdge: 'force',
     // Keeps location updates coming after five minutes in the background
     // (capacitor-community/background-geolocation, issue 89).
     useLegacyBridge: true,
