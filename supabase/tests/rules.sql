@@ -3109,6 +3109,44 @@ begin
       perform act_as(boss);
     end;
 
+    -- Movement saved with no signal is kept after clock-out (0085).
+    declare
+      lu uuid := gen_random_uuid();
+      tokl jsonb;
+      resl jsonb;
+    begin
+      insert into auth.users (id, email) values (lu, 'late.track@xpel.ng');
+      insert into public.profiles (id, full_name, email, role, outlet_id, supervisor_id)
+      values (lu, 'Late Tracker', 'late.track@xpel.ng', 'merchandiser',
+              (select id from public.outlets where name = 'Ikeja City Mall'), tunde);
+      perform notifications_on(lu);
+      perform act_as(lu);
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+      values ('opening', 6.6019, 3.3516, 12, fresh_photo('selfies', 'late-in.jpg'), now() - interval '10 minutes');
+      tokl := public.issue_tracking_token('android');
+      update public.tracking_tokens set created_at = now() - interval '10 minutes' where user_id = lu;
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+      values ('closing', 6.6019, 3.3516, 12, fresh_photo('selfies', 'late-out.jpg'), now());
+      perform public.revoke_tracking_tokens();
+      perform set_config('request.jwt.claim.sub', '', false);  -- the server's call has no signed-in user
+      resl := public.record_background_pings(tokl->>'token', jsonb_build_array(
+        jsonb_build_object('lat', 6.7100, 'lng', 3.4100, 'accuracy_m', 9, 'captured_at', now() - interval '5 minutes'),
+        jsonb_build_object('lat', 6.7102, 'lng', 3.4102, 'accuracy_m', 9, 'captured_at', now() + interval '1 minute')),
+        now());
+      perform assert((resl->>'ok')::boolean and (resl->>'kept')::int = 1 and not (resl->>'shift_open')::boolean
+                     and (resl->>'late')::boolean,
+        'late tracking: positions taken during the shift are kept when they arrive after the clock-out');
+      perform assert(exists (select 1 from public.location_pings where user_id = lu and offline and lat = 6.7100
+                             and created_at between now() - interval '6 minutes' and now() - interval '4 minutes')
+                     and not exists (select 1 from public.location_pings where user_id = lu and lat = 6.7102),
+        'late tracking: they are stored at the time they were taken, and nothing taken after the clock-out is kept');
+      perform assert((public.record_background_pings(tokl->>'token', jsonb_build_array(
+        jsonb_build_object('lat', 6.7100, 'lng', 3.4100, 'accuracy_m', 9, 'captured_at', now() - interval '5 minutes')),
+        now())->>'kept')::int = 0,
+        'late tracking: a position sent again is not stored twice');
+      perform act_as(boss);
+    end;
+
     -- Store visits and alerts, advanced (052).
     declare
       lekki uuid;

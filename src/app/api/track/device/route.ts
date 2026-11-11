@@ -44,6 +44,8 @@ interface Recorded {
   user_id?: string
   kept?: number
   shift_open?: boolean
+  /** Positions taken during a shift that has since ended (0085). */
+  late?: boolean
   alert?: { id: string; distance_m: number | null; ping_id: string | null; lat: number; lng: number } | null
 }
 
@@ -124,7 +126,10 @@ export async function POST(request: Request) {
     return Response.json({
       kept: got.kept ?? 0,
       shift_open: got.shift_open ?? false,
-      stop: !got.shift_open,
+      // After the shift the phone is told to stop, except after a full batch
+      // of late positions: more may be waiting, and it clears its queue the
+      // moment it is told to stop (0085).
+      stop: !got.shift_open && !(got.late && parsed.data.points.length >= 500),
       ...(interval ? { interval_ms: interval } : {}),
     })
   } catch (error) {
