@@ -65,7 +65,7 @@ export function CameraCapture({
 
     try {
       const media = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing, width: { ideal: 1280 }, height: { ideal: 960 } },
+        video: { facingMode: facing, width: { ideal: 960 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 } },
         audio: false,
       })
       stream.current = media

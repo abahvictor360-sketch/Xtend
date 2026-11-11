@@ -55,7 +55,7 @@ export default async function FieldLayout({ children }: { children: React.ReactN
   return (
     <div className="field-shell min-h-dvh bg-background">
       <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col overflow-x-hidden">
-        <main className="flex-1 px-4 pb-28 pt-4">
+        <main className="min-w-0 flex-1 px-4 pb-[calc(7.5rem+env(safe-area-inset-bottom,0px))] pt-4 [overflow-wrap:anywhere]">
           {isAdmin && <RoleSwitchBar acting={acting} />}
           {due && (
             <div className="mb-4">
