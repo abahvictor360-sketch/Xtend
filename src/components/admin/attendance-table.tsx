@@ -161,7 +161,13 @@ export function AttendanceTable({
                   <button type="button" className="flex w-full items-start gap-3 text-left" onClick={() => void open(row)}>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center justify-between gap-2">
-                        <span className="truncate text-sm font-bold">{p?.name ?? 'Someone'}</span>
+                        <Link
+                          href={`/admin/attendance/day?person=${row.userId}&date=${row.date}`}
+                          onClick={(e) => e.stopPropagation()}
+                          className="truncate text-sm font-bold text-brand hover:underline"
+                        >
+                          {p?.name ?? 'Someone'}
+                        </Link>
                         <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{shortDate(row.date)}</span>
                       </span>
                       <span className="mt-0.5 block truncate text-xs text-muted-foreground">
@@ -212,7 +218,13 @@ export function AttendanceTable({
                       <TableRow className="cursor-pointer" onClick={() => void open(row)}>
                         <TableCell className="whitespace-nowrap tabular-nums">{shortDate(row.date)}</TableCell>
                         <TableCell className="font-medium">
-                          {p?.name ?? 'Someone'}
+                          <Link
+                            href={`/admin/attendance/day?person=${row.userId}&date=${row.date}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="text-brand hover:underline"
+                          >
+                            {p?.name ?? 'Someone'}
+                          </Link>
                           {p?.team && <span className="block text-xs font-normal text-muted-foreground">{p.team}</span>}
                         </TableCell>
                         <TableCell className="max-w-[160px] truncate">{row.outletName ?? '—'}</TableCell>
