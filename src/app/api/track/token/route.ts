@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { publicOrigin } from '@/lib/origin'
 import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/auth'
 
 const schema = z.object({ platform: z.enum(['android', 'ios']) })
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
     return Response.json({
       token: got.token,
       expires_at: got.expires_at,
-      endpoint: new URL('/api/track/device', request.url).toString(),
+      endpoint: new URL('/api/track/device', publicOrigin(request)).toString(),
     })
   } catch (error) {
     return apiError(error)
