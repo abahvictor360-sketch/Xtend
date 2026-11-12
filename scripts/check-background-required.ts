@@ -44,6 +44,12 @@ check(!needs({ platform: 'android' }).blocked, 'Android that does not report the
 check(!needs({ platform: 'android', always: true }).blocked, 'an older app that omits the battery setting is not held back for it')
 check(!needs({ platform: 'android', batteryUnrestricted: true }).blocked, 'an older app that omits "all the time" is not held back for it')
 
+// A phone that cannot report the battery setting: the person confirms it.
+const confirmed = backgroundNeeds({ platform: 'android', always: true, batteryUnrestricted: false }, { batteryConfirmed: true })
+check(!confirmed.blocked && !confirmed.battery, 'battery confirmed by the person: not held back for it', confirmed)
+const confirmedNoLocation = backgroundNeeds({ platform: 'android', always: false, batteryUnrestricted: false }, { batteryConfirmed: true })
+check(confirmedNoLocation.blocked && confirmedNoLocation.always && !confirmedNoLocation.battery, 'confirming the battery never waives location', confirmedNoLocation)
+
 if (failed) {
   console.log(`\n${failed} check(s) FAILED`)
   process.exit(1)

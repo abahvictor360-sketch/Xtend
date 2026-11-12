@@ -1,11 +1,14 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { lagosDateString } from '@/lib/utils'
 import { BatteryWarning, CheckCircle2, MapPin, ShieldAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { askAlwaysLocation, hasShiftTracker, openBatterySettings, shiftTrackerState } from '@/lib/native'
 import { backgroundNeeds, type BackgroundNeeds, type BackgroundState } from '@/lib/background-gate'
+
+const CONFIRM_KEY = 'xtend-battery-confirmed'
 
 /**
  * Reads the phone app's settings and keeps them current: when the page opens,
@@ -17,6 +20,23 @@ import { backgroundNeeds, type BackgroundNeeds, type BackgroundState } from '@/l
 export function useBackgroundNeeds() {
   const [state, setState] = useState<BackgroundState | null>(null)
   const [checked, setChecked] = useState(!hasShiftTracker())
+  // "I turned battery saving off", good for today only.
+  const [batteryConfirmed, setBatteryConfirmed] = useState(false)
+  useEffect(() => {
+    try {
+      setBatteryConfirmed(localStorage.getItem(CONFIRM_KEY) === lagosDateString())
+    } catch {
+      // Storage blocked: the step simply stays required.
+    }
+  }, [])
+  const confirmBattery = useCallback(() => {
+    try {
+      localStorage.setItem(CONFIRM_KEY, lagosDateString())
+    } catch {
+      // Still allowed for this visit.
+    }
+    setBatteryConfirmed(true)
+  }, [])
 
   const recheck = useCallback(async () => {
     if (!hasShiftTracker()) return
@@ -37,14 +57,14 @@ export function useBackgroundNeeds() {
     }
   }, [recheck])
 
-  const needs = backgroundNeeds(state)
+  const needs = backgroundNeeds(state, { batteryConfirmed })
   useEffect(() => {
     if (!needs.blocked) return
     const timer = window.setInterval(() => void recheck(), 3000)
     return () => window.clearInterval(timer)
   }, [needs.blocked, recheck])
 
-  return { state, needs, checked, recheck }
+  return { state, needs, checked, recheck, confirmBattery }
 }
 
 /**
@@ -57,12 +77,15 @@ export function BackgroundGate({
   needs,
   action,
   onDone,
+  onConfirmBattery,
 }: {
   state: BackgroundState | null
   needs: BackgroundNeeds
   /** "clock in" or "clock out". */
   action: string
   onDone: () => void
+  /** Phones that cannot report the battery setting: the person says it is off. */
+  onConfirmBattery?: () => void
 }) {
   const ios = state?.platform === 'ios'
   return (
@@ -129,6 +152,16 @@ export function BackgroundGate({
                     <Button size="sm" variant="outline" onClick={() => void openBatterySettings().then(onDone)}>
                       Open battery settings
                     </Button>
+                    {onConfirmBattery && (
+                      <>
+                        <p className="pt-1 text-xs text-muted-foreground">
+                          Already set it, but this still shows? Some phones cannot report it.
+                        </p>
+                        <Button size="sm" variant="ghost" onClick={onConfirmBattery}>
+                          I turned it off, continue
+                        </Button>
+                      </>
+                    )}
                   </>
                 )}
               </div>

@@ -26,9 +26,18 @@ export interface BackgroundNeeds {
   blocked: boolean
 }
 
-export function backgroundNeeds(state: BackgroundState | null | undefined): BackgroundNeeds {
+/**
+ * `batteryConfirmed`: the person says they turned battery saving off for
+ * today, for phones (TECNO, Infinix, itel) that will not report the setting
+ * even when it is off. Only the battery step can be confirmed this way;
+ * location can always be read, so it is never waived.
+ */
+export function backgroundNeeds(
+  state: BackgroundState | null | undefined,
+  options: { batteryConfirmed?: boolean } = {},
+): BackgroundNeeds {
   if (!state) return { always: false, battery: false, blocked: false }
   const always = state.always === false
-  const battery = state.platform === 'android' && state.batteryUnrestricted === false
+  const battery = state.platform === 'android' && state.batteryUnrestricted === false && !options.batteryConfirmed
   return { always, battery, blocked: always || battery }
 }
