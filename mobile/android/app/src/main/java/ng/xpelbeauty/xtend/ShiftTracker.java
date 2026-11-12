@@ -114,14 +114,23 @@ public class ShiftTracker extends Plugin {
     /** The phone's battery saver is the usual reason a shift goes quiet. */
     @PluginMethod
     public void openBatterySettings(PluginCall call) {
-        try {
-            Intent i = new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS);
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            getContext().startActivity(i);
-        } catch (Exception e) {
-            Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + getContext().getPackageName()));
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            getContext().startActivity(i);
+        Context context = getContext();
+        // Best first: the system's own pop-up for this app ("Allow ... to always
+        // run in the background"), which phones that hide the settings list
+        // (Tecno, Infinix, itel) still show. Then the list, then this app's page.
+        Intent[] tries = new Intent[] {
+            new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + context.getPackageName())),
+            new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS),
+            new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + context.getPackageName())),
+        };
+        for (Intent i : tries) {
+            try {
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(i);
+                break;
+            } catch (Exception e) {
+                // Not on this phone: try the next screen.
+            }
         }
         call.resolve(state());
     }
