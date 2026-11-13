@@ -553,8 +553,11 @@ export default async function AdminGuidePage() {
           <p>
             <Ui>Teams</Ui>: pick a category, tick people (or <Ui>Select all shown</Ui>), choose a supervisor
             and click <Ui>Assign to supervisor</Ui>. <Ui>Roles</Ui>: add a role with its own name (such as
-            Account Receivable) that works like one of the built-in ones. <Ui>Store allocation</Ui>: which
-            stores each person works. Once someone has any store allocated, a check-in at a store that is
+            Account Receivable) that works like one of the built-in ones, and switch off stock counts for a
+            role (<Ui>Who takes stock counts</Ui>, also on <Ui>Stock count</Ui>): Marketers off means no Count
+            tab, count-due banner or count sheet in their app. <Ui>Store allocation</Ui>: which stores each
+            person works; in <Ui>Allocate stores</Ui>, type part of a shop&apos;s name or address in{' '}
+            <Ui>Search shops</Ui> to find it. Once someone has any store allocated, a check-in at a store that is
             not theirs is refused, whether they picked it or Xtend recognised it by location; people with
             no allocation can check in anywhere, as before.
           </p>

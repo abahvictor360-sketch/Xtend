@@ -881,6 +881,14 @@ The proxy's forwarded headers carry the real host; NEXT_PUBLIC_SITE_URL
 
 Exports: `publicOrigin`
 
+## `src/lib/outlet-search.ts`
+
+Finding shops in a long list (Store allocation): every word typed must
+appear in the shop's name or address, in any order, ignoring case and
+accents. Pure, so scripts/check-allocate.ts can test it.
+
+Exports: `SearchableOutlet`, `searchOutlets`
+
 ## `src/lib/password-check.ts`
 
 Whether this is the password for that email, checked by signing in on a
@@ -1617,8 +1625,6 @@ Exports: `OfficeReportFile`, `ReportFileList`
 
 ## `src/components/admin/role-manager.tsx`
 
-Which roles take the month-end stock count and counts a supervisor asks for.
-
 Exports: `RoleManager`
 
 ## `src/components/admin/role-select.tsx`
@@ -1660,6 +1666,12 @@ Exports: `StaffLoginsButton`
 A built-in role, or "custom:<id>" for one an admin added (042).
 
 Exports: `SupervisorOption`, `StaffManager`
+
+## `src/components/admin/store-count-switches.tsx`
+
+What the admin is told after switching a role on or off.
+
+Exports: `countNotice`, `StoreCountSwitches`
 
 ## `src/components/admin/store-importer.tsx`
 

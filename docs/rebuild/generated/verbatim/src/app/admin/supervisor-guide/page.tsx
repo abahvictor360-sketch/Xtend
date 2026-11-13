@@ -265,7 +265,8 @@ export default async function SupervisorGuidePage() {
             a name or phone number, or deactivate someone who has left (their history stays).
           </p>
           <p>
-            <Ui>Store allocation</Ui>: choose which stores each person works. A merchandiser&apos;s clock-in
+            <Ui>Store allocation</Ui>: choose which stores each person works (after <Ui>Allocate stores</Ui>,
+            type part of a shop&apos;s name or address in <Ui>Search shops</Ui> to find it). A merchandiser&apos;s clock-in
             is measured against their store, so keep it right. Once someone has stores allocated, they
             can only check in at those (and their home store), and the app lists only those.
           </p>
