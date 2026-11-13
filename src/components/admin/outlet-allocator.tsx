@@ -10,6 +10,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Chip } from '@/components/ui/chip'
 import { Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
+import { searchOutlets } from '@/lib/outlet-search'
 
 export interface Allocation {
   user_id: string
@@ -66,6 +67,9 @@ export function OutletAllocator({
   const [team, setTeam] = useState<string>('all')
   const [editing, setEditing] = useState<string | null>(null)
   const [chosen, setChosen] = useState<Set<string>>(new Set())
+  // Finding a shop in the list while allocating.
+  const [shopSearch, setShopSearch] = useState('')
+  const shops = useMemo(() => searchOutlets(outlets, shopSearch), [outlets, shopSearch])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
@@ -114,6 +118,7 @@ export function OutletAllocator({
     setSaved(null)
     setEditing(person.user_id)
     setChosen(new Set(person.outlet_ids))
+    setShopSearch('')
   }
 
   function toggle(id: string) {
@@ -252,8 +257,39 @@ export function OutletAllocator({
               </div>
 
               {open ? (
+                <div className="space-y-3">
+                <div className="relative">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    className="h-11 pl-9"
+                    placeholder="Search shops by name or address"
+                    aria-label="Search shops"
+                    value={shopSearch}
+                    onChange={(event) => setShopSearch(event.target.value)}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {chosen.size} chosen
+                  {shopSearch.trim()
+                    ? ` · ${shops.length} of ${outlets.length} shops match`
+                    : ` · ${outlets.length} shops`}
+                  {shopSearch.trim() && (
+                    <>
+                      {' · '}
+                      <button type="button" className="font-semibold text-brand" onClick={() => setShopSearch('')}>
+                        Show all
+                      </button>
+                    </>
+                  )}
+                </p>
+                {shops.length === 0 && (
+                  <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+                    No shop matches &ldquo;{shopSearch.trim()}&rdquo;. Check the spelling, or add the shop on the
+                    Outlets page.
+                  </p>
+                )}
                 <div className="grid gap-2 sm:grid-cols-2">
-                  {outlets.map((outlet) => {
+                  {shops.map((outlet) => {
                     const picked = chosen.has(outlet.id)
                     const isHome = outlet.id === person.home_outlet_id
                     return (
@@ -286,6 +322,7 @@ export function OutletAllocator({
                       </button>
                     )
                   })}
+                </div>
                 </div>
               ) : person.outlet_names.length ? (
                 <div className="flex flex-wrap gap-1.5">

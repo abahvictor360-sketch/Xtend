@@ -26,6 +26,7 @@ import {
 import { addDays, lagosDateString, longDate, metres } from '@/lib/utils'
 import { countMonth } from '@/lib/count-sheet'
 import { takesStoreCounts, type BuiltInCounts, type CountingRole, type StaffRole } from '@/lib/staff-roles'
+import { StoreCountSwitches } from '@/components/admin/store-count-switches'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Stock count — Xtend' }
@@ -126,7 +127,7 @@ export default async function StoreCountsPage({
       .not('sheet_order', 'is', null)
       .eq('is_active', true),
     // Which roles take stock counts (migration 046).
-    supabase.from('staff_roles').select('id, name, counts_stock'),
+    supabase.from('staff_roles').select('id, name, base_role, is_active, counts_stock').order('name'),
     supabase.from('role_store_counts').select('role, counts_stock'),
   ])
   const countingRoles = new Map(
@@ -210,9 +211,14 @@ export default async function StoreCountsPage({
         <p className="text-sm text-muted-foreground">
           Merchandisers count every product on the Xpel stock count sheet: how many are in the
           back store and on the shop floor, the expiry date, and how many sold since their last
-          count. They count when a supervisor asks, and at the end of every month.
+          count. They count when a supervisor asks, and at the end of every month. Marketers count
+          too, unless an admin switches them off.
         </p>
       </div>
+
+      {isAdmin && (
+        <StoreCountSwitches builtInCounts={builtInCounts} roles={(addedRoles ?? []) as StaffRole[]} />
+      )}
 
       <CountTemplateCard
         month={countMonth(today)}

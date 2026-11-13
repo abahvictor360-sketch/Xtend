@@ -278,11 +278,11 @@ On screen: Add a role with its own name, such as Account Receivable or Promoter,
 
 - File: `src/app/admin/store-counts/page.tsx`
 - Who: ['admin', 'supervisor']
-- Components: `admin/count-requests`, `admin/count-template-card`, `ui/alert`, `ui/button`, `ui/card`, `ui/input`, `ui/label`, `ui/table`
+- Components: `admin/count-requests`, `admin/count-template-card`, `ui/alert`, `ui/button`, `ui/card`, `ui/input`, `ui/label`, `ui/table`, `admin/store-count-switches`
 
 31 Mar 2027
 
-On screen: Merchandisers count every product on the Xpel stock count sheet: how many are in the back store and on the shop floor, the expiry date, and how many sold since their last count. They count when a supervisor asks, and at the end of every month.
+On screen: Merchandisers count every product on the Xpel stock count sheet: how many are in the back store and on the shop floor, the expiry date, and how many sold since their last count. They count when a supervisor asks, and at the end of every month. Marketers count too, unless an admin switches them off.
 
 ## `/admin/supervisor-guide` — Supervisor guide — Xtend
 
