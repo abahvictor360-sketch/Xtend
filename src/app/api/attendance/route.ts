@@ -182,7 +182,27 @@ export async function POST(request: Request) {
       data?.type === 'closing' &&
       (session.profile.role === 'merchandiser' || session.profile.role === 'marketer')
 
-    return Response.json({ attendance: { ...data, outlet_name }, sign_out }, { status: 201 })
+    // Clocking in at one of a marketer's stores also checks them in there
+    // (0087): say which store, so the phone can tell them.
+    let store_check_in: string | null = null
+    if (data?.type === 'opening') {
+      const { data: visit } = await supabase
+        .from('store_visits')
+        .select('outlet_id')
+        .eq('device_info->>attendance_id', data.id)
+        .eq('status', 'open')
+        .maybeSingle<{ outlet_id: string | null }>()
+      if (visit?.outlet_id) {
+        const { data: store } = await supabase
+          .from('outlets')
+          .select('name')
+          .eq('id', visit.outlet_id)
+          .maybeSingle<{ name: string }>()
+        store_check_in = store?.name ?? 'your store'
+      }
+    }
+
+    return Response.json({ attendance: { ...data, outlet_name, store_check_in }, sign_out }, { status: 201 })
   } catch (error) {
     return apiError(error)
   }

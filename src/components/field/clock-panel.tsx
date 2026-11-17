@@ -318,6 +318,7 @@ export function ClockPanel({
                 distance_m: number | null
                 outlet_name: string | null
                 outlet_radius_m: number | null
+                store_check_in?: string | null
               }
             }
           ).attendance
@@ -361,6 +362,18 @@ export function ClockPanel({
               title: type === 'opening' ? 'Clocked in' : 'Clocked out',
               detail: `Location: ${where}. Your location was not clear enough to match to your store. Next time, wait a moment outside for a better signal.`,
             })
+          }
+
+          // Clocked in at one of their stores: checked in there too (0087).
+          if (record.store_check_in) {
+            setOutcome((o) =>
+              o
+                ? {
+                    ...o,
+                    detail: `${o.detail} You are also checked in at ${record.store_check_in}: check out of it before you leave for the next store.`,
+                  }
+                : o,
+            )
           }
 
           if (signOut) {

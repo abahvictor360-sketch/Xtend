@@ -1168,6 +1168,19 @@ Only the owner, only an open visit ("That visit is already closed"). Status
 is judged the same way against the snapshot; no snapshot → null (or
 flagged). Returns minutes in store. Visits still open from an earlier day
 are marked `abandoned` by the nightly job (`close_abandoned_visits`).
+They are also closed the moment the same person checks in again (0086,
+`store_visit_close_stale()`, BEFORE INSERT trigger
+`trg_store_visit_zz_close_stale`), so a missed nightly job never leaves a
+marketer blocked by a visit Home does not show (Home lists today's only).
+
+A marketer's clock-in can open a visit too (0087, AFTER INSERT trigger
+`trg_attendance_zz_store_check_in` → `attendance_store_check_in()`): an
+`opening` by the caller, who `can_visit_stores()` and
+`has_allocated_stores()`, accuracy ≤ 100 m, `client_captured_at` within 30
+minutes, inside the fence of the nearest active store in
+`outlets_for_user(user)`, with no visit open today → insert a visit at
+that store (no selfie; `device_info` gets `source: 'clock_in'` and
+`attendance_id`). Errors are swallowed so the clock-in always stands.
 
 ### 5.4 Store labels (`store_visit_detail`, 0016, 0052)
 

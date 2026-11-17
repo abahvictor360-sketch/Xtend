@@ -104,6 +104,8 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0083_team_photo_access.sql           # supervisors (own team), HR and admins can open clock-in, shelf and profile photos
    supabase/migrations/0084_app_only.sql                    # profiles.app_only: an admin can require merchandisers and marketers to use the phone app
    supabase/migrations/0085_late_tracking_points.sql        # movement saved with no signal is kept when it arrives after the clock-out
+   supabase/migrations/0086_close_stale_visit_on_check_in.sql # a store check-in forgotten on an earlier day never blocks the next one
+   supabase/migrations/0087_clock_in_checks_in.sql             # a marketer clocking in at one of their stores is checked in there too
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

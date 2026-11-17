@@ -33,6 +33,7 @@ export default async function FieldPage() {
     photo,
     { data: calendar },
     { data: unread },
+    { data: openVisits },
   ] = await Promise.all([
     supabase.rpc('my_day'),
     supabase.rpc('my_store_visits'),
@@ -44,11 +45,21 @@ export default async function FieldPage() {
     supabase.rpc('my_calendar', { p_from: addDays(lagosDateString(), -6), p_to: lagosDateString() }),
     // Unread messages from their supervisor (0073).
     supabase.rpc('unread_messages'),
+    // An open store visit from any day (0086), so Check out always shows.
+    // Missing function (0086 not run): nothing extra.
+    supabase.rpc('my_open_store_visits'),
   ])
 
   if (error || !data) {
     return <DashboardRetry />
   }
+
+  // Today's visits plus a visit still open from before, if any.
+  const todayVisits = (visits ?? []) as VisitRow[]
+  const allVisits = [
+    ...todayVisits,
+    ...((openVisits ?? []) as VisitRow[]).filter((v) => !todayVisits.some((t) => t.id === v.id)),
+  ]
 
   // When an admin is acting, the role decides the experience; otherwise the
   // database's own answer stands.
@@ -61,7 +72,7 @@ export default async function FieldPage() {
       {countStatus.open && <CountDueBanner status={countStatus} />}
       <FieldHome
         day={data as DayState}
-        visits={(visits ?? []) as VisitRow[]}
+        visits={allVisits}
         outlets={(outlets ?? []) as VisitOutlet[]}
         canVisitStores={showStores}
         canFileReport={canFileReport}

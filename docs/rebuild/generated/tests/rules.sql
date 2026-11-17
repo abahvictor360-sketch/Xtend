@@ -503,6 +503,77 @@ begin
     perform assert(true, 'a marketer cannot be in two stores at once');
   end;
 
+  -- 0086: a check-in forgotten on an earlier day does not block today's.
+  -- (Rolled back: the rest of the day's tests expect the open mall visit.)
+  begin
+    update public.store_visits set visit_date = public.business_date() - 1 where id = visit_id;
+    perform assert(
+      not exists (select 1 from public.my_store_visits() where id = visit_id)
+      and (select id from public.my_open_store_visits()) = visit_id,
+      'stale 0086: Home''s today list misses yesterday''s open visit, my_open_store_visits finds it');
+    insert into public.store_visits
+      (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
+    values (kiosk_id, 9.0765, 7.3986, 12, now());
+    perform assert(
+      (select status from public.store_visits where id = visit_id) = 'abandoned',
+      'stale 0086: yesterday''s forgotten check-in is closed as abandoned');
+    perform assert(
+      (select count(*) from public.store_visits where user_id = grace and status = 'open') = 1,
+      'stale 0086: and the new check-in is the one open visit');
+    raise exception 'stale-0086-done';
+  exception when others then
+    if sqlerrm <> 'stale-0086-done' then raise; end if;
+  end;
+  perform assert(
+    (select status from public.store_visits where id = visit_id) = 'open',
+    'stale 0086: today''s open visit is left alone');
+
+  -- 0087: a marketer clocking in at one of their own stores is checked in
+  -- there too. (Rolled back: a fresh marketer, so the day above is untouched.)
+  declare
+    mia uuid := gen_random_uuid();
+    ola uuid := gen_random_uuid();
+  begin
+    perform act_as(boss);
+    insert into auth.users (id, email) values (mia, 'mia@xpel.ng'), (ola, 'ola@xpel.ng');
+    insert into public.profiles (id, full_name, email, role, outlet_id) values
+      (mia, 'Mia Bello', 'mia@xpel.ng', 'marketer', mall_id),
+      (ola, 'Ola Ade',   'ola@xpel.ng', 'marketer', kiosk_id);
+    perform notifications_on(mia);
+    perform notifications_on(ola);
+    insert into public.work_patterns (user_id, days) values (mia, '{0,1,2,3,4,5,6}'), (ola, '{0,1,2,3,4,5,6}');
+    perform public.set_staff_outlets(mia, array[mall_id, kiosk_id]);
+    perform public.set_staff_outlets(ola, array[kiosk_id]);
+
+    -- Clocks in inside the mall's fence, the mall being one of her stores.
+    perform act_as(mia);
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+    values ('opening', 6.6019, 3.3516, 12, fresh_photo('selfies', 'mia-in.jpg'), now());
+    perform assert(
+      (select count(*) from public.store_visits where user_id = mia and status = 'open' and outlet_id = mall_id) = 1,
+      'clock-in 0087: clocking in at your own store checks you in there');
+    perform assert(
+      (select arrived_status from public.store_visits where user_id = mia) = 'on_site'
+      and (select device_info ->> 'source' from public.store_visits where user_id = mia) = 'clock_in',
+      'clock-in 0087: on site, marked as made by the clock-in');
+    perform assert(
+      exists (select 1 from public.my_store_visits() where status = 'open'),
+      'clock-in 0087: Home shows the check-in, ready to check out');
+
+    -- Clocks in at the mall, but the mall is not one of his stores.
+    perform act_as(ola);
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+    values ('opening', 6.6019, 3.3516, 12, fresh_photo('selfies', 'ola-in.jpg'), now());
+    perform assert(
+      not exists (select 1 from public.store_visits where user_id = ola),
+      'clock-in 0087: not at one of your stores, no check-in');
+
+    raise exception 'clock-in-0087-done';
+  exception when others then
+    if sqlerrm <> 'clock-in-0087-done' then raise; end if;
+  end;
+  perform act_as(grace);
+
   -- Check out, then move to the next store.
   payload := public.end_store_visit(visit_id, 6.6019, 3.3516, 12, 'Ikeja City Mall', null);
   perform assert(payload ->> 'status' = 'on_site', 'checking out at the store is on_site');

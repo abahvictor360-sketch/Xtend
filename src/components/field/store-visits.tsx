@@ -15,7 +15,7 @@ import { GeoBlocked, haversineMetres, positionCheck, requireFix, type Fix, type 
 import { processSelfie } from '@/lib/image'
 import { supabase } from '@/lib/supabase/client'
 import { checkPhoto } from '@/lib/offline/sync'
-import { formatLagos, metres } from '@/lib/utils'
+import { formatLagos, lagosDateString, metres } from '@/lib/utils'
 
 /** One of the stores allocated to the person (my_visit_stores, 060). */
 export interface VisitOutlet {
@@ -123,7 +123,10 @@ export function StoreVisits({
   onShift?: boolean
 }) {
   const router = useRouter()
-  const open = visits.find((v) => v.status === 'open') ?? null
+  // An open visit the server told us about when a check-in was refused,
+  // until the page's own list has it (or it is checked out).
+  const [stuck, setStuck] = useState<VisitRow | null>(null)
+  const open = visits.find((v) => v.status === 'open') ?? (stuck?.status === 'open' ? stuck : null)
   const done = visits.filter((v) => v.status !== 'open')
 
   const [picking, setPicking] = useState(false)
@@ -256,6 +259,10 @@ export function StoreVisits({
         })
         const data = await res.json()
         if (!res.ok) {
+          if (data.code === 'visit_open' && data.visit) {
+            setStuck(data.visit as VisitRow)
+            router.refresh()
+          }
           setError(data.error ?? 'That check-in did not go through.')
           return
         }
@@ -331,6 +338,7 @@ export function StoreVisits({
       setNotice(
         `Checked out of ${open.store_label ?? open.outlet_name} after ${data.visit?.minutes ?? open.minutes} minutes.`,
       )
+      setStuck(null)
       router.refresh()
     } catch (err) {
       if (err instanceof GeoBlocked) setError(err.message)
@@ -369,7 +377,9 @@ export function StoreVisits({
                   </Badge>
                 </p>
                 <p className="text-xs text-muted-foreground">
-                  In store since {formatLagos(open.arrived_at, false)} · {open.minutes} min
+                  {open.visit_date === lagosDateString()
+                    ? `In store since ${formatLagos(open.arrived_at, false)} · ${open.minutes} min`
+                    : `Checked in ${formatLagos(open.arrived_at)} and never checked out`}
                 </p>
               </div>
             </div>

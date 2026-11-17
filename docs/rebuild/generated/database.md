@@ -1357,6 +1357,7 @@ Policies:
 - `attendance_place_due()` → trigger · definer · 0045_mandatory_place_naming.sql
 - `attendance_punctuality()` → trigger · definer · 0036_supervisor_alerts.sql
 - `attendance_push_check()` → trigger · definer · 0027_notifications_required.sql
+- `attendance_store_check_in()` → trigger · definer · 0087_clock_in_checks_in.sql
 - `attendance_timing()` → trigger · definer · 0026_phone_evidence.sql
 - `attendance_timing_flag()` → trigger · definer · 0026_phone_evidence.sql
 - `audit_context_columns(p jsonb)` → TABLE(ip text, user_agent text, device jsonb, lat double precision, lng double precision, accuracy_m double precision, location_source text, place text, country text, vpn boolean) · definer · 0049_audit_context.sql
@@ -1472,6 +1473,7 @@ Policies:
 - `my_mfa_required()` → boolean · definer · 0080_zero_trust.sql
 - `my_notifications(p_limit integer)` → TABLE(id uuid, title text, body text, url text, sent_at timestamp with time zone, sender_name text, read_at timestamp with time zone) · definer · 0006_push_notifications.sql
 - `my_open_count_request()` → TABLE(id uuid, due_date date, note text, requested_by_name text) · definer · 0020_count_requests.sql
+- `my_open_store_visits()` → SETOF store_visit_detail · definer · 0086_close_stale_visit_on_check_in.sql
 - `my_outlets()` → SETOF outlets · definer · 0011_store_allocation.sql
 - `my_place_due()` → TABLE(id uuid, lat double precision, lng double precision, source_kind text, created_at timestamp with time zone) · definer · 0045_mandatory_place_naming.sql
 - `my_staff()` → SETOF profiles · definer · 0072_hr_role.sql
@@ -1613,6 +1615,7 @@ Policies:
 - `staff_no_show(p_grace_minutes integer)` → TABLE(user_id uuid, full_name text, phone text, outlet_id uuid, outlet_name text, shift_start time without time zone, minutes_late integer) · definer · 0059_schedules_leave.sql
 - `store_count_status()` → jsonb · definer · 0020_count_requests.sql
 - `store_visit_alert()` → trigger · definer · 0016_visits_without_allocation.sql
+- `store_visit_close_stale()` → trigger · definer · 0086_close_stale_visit_on_check_in.sql
 - `store_visit_enforce()` → trigger · definer · 0060_marketer_visits_reports.sql
 - `store_visits_today()` → SETOF store_visit_detail · definer · 0016_visits_without_allocation.sql
 - `submit_count_sheet(p_outlet_id uuid, p_path text, p_file_name text)` → uuid · definer · 0064_count_sheets_any_time_report_files.sql
@@ -1675,6 +1678,7 @@ Policies:
 - `attendance`: `trg_attendance_timing` — BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_timing()
 - `attendance`: `trg_attendance_timing_flag` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_timing_flag()
 - `attendance`: `trg_attendance_zz_place_due` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_place_due()
+- `attendance`: `trg_attendance_zz_store_check_in` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_store_check_in()
 - `attendance`: `trg_follow_end_at_clock_out` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION follow_end_at_clock_out()
 - `audit_log`: `trg_audit_fill_context` — BEFORE INSERT ON public.audit_log FOR EACH ROW EXECUTE FUNCTION audit_fill_context()
 - `location_pings`: `trg_ping_alert` — AFTER INSERT ON public.location_pings FOR EACH ROW EXECUTE FUNCTION ping_alert()
@@ -1700,6 +1704,7 @@ Policies:
 - `store_visits`: `trg_store_visit_alert` — AFTER INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION store_visit_alert()
 - `store_visits`: `trg_store_visit_enforce` — BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION store_visit_enforce()
 - `store_visits`: `trg_store_visit_selfie_check` — BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION selfie_check()
+- `store_visits`: `trg_store_visit_zz_close_stale` — BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION store_visit_close_stale()
 - `store_visits`: `trg_store_visits_place_due_guard` — BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION place_due_guard()
 - `store_visits`: `trg_store_visits_zz_place_due` — AFTER INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION visit_place_due()
 - `support_messages`: `realtime_broadcast` — AFTER INSERT OR DELETE OR UPDATE ON public.support_messages FOR EACH ROW EXECUTE FUNCTION realtime_notify_support_message()

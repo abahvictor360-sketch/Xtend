@@ -104,5 +104,7 @@ run supabase/migrations/0082_app_update_notices.sql
 run supabase/migrations/0083_team_photo_access.sql
 run supabase/migrations/0084_app_only.sql
 run supabase/migrations/0085_late_tracking_points.sql
+run supabase/migrations/0086_close_stale_visit_on_check_in.sql
+run supabase/migrations/0087_clock_in_checks_in.sql
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rules.sql 2>&1 | grep -E 'NOTICE|ERROR' | sed 's/^psql:[^ ]*: //'
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_counts.sql 2>&1 | grep -E 'NOTICE|ERROR|PASSED' | sed 's/^psql:[^ ]*: //'

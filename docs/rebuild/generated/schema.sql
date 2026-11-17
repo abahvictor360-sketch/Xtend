@@ -986,6 +986,64 @@ $$;
 
 
 --
+-- Name: attendance_store_check_in(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.attendance_store_check_in() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  store uuid;
+begin
+  if new.type <> 'opening' or auth.uid() is null or auth.uid() <> new.user_id then
+    return null;
+  end if;
+  if not public.can_visit_stores() or not public.has_allocated_stores(new.user_id) then
+    return null;
+  end if;
+  if new.accuracy_m is null or new.accuracy_m > 100
+     or new.client_captured_at < now() - interval '30 minutes' then
+    return null;
+  end if;
+
+  select x.id into store
+  from public.outlets x
+  where x.id in (select f.outlet_id from public.outlets_for_user(new.user_id) f)
+    and x.is_active
+    and public.distance_metres(new.lat, new.lng, x.lat, x.lng) <= x.geofence_radius_m
+  order by public.distance_metres(new.lat, new.lng, x.lat, x.lng)
+  limit 1;
+  if store is null then
+    return null;
+  end if;
+
+  if exists (select 1 from public.store_visits
+             where user_id = new.user_id and status = 'open'
+               and visit_date = public.business_date()) then
+    return null;
+  end if;
+
+  begin
+    insert into public.store_visits
+      (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m,
+       arrived_address, arrived_place_name, device_info, client_captured_at)
+    values
+      (store, new.lat, new.lng, new.accuracy_m,
+       new.address, new.place_name,
+       coalesce(new.device_info, '{}'::jsonb)
+         || jsonb_build_object('source', 'clock_in', 'attendance_id', new.id),
+       new.client_captured_at);
+  exception when others then
+    -- No automatic check-in; the clock-in stands.
+    null;
+  end;
+  return null;
+end;
+$$;
+
+
+--
 -- Name: attendance_timing(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3836,37 +3894,6 @@ CREATE TABLE public.outlets (
 
 
 --
--- Name: my_outlets(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.my_outlets() RETURNS SETOF public.outlets
-    LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-  select o.* from public.outlets o
-  where o.id in (select outlet_id from public.outlets_for_user(auth.uid()))
-  order by o.name;
-$$;
-
-
---
--- Name: my_place_due(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.my_place_due() RETURNS TABLE(id uuid, lat double precision, lng double precision, source_kind text, created_at timestamp with time zone)
-    LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-  select d.id, d.lat, d.lng, d.source_kind, d.created_at
-  from public.place_naming_due d
-  where d.user_id = auth.uid() and d.due_date = public.business_date()
-    and d.named_at is null and d.dismissed_at is null
-  order by d.created_at
-  limit 1;
-$$;
-
-
---
 -- Name: profiles; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3888,20 +3915,6 @@ CREATE TABLE public.profiles (
     staff_role_id uuid,
     app_only boolean DEFAULT false NOT NULL
 );
-
-
---
--- Name: my_staff(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.my_staff() RETURNS SETOF public.profiles
-    LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-  select p.* from public.profiles p
-  where public.is_admin() or public.supervises_user(p.id) or public.hr_sees(p.id) or p.id = auth.uid()
-  order by p.full_name;
-$$;
 
 
 --
@@ -3997,6 +4010,65 @@ CREATE VIEW public.store_visit_detail WITH (security_invoker='true') AS
    FROM ((public.store_visits v
      JOIN public.profiles p ON ((p.id = v.user_id)))
      LEFT JOIN public.outlets o ON ((o.id = v.outlet_id)));
+
+
+--
+-- Name: my_open_store_visits(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_open_store_visits() RETURNS SETOF public.store_visit_detail
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select * from public.store_visit_detail
+  where user_id = auth.uid() and status = 'open'
+  order by arrived_at desc;
+$$;
+
+
+--
+-- Name: my_outlets(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_outlets() RETURNS SETOF public.outlets
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select o.* from public.outlets o
+  where o.id in (select outlet_id from public.outlets_for_user(auth.uid()))
+  order by o.name;
+$$;
+
+
+--
+-- Name: my_place_due(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_place_due() RETURNS TABLE(id uuid, lat double precision, lng double precision, source_kind text, created_at timestamp with time zone)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select d.id, d.lat, d.lng, d.source_kind, d.created_at
+  from public.place_naming_due d
+  where d.user_id = auth.uid() and d.due_date = public.business_date()
+    and d.named_at is null and d.dismissed_at is null
+  order by d.created_at
+  limit 1;
+$$;
+
+
+--
+-- Name: my_staff(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_staff() RETURNS SETOF public.profiles
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select p.* from public.profiles p
+  where public.is_admin() or public.supervises_user(p.id) or public.hr_sees(p.id) or p.id = auth.uid()
+  order by p.full_name;
+$$;
 
 
 --
@@ -7377,6 +7449,25 @@ begin
     insert into public.location_alerts (user_id, alert_type, distance_m)
     values (new.user_id, 'off_site_clock'::alert_type, new.arrived_distance_m);
   end if;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: store_visit_close_stale(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.store_visit_close_stale() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  update public.store_visits
+     set status = 'abandoned'
+   where user_id = new.user_id
+     and status = 'open'
+     and visit_date < public.business_date();
   return new;
 end;
 $$;
@@ -12555,6 +12646,13 @@ CREATE TRIGGER trg_attendance_zz_place_due AFTER INSERT ON public.attendance FOR
 
 
 --
+-- Name: attendance trg_attendance_zz_store_check_in; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_attendance_zz_store_check_in AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION public.attendance_store_check_in();
+
+
+--
 -- Name: audit_log trg_audit_fill_context; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -12706,6 +12804,13 @@ CREATE TRIGGER trg_store_visit_enforce BEFORE INSERT ON public.store_visits FOR 
 --
 
 CREATE TRIGGER trg_store_visit_selfie_check BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION public.selfie_check();
+
+
+--
+-- Name: store_visits trg_store_visit_zz_close_stale; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_store_visit_zz_close_stale BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION public.store_visit_close_stale();
 
 
 --
@@ -15121,6 +15226,13 @@ REVOKE ALL ON FUNCTION public.attendance_push_check() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION attendance_store_check_in(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.attendance_store_check_in() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION attendance_timing(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -15895,6 +16007,15 @@ GRANT ALL ON FUNCTION public.my_notifications(p_limit integer) TO service_role;
 REVOKE ALL ON FUNCTION public.my_open_count_request() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.my_open_count_request() TO authenticated;
 GRANT ALL ON FUNCTION public.my_open_count_request() TO service_role;
+
+
+--
+-- Name: FUNCTION my_open_store_visits(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.my_open_store_visits() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.my_open_store_visits() TO authenticated;
+GRANT ALL ON FUNCTION public.my_open_store_visits() TO service_role;
 
 
 --
@@ -16783,6 +16904,13 @@ GRANT ALL ON FUNCTION public.store_count_status() TO service_role;
 --
 
 REVOKE ALL ON FUNCTION public.store_visit_alert() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION store_visit_close_stale(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.store_visit_close_stale() FROM PUBLIC;
 
 
 --
