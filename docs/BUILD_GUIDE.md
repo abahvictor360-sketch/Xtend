@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-11-17, after clocking in at one of a marketer's own stores checking them in there too (0087) and a store check-in forgotten on an earlier day being shown with Check out and never blocking the next one (0086); see earlier entries for 2026-11-13 and before._
+_Last updated: 2026-11-17, after the owner's change record `docs/CHANGES.md` (what was done, its impact, what to do), clocking in at one of a marketer's own stores checking them in there too (0087) and a store check-in forgotten on an earlier day being shown with Check out and never blocking the next one (0086); see earlier entries for 2026-11-13 and before._
 
 ---
 
@@ -1016,7 +1016,7 @@ supabase/migrations/      The database, in order
 supabase/tests/           Database tests and the Supabase stand-in
 scripts/                  Admin bootstrap, logic checks, SQL test runner
 mobile/                   Capacitor Android and iOS apps
-docs/                     This guide, LOCATION-INTEGRITY.md, and rebuild/ (the rebuild pack)
+docs/                     This guide, CHANGES.md (the owner's change record), LOCATION-INTEGRITY.md, and rebuild/ (the rebuild pack)
 .github/workflows/        Phone app builds, the 5-minute alerts job, deploy to the VPS
 deploy/                   Hostinger VPS: setup, deploy with rollback, PM2, Nginx, crontab; DOCKER.md for Dokploy/Coolify
 Dockerfile, .dockerignore The container for Dokploy or Coolify (standalone server, non-root)
@@ -1062,6 +1062,8 @@ script or a setup step must update it **in the same commit or PR**:
   migration, 7 for a variable, 8 for a job, 9 for the apps, 10 for a check,
   11 for a new folder, 15 for anything left to do);
 - change the "Last updated" line at the top;
+- add a plain-English entry to `docs/CHANGES.md` (what was done, the impact,
+  what the owner needs to do) and keep its "Waiting on you" list current;
 - keep the **rebuild pack** current: update the spec in `docs/rebuild/` the
   change touches and rerun `scripts/rebuild-pack.ts` (see
   `docs/rebuild/00-START-HERE.md` §7).
@@ -1075,6 +1077,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-11-17 | **Owner's change record**: new `docs/CHANGES.md`, in plain English, newest first: what was done, its impact and what the owner needs to do, for every change since the first build, with a "Waiting on you" list at the top (deploy, migrations to run, TOTP, the 0069 fix, scheduled jobs, Android signing, app builds). `CLAUDE.md` and section 13 now require an entry for every change | — |
 | 2026-11-17 | **Clocking in at your store checks you in**: a marketer who clocks in inside one of their own stores is checked in there at the same moment, with the clock-in selfie (no second selfie); the clock-in result adds "You are also checked in at <store>: check out of it before you leave for the next store." (`/api/attendance` returns `store_check_in`). Not for a store that is not theirs, a poor fix, a clock-in sent late from the outbox, or when a visit is already open | 0087 |
 | 2026-11-17 | **Forgotten store check-in no longer blocks**: a marketer who did not check out of a store on an earlier day (and the nightly job did not run) got "You are already checked in to a store. Check out of it first." with the button still saying Check in (Home lists today's visits only). Home now also shows an open visit from any day with its Check out button, a refused check-in names the store and switches the button to Check out, and a new check-in closes the person's own earlier-day open visits as abandoned; running 0086 frees anyone already stuck | 0086 |
 | 2026-11-13 | **Shop search on Store allocation; stock count switches on Stock count**: **Allocate stores** opens with **Search shops** (name or address, every word in any order, accents and commas ignored, `src/lib/outlet-search.ts`) and "N chosen · K of M shops match"; shops hidden by the search stay chosen. The **Who takes stock counts** switches (0046: Merchandisers, Marketers and added roles) are now one component (`src/components/admin/store-count-switches.tsx`) shown on Roles and, for admins, at the top of Stock count; switching Marketers off removes their Count tab, count-due banner and count sheet, and nobody can ask them to count. New check `scripts/check-store-allocation.ts`; admin and supervisor guides updated | — |

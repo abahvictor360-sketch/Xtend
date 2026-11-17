@@ -3,6 +3,15 @@
 Read `docs/BUILD_GUIDE.md` first: it explains how Xtend is built, the rules
 it follows, every migration, setup, and the checks to run.
 
+## Always record the change for the owner
+
+Every change, however small, adds an entry at the top of `docs/CHANGES.md`
+in the same commit, in plain English for the owner: **what was done**,
+**the impact** (what people notice, what it fixes or protects) and **what
+the owner needs to do** (migration to run, setting, new app build). Keep its
+"Waiting on you" list current: add new steps, and remove ones the owner
+confirms are done.
+
 ## Always update the build guide
 
 Every change that adds or changes a feature, migration, environment variable,
