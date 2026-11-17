@@ -4,7 +4,8 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Activity, CheckCircle2, ClipboardCheck, HelpCircle, History, Smartphone, User, XCircle } from 'lucide-react'
+import { Chip, EmptyState, Panel, PageHeader, StatCard, StatGrid } from '@/components/admin/page-kit'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
@@ -117,18 +118,39 @@ export default async function ExcusesPage({ searchParams }: { searchParams: Prom
     { label: 'Last 3 days', href: link(addDays(today, -2), today, '00:00', nowHm) },
   ]
 
-  return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold">Check an excuse</h1>
-        <p className="text-sm text-muted-foreground">
-          Someone says their network was bad, their phone was off, their location would not work, they were at the
-          store all along, or the app would not let them clock in? Pick who, when, and what they said. Xtend lays out
-          everything their phone did in that time, on a timeline, and says whether it fits. Keep the check on their
-          record to see a pattern. Staff are not told any of this is recorded.
-        </p>
-      </div>
+  const verdicts = { fits: 0, false: 0, doubtful: 0, unknown: 0 }
+  for (const k of kept) verdicts[k.verdict]++
 
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Check an excuse"
+        note="Bad network, phone off, location not working, at the store all along? Pick who, when and what they said: Xtend lays out what their phone did and says whether it fits. Staff are not told."
+        chips={person ? <Chip icon={User}>{person.full_name}</Chip> : undefined}
+      />
+
+      <StatGrid>
+        <StatCard icon={ClipboardCheck} label="Checks kept" value={String(kept.length)} note={person ? 'On their record, 90 days' : 'Latest, 90 days'} />
+        <StatCard
+          icon={CheckCircle2}
+          label="Fit the evidence"
+          value={String(verdicts.fits)}
+          tone="good"
+          bar={kept.length ? (verdicts.fits / kept.length) * 100 : null}
+          note="The phone backs them up"
+        />
+        <StatCard
+          icon={XCircle}
+          label="Not true or doubtful"
+          value={String(verdicts.false + verdicts.doubtful)}
+          tone={verdicts.false + verdicts.doubtful ? 'bad' : 'muted'}
+          bar={kept.length ? ((verdicts.false + verdicts.doubtful) / kept.length) * 100 : null}
+          note={verdicts.false ? `${verdicts.false} plainly not true` : 'None plainly not true'}
+        />
+        <StatCard icon={HelpCircle} label="No evidence" value={String(verdicts.unknown)} tone="muted" note="Nothing either way" />
+      </StatGrid>
+
+      <section className="surface p-4 sm:p-5">
       <form className="space-y-3" method="get">
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-full space-y-1.5 sm:w-56">
@@ -186,18 +208,18 @@ export default async function ExcusesPage({ searchParams }: { searchParams: Prom
           <span className="text-muted-foreground">· up to 3 days</span>
         </div>
       </form>
+      </section>
 
       {problem && <Alert variant="destructive">{problem}</Alert>}
 
       {person && result && (
-        <Card className={cn('border', TONE[result.verdict])}>
-          <CardHeader>
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        <section className={cn('space-y-4 rounded-2xl border-2 p-4 shadow-soft sm:p-5', TONE[result.verdict])}>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
               {LABEL[result.verdict]} · {person.full_name} · “{CLAIMS[claim]}” · {formatLagos(windowFrom, true)} to {formatLagos(windowTo, true)}
             </p>
-            <CardTitle>{result.headline}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
+            <h2 className="mt-1 text-xl font-extrabold">{result.headline}</h2>
+          </div>
             {result.points.length > 0 && (
               <ul className="list-disc space-y-1 pl-5 text-sm">
                 {result.points.map((p, i) => (
@@ -206,55 +228,37 @@ export default async function ExcusesPage({ searchParams }: { searchParams: Prom
               </ul>
             )}
             <SaveExcuseCheck userId={person.id} claim={claim} from={windowFrom} to={windowTo} />
-          </CardContent>
-        </Card>
+        </section>
       )}
 
       {person && checked?.evidence && (
-        <Card>
-          <CardHeader>
-            <CardTitle>What the phone did</CardTitle>
-            <CardDescription>
-              {formatLagos(windowFrom, true)} to {formatLagos(windowTo, true)}. Point at a mark for the detail.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ExcuseTimeline from={windowFrom} to={windowTo} evidence={checked.evidence} more={checked.more} />
-          </CardContent>
-        </Card>
+        <Panel icon={Activity} title="What the phone did" note={`${formatLagos(windowFrom, true)} to ${formatLagos(windowTo, true)}. Point at a mark for the detail.`}>
+          <ExcuseTimeline from={windowFrom} to={windowTo} evidence={checked.evidence} more={checked.more} />
+        </Panel>
       )}
 
       {person && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Is the phone on right now?</CardTitle>
-            <p className="text-sm text-muted-foreground">
-              If they say their phone is off or has no network now, check it. Xtend sends the phone a notification
-              (&ldquo;Please open Xtend now&rdquo;), and the phone reports when it arrives. If it arrives, the phone is on
-              and has network.
-            </p>
-          </CardHeader>
-          <CardContent>
-            <PhoneCheck userId={person.id} name={person.full_name} />
-          </CardContent>
-        </Card>
+        <Panel
+          icon={Smartphone}
+          title="Is the phone on right now?"
+          note="Xtend sends the phone a notification (“Please open Xtend now”) and the phone reports when it arrives. If it arrives, the phone is on and has network."
+        >
+          <PhoneCheck userId={person.id} name={person.full_name} />
+        </Panel>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{person ? `${person.full_name}’s excuses, last 90 days` : 'Excuses kept, last 90 days'}</CardTitle>
-          <CardDescription>
-            {person ? 'Checks kept on their record, newest first.' : 'Pick a person to check, or open one below.'}
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <Panel
+        icon={History}
+        title={person ? `${person.full_name}’s excuses, last 90 days` : 'Excuses kept, last 90 days'}
+        note={person ? 'Checks kept on their record, newest first.' : 'Pick a person to check, or open one below.'}
+      >
           {person && kept.length > 0 && <Pattern kept={kept} />}
           {kept.length === 0 ? (
-            <p className="text-sm text-muted-foreground">None kept yet.</p>
+            <EmptyState icon={ClipboardCheck}>None kept yet.</EmptyState>
           ) : (
-            <ul className="divide-y divide-border text-sm">
+            <ul className="grid gap-2 text-sm lg:grid-cols-2">
               {kept.map((k) => (
-                <li key={k.id} className="space-y-1 py-2.5">
+                <li key={k.id} className={cn('space-y-1 rounded-xl border-l-4 bg-muted/40 px-3 py-2.5', k.verdict === 'fits' ? 'border-l-success' : k.verdict === 'unknown' ? 'border-l-border' : k.verdict === 'doubtful' ? 'border-l-warning' : 'border-l-destructive')}>
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant={BADGE[k.verdict]}>{LABEL[k.verdict]}</Badge>
                     {!person && (
@@ -279,8 +283,7 @@ export default async function ExcusesPage({ searchParams }: { searchParams: Prom
               ))}
             </ul>
           )}
-        </CardContent>
-      </Card>
+      </Panel>
     </div>
   )
 }

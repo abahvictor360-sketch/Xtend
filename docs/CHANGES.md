@@ -57,6 +57,24 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-17
 
+### Nine more pages in the new look
+- **What was done:** Marketer reports, Support, Messages, X Metrics,
+  Integrity, Check an excuse, Notifications, Ask Xtend and the Admin guide
+  now match the Attendance page: a clear title, figure cards with coloured
+  icons and bars, headings with icons and tidy cards. New figures:
+  **Marketer reports** shows store visits, stores reached, time in stores
+  and reports filed (and who visited stores but filed nothing);
+  **Messages** shows people, conversations, unread and people with no
+  conversation yet; **Check an excuse** shows checks kept, how many fitted
+  the evidence and how many were not true or doubtful. **Support**,
+  **Integrity** and **Notifications** have the same figures as before in
+  the new cards (tap "Needs a reply", "High, not reviewed" or
+  "Notifications off" to go straight to them). The X Metrics tabs are now
+  a tidy switcher, and both guides open with a card of sections to jump to.
+- **The impact:** the whole dashboard reads the same way. Nothing about
+  what the pages do has changed.
+- **What you need to do:** redeploy the latest code. No migration.
+
 ### Eight more dashboard pages in the new look, and the top bar fixed
 - **What was done:** Overview, Alerts, Movement, Store visits, Leave,
   Schedules, Outlets and Places now look like the Attendance page: a clear

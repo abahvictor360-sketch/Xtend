@@ -13,7 +13,9 @@ import {
   type PanelMessage,
   type QuickReply,
 } from '@/components/admin/support-threads'
-import { Figure, PersonContext, ThreadRow, type PanelInfo } from '@/components/admin/support-inbox'
+import { PersonContext, ThreadRow, type PanelInfo } from '@/components/admin/support-inbox'
+import { CheckCheck, Hourglass, Inbox, MessageCircleQuestion, MessagesSquare, Timer } from 'lucide-react'
+import { EmptyState, PageHeader, StatCard, StatGrid } from '@/components/admin/page-kit'
 import {
   LONG_WAIT_MIN,
   SORTS,
@@ -122,25 +124,37 @@ export default async function AdminSupportPage({
   const backHref = `?${supportQuery(filter, { thread: null })}`
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <AutoRefresh seconds={60} />
       <Header />
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Figure label="Needs a reply" value={String(waiting.length)} warn={waiting.length > 0} />
-        <Figure
+      <StatGrid>
+        <StatCard
+          icon={MessageCircleQuestion}
+          label="Needs a reply"
+          value={String(waiting.length)}
+          tone={waiting.length ? 'bad' : 'muted'}
+          note={waiting.length ? 'Waiting for the office' : 'Nothing waiting'}
+          href={filter.view !== 'needs' ? `?${supportQuery(filter, { view: 'needs', thread: null })}` : undefined}
+        />
+        <StatCard
+          icon={Hourglass}
           label={`Waiting over ${LONG_WAIT_MIN / 60} hour`}
           value={String(longWaits)}
-          warn={longWaits > 0}
+          tone={longWaits ? 'warn' : 'muted'}
+          note={longWaits ? 'Left too long' : 'None left too long'}
+          bar={waiting.length ? (longWaits / waiting.length) * 100 : null}
         />
-        <Figure label="Answered today" value={String(answeredToday)} />
-        <Figure
-          label="Typical reply time, 7 days"
+        <StatCard icon={CheckCheck} label="Answered today" value={String(answeredToday)} tone="good" note="Replies from the office" />
+        <StatCard
+          icon={Timer}
+          label="Typical reply time"
           value={typical === null ? '—' : durationText(typical)}
-          note={replyTimes.length ? `from ${replyTimes.length} repl${replyTimes.length === 1 ? 'y' : 'ies'}` : 'no replies yet'}
+          note={replyTimes.length ? `Last 7 days, from ${replyTimes.length} repl${replyTimes.length === 1 ? 'y' : 'ies'}` : 'No replies yet'}
         />
-      </div>
+      </StatGrid>
 
+      <section className="surface p-4 sm:p-5">
       <form method="get" className="space-y-3">
         <input type="hidden" name="view" value={filter.view} />
         <div className="flex flex-wrap items-end gap-3">
@@ -195,15 +209,16 @@ export default async function AdminSupportPage({
           ))}
         </div>
       </form>
+      </section>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
         <section className={cn('space-y-2', selected && 'hidden lg:block')} aria-label="Threads">
           {list.length === 0 ? (
-            <div className="surface p-6 text-center text-sm text-muted-foreground">
+            <EmptyState icon={Inbox}>
               {filter.view === 'needs' && !filter.q && !filter.person
                 ? 'Nothing waiting. New issues from the field appear here.'
                 : 'Nothing matches.'}
-            </div>
+            </EmptyState>
           ) : (
             <ul className="space-y-2">
               {list.map((t) => (
@@ -234,6 +249,7 @@ export default async function AdminSupportPage({
             />
           ) : (
             <div className="flex h-full min-h-48 flex-col items-center justify-center gap-1 text-center text-sm text-muted-foreground">
+              <MessagesSquare className="mb-1 h-7 w-7 text-brand/60" />
               <p className="font-semibold text-foreground">Pick a thread</p>
               <p>The conversation, who the person is and how their day is going show here.</p>
             </div>
@@ -246,15 +262,21 @@ export default async function AdminSupportPage({
 
 function Header() {
   return (
-    <div>
-      <h1 className="text-xl font-semibold">Support</h1>
-      <p className="text-sm text-muted-foreground">
-        Issues field staff raised in the app. The Xtend helper answers the simple ones; anything marked{' '}
-        <span className="font-medium">With the office</span> needs a person. Longest waiting is at the top. Reply here
-        and the person gets it in their app; give a thread to a colleague, close it when it is sorted, and reopen it if
-        it is not.
-      </p>
-    </div>
+    <PageHeader
+      title="Support"
+      note="Issues field staff raised in the app. The Xtend helper answers the simple ones; anything With the office needs a person. Longest waiting first."
+      actions={
+        <details className="group relative text-xs text-muted-foreground">
+          <summary className="cursor-pointer list-none rounded-full border border-border bg-card px-3 py-1.5 font-semibold hover:text-foreground [&::-webkit-details-marker]:hidden">
+            How support works
+          </summary>
+          <p className="absolute right-0 z-20 mt-2 w-72 rounded-2xl border border-border bg-card p-3 leading-relaxed shadow-lg">
+            Reply here and the person gets it in their app. Give a thread to a colleague, close it when it is sorted, and
+            reopen it if it is not.
+          </p>
+        </details>
+      }
+    />
   )
 }
 

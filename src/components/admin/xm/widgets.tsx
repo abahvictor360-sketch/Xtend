@@ -27,7 +27,7 @@ export function XmTabs({ readOnly = false }: { readOnly?: boolean }) {
   const pathname = usePathname()
   const features = useXmFeatures()
   return (
-    <nav className="-mx-1 flex gap-1 overflow-x-auto pb-1">
+    <nav className="flex max-w-full gap-1 overflow-x-auto rounded-2xl bg-muted p-1">
       {xmTabs(features, readOnly).map((t) => {
         const active = t.href === '/admin/metrics' ? pathname === t.href : pathname.startsWith(t.href)
         return (
@@ -35,8 +35,8 @@ export function XmTabs({ readOnly = false }: { readOnly?: boolean }) {
             key={t.href}
             href={t.href}
             className={cn(
-              'shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors',
-              active ? 'bg-brand text-primary-foreground' : 'bg-tint text-tint-foreground hover:brightness-95',
+              'inline-flex min-h-10 shrink-0 items-center rounded-xl px-4 text-sm font-semibold transition-colors',
+              active ? 'bg-card text-foreground shadow-soft' : 'text-muted-foreground hover:text-foreground',
             )}
           >
             {t.label}
@@ -49,11 +49,12 @@ export function XmTabs({ readOnly = false }: { readOnly?: boolean }) {
 
 export function XmHeader({ title, intro, readOnly }: { title: string; intro: string; readOnly?: boolean }) {
   return (
-    <div className="space-y-3">
-      <div>
-        <h1 className="text-xl font-semibold">{title}</h1>
-        <p className="text-sm text-muted-foreground">{intro}</p>
-      </div>
+    <div className="space-y-4">
+      <header className="min-w-0">
+        <p className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-brand">X Metrics</p>
+        <h1 className="text-2xl font-extrabold tracking-tight">{title}</h1>
+        <p className="mt-0.5 max-w-2xl text-sm text-muted-foreground">{intro}</p>
+      </header>
       <XmTabs readOnly={readOnly} />
     </div>
   )

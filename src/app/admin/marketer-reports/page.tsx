@@ -6,9 +6,11 @@ import { MarketerReportList } from '@/components/admin/marketer-report-list'
 import { ReportFileList, type OfficeReportFile } from '@/components/admin/report-file-list'
 import { monthName, parseReportRequest, type ReportKind } from '@/lib/marketer-report'
 import { chip } from '@/components/admin/visit-views'
+import { duration } from '@/lib/movement'
+import { CalendarDays, Clock3, Download, FileText, MapPin, Paperclip, Store, Users } from 'lucide-react'
+import { Chip, Panel, PageHeader, SectionTitle, StatCard, StatGrid, TabLinks } from '@/components/admin/page-kit'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { addDays, lagosDateString, longDate } from '@/lib/utils'
@@ -60,28 +62,50 @@ export default async function MarketerReportsPage({ searchParams }: { searchPara
     return `?${q.toString()}`
   }
 
-  return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold">Marketer reports</h1>
-        <p className="text-sm text-muted-foreground">
-          A report to download for each marketer, for one day or a whole month: when they clocked in and out, every store
-          they checked in to and how long they spent there, the time between stores, and the daily report they filed.
-          PDF is the one to share; Word and Excel hold the same.
-          {!isAdmin && ' You see your own team only.'} Times are Africa/Lagos.
-        </p>
-      </div>
+  const visits = shown.reduce((n, r) => n + r.visits, 0)
+  const stores = shown.reduce((n, r) => n + r.stores, 0)
+  const minutes = shown.reduce((n, r) => n + r.minutes, 0)
+  const reports = shown.reduce((n, r) => n + r.reports, 0)
+  const active = shown.filter((r) => r.visits > 0).length
+  const silent = shown.filter((r) => r.visits > 0 && r.reports === 0).length
 
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title="Marketer reports"
+        note={`A report to download for each marketer, for one day or a whole month. PDF is the one to share; Word and Excel hold the same.${isAdmin ? '' : ' Your own team only.'} Lagos time.`}
+        chips={
+          <>
+            <Chip icon={CalendarDays}>{period}</Chip>
+            <Chip icon={Users}>
+              {shown.length} {shown.length === 1 ? 'person' : 'people'}
+            </Chip>
+          </>
+        }
+      />
+
+      <StatGrid>
+        <StatCard icon={MapPin} label="Store visits" value={String(visits)} note={`${active} of ${shown.length} visited a store`} bar={shown.length ? (active / shown.length) * 100 : null} />
+        <StatCard icon={Store} label="Stores reached" value={String(stores)} tone="good" note="Added up per person" />
+        <StatCard icon={Clock3} label="Time in stores" value={minutes ? duration(minutes) : '—'} note={visits ? `${duration(Math.round(minutes / visits))} a visit on average` : 'No visits yet'} />
+        <StatCard
+          icon={FileText}
+          label="Daily reports filed"
+          value={String(reports)}
+          tone={silent ? 'warn' : 'brand'}
+          note={silent ? `${silent} visited stores and filed none` : `${files.length} document${files.length === 1 ? '' : 's'} attached`}
+        />
+      </StatGrid>
+
+      <section className="surface p-4 sm:p-5">
       <form method="get" className="space-y-3">
         {only.length > 0 && req.userId && <input type="hidden" name="user_id" value={req.userId} />}
-        <div className="flex flex-wrap gap-2">
-          <Link href={href('day', req.date)} className={chip(req.kind === 'day')}>
-            A day
-          </Link>
-          <Link href={href('month', req.month)} className={chip(req.kind === 'month')}>
-            A month
-          </Link>
-        </div>
+        <TabLinks
+          tabs={[
+            { href: href('day', req.date), label: 'A day', active: req.kind === 'day' },
+            { href: href('month', req.month), label: 'A month', active: req.kind === 'month' },
+          ]}
+        />
         <div className="flex flex-wrap items-end gap-3">
           <input type="hidden" name="period" value={req.kind} />
           {req.kind === 'day' ? (
@@ -122,13 +146,22 @@ export default async function MarketerReportsPage({ searchParams }: { searchPara
           )}
         </div>
       </form>
+        <details className="mt-3 text-xs text-muted-foreground">
+          <summary className="cursor-pointer font-semibold hover:text-foreground">What is in a report</summary>
+          <p className="mt-1.5 leading-relaxed">
+            When they clocked in and out, every store they checked in to and how long they spent there, the time between
+            stores, and the daily report they filed, with the names of any documents they attached.
+          </p>
+        </details>
+      </section>
 
       {error && <Alert variant="destructive">Could not load the people: {error}</Alert>}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{period}</CardTitle>
-          <CardDescription>
+      <section className="surface space-y-4 p-4 sm:p-5">
+        <SectionTitle
+          icon={Download}
+          title={`Reports: ${period}`}
+          note={<>
             {only.length
               ? 'One person. '
               : `${shown.length} ${shown.length === 1 ? 'person' : 'people'}: every marketer, and anyone else who checked in to a store in this period. `}
@@ -141,25 +174,18 @@ export default async function MarketerReportsPage({ searchParams }: { searchPara
                 </Link>
               </>
             )}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <MarketerReportList rows={shown} kind={req.kind} periodKey={key} />
-        </CardContent>
-      </Card>
+          </>}
+        />
+        <MarketerReportList rows={shown} kind={req.kind} periodKey={key} />
+      </section>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Documents attached ({files.length})</CardTitle>
-          <CardDescription>
-            Files staff attached to their daily reports in this period: price lists, plans, invoices, pictures.
-            The PDF, Word and Excel reports list them by name.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ReportFileList files={files} />
-        </CardContent>
-      </Card>
+      <Panel
+        icon={Paperclip}
+        title={`Documents attached (${files.length})`}
+        note="Files staff attached to their daily reports in this period: price lists, plans, invoices, pictures."
+      >
+        <ReportFileList files={files} />
+      </Panel>
     </div>
   )
 }

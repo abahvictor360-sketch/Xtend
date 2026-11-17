@@ -3,12 +3,14 @@ import { FIELD_ROLES, requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Alert } from '@/components/ui/alert'
+import { BarChart3, CalendarDays, CheckCircle2, Flag, ListFilter, SearchCheck, ShieldAlert, UserSearch, Users } from 'lucide-react'
+import { Chip, Panel, PageHeader, SectionTitle, StatCard, StatGrid } from '@/components/admin/page-kit'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { IntegrityFlags } from '@/components/admin/integrity-flags'
-import { KindBars, RiskList, Stat, Trend } from '@/components/admin/integrity-overview'
+import { KindBars, RiskList, Trend } from '@/components/admin/integrity-overview'
 import { AREA_LABEL, FLAG_AREAS, FLAG_KINDS, flagArea } from '@/lib/integrity'
 import {
   MAX_DAYS,
@@ -71,18 +73,14 @@ export default async function IntegrityPage({ searchParams }: { searchParams: Pr
   }))
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold">Integrity checks</h1>
-        <p className="text-sm text-muted-foreground">
-          Things that look wrong: signs of a fake-location app, phone clocks changed, photos refused, and stock counts
-          that do not add up. A flag is a reason to look, not proof. See who to look at first, open a flag for the
-          detail and the evidence around it, then mark it reviewed with what you found, one at a time or several
-          together.{session.profile.role === 'supervisor' ? ' You see your own team only.' : ''} Staff do not see
-          these.
-        </p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Integrity checks"
+        note={`Things that look wrong: signs of a fake-location app, phone clocks changed, photos refused, stock counts that do not add up. A flag is a reason to look, not proof.${session.profile.role === 'supervisor' ? ' Your own team only.' : ''} Staff do not see these.`}
+        chips={<Chip icon={CalendarDays}>{filter.to !== filter.from ? `${longDate(filter.from)} to ${longDate(filter.to)}` : longDate(filter.from)}</Chip>}
+      />
 
+      <section className="surface p-4 sm:p-5">
       <form method="get" className="space-y-3">
         <div className="flex flex-wrap items-end gap-3">
           <div className="space-y-1.5">
@@ -195,33 +193,55 @@ export default async function IntegrityPage({ searchParams }: { searchParams: Pr
           {truncated ? ' · only the newest 2,000 flags are shown: narrow the dates' : ''}
         </p>
       </form>
+      </section>
 
       {failed && (
-        <p className="text-sm text-destructive">The checks could not be loaded: {failed}. Has migration 022 been run in Supabase?</p>
+        <Alert variant="destructive">The checks could not be loaded: {failed}. Has migration 022 been run in Supabase?</Alert>
       )}
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Stat label="To review" value={open.length} note={`of ${all.length} in these dates`} tone={open.length ? 'warn' : undefined} />
-        <Stat label="High, not reviewed" value={highOpen} tone={highOpen ? 'bad' : undefined} />
-        <Stat
-          label="People with open flags"
-          value={risk.length}
-          note={risk.filter((p) => p.level === 'act').length ? `${risk.filter((p) => p.level === 'act').length} to act on now` : undefined}
+      <StatGrid>
+        <StatCard
+          icon={SearchCheck}
+          label="To review"
+          value={String(open.length)}
+          tone={open.length ? 'warn' : 'muted'}
+          note={`of ${all.length} in these dates`}
+          bar={all.length ? (open.length / all.length) * 100 : null}
         />
-        <Stat label="Reviewed" value={reviewed} note={all.length ? `${Math.round((reviewed / all.length) * 100)}% done` : undefined} />
-      </div>
+        <StatCard
+          icon={ShieldAlert}
+          label="High, not reviewed"
+          value={String(highOpen)}
+          tone={highOpen ? 'bad' : 'muted'}
+          note={highOpen ? 'Look at these first' : 'None waiting'}
+          href={highOpen && filter.severity !== 'high' ? href({ severity: 'high', status: 'open' }) : undefined}
+        />
+        <StatCard
+          icon={Users}
+          label="People with open flags"
+          value={String(risk.length)}
+          tone={risk.some((p) => p.level === 'act') ? 'bad' : 'brand'}
+          note={risk.filter((p) => p.level === 'act').length ? `${risk.filter((p) => p.level === 'act').length} to act on now` : 'Nobody to act on now'}
+        />
+        <StatCard
+          icon={CheckCircle2}
+          label="Reviewed"
+          value={String(reviewed)}
+          tone="good"
+          note={all.length ? `${Math.round((reviewed / all.length) * 100)}% done` : 'Nothing in these dates'}
+          bar={all.length ? (reviewed / all.length) * 100 : null}
+        />
+      </StatGrid>
 
       {all.length > 0 && (
         <div className="grid gap-4 lg:grid-cols-5">
-          <Card className="lg:col-span-3">
-            <CardHeader>
-              <CardTitle>Who to look at first</CardTitle>
-              <CardDescription>
-                People ranked by open flags: high counts most, the last 7 days count double, and proof from the phone
-                (fake GPS confirmed, a tampered phone, a faked clock time) puts them straight to the top.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
+          <Panel
+            className="lg:col-span-3"
+            icon={UserSearch}
+            title="Who to look at first"
+            note="Ranked by open flags: high counts most, the last 7 days count double, and proof from the phone puts them straight to the top."
+          >
+            <div>
               {risk.length === 0 ? (
                 <p className="text-sm text-muted-foreground">Everything in these dates has been reviewed.</p>
               ) : (
@@ -230,37 +250,23 @@ export default async function IntegrityPage({ searchParams }: { searchParams: Pr
               {risk.length > 8 && (
                 <p className="mt-2 text-xs text-muted-foreground">And {risk.length - 8} more with fewer flags.</p>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </Panel>
 
           <div className="space-y-4 lg:col-span-2">
-            <Card>
-              <CardHeader>
-                <CardTitle>Flags per day</CardTitle>
-                <CardDescription>Every flag in these dates, reviewed or not, by severity.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Trend days={perDay} />
-              </CardContent>
-            </Card>
-            <Card>
-              <CardHeader>
-                <CardTitle>By check</CardTitle>
-                <CardDescription>Tap one to see only those.</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <KindBars kinds={byKind} active={filter.kind} href={(kind) => href({ kind })} />
-              </CardContent>
-            </Card>
+            <Panel icon={BarChart3} title="Flags per day" note="Every flag in these dates, reviewed or not, by severity.">
+              <Trend days={perDay} />
+            </Panel>
+            <Panel icon={ListFilter} title="By check" note="Tap one to see only those.">
+              <KindBars kinds={byKind} active={filter.kind} href={(kind) => href({ kind })} />
+            </Panel>
           </div>
         </div>
       )}
 
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-base font-semibold">
-            {filter.status === 'open' ? 'To review' : filter.status === 'reviewed' ? 'Reviewed' : 'All flags'}
-          </h2>
+          <SectionTitle icon={Flag} title={filter.status === 'open' ? 'To review' : filter.status === 'reviewed' ? 'Reviewed' : 'All flags'} />
           {filter.kind && <Badge>{kindLabel(filter.kind)}</Badge>}
           {filter.severity && <Badge>{SEVERITY_LABEL[filter.severity]}</Badge>}
           {filter.person && <Badge>{(people ?? []).find((p) => p.id === filter.person)?.full_name ?? 'One person'}</Badge>}

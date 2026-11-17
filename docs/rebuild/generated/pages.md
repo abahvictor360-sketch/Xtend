@@ -32,9 +32,7 @@ On screen: How the team is turning up over a period, and how that compares with 
 
 - File: `src/app/admin/ask/page.tsx`
 - Who: ['admin', 'supervisor']
-- Components: `admin/attendance-assistant`
-
-On screen: Ask in plain words about attendance, store visits, stock counts, X Metrics, integrity flags, location alerts, support issues and notifications. It can make reports to download, and prepare notifications, count requests and reviews for you to approve.
+- Components: `admin/attendance-assistant`, `admin/page-kit`
 
 ## `/admin/assignments` — Store allocation — Xtend
 
@@ -74,11 +72,9 @@ On screen: Every change an admin or supervisor makes, newest first: who, what, w
 
 - File: `src/app/admin/excuses/page.tsx`
 - Who: ['admin', 'supervisor']
-- Components: `ui/alert`, `ui/badge`, `ui/button`, `ui/card`, `ui/input`, `ui/label`, `ui/select`, `admin/phone-check`, `admin/excuse-timeline`, `admin/save-excuse-check`
+- Components: `ui/alert`, `ui/badge`, `ui/button`, `admin/page-kit`, `ui/input`, `ui/label`, `ui/select`, `admin/phone-check`, `admin/excuse-timeline`, `admin/save-excuse-check`
 
 How often each excuse came up, and how often it did not hold.
-
-On screen: Someone says their network was bad, their phone was off, their location would not work, they were at the store all along, or the app would not let them clock in? Pick who, when, and what they said. Xtend lays out everything their phone did in that time, on a timeline, and says whether it fits. Keep the check on their record to see a pattern. Staff are not told any of
 
 ## `/admin/follow/[userId]` — Follow live — Xtend
 
@@ -96,7 +92,7 @@ when following starts.
 
 - File: `src/app/admin/guide/page.tsx`
 - Who: ['admin', 'hr']
-- Components: `guide`
+- Components: `admin/page-kit`, `guide`
 
 How to run the Xtend dashboard, page by page. Admins only: it covers
 how location, checks and the phone app work, which staff and
@@ -108,9 +104,9 @@ On screen: The latest changes, where to find them, and the one-off steps they ne
 
 - File: `src/app/admin/integrity/page.tsx`
 - Who: ['admin', 'supervisor']
-- Components: `ui/badge`, `ui/button`, `ui/card`, `ui/input`, `ui/label`, `ui/select`, `admin/integrity-flags`, `admin/integrity-overview`
+- Components: `ui/badge`, `ui/button`, `ui/alert`, `admin/page-kit`, `ui/input`, `ui/label`, `ui/select`, `admin/integrity-flags`, `admin/integrity-overview`
 
-On screen: Things that look wrong: signs of a fake-location app, phone clocks changed, photos refused, and stock counts that do not add up. A flag is a reason to look, not proof. See who to look at first, open a flag for the detail and the evidence around it, then mark it reviewed with what you found, one at a time or several together.
+On screen: Everything in these dates has been reviewed.
 
 ## `/admin/leave` — Leave — Xtend
 
@@ -122,9 +118,7 @@ On screen: Things that look wrong: signs of a fake-location app, phone clocks ch
 
 - File: `src/app/admin/marketer-reports/page.tsx`
 - Who: ['admin', 'supervisor']
-- Components: `admin/marketer-report-list`, `admin/report-file-list`, `admin/visit-views`, `ui/alert`, `ui/button`, `ui/card`, `ui/input`, `ui/label`
-
-On screen: A report to download for each marketer, for one day or a whole month: when they clocked in and out, every store they checked in to and how long they spent there, the time between stores, and the daily report they filed. PDF is the one to share; Word and Excel hold the same.
+- Components: `admin/marketer-report-list`, `admin/report-file-list`, `admin/visit-views`, `admin/page-kit`, `ui/alert`, `ui/button`, `ui/input`, `ui/label`
 
 ## `/admin/messages/[staffId]` — Conversation — Xtend
 
@@ -136,9 +130,7 @@ On screen: A report to download for each marketer, for one day or a whole month:
 
 - File: `src/app/admin/messages/page.tsx`
 - Who: ['admin', 'supervisor', 'hr']
-- Components: `ui/alert`, `ui/badge`, `ui/button`, `ui/input`, `admin/movement-map`
-
-On screen: No merchandisers or marketers to message yet.
+- Components: `admin/page-kit`, `ui/alert`, `ui/badge`, `ui/button`, `ui/input`, `admin/movement-map`
 
 ## `/admin/metrics/expiry` — Expiry alerts — X Metrics
 
@@ -160,7 +152,7 @@ On screen: Each merchandiser and marketer, graded on sales against target, stock
 
 - File: `src/app/admin/metrics/page.tsx`
 - Who: ['admin', 'supervisor']
-- Components: `ui/badge`, `ui/card`, `ui/table`, `admin/xm/widgets`, `admin/xm/dashboard`, `admin/xm/switched-off`
+- Components: `ui/badge`, `ui/card`, `ui/table`, `admin/xm/widgets`, `admin/xm/dashboard`, `admin/xm/switched-off`, `admin/page-kit`
 
 On screen: No store is in X Metrics yet.
 
@@ -222,9 +214,9 @@ On screen: A monthly target in units, for a person or a store. A person's own ta
 
 - File: `src/app/admin/notifications/page.tsx`
 - Who: ['admin', 'supervisor']
-- Components: `admin/notification-composer`, `admin/notification-tools`, `admin/notification-history`, `ui/alert`, `ui/button`, `ui/card`, `ui/input`, `ui/label`, `ui/select`
+- Components: `admin/notification-composer`, `admin/notification-tools`, `admin/notification-history`, `admin/page-kit`, `ui/alert`, `ui/button`, `ui/input`, `ui/label`, `ui/select`
 
-On screen: Send a push notification to staff phones, now or at a set time.
+On screen: They have no phone with Xtend notifications turned on. Ask them to open Xtend and allow notifications; until they do they cannot clock in (unless excused) and will not hear from the office.
 
 ## `/admin/outlets/import` — Add stores — Xtend
 
@@ -306,7 +298,7 @@ On screen: What you can see and do.
 
 - File: `src/app/admin/support/page.tsx`
 - Who: ['admin', 'supervisor']
-- Components: `ui/alert`, `ui/button`, `ui/input`, `ui/label`, `ui/select`, `admin/movement-map`, `admin/support-threads`, `admin/support-inbox`
+- Components: `ui/alert`, `ui/button`, `ui/input`, `ui/label`, `ui/select`, `admin/movement-map`, `admin/support-threads`, `admin/support-inbox`, `admin/page-kit`
 
 On screen: Showing the 500 most recent threads. Search or pick a person to go further back.
 

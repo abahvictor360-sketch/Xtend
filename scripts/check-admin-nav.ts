@@ -44,9 +44,17 @@ for (const page of [
   'src/components/admin/overview-view.tsx', 'src/app/admin/alerts/page.tsx', 'src/app/admin/tracking/page.tsx',
   'src/app/admin/visits/page.tsx', 'src/app/admin/leave/page.tsx', 'src/app/admin/schedules/page.tsx',
   'src/app/admin/outlets/page.tsx', 'src/app/admin/places/page.tsx', 'src/components/admin/attendance-overview.tsx',
+  'src/app/admin/marketer-reports/page.tsx', 'src/app/admin/support/page.tsx', 'src/app/admin/messages/page.tsx',
+  'src/app/admin/integrity/page.tsx', 'src/app/admin/excuses/page.tsx', 'src/app/admin/notifications/page.tsx',
 ]) {
   check(/from '@\/components\/admin\/page-kit'/.test(read(page)) && /StatCard/.test(read(page)), `${page.split('/').slice(-2).join('/')} uses the shared page look`)
 }
+
+for (const page of ['src/app/admin/ask/page.tsx', 'src/app/admin/guide/page.tsx']) {
+  check(/<PageHeader/.test(read(page)), `${page.split('/').slice(-2).join('/')} has the page header`)
+}
+check(/layout="cards"/.test(read('src/app/admin/guide/page.tsx')) && /layout="cards"/.test(read('src/app/admin/supervisor-guide/page.tsx')), 'both office guides open with the section cards')
+check(/rounded-2xl bg-muted p-1/.test(read('src/components/admin/xm/widgets.tsx')), 'X Metrics tabs are a segmented switcher')
 
 // The table keeps its own padding and alignment and adds the caller's classes.
 const table = read('src/components/ui/table.tsx')
