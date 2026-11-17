@@ -226,6 +226,8 @@ async function runReport(record: OutboxRecord & { job: ReportJob }) {
   )
 
   return postJson('/api/reports', {
+    scope: job.scope ?? 'day',
+    store_visit_id: job.scope === 'store' ? (job.store_visit_id ?? null) : null,
     body: job.body,
     sales_summary: job.sales_summary,
     stock_status: job.stock_status,

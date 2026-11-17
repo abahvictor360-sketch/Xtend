@@ -442,8 +442,21 @@ Stored in `attendance.time_verdict` and `time_detail` (`offset_s`,
 
 ### 2.6 Daily reports (marketers)
 
-- One per person per Lagos day (`reports_one_per_day`); `user_id`,
-  `report_date`, `outlet_id` server-set (`report_enforce`).
+- Each report is for the whole day or one store visit (0088): `scope`
+  (`'day'` default, `'store'`), `store_visit_id` (no foreign key) and
+  `store_label`; check `reports_scope_ok` (day ⇔ no visit). One whole-day
+  report per person per Lagos day (`reports_one_day_report`, partial
+  unique on `(user_id, report_date) where scope = 'day'`) and one report
+  per store visit (`reports_one_per_visit`). `user_id`, `report_date`,
+  `outlet_id` server-set (`report_enforce`); for a store report the visit
+  must be the caller's and today's ("Pick a store you checked in at
+  today"), and `outlet_id`/`store_label` come from it. Scope, visit and
+  label never change on an edit. A store report's `store_visits` snapshot
+  holds that one visit (`report_visit_snapshot(visit)`); a whole-day
+  report's holds the day. Any report counts as "report filed" for the day.
+  `add_report_photo(path, report)` / `add_report_file(path, name, report)`
+  put a photo or document on that report; the old forms pick today's
+  whole-day report first.
 - Editable only on the day filed ("Reports can only be edited on the day
   they were filed"); owner and date can never change.
 - At most **5** photos per report (`report_photo_limit`).

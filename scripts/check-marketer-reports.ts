@@ -12,6 +12,7 @@ import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   buildMarketerReport,
+  dayReportFields,
   parseReportRequest,
   reportQuery,
   snapshotText,
@@ -116,6 +117,20 @@ for (let d = '2026-10-01'; d <= today; d = addDays(d, 1)) {
       issues: n % 5 === 0 ? 'The shelf strip at Allen Avenue is broken and the price tags fall off. Please send a new one.' : '',
     })
 }
+// Today: a report for one store as well as (or instead of) the whole day (0088).
+reports.push({
+  id: 'store-report-today',
+  scope: 'store',
+  store_label: STORES[1].name,
+  report_date: today,
+  created_at: T(today, 16, 30),
+  updated_at: null,
+  body: 'Quiet hour at this store, but the new display drew questions.',
+  sales_summary: 'Sold 5 units of the serum here.',
+  stock_status: 'Toner is low at this store.',
+  competitor_activity: '',
+  issues: '',
+})
 // Today: still checked in at the second store.
 visits.push(visit(today, STORES[1], 16, 0, 40, { status: 'open', departed_at: null }))
 sales.push({ sale_date: today, outlet_name: STORES[0].name, product_name: 'Vitamin C Brightening Serum 30ml', units: 6 })
@@ -193,6 +208,19 @@ const snap = snapshotText([
 ])
 check(snap.count === 2 && snap.minutes === 62 && snap.text === 'Shoprite Ikeja 09:00–09:50 (50 min); Ogba 10:15–still in (12 min). Total 1 h 2 min.', 'the visits kept with a report read in one cell', snap)
 check(snapshotText(null).text === 'No store visits', 'a report without visits says so')
+
+/* ---------------- a report per store or for the whole day (0088) ---------------- */
+{
+  const t = buildMarketerReport(src('day', today, today)).days[0]
+  const store = t.reports.find((r) => r.store)
+  check(Boolean(store) && store!.title === STORES[1].name, 'a store report is named after its store', store?.title)
+  check(t.reports.length === 1 || !t.reports[0].store, 'the whole-day report comes first', t.reports.map((r) => r.title))
+  check(Boolean(t.report), 'a day with only store reports still counts as reported')
+  const fields = dayReportFields(t)
+  check(fields.some((f) => f.label === 'Report for' && f.text.startsWith(STORES[1].name)), 'each report in the download says what it is for')
+  const plain = buildMarketerReport(src('day', addDays(today, -1), addDays(today, -1))).days[0]
+  check(!plain.reports.length || !dayReportFields(plain).some((f) => f.label === 'Report for'), 'a day with just the whole-day report reads as before')
+}
 
 /* ---------------- the files ---------------- */
 

@@ -27,6 +27,28 @@ const VISIT_COLUMNS =
  * client: RLS keeps a supervisor to their team, so somebody they cannot
  * see comes back as null.
  */
+const REPORT_COLUMNS = 'report_date, created_at, updated_at, body, sales_summary, stock_status, competitor_activity, issues'
+
+/**
+ * A person's reports in a period, with what each is for (0088). Before
+ * 0088 runs there is no scope: every report is the whole day.
+ */
+async function fetchReports(supabase: SupabaseClient, userId: string, from: string, to: string) {
+  const scoped = await supabase
+    .from('reports')
+    .select(`id, scope, store_label, ${REPORT_COLUMNS}`)
+    .eq('user_id', userId)
+    .gte('report_date', from)
+    .lte('report_date', to)
+  if (!scoped.error) return scoped
+  return supabase
+    .from('reports')
+    .select(`id, ${REPORT_COLUMNS}`)
+    .eq('user_id', userId)
+    .gte('report_date', from)
+    .lte('report_date', to)
+}
+
 export async function loadMarketerReport(supabase: SupabaseClient, req: ReportRequest & { userId: string }): Promise<MarketerReport | null> {
   const { data: profile } = await supabase
     .from('profiles')
@@ -54,12 +76,7 @@ export async function loadMarketerReport(supabase: SupabaseClient, req: ReportRe
       .lte('visit_date', req.to)
       .order('arrived_at')
       .limit(3000),
-    supabase
-      .from('reports')
-      .select('report_date, created_at, updated_at, body, sales_summary, stock_status, competitor_activity, issues')
-      .eq('user_id', req.userId)
-      .gte('report_date', req.from)
-      .lte('report_date', req.to),
+    fetchReports(supabase, req.userId, req.from, req.to),
     supabase
       .from('store_count_detail')
       .select('count_date, outlet_name, product_name, in_store, sold')
@@ -79,7 +96,7 @@ export async function loadMarketerReport(supabase: SupabaseClient, req: ReportRe
     // Documents attached to the reports (0064); none before it runs.
     supabase
       .from('report_file_detail')
-      .select('report_date, name, mime, size_bytes')
+      .select('report_id, report_date, name, mime, size_bytes')
       .eq('user_id', req.userId)
       .gte('report_date', req.from)
       .lte('report_date', req.to)

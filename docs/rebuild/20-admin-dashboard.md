@@ -2212,6 +2212,19 @@ summary notes wrap rather than truncate; below 380px the three figures stack.
 Office document rows wrap full filenames and staff details on small screens. Document downloads, marketer export buttons and activity presets/exports have a minimum 44px height. Document and marketer export links have descriptive accessible names.
 
 
+## Reports per store or for the whole day (0088)
+
+- Marketer reports downloads: a day may hold several reports, the whole
+  day first then each store in the order filed (`DayDetail.reports`,
+  `report` = the first). With more than the single whole-day report, each
+  starts with a **Report for** line ("<store or The whole day> · filed at
+  HH:MM") and the "Daily report" heading notes "N reports"; the month PDF
+  chip says "N reports". Excel's report sheet has a **Report for** column
+  and one row per report. Documents are listed under the report they are
+  on (`report_file_detail.report_id`).
+- Attendance → a person's day (`/admin/attendance/day`): the block is
+  **Day report**, or **Reports (N)** with "Report for <name>" above each.
+
 ## Zero trust in the dashboard (0080)
 
 - **`/mfa`** (enter the code) and **`/mfa/setup`** (set it up) use `MfaShell`

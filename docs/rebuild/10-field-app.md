@@ -1399,14 +1399,34 @@ redirected to `/field`.
   <reason>") and `add_report_file(path, name)` for each document after
   saving the report; a refusal returns 400 "Your report is saved, but
   <name> was not attached: <reason>".
-- Server: one report per person per business day; a second submission
-  updates today's row; the database refuses edits on any other day
-  ("editable until midnight"). Report photo limit enforced by trigger.
-  Place-due guard on insert.
+- **What the report is for (0088).** `/field/report` with no `?for=` shows
+  "What is this report for?": **The whole day** ("All your work today,
+  across every store.") and, under **One store**, each of today's visits
+  (`my_store_visits()`, oldest first: store label, "Checked in HH:MM", "·
+  still here" when open), each with a badge **Filed · edit** or **Not
+  yet**; no visits: "Check in at a store first, then you can write a report
+  for it." `?for=day` or `?for=<visit id>` opens that report's form with a
+  "Report for <name>" bar and **Change** (back to the choice); the visits
+  shown above the form are all of today's (day) or just that one (store).
+  The form posts `scope` (`'day' | 'store'`) and `store_visit_id`; the
+  outbox job carries both (old jobs: the whole day). Before 0088 runs (no
+  `scope` column) the page skips the choice and the route keeps one report
+  a day.
+- Server: one whole-day report per person per business day and one report
+  per store visit (0088); sending the same one again updates it (looked up
+  by user, date, scope and visit); 409 "The report for this store is
+  already filed. Open it to edit." / "Today’s whole-day report is already
+  filed. Open it to edit." on a race; 400 "Pick a store you checked in at
+  today." for a visit that is not theirs or not today. Photos and documents
+  go on that report (`add_report_photo(path, report)`,
+  `add_report_file(path, name, report)`). The database refuses edits on any
+  other day ("editable until midnight"). Report photo limit enforced by
+  trigger. Place-due guard on insert.
 - Messages: "Report saved. You can keep editing it until midnight."; queued
   "No data right now. Your report is saved on this phone and will send
   itself when you get signal."; waiting for place (see §6). Footer: "One
-  report per day. Editable until midnight, not after."
+  report for the whole day and one for each store you checked in at.
+  Editable until midnight, not after."
 
 ### Acceptance checks
 

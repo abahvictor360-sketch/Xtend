@@ -221,11 +221,16 @@ export function StaffGuide() {
         </Tip>
       </GuideSection>
 
-      <GuideSection topic={T.report} intro="If you see a Report tab at the bottom, file one report each day.">
+      <GuideSection topic={T.report} intro="If you see a Report tab at the bottom, file your report each day.">
         <Steps
           items={[
             <>
-              Tap <Ui>Report</Ui>, fill in how the day went, and add a photo if asked.
+              Tap <Ui>Report</Ui>. Xtend asks what the report is for: <Ui>The whole day</Ui>, or one
+              of the stores you checked in at today. You can write one for each store and one for the
+              whole day; each shows <Ui>Filed · edit</Ui> once sent.
+            </>,
+            <>
+              Fill in how it went, and add a photo if asked.
             </>,
             <>
               Have a price list, a display plan, an invoice or a picture for the office? Under{' '}
@@ -240,9 +245,10 @@ export function StaffGuide() {
           ]}
         />
         <p>
-          Marketers: the top of the report shows today&apos;s store visits: each store, the time in
-          and out, how long you were there, and the total. They are added to your report when you
-          save it; there is nothing to type for them.
+          Marketers: the top of the report shows the store visits it covers: all of today&apos;s for
+          the whole day, or just that one for a store report, with the time in and out and how long
+          you were there. They are added to your report when you save it; there is nothing to type
+          for them.
         </p>
         <Tip>
           No data? Your report and its documents wait on your phone and send themselves when you

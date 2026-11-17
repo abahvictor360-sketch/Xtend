@@ -32,6 +32,16 @@ interface Visit {
 }
 
 /** One person, one day: everything Xtend recorded about it, on a single page. */
+interface DayReportRow {
+  scope?: 'day' | 'store' | null
+  store_label?: string | null
+  body: string | null
+  sales_summary: string | null
+  stock_status: string | null
+  competitor_activity: string | null
+  issues: string | null
+}
+
 export default async function DayOverview({ searchParams }: { searchParams: Promise<Search> }) {
   await requireSession(['admin', 'supervisor', 'hr'])
   const q = await searchParams
@@ -64,10 +74,13 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
       .returns<Visit[]>(),
     supabase
       .from('reports')
-      .select('body, sales_summary, stock_status, competitor_activity, issues')
+      // Every report of the day (0088: the whole day and each store). The
+      // star keeps this working before 0088 adds scope and store_label.
+      .select('*')
       .eq('user_id', id)
       .eq('report_date', date)
-      .maybeSingle<{ body: string | null; sales_summary: string | null; stock_status: string | null; competitor_activity: string | null; issues: string | null }>(),
+      .order('created_at')
+      .returns<DayReportRow[]>(),
     supabase
       .from('integrity_flags')
       .select('kind, severity, summary')
@@ -97,15 +110,19 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
   const hours = opening && closing ? (Date.parse(closing.created_at) - Date.parse(opening.created_at)) / 3_600_000 : null
   const qs = `person=${id}&date=${date}&until=${date}`
   const visitList = visits.data ?? []
-  const reportFields = report.data
-    ? ([
-        ['Report', report.data.body],
-        ['Sales', report.data.sales_summary],
-        ['Stock', report.data.stock_status],
-        ['Competitors', report.data.competitor_activity],
-        ['Issues', report.data.issues],
-      ] as const).filter(([, v]) => v)
-    : []
+  // The whole-day report first, then each store's.
+  const dayReports = [...(report.data ?? [])]
+    .sort((a, b) => Number(a.scope === 'store') - Number(b.scope === 'store'))
+    .map((r) => ({
+      title: r.scope === 'store' ? (r.store_label ?? 'A store') : 'The whole day',
+      fields: ([
+        ['Report', r.body],
+        ['Sales', r.sales_summary],
+        ['Stock', r.stock_status],
+        ['Competitors', r.competitor_activity],
+        ['Issues', r.issues],
+      ] as const).filter(([, v]) => v),
+    }))
 
   return (
     <div className="space-y-5">
@@ -178,18 +195,27 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
         )}
       </Block>
 
-      <Block title="Day report">
-        {reportFields.length === 0 ? (
+      <Block title={dayReports.length > 1 ? `Reports (${dayReports.length})` : 'Day report'}>
+        {dayReports.length === 0 ? (
           <p className="text-sm text-muted-foreground">No report sent for this day.</p>
         ) : (
-          <dl className="space-y-2 text-sm">
-            {reportFields.map(([label, value]) => (
-              <div key={label}>
-                <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</dt>
-                <dd className="whitespace-pre-wrap break-words">{value}</dd>
+          <div className="space-y-4">
+            {dayReports.map((r, i) => (
+              <div key={i} className="space-y-2">
+                {(dayReports.length > 1 || r.title !== 'The whole day') && (
+                  <p className="text-sm font-semibold">Report for {r.title}</p>
+                )}
+                <dl className="space-y-2 text-sm">
+                  {r.fields.map(([label, value]) => (
+                    <div key={label}>
+                      <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</dt>
+                      <dd className="whitespace-pre-wrap break-words">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
               </div>
             ))}
-          </dl>
+          </div>
         )}
       </Block>
 

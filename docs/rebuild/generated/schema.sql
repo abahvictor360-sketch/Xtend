@@ -386,6 +386,18 @@ $$;
 --
 
 CREATE FUNCTION public.add_report_file(p_path text, p_name text) RETURNS uuid
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select public.add_report_file(p_path, p_name, null::uuid);
+$$;
+
+
+--
+-- Name: add_report_file(text, text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.add_report_file(p_path text, p_name text, p_report uuid) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'storage'
     AS $$
@@ -403,6 +415,9 @@ begin
   select r.id, r.report_date into rep
   from public.reports r
   where r.user_id = auth.uid() and r.report_date = public.business_date()
+    and (p_report is null or r.id = p_report)
+  order by (r.scope = 'day') desc, r.updated_at desc
+  limit 1
   for update;
   if not found then
     raise exception 'Save today''s report first, then attach documents';
@@ -454,6 +469,18 @@ $$;
 --
 
 CREATE FUNCTION public.add_report_photo(p_path text) RETURNS uuid
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select public.add_report_photo(p_path, null::uuid);
+$$;
+
+
+--
+-- Name: add_report_photo(text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.add_report_photo(p_path text, p_report uuid) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'storage'
     AS $$
@@ -466,10 +493,14 @@ begin
     raise exception 'Only marketers file the daily report';
   end if;
 
-  -- Today's report, locked so two tries at once cannot both add the photo.
+  -- The report, locked so two tries at once cannot both add the photo.
+  -- No report named: today's whole-day report first, else the latest.
   select r.id into rep
   from public.reports r
   where r.user_id = auth.uid() and r.report_date = public.business_date()
+    and (p_report is null or r.id = p_report)
+  order by (r.scope = 'day') desc, r.updated_at desc
+  limit 1
   for update;
   if not found then
     raise exception 'Save today''s report first, then add photos';
@@ -5663,9 +5694,13 @@ CREATE FUNCTION public.report_capture_visits() RETURNS trigger
     SET search_path TO 'public'
     AS $$
 begin
-  -- Runs after report_enforce (trigger names sort), so user and date are
-  -- the server's own.
-  new.store_visits := public.report_visits_snapshot(new.user_id, new.report_date);
+  -- Runs after report_enforce (trigger names sort), so user, date and
+  -- scope are the server's own.
+  if new.scope = 'store' then
+    new.store_visits := public.report_visit_snapshot(new.store_visit_id);
+  else
+    new.store_visits := public.report_visits_snapshot(new.user_id, new.report_date);
+  end if;
   return new;
 end;
 $$;
@@ -5679,6 +5714,8 @@ CREATE FUNCTION public.report_enforce() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
+declare
+  vis record;
 begin
   if tg_op = 'INSERT' then
     if not public.can_file_report() then
@@ -5686,12 +5723,33 @@ begin
     end if;
     new.user_id     := auth.uid();
     new.report_date := public.business_date();
-    select p.outlet_id into new.outlet_id
-    from public.profiles p where p.id = new.user_id;
+    new.scope       := coalesce(new.scope, 'day');
+
+    if new.scope = 'store' then
+      select d.outlet_id, d.store_label into vis
+      from public.store_visit_detail d
+      where d.id = new.store_visit_id
+        and d.user_id = new.user_id
+        and d.visit_date = new.report_date;
+      if not found then
+        raise exception 'Pick a store you checked in at today';
+      end if;
+      new.outlet_id   := vis.outlet_id;
+      new.store_label := vis.store_label;
+    else
+      new.scope          := 'day';
+      new.store_visit_id := null;
+      new.store_label    := null;
+      select p.outlet_id into new.outlet_id
+      from public.profiles p where p.id = new.user_id;
+    end if;
   else
-    new.user_id     := old.user_id;
-    new.report_date := old.report_date;
-    new.outlet_id   := old.outlet_id;
+    new.user_id        := old.user_id;
+    new.report_date    := old.report_date;
+    new.outlet_id      := old.outlet_id;
+    new.scope          := old.scope;
+    new.store_visit_id := old.store_visit_id;
+    new.store_label    := old.store_label;
     if old.report_date <> public.business_date() then
       raise exception 'Reports can only be edited on the day they were filed';
     end if;
@@ -5854,6 +5912,29 @@ CREATE FUNCTION public.report_photo_orphans_before(p_before timestamp with time 
     and not exists (select 1 from public.store_count_sheets s where s.path = o.name)
     and not exists (select 1 from public.count_sheet_templates t where t.path = o.name);
 $_$;
+
+
+--
+-- Name: report_visit_snapshot(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.report_visit_snapshot(p_visit uuid) RETURNS jsonb
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'store',          d.store_label,
+           'outlet_name',    d.outlet_name,
+           'address',        coalesce(d.outlet_address, d.arrived_address),
+           'arrived_at',     d.arrived_at,
+           'departed_at',    d.departed_at,
+           'minutes',        d.minutes,
+           'status',         d.status,
+           'arrived_status', d.arrived_status
+         ) order by d.arrived_at), '[]'::jsonb)
+  from public.store_visit_detail d
+  where d.id = p_visit;
+$$;
 
 
 --
@@ -10223,7 +10304,11 @@ CREATE TABLE public.reports (
     issues text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    store_visits jsonb DEFAULT '[]'::jsonb NOT NULL
+    store_visits jsonb DEFAULT '[]'::jsonb NOT NULL,
+    scope text DEFAULT 'day'::text NOT NULL,
+    store_visit_id uuid,
+    store_label text,
+    CONSTRAINT reports_scope_ok CHECK ((((scope = 'day'::text) AND (store_visit_id IS NULL)) OR ((scope = 'store'::text) AND (store_visit_id IS NOT NULL))))
 );
 
 
@@ -10232,6 +10317,27 @@ CREATE TABLE public.reports (
 --
 
 COMMENT ON COLUMN public.reports.store_visits IS 'The store visits of that person and day when the report was last saved (060). Set by trigger only.';
+
+
+--
+-- Name: COLUMN reports.scope; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.reports.scope IS 'day: the whole day (one per person per day); store: one store visit (0088).';
+
+
+--
+-- Name: COLUMN reports.store_visit_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.reports.store_visit_id IS 'For a store report, the store visit it is about (0088). No foreign key: a reset of visits keeps the report.';
+
+
+--
+-- Name: COLUMN reports.store_label; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.reports.store_label IS 'For a store report, the store''s name when it was filed (0088).';
 
 
 --
@@ -12289,10 +12395,24 @@ CREATE INDEX report_photos_storage_path ON public.report_photos USING btree (sto
 
 
 --
--- Name: reports_one_per_day; Type: INDEX; Schema: public; Owner: -
+-- Name: reports_by_user_date; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE UNIQUE INDEX reports_one_per_day ON public.reports USING btree (user_id, report_date);
+CREATE INDEX reports_by_user_date ON public.reports USING btree (user_id, report_date);
+
+
+--
+-- Name: reports_one_day_report; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX reports_one_day_report ON public.reports USING btree (user_id, report_date) WHERE (scope = 'day'::text);
+
+
+--
+-- Name: reports_one_per_visit; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX reports_one_per_visit ON public.reports USING btree (store_visit_id) WHERE (scope = 'store'::text);
 
 
 --
@@ -15119,12 +15239,30 @@ GRANT ALL ON FUNCTION public.add_report_file(p_path text, p_name text) TO servic
 
 
 --
+-- Name: FUNCTION add_report_file(p_path text, p_name text, p_report uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.add_report_file(p_path text, p_name text, p_report uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.add_report_file(p_path text, p_name text, p_report uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.add_report_file(p_path text, p_name text, p_report uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION add_report_photo(p_path text); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.add_report_photo(p_path text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.add_report_photo(p_path text) TO authenticated;
 GRANT ALL ON FUNCTION public.add_report_photo(p_path text) TO service_role;
+
+
+--
+-- Name: FUNCTION add_report_photo(p_path text, p_report uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.add_report_photo(p_path text, p_report uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.add_report_photo(p_path text, p_report uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.add_report_photo(p_path text, p_report uuid) TO service_role;
 
 
 --
@@ -16531,6 +16669,13 @@ GRANT ALL ON FUNCTION public.report_photo_orphans(p_hours integer, p_limit integ
 
 REVOKE ALL ON FUNCTION public.report_photo_orphans_before(p_before timestamp with time zone) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.report_photo_orphans_before(p_before timestamp with time zone) TO service_role;
+
+
+--
+-- Name: FUNCTION report_visit_snapshot(p_visit uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.report_visit_snapshot(p_visit uuid) FROM PUBLIC;
 
 
 --

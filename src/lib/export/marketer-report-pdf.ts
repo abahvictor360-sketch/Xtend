@@ -4,7 +4,7 @@
  * Xpel logo, the person, summary tiles, then tables and the daily report,
  * with page numbers and a footer on every page.
  */
-import { minutesText, reportFieldsWithDocuments, type MarketerReport, type DayDetail } from '@/lib/marketer-report'
+import { minutesText, dayReportFields, dayReportNote, type MarketerReport, type DayDetail } from '@/lib/marketer-report'
 import { XPEL_LOGO_PNG, XPEL_LOGO_RATIO } from '@/lib/export/brand-logo'
 
 type RGB = { r: number; g: number; b: number }
@@ -415,8 +415,8 @@ export async function marketerReportPdf(report: MarketerReport): Promise<Uint8Ar
     if (d.visits.length) visitsTable(d, false)
     else paragraph('No store visits recorded on this day.', 9, C.muted, italic)
 
-    heading('Daily report', d.report ? `Filed at ${d.report.filedAt}` : undefined)
-    if (d.report) fields(reportFieldsWithDocuments(d.report))
+    heading('Daily report', dayReportNote(d))
+    if (d.reports.length) fields(dayReportFields(d))
     else paragraph('No daily report was filed for this day.', 9, C.muted, italic)
 
     extras(d, false)
@@ -483,7 +483,7 @@ export async function marketerReportPdf(report: MarketerReport): Promise<Uint8Ar
         d.clockOut ? `Out ${d.outText}` : d.outText,
         `${d.stores} ${d.stores === 1 ? 'store' : 'stores'}`,
         d.visits.length ? minutesText(d.minutesInStores) : null,
-        d.report ? 'Report filed' : 'No report',
+        d.reports.length > 1 ? `${d.reports.length} reports` : d.report ? 'Report filed' : 'No report',
       ]
         .filter(Boolean)
         .join('   ·   ')
@@ -491,7 +491,7 @@ export async function marketerReportPdf(report: MarketerReport): Promise<Uint8Ar
       y -= barH + 6
       paragraph(d.summary, 8, C.muted)
       if (d.visits.length) visitsTable(d, true)
-      if (d.report) fields(reportFieldsWithDocuments(d.report), 7.8, 108)
+      if (d.reports.length) fields(dayReportFields(d), 7.8, 108)
       extras(d, true)
       y -= 4
     }

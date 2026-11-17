@@ -33,6 +33,12 @@ export interface PingJob {
 
 export interface ReportJob {
   kind: 'report'
+  /**
+   * What the report is for (0088): the whole day, or one store visit of
+   * today. Missing on jobs queued before it: the whole day.
+   */
+  scope?: 'day' | 'store'
+  store_visit_id?: string | null
   body: string
   sales_summary: string
   stock_status: string

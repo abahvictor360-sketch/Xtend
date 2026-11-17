@@ -572,6 +572,101 @@ begin
   exception when others then
     if sqlerrm <> 'clock-in-0087-done' then raise; end if;
   end;
+
+  -- 0088: a report for one store, or for the whole day.
+  declare
+    zara uuid := gen_random_uuid();
+    zvisit uuid;
+    sreport uuid;
+    dreport uuid;
+    ph uuid;
+  begin
+    perform act_as(boss);
+    insert into auth.users (id, email) values (zara, 'zara@xpel.ng');
+    insert into public.profiles (id, full_name, email, role, outlet_id) values
+      (zara, 'Zara Musa', 'zara@xpel.ng', 'marketer', mall_id);
+    perform notifications_on(zara);
+    insert into public.work_patterns (user_id, days) values (zara, '{0,1,2,3,4,5,6}');
+
+    perform act_as(zara);
+    insert into public.store_visits (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
+    values (mall_id, 6.6019, 3.3516, 12, now()) returning id into zvisit;
+
+    -- A store report: tied to that visit, the store named by the server.
+    insert into public.reports (body, sales_summary, stock_status, scope, store_visit_id, store_label)
+    values ('Good day at the mall', 'Sold ten tubs today', 'Shelf is well stocked', 'store', zvisit, 'Fake name')
+    returning id into sreport;
+    perform assert(
+      (select scope from public.reports where id = sreport) = 'store'
+      and (select outlet_id from public.reports where id = sreport) = mall_id
+      and (select store_label from public.reports where id = sreport) = 'Ikeja City Mall',
+      'report 0088: a store report is tied to the visit, with the server''s store name');
+    perform assert(
+      jsonb_array_length((select store_visits from public.reports where id = sreport)) = 1,
+      'report 0088: a store report keeps only that visit');
+
+    -- One report per store visit.
+    begin
+      insert into public.reports (body, sales_summary, stock_status, scope, store_visit_id)
+      values ('Good day at the mall', 'Sold ten tubs today', 'Shelf is well stocked', 'store', zvisit);
+      perform assert(false, 'report 0088: a second report for the same visit must be refused');
+    exception when unique_violation then
+      perform assert(true, 'report 0088: one report per store visit');
+    end;
+
+    -- Not someone else's visit (grace's open one).
+    begin
+      insert into public.reports (body, sales_summary, stock_status, scope, store_visit_id)
+      select 'Good day at the kiosk', 'Sold ten tubs today', 'Shelf is well stocked', 'store', v.id
+      from public.store_visits v where v.user_id = grace limit 1;
+      perform assert(false, 'report 0088: a report on another person''s visit must be refused');
+    exception when others then
+      perform assert(sqlerrm like 'Pick a store you checked in at today%',
+        'report 0088: only a store you checked in at today');
+    end;
+
+    -- The whole day as well, once.
+    insert into public.reports (body, sales_summary, stock_status)
+    values ('The whole day went well', 'Sold thirty tubs in all', 'Two stores low on stock')
+    returning id into dreport;
+    perform assert(
+      (select scope from public.reports where id = dreport) = 'day'
+      and (select store_visit_id from public.reports where id = dreport) is null,
+      'report 0088: a report with no store is the whole-day report');
+    begin
+      insert into public.reports (body, sales_summary, stock_status)
+      values ('The whole day went well', 'Sold thirty tubs in all', 'Two stores low on stock');
+      perform assert(false, 'report 0088: a second whole-day report must be refused');
+    exception when unique_violation then
+      perform assert(true, 'report 0088: one whole-day report a day');
+    end;
+
+    -- The scope and store never change on an edit.
+    update public.reports set scope = 'day', store_visit_id = null, body = 'Good day at the mall, edited'
+     where id = sreport;
+    perform assert(
+      (select scope from public.reports where id = sreport) = 'store'
+      and (select store_visit_id from public.reports where id = sreport) = zvisit,
+      'report 0088: an edit keeps the report''s store');
+
+    -- A photo goes on the report it is meant for.
+    insert into storage.objects (bucket_id, name, metadata, created_at) values
+      ('reports', zara || '/report-photo-z1.jpg', '{"mimetype":"image/jpeg","size":1000}', now()),
+      ('reports', zara || '/report-photo-z2.jpg', '{"mimetype":"image/jpeg","size":1000}', now());
+    ph := public.add_report_photo(zara || '/report-photo-z1.jpg', sreport);
+    perform assert(
+      (select rp.report_id from public.report_photos rp where rp.id = ph) = sreport,
+      'report 0088: a photo goes on the named report');
+    ph := public.add_report_photo(zara || '/report-photo-z2.jpg');
+    perform assert(
+      (select rp.report_id from public.report_photos rp where rp.id = ph) = dreport,
+      'report 0088: with no report named, the whole-day report');
+
+    raise exception 'report-0088-done';
+  exception when others then
+    if sqlerrm <> 'report-0088-done' then raise; end if;
+  end;
+  perform act_as(grace);
   perform act_as(grace);
 
   -- Check out, then move to the next store.
