@@ -66,6 +66,7 @@ const FIXTURE: Record<string, 'wipe' | 'admins-kept' | 'keep'> = {
   sign_in_lockouts: 'keep', sign_in_trusted_devices: 'keep',
   // 0080: re-confirmations expire in minutes.
   recent_auth: 'keep',
+  sign_in_keys: 'keep',
 }
 
 // --- Typed confirmations.

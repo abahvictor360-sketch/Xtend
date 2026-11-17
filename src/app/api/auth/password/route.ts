@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { createAdminSupabase } from '@/lib/supabase/admin'
 import { apiError, requireApiSession } from '@/lib/auth'
 import { recordActivity } from '@/lib/activity-server'
 import { passwordIsRight } from '@/lib/password-check'
@@ -51,6 +52,14 @@ export async function POST(request: Request) {
     if (error) return Response.json({ error: passwordProblem(error) }, { status: 400 })
 
     await supabase.from('profiles').update({ must_change_password: false }).eq('id', session.userId)
+    // A new password ends every fingerprint and passkey sign-in (0089):
+    // whoever changed it because of a lost phone is safe at once. They can
+    // set them up again. Missing table (0089 not run): nothing to do.
+    await createAdminSupabase()
+      .from('sign_in_keys')
+      .delete()
+      .eq('user_id', session.userId)
+      .then(() => undefined, () => undefined)
     await recordActivity(session.userId, 'password_changed', request.headers, {
       detail: forced ? { first: true } : {},
     })
