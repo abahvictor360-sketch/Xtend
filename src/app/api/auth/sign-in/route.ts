@@ -1,17 +1,10 @@
-import { createHash, randomBytes } from 'node:crypto'
-import { cookies } from 'next/headers'
 import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { allowAttempt, clientAddress } from '@/lib/rate-limit'
 import { NO_SUCH_ACCOUNT, passwordIsRight } from '@/lib/password-check'
-import { recordActivity } from '@/lib/activity-server'
-import { alertNewOfficeDevice } from '@/lib/new-device-alert'
-import { LAST_SEEN_COOKIE, OFFICE_SESSION_HOURS } from '@/lib/zero-trust'
-import { formatLagos } from '@/lib/utils'
 import { TURNSTILE_ERROR, turnstileEnabled, verifyTurnstile } from '@/lib/turnstile'
-import { APP_ONLY_CODE, APP_ONLY_MESSAGE, appOnlyBlocks } from '@/lib/app-only'
-import { APP_COOKIE } from '@/lib/app-agent'
+import { WRONG, attemptFor, finishSignIn, paused, type Attempt, type Service } from '@/lib/sign-in-finish'
 
 const schema = z.object({
   identifier: z.string().trim().min(3).max(120),
@@ -20,10 +13,7 @@ const schema = z.object({
   turnstile: z.string().max(2048).optional(),
 })
 
-const WRONG = 'Those details are not correct.'
 const WINDOW_MS = 15 * 60 * 1000
-/** A random token for a phone or computer that has signed in before (0077). */
-const DEVICE_COOKIE = 'xt_dev'
 
 /**
  * Staff sign in with an email or a phone number. Supabase signs in on
@@ -63,11 +53,7 @@ export async function POST(request: Request) {
 
   // An identifier that matches nobody is counted the same way, so the
   // answer never says whether an account exists.
-  const attempt: Attempt = {
-    p_account: email ?? identifier.toLowerCase(),
-    p_address: address,
-    p_device: deviceHash((await cookies()).get(DEVICE_COOKIE)?.value),
-  }
+  const attempt = await attemptFor(email ?? identifier, address)
   const service = createAdminSupabase()
   const { data: lockedUntil } = await service.rpc('sign_in_lock_status', attempt)
   if (lockedUntil) return paused(lockedUntil as string)
@@ -84,84 +70,17 @@ export async function POST(request: Request) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password })
   if (error) return wrongPassword(service, attempt)
 
-  // An account an admin made app-only (0084) cannot sign in from a browser:
-  // sign the session straight back out and say why. The apps get through.
-  if (data.user) {
-    const { data: who } = await service
-      .from('profiles')
-      .select('role, app_only')
-      .eq('id', data.user.id)
-      .maybeSingle<{ role: string; app_only: boolean | null }>()
-    if (appOnlyBlocks(who, request.headers.get('user-agent'), readCookie(request, APP_COOKIE))) {
-      await supabase.auth.signOut()
-      return Response.json({ error: APP_ONLY_MESSAGE, code: APP_ONLY_CODE }, { status: 403 })
-    }
-  }
-
-  // Whether this device was known to the account before (0080): a new one
-  // for an office account is announced below. Asked before it is recorded.
-  const { data: deviceStatus } = await service.rpc('sign_in_device_status', {
-    p_account: attempt.p_account,
-    p_device: attempt.p_device,
-  })
-  const status = deviceStatus as { known?: boolean; any_known?: boolean } | null
-  const newDevice = Boolean(status && status.any_known && !status.known)
-
-  // This device is now known to this account: a new token each sign-in.
-  const token = randomBytes(32).toString('base64url')
-  const { error: trustError } = await service.rpc('sign_in_succeeded', {
-    ...attempt,
-    p_new_device: deviceHash(token),
-  })
-  if (!trustError) {
-    ;(await cookies()).set(DEVICE_COOKIE, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      path: '/api/auth',
-      maxAge: 180 * 24 * 60 * 60,
-    })
-  }
-
-  // A fresh sign-in starts the office idle clock afresh (lib/zero-trust.ts).
-  ;(await cookies()).set(LAST_SEEN_COOKIE, String(Date.now()), {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: OFFICE_SESSION_HOURS * 3600,
-  })
-
-  // For the office's activity log (062); never holds up the sign-in.
-  if (data.user) await recordActivity(data.user.id, 'sign_in', request.headers)
-  if (data.user && newDevice) await alertNewOfficeDevice(data.user.id, request.headers)
+  if (!data.user) return wrongPassword(service, attempt)
+  const refused = await finishSignIn({ service, supabase, userId: data.user.id, attempt, request, method: 'password' })
+  if (refused) return refused
 
   return Response.json({ ok: true })
-}
-
-type Service = ReturnType<typeof createAdminSupabase>
-type Attempt = { p_account: string; p_address: string; p_device: string | null }
-
-/** Only the token's hash reaches the database. */
-function deviceHash(token: string | undefined): string | null {
-  if (!token || token.length > 100) return null
-  return createHash('sha256').update(token).digest('hex')
 }
 
 async function wrongPassword(service: Service, attempt: Attempt) {
   const { data: lockedUntil } = await service.rpc('sign_in_failed', attempt)
   if (lockedUntil) return paused(lockedUntil as string)
   return Response.json({ error: WRONG }, { status: 401 })
-}
-
-function paused(until: string) {
-  return Response.json(
-    {
-      error: `Too many wrong passwords, so signing in here is paused until ${formatLagos(until, false)}. Try again then, or ask your supervisor to unlock it.`,
-      locked_until: until,
-    },
-    { status: 423 },
-  )
 }
 
 async function emailForPhone(identifier: string): Promise<string | null> {
@@ -183,13 +102,4 @@ async function emailForPhone(identifier: string): Promise<string | null> {
     .limit(1)
     .maybeSingle<{ email: string | null }>()
   return data?.email ?? null
-}
-
-/** One cookie from the request, or null. */
-function readCookie(request: Request, name: string) {
-  for (const part of (request.headers.get('cookie') ?? '').split(';')) {
-    const [key, ...rest] = part.trim().split('=')
-    if (key === name) return rest.join('=')
-  }
-  return null
 }

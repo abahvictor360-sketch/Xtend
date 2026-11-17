@@ -20,7 +20,7 @@ grant update, delete on public.known_places to authenticated;
 -- migration's own revokes come after. Replay 026's in that order.
 revoke select on public.phone_checks from authenticated;
 -- 0077: sign-in locks are read and written by the server only.
-revoke all on public.sign_in_lockouts, public.sign_in_trusted_devices, public.recent_auth from authenticated;
+revoke all on public.sign_in_lockouts, public.sign_in_trusted_devices, public.recent_auth, public.sign_in_keys from authenticated;
 grant select (id, user_id, requested_by, devices, created_at, delivered_at, opened_at)
   on public.phone_checks to authenticated;
 
@@ -804,6 +804,14 @@ select assert(not has_table_privilege('authenticated', 'public.recent_auth', 'se
                 and not has_function_privilege('authenticated', 'public.recent_auth_ok(uuid, integer)', 'execute')
                 and not has_function_privilege('authenticated', 'public.sign_in_device_status(text, text)', 'execute'),
   'rls: re-confirmations and device checks are server only');
+
+-- Quick sign-in (0089): keys are read and written by the server only.
+select assert(not has_table_privilege('authenticated', 'public.sign_in_keys', 'select')
+                and not has_table_privilege('authenticated', 'public.sign_in_keys', 'insert')
+                and not has_table_privilege('authenticated', 'public.sign_in_keys', 'update')
+                and has_function_privilege('authenticated', 'public.my_sign_in_keys()', 'execute')
+                and not has_function_privilege('anon', 'public.my_sign_in_keys()', 'execute'),
+  'rls: sign-in keys are server only; people list their own through my_sign_in_keys');
 
 reset role;
 select 'ALL RLS CHECKS PASSED';

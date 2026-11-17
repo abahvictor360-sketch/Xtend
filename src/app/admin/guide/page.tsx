@@ -110,6 +110,16 @@ export default async function AdminGuidePage() {
               if it was not them, reset their password. Changes sent from another website are refused.
             </li>
             <li>
+              <Ui>Fingerprint and passkeys</Ui> (0089): anyone can sign in without the password. In the
+              phone app, after a password sign-in Xtend offers <Ui>Use my fingerprint</Ui>; in a browser,{' '}
+              <Ui>Sign in with a passkey</Ui> uses the device&apos;s fingerprint, face or screen lock. Each person
+              manages theirs under <Ui>You → Security</Ui> (staff) or <Ui>Fingerprint and passkeys</Ui> in the
+              menu (office). Fingerprints never reach Xtend. All the usual rules still apply, and admins and
+              HR still enter their code. <Ui>Reset password</Ui> or <Ui>Deactivate</Ui> on Staff switches off all
+              of that person&apos;s fingerprint and passkey sign-ins at once: do that when a phone is lost or
+              stolen. The Activity log shows how each sign-in was made.
+            </li>
+            <li>
               <Ui>Limits and safeguards</Ui> (0079): each person may have up to 60 photos checked, 120
               place lookups, 20 support helper replies and 60 Ask Xtend questions an hour; past that they
               are asked to wait (a support message is still sent and the office answers it, as it does

@@ -2212,6 +2212,14 @@ summary notes wrap rather than truncate; below 380px the three figures stack.
 Office document rows wrap full filenames and staff details on small screens. Document downloads, marketer export buttons and activity presets/exports have a minimum 44px height. Document and marketer export links have descriptive accessible names.
 
 
+## Fingerprint and passkeys (0089)
+
+- Sidebar, under **Two-step sign-in**: a plain link **Fingerprint and
+  passkeys** to `/admin/sign-in-methods` (admins, supervisors, HR): heading,
+  "Sign in to Xtend without typing your password. If your role uses
+  two-step sign-in, Xtend still asks for the code from your authenticator
+  app.", then the same `QuickSignInSettings` card as the staff You page.
+
 ## Reports per store or for the whole day (0088)
 
 - Marketer reports downloads: a day may hold several reports, the whole

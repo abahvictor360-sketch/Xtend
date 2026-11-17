@@ -72,8 +72,12 @@ check(/Download/i.test(APP_ONLY_MESSAGE) || /download/.test(APP_ONLY_MESSAGE), '
       && (auth.match(/await appOnlyHere\(session\.profile\)/g) ?? []).length === 2,
     'pages and API routes both accept the cookie')
   check(/appOnlyHere\(session\.profile\)/.test(read('src/app/app-only/page.tsx'))
-      && /readCookie\(request, APP_COOKIE\)/.test(read('src/app/api/auth/sign-in/route.ts')),
-    'the "Use the app" page and sign-in accept it too')
+      // Every way of signing in (password, passkey, fingerprint: 0089) ends
+      // in finishSignIn, which reads the app cookie.
+      && /readCookie\(request, APP_COOKIE\)/.test(read('src/lib/sign-in-finish.ts'))
+      && /finishSignIn\(/.test(read('src/app/api/auth/sign-in/route.ts'))
+      && /finishSignIn\(/.test(read('src/lib/sign-in-finish.ts').split('export async function signInProven')[1] ?? ''),
+    'the "Use the app" page and every way of signing in accept it too')
   check(/AppOnlyRecheck/.test(read('src/app/app-only/page.tsx'))
       && /navigator\.userAgent\.includes\(APP_AGENT_MARK\)/.test(read('src/components/app-only-recheck.tsx')),
     'inside the app, the "Use the app" page marks itself and moves on, once')

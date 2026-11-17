@@ -10,6 +10,7 @@ import { getCountStatus } from '@/lib/store-count-status'
 import { readXmFeatures } from '@/lib/metrics/features-server'
 import { getActingRole } from '@/lib/acting'
 import { RoleSwitchBar } from '@/components/field/role-switch-bar'
+import { ReconfirmDialog } from '@/components/reconfirm'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,6 +68,7 @@ export default async function FieldLayout({ children }: { children: React.ReactN
         <PhoneBeacon />
         <NativeBridge />
         <ActivityPing />
+        <ReconfirmDialog />
         <FieldNav canFileReport={canFileReport === true} canCountStock={countStatus.open} hasMetrics={hasMetrics} />
       </div>
     </div>

@@ -138,6 +138,12 @@ export function AdminFrame({
             >
               Two-step sign-in
             </Link>
+            <Link
+              href="/admin/sign-in-methods"
+              className="flex h-10 items-center rounded-xl px-3 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              Fingerprint and passkeys
+            </Link>
             <SignOutButton className="h-10 w-full justify-start px-3 text-sm" />
           </div>
         </aside>

@@ -26,7 +26,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0084_app_only.sql`;
    - `supabase/migrations/0086_close_stale_visit_on_check_in.sql`;
    - `supabase/migrations/0087_clock_in_checks_in.sql`;
-   - `supabase/migrations/0088_report_per_store_or_day.sql`.
+   - `supabase/migrations/0088_report_per_store_or_day.sql`;
+   - `supabase/migrations/0089_quick_sign_in.sql`.
 4. **Clock-out reminder fix (0069)**, if never pasted:
    ```sql
    alter table public.clock_out_reminders drop constraint if exists clock_out_reminders_stage_check;
@@ -42,10 +43,41 @@ the live database, so it cannot tell which of these are already done.)
    installed". Staff must uninstall, then install again.
 7. **New phone app builds**: several fixes below say "needs a new app build".
    Publish the latest APK (and TestFlight build) so staff get them.
+8. **Try fingerprint sign-in on one Android phone and one iPhone** before
+   telling all staff (it could not be tested on a real phone here). Sign in
+   with the password in the new app, tap **Use my fingerprint**, sign out,
+   then tap **Sign in with fingerprint**.
 
 ---
 
 ## 2026-11-17
+
+### Sign in with a fingerprint, face or passkey (migration 0089)
+- **What was done:**
+  - **In the Android and iPhone apps:** after signing in with the password,
+    Xtend offers "Sign in faster next time?". With **Use my fingerprint**,
+    the login screen then shows **Sign in with fingerprint**: touch the
+    sensor (or look at the phone) and you are in.
+  - **In a browser (phone or computer):** the login page has **Sign in with
+    a passkey**, which uses the device's own fingerprint, face or screen
+    lock. A passkey is added once, from the offer after signing in, from
+    **You → Security** (staff) or from **Fingerprint and passkeys** in the
+    office menu.
+  - Everyone sees their fingerprint and passkey sign-ins in the same place,
+    with when each was last used, and can remove any of them.
+- **Impact:** staff, who sign in every day, no longer type their password
+  each morning. Fingerprints and faces never leave the phone; Xtend only
+  keeps a key that is useless on its own. The password always still works.
+  All the usual rules still apply: the daily sign-in, office time limits,
+  app-only accounts, the 5-wrong-tries pause, new-device alerts, and admins
+  and HR still enter their 6-digit code. A password reset by the office, a
+  deactivation, or the person changing their own password switches off all
+  their fingerprint and passkey sign-ins at once (useful when a phone is
+  lost). Every sign-in shows in the Activity log with how it was done.
+- **What you need to do:** deploy, run 0089, and publish the new app build
+  (the fingerprint part is inside the app). Then try it on one Android phone
+  and one iPhone before telling everyone. Passkeys only work on the address
+  they were made on (www.withxtend.com).
 
 ### A report for one store, or for the whole day (migration 0088)
 - **What was done:** when a marketer taps **Report**, Xtend first asks

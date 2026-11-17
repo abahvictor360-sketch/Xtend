@@ -274,6 +274,11 @@ Every exported UPPER_CASE constant in `src/lib`, with the comment above it. Thes
 
 - `NATIVE_PREFIX` = `{ android: 'native-fcm:', ios: 'native-apns:' }` — Push to the Xtend Android and iOS apps (mobile/). Web push does not reach an app, so each phone's own service is used: Android — Firebase Cloud Messaging, HTTP v1. FIREBASE_SERVICE_ACCOUNT: the service account key JSON from the Firebase console (Project settings → Service accounts). iOS — Apple Push Notification service, HTTP/2 with a token key. APNS_KEY (the .p8 file's contents), APNS_KEY_ID, APNS_TEAM_ID, APNS_BUNDLE_ID (default ng.xpelbeauty.xtend), APNS_SANDBOX=true for builds run from Xcode. A device is stored in push_subscriptions with an endpoint of "native-fcm:<token>" or "native-apns:<token>" (migration 033). /
 
+## `src/lib/quick-sign-in-rules.ts`
+
+- `APP_KEY_SERVER` = `'xtend-sign-in'` — The plain rules of quick sign-in (0089), kept pure so scripts/check-quick-sign-in.ts can test them. / Where the app keeps its fingerprint key, in the phone's secure storage.
+- `OFFER_AGAIN_DAYS` = `30` — A sign-in key's name as people see it: short, single-line. export function keyLabelFrom(line: string | null | undefined, fallback: string) { const text = (line ?? '').replace(/\s+/g, ' ').trim() return (text || fallback).slice(0, 120) } What the app stores for its fingerprint key: the key's id and its secret, joined so the plugin's username/password pair holds both. / export function packAppKey(keyId: string, secret: string) { return { username: keyId, password: secret } } const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i Reads it back; null when it is not a key Xtend stored. export function unpackAppKey(stored: { username?: unknown; password?: unknown } | null | undefined) { const keyId = typeof stored?.username === 'string' ? stored.username : '' const secret = typeof stored?.password === 'string' ? stored.password : '' if (!UUID.test(keyId) || secret.length < 20 || secret.length > 200) return null return { keyId, secret } } When the login page offers "use your fingerprint next time" again after "Not now".
+
 ## `src/lib/reconfirm.ts`
 
 - `RECONFIRM_CODE` = `'reconfirm'` — The answer code the dashboard knows to open the "confirm it is you" box for.
@@ -320,6 +325,11 @@ Every exported UPPER_CASE constant in `src/lib`, with the comment above it. Thes
 
 - `DEFAULT_SHIFT_START` = `'08:00'` — Five-minute heads-ups (migration 0069): "Time to clock in" five minutes before the shift starts, and "Your shift ends at HH:MM" five minutes before it ends. The database decides who is sent a push (claim_shift_soon_reminders); this file holds the same timing for the phone screen, and the wording of the pushes. Plain functions so the browser, the server and the check script (scripts/check-shift-reminders.ts) all use the same rules. / import { dayEndAt, shiftEndAt, shiftEndLabel } from '@/lib/clock-out-reminder' The shift start for somebody with no store (a store's own default too).
 - `HEADS_UP_MIN` = `5` — How many minutes before the start or end the heads-up comes.
+
+## `src/lib/sign-in-finish.ts`
+
+- `WRONG` = `'Those details are not correct.'` — What every way of signing in does once the person is proven: the password (/api/auth/sign-in), a passkey or the app's fingerprint key (0089). One place, so they all follow the same rules: app-only accounts stay out of browsers, the device becomes known, new office devices are announced, the office clocks start and the activity log hears of it. /
+- `DEVICE_COOKIE` = `'xt_dev'` — A random token for a phone or computer that has signed in before (0077).
 
 ## `src/lib/staff-roles.ts`
 

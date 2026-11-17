@@ -1183,6 +1183,7 @@ opens in the phone's browser.
 | `@capacitor/core` | 8.5.2 |
 | `@capacitor/ios` | 8.5.2 |
 | `@capacitor/push-notifications` | 8.1.3 |
+| `@capgo/capacitor-native-biometric` | 8.9.1 (fingerprint sign-in, 0089; iOS `NSFaceIDUsageDescription`: "Xtend uses Face ID so you can sign in without typing your password.") |
 | `@capacitor/cli` (dev) | 8.5.2 |
 | `typescript` (dev) | ^5.6.0 |
 

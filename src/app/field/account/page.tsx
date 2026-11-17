@@ -15,6 +15,7 @@ import { CountSheetPanel, type SentSheet } from '@/components/field/count-sheet-
 import { getCountStatus } from '@/lib/store-count-status'
 import { countMonth } from '@/lib/count-sheet'
 import { countSheetStatus } from '@/lib/report-files'
+import { QuickSignInSettings } from '@/components/quick-sign-in-settings'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Your account — Xtend' }
@@ -236,6 +237,7 @@ export default async function AccountPage() {
               trailing={<span className="text-xs font-semibold text-brand">Change</span>}
             />
           </Link>
+          <QuickSignInSettings />
         </section>
 
         <section className="space-y-3">

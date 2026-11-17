@@ -4089,6 +4089,21 @@ $$;
 
 
 --
+-- Name: my_sign_in_keys(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_sign_in_keys() RETURNS TABLE(id uuid, kind text, label text, created_at timestamp with time zone, last_used_at timestamp with time zone)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select k.id, k.kind, k.label, k.created_at, k.last_used_at
+  from public.sign_in_keys k
+  where k.user_id = auth.uid()
+  order by k.created_at desc;
+$$;
+
+
+--
 -- Name: my_staff(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5575,6 +5590,21 @@ begin
 
   insert into public.place_addresses (address, lat, lng) values (clean, p_lat, p_lng)
   returning id into found;
+  return found;
+end;
+$$;
+
+
+--
+-- Name: remove_my_sign_in_key(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.remove_my_sign_in_key(p_id uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  delete from public.sign_in_keys where id = p_id and user_id = auth.uid();
   return found;
 end;
 $$;
@@ -7305,6 +7335,24 @@ begin
     perform public.sign_in_bump(acct || '#account', acct, 'account', 20);
   end if;
   return public.sign_in_lock_status(acct, p_address, p_device);
+end;
+$$;
+
+
+--
+-- Name: sign_in_keys_clear_on_reset(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.sign_in_keys_clear_on_reset() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if (new.must_change_password and not coalesce(old.must_change_password, false))
+     or (old.is_active and not new.is_active) then
+    delete from public.sign_in_keys where user_id = new.id;
+  end if;
+  return null;
 end;
 $$;
 
@@ -10403,6 +10451,28 @@ CREATE TABLE public.schedule_overrides (
 
 
 --
+-- Name: sign_in_keys; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.sign_in_keys (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    kind text NOT NULL,
+    label text DEFAULT ''::text NOT NULL,
+    credential_id text,
+    public_key text,
+    sign_count bigint DEFAULT 0 NOT NULL,
+    transports text[] DEFAULT '{}'::text[] NOT NULL,
+    secret_hash text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_used_at timestamp with time zone,
+    CONSTRAINT sign_in_keys_kind_check CHECK ((kind = ANY (ARRAY['passkey'::text, 'app'::text]))),
+    CONSTRAINT sign_in_keys_label_check CHECK ((length(label) <= 120)),
+    CONSTRAINT sign_in_keys_shape CHECK ((((kind = 'passkey'::text) AND (credential_id IS NOT NULL) AND (public_key IS NOT NULL) AND (secret_hash IS NULL)) OR ((kind = 'app'::text) AND (secret_hash IS NOT NULL) AND (credential_id IS NULL) AND (public_key IS NULL))))
+);
+
+
+--
 -- Name: sign_in_lockouts; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -11744,6 +11814,30 @@ ALTER TABLE ONLY public.scheduled_notifications
 
 
 --
+-- Name: sign_in_keys sign_in_keys_credential_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sign_in_keys
+    ADD CONSTRAINT sign_in_keys_credential_id_key UNIQUE (credential_id);
+
+
+--
+-- Name: sign_in_keys sign_in_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sign_in_keys
+    ADD CONSTRAINT sign_in_keys_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: sign_in_keys sign_in_keys_secret_hash_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sign_in_keys
+    ADD CONSTRAINT sign_in_keys_secret_hash_key UNIQUE (secret_hash);
+
+
+--
 -- Name: sign_in_lockouts sign_in_lockouts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -12430,6 +12524,13 @@ CREATE INDEX scheduled_notifications_due ON public.scheduled_notifications USING
 
 
 --
+-- Name: sign_in_keys_by_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX sign_in_keys_by_user ON public.sign_in_keys USING btree (user_id);
+
+
+--
 -- Name: sign_in_lockouts_account; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -12847,6 +12948,13 @@ CREATE TRIGGER trg_profiles_touch BEFORE UPDATE ON public.profiles FOR EACH ROW 
 --
 
 CREATE TRIGGER trg_profiles_zz_field_only_reporting BEFORE INSERT OR UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.profiles_field_only_reporting();
+
+
+--
+-- Name: profiles trg_profiles_zz_sign_in_keys; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_profiles_zz_sign_in_keys AFTER UPDATE OF must_change_password, is_active ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.sign_in_keys_clear_on_reset();
 
 
 --
@@ -13509,6 +13617,14 @@ ALTER TABLE ONLY public.scheduled_notifications
 
 ALTER TABLE ONLY public.scheduled_notifications
     ADD CONSTRAINT scheduled_notifications_notification_id_fkey FOREIGN KEY (notification_id) REFERENCES public.notifications(id) ON DELETE SET NULL;
+
+
+--
+-- Name: sign_in_keys sign_in_keys_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.sign_in_keys
+    ADD CONSTRAINT sign_in_keys_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 
 
 --
@@ -14761,6 +14877,12 @@ ALTER TABLE public.scheduled_notifications ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY scheduled_notifications_read ON public.scheduled_notifications FOR SELECT USING ((public.is_admin() OR (created_by = auth.uid())));
 
+
+--
+-- Name: sign_in_keys; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.sign_in_keys ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: sign_in_lockouts; Type: ROW SECURITY; Schema: public; Owner: -
@@ -16175,6 +16297,15 @@ GRANT ALL ON FUNCTION public.my_place_due() TO service_role;
 
 
 --
+-- Name: FUNCTION my_sign_in_keys(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.my_sign_in_keys() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.my_sign_in_keys() TO authenticated;
+GRANT ALL ON FUNCTION public.my_sign_in_keys() TO service_role;
+
+
+--
 -- Name: FUNCTION my_staff(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -16549,6 +16680,15 @@ REVOKE ALL ON FUNCTION public.release_reports_on_demotion() FROM PUBLIC;
 
 REVOKE ALL ON FUNCTION public.remember_address(p_lat double precision, p_lng double precision, p_address text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.remember_address(p_lat double precision, p_lng double precision, p_address text) TO service_role;
+
+
+--
+-- Name: FUNCTION remove_my_sign_in_key(p_id uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.remove_my_sign_in_key(p_id uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.remove_my_sign_in_key(p_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.remove_my_sign_in_key(p_id uuid) TO service_role;
 
 
 --
@@ -16983,6 +17123,13 @@ GRANT ALL ON FUNCTION public.sign_in_device_status(p_account text, p_device text
 
 REVOKE ALL ON FUNCTION public.sign_in_failed(p_account text, p_address text, p_device text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.sign_in_failed(p_account text, p_address text, p_device text) TO service_role;
+
+
+--
+-- Name: FUNCTION sign_in_keys_clear_on_reset(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.sign_in_keys_clear_on_reset() FROM PUBLIC;
 
 
 --

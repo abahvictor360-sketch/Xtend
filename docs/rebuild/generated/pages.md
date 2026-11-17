@@ -2,7 +2,7 @@
 
 # Pages
 
-64 pages. "Who" is what `requireSession` admits (field pages are also guarded by their layout).
+65 pages. "Who" is what `requireSession` admits (field pages are also guarded by their layout).
 
 ## `/admin/activity` — Activity log — Xtend
 
@@ -274,6 +274,16 @@ On screen: Add a role with its own name, such as Account Receivable or Promoter,
 - Who: ['admin', 'supervisor', 'hr']
 - Components: `admin/schedule-manager`, `ui/alert`
 
+## `/admin/sign-in-methods` — Fingerprint and passkeys — Xtend
+
+- File: `src/app/admin/sign-in-methods/page.tsx`
+- Who: ['admin', 'supervisor', 'hr']
+- Components: `quick-sign-in-settings`
+
+The office's own fingerprint and passkey sign-ins (0089).
+
+On screen: Sign in to Xtend without typing your password. If your role uses two-step sign-in, Xtend still asks for the code from your authenticator app.
+
 ## `/admin/store-counts` — Stock count — Xtend
 
 - File: `src/app/admin/store-counts/page.tsx`
@@ -408,7 +418,7 @@ On screen: Point your phone&apos;s camera at the code to open this page on your 
 
 - File: `src/app/field/account/page.tsx`
 - Who: FIELD_ROLES
-- Components: `field/screen`, `field/task-row`, `sign-out-button`, `brand/logo`, `field/push-toggle`, `field/profile-photo`, `field/count-sheet-panel`
+- Components: `field/screen`, `field/task-row`, `sign-out-button`, `brand/logo`, `field/push-toggle`, `field/profile-photo`, `field/count-sheet-panel`, `quick-sign-in-settings`
 
 On screen: Your photo helps your team recognise you. Take it facing the camera in good light.
 

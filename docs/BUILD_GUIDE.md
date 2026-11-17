@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-11-17, after marketers choosing a report for one store or for the whole day (0088), the owner's change record `docs/CHANGES.md`, clocking in at one of a marketer's own stores checking them in there too (0087) and forgotten store check-ins never blocking the next one (0086); see earlier entries for 2026-11-13 and before._
+_Last updated: 2026-11-17, after signing in with a fingerprint, face or passkey (0089), marketers choosing a report for one store or for the whole day (0088), the owner's change record `docs/CHANGES.md`, clocking in at one of a marketer's own stores checking them in there too (0087) and forgotten store check-ins never blocking the next one (0086); see earlier entries for 2026-11-13 and before._
 
 ---
 
@@ -283,6 +283,16 @@ What protects Xtend beyond sign-in and RLS (each has a test: `rules.sql`,
   says only `{ ok, checked_at }` (the configuration list needs
   `Authorization: Bearer <CRON_SECRET>`); downloads check the format before
   anything is audited; CSV cells that would run as a formula start with `'`.
+- **Fingerprint, face and passkeys** (0089): optional ways to sign in
+  without the password. Browsers use passkeys (WebAuthn; the site's
+  hostname is the relying party, so a passkey made on `www.withxtend.com`
+  works there only). The apps keep a 32-byte secret behind the fingerprint
+  in the Keystore/Keychain; the server holds its SHA-256, replaces it at
+  every use and removes the key on a wrong one. Every quick sign-in goes
+  through the same checks as the password (lockout pause, app-only,
+  devices, alerts) and still asks admins and HR for their code. A new
+  password or a deactivation removes every key; so does changing your own
+  password.
 - **Secrets**: `.env` and `.env.*` are ignored by git (except
   `.env.example`, which lists every setting blank) and by AI tools
   (`.claudeignore`, `.cursorignore`, `.aiexclude`); `CLAUDE.md` tells any
@@ -799,6 +809,7 @@ Run in this order. Tests run them the same way (`scripts/test-sql.sh`).
 | 0086 | Forgotten check-ins: trigger `trg_store_visit_zz_close_stale` (BEFORE INSERT on `store_visits`, after `trg_store_visit_enforce` sets `user_id`) calls `store_visit_close_stale()`, which marks the person's own open visits from an earlier business day `abandoned` (what the nightly `close_abandoned_visits` does), so the one-open-visit index never blocks today's check-in on a visit Home does not show; plus a one-off close of every such visit. Today's open visit still blocks a second check-in. `my_open_store_visits()` returns the caller's open visit from any day: Home adds it to today's list (so the Check out button always shows) and a refused check-in (409 `visit_open`) hands it back to the phone |
 | 0087 | Clock-in checks in: trigger `trg_attendance_zz_store_check_in` (AFTER INSERT on `attendance`, `attendance_store_check_in()`): a marketer's opening (`can_visit_stores`, stores allocated) with accuracy ≤ 100 m, captured in the last 30 minutes, inside the fence of one of their own stores (`outlets_for_user`, nearest active first) and no visit open today, also inserts a `store_visits` row at that store with no selfie (the clock-in's photo; `device_info.source = 'clock_in'`, `attendance_id`). Any error is swallowed: the clock-in always stands |
 | 0088 | Reports per store or for the whole day: `reports.scope` (`'day'` default, `'store'`), `store_visit_id` (no foreign key), `store_label`; check `reports_scope_ok`; `reports_one_per_day` replaced by `reports_one_day_report` (one whole-day report per person per day) and `reports_one_per_visit` (one per store visit); `report_enforce` checks a store report's visit is the caller's and today's and sets `outlet_id`/`store_label` from it, and never lets scope change; `report_visit_snapshot(visit)` for a store report's `store_visits`; `add_report_photo(path, report)` and `add_report_file(path, name, report)` (the old forms pick the whole-day report first) |
+| 0089 | Quick sign-in: table `sign_in_keys` (server only: RLS on, no grants) — `kind` `'passkey'` (WebAuthn `credential_id`, `public_key` base64url, `sign_count`, `transports`) or `'app'` (`secret_hash`, SHA-256 hex of the secret the phone holds), `label`, `created_at`, `last_used_at`, check `sign_in_keys_shape`; `my_sign_in_keys()` and `remove_my_sign_in_key(id)` for the person's own; trigger `trg_profiles_zz_sign_in_keys` removes every key when the office sets `must_change_password` or deactivates the account. Kept by a test reset (goes with the account) |
 | 0078 | Function grants: revokes EXECUTE from `public`, `anon` and `authenticated` on every trigger and event-trigger function in `public` (they fire without it) and on `place_is_recognised(lat, lng)` (only other database functions call it), after Supabase's security advisor found them callable signed out |
 | 0075 | Message attachments: `messages.attachment_path/name/mime/size_bytes/kind`; `messages_body_check` relaxed (words **or** an attachment); `messages_attachment_check` (all five columns together, picture or PDF ≤ 10 MB); private `message-files` bucket with `message_files_insert_own` + `message_files_read`; `send_message(uuid, text, jsonb)` (drops the 2-arg form, validates and stores the attachment); `conversation` returns the attachment columns; `message_inbox` preview shows "Attachment" for a file-only message |
 | 0074 | Office stock count: `xm_counts.source` (`'field'`/`'office'`, default `'field'`); `lat`, `lng`, `accuracy_m`, `photo_path` made nullable; the `photo_path` UNIQUE constraint replaced by a partial unique index (`xm_counts_photo_path_uniq`, where not null); check `xm_counts_source_shape_check` (field counts keep GPS + photo, office counts carry neither); `xm_office_count(outlet, lines)` (admin only, no GPS/photo, same line checks as `xm_submit_count`, recorded under `auth.uid()`) |
@@ -984,7 +995,7 @@ for s in check-allocate check-assistant-actions check-attendance check-audit \
          check-schedules-leave check-marketer-reports check-clock-out-reminder check-activity \
          check-xm-features check-report-files check-system-reset check-report-photos check-retention \
          check-places-usage check-shift-reminders check-follow-live check-bot-guard \
-         check-security-fixes check-assistant-cache check-redis check-zero-trust \
+         check-security-fixes check-assistant-cache check-redis check-zero-trust check-quick-sign-in \
          check-location-required check-downloads check-background-required check-app-only check-clock-notices \
          check-store-allocation; do
   npx tsx --tsconfig tsconfig.scripts.json scripts/$s.ts | tail -1
@@ -1078,6 +1089,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-11-17 | **Sign in with a fingerprint, face or passkey**: in a browser, **Sign in with a passkey** on the login page (WebAuthn via `@simplewebauthn/server` 14.0.3 and `@simplewebauthn/browser` 14.0.0; `/api/auth/passkey/options` → `/api/auth/passkey`; passkeys added on You → Security or the office's **Fingerprint and passkeys** page, `/api/auth/passkey/register/options` → `/api/auth/passkey/register`); in the Android and iPhone apps, **Sign in with fingerprint** (`@capgo/capacitor-native-biometric` 8.9.1: a secret kept in the Keystore/Keychain behind the fingerprint, `/api/auth/biometric/enroll` and `/api/auth/biometric`, a new secret every use, a wrong one removes the key). After a password sign-in the login page offers to set it up ("Not now" waits 30 days). Both mint the session with a one-time magic link made and used on the server, then follow the password's rules (`src/lib/sign-in-finish.ts`: lockout pause, app-only, known devices, new-device alerts, office clocks, activity log `method`). Two-step sign-in still asks admins and HR for their code. A password sign-in now confirms the person for 10 minutes when their role needs no code, so setting it up right after asks for nothing more. Changing your own password, an office reset or a deactivation removes every key. New check `scripts/check-quick-sign-in.ts` (a software passkey made and used). Needs a new app build | 0089 |
 | 2026-11-17 | **A report for one store or for the whole day**: the marketer's Report tab first asks "What is this report for?": **The whole day** or one of today's store check-ins, each marked **Filed · edit** or **Not yet**; one whole-day report a day and one per store visit, both allowed. `/api/reports` takes `scope` and `store_visit_id` and puts photos and documents on that report; the outbox carries them. Marketer reports downloads (PDF, Word, Excel) and the Attendance day overview list every report of a day with what it is for. Before 0088 runs everything works as before (one report a day). Checks added to `scripts/check-marketer-reports.ts` | 0088 |
 | 2026-11-17 | **Owner's change record**: new `docs/CHANGES.md`, in plain English, newest first: what was done, its impact and what the owner needs to do, for every change since the first build, with a "Waiting on you" list at the top (deploy, migrations to run, TOTP, the 0069 fix, scheduled jobs, Android signing, app builds). `CLAUDE.md` and section 13 now require an entry for every change | — |
 | 2026-11-17 | **Clocking in at your store checks you in**: a marketer who clocks in inside one of their own stores is checked in there at the same moment, with the clock-in selfie (no second selfie); the clock-in result adds "You are also checked in at <store>: check out of it before you leave for the next store." (`/api/attendance` returns `store_check_in`). Not for a store that is not theirs, a poor fix, a clock-in sent late from the outbox, or when a visit is already open | 0087 |

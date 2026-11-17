@@ -16,11 +16,13 @@ import { Alert } from '@/components/ui/alert'
 
 const EVENT = 'xt-reconfirm'
 type Ask = { resolve: (ok: boolean) => void }
+/** How many boxes are on the page; none (the login page): nobody to ask. */
+let mounted = 0
 
 /** Opens the box; true once the person confirmed, false if they cancelled. */
 export function requestReconfirm(): Promise<boolean> {
   return new Promise((resolve) => {
-    if (typeof window === 'undefined') return resolve(false)
+    if (typeof window === 'undefined' || mounted === 0) return resolve(false)
     window.dispatchEvent(new CustomEvent<Ask>(EVENT, { detail: { resolve } }))
   })
 }
@@ -62,7 +64,11 @@ export function ReconfirmDialog() {
       setTimeout(() => passwordRef.current?.focus(), 0)
     }
     window.addEventListener(EVENT, onAsk)
-    return () => window.removeEventListener(EVENT, onAsk)
+    mounted += 1
+    return () => {
+      mounted -= 1
+      window.removeEventListener(EVENT, onAsk)
+    }
   }, [])
 
   function close(ok: boolean) {

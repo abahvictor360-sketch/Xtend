@@ -357,6 +357,17 @@ export default async function SupervisorGuidePage() {
                 ),
               },
               {
+                q: 'Can I sign in with my fingerprint?',
+                a: (
+                  <>
+                    Yes. Open <Ui>Fingerprint and passkeys</Ui> in the menu: in the phone app, turn on
+                    fingerprint sign-in; in a browser, add a passkey. Your team can do the same from{' '}
+                    <Ui>You</Ui> in their app. If someone loses their phone, <Ui>Reset password</Ui> on Staff
+                    switches their fingerprint sign-in off.
+                  </>
+                ),
+              },
+              {
                 q: 'Why was I signed out?',
                 a: (
                   <>

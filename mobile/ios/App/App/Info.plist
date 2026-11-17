@@ -30,6 +30,8 @@
 	<string>Xtend uses the camera for your clock-in selfie and photos of the shelves you count.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Xtend uses your location to confirm you are at your store when you clock in.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Xtend uses Face ID so you can sign in without typing your password.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>Xtend uses your location while you are on shift to confirm you are at your store.</string>
 	<key>UIBackgroundModes</key>
