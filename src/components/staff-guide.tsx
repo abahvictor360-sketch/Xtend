@@ -328,7 +328,10 @@ export function StaffGuide() {
           <Ui>History</Ui> shows your attendance day by day. <Ui>You</Ui> shows your
           account: your store, notifications, <Ui>Messages</Ui>, <Ui>Change your password</Ui> and{' '}
           <Ui>Message support</Ui>. To change your password, type your current password first, then
-          the new one twice.
+          the new one twice. Under <Ui>Fingerprint and passkeys</Ui> you can turn on{' '}
+          <Ui>Sign in with fingerprint</Ui> in the app, so you sign in by touching the sensor instead of
+          typing your password. Your fingerprint stays on your phone. Changing your password turns it
+          off; turn it on again after.
         </p>
         <p>The week on the home screen and the calendar in History are coloured:</p>
         <ul className="list-disc space-y-1 pl-5">

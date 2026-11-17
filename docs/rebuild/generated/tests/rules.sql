@@ -5652,6 +5652,53 @@ begin
   end;
   perform set_config('request.jwt.claims', '{"aal":"aal2"}', false);
 
+  -- Quick sign-in (0089): fingerprint and passkey keys.
+  begin
+    insert into public.sign_in_keys (user_id, kind, label, secret_hash)
+      values (ada, 'app', 'Ada''s phone', repeat('a', 64));
+    insert into public.sign_in_keys (user_id, kind, label, credential_id, public_key)
+      values (ada, 'passkey', 'Chrome on Windows', 'cred-ada-1', 'pk-ada-1');
+    insert into public.sign_in_keys (user_id, kind, label, secret_hash)
+      values (bala, 'app', 'Bala''s phone', repeat('b', 64));
+
+    begin
+      insert into public.sign_in_keys (user_id, kind, label) values (ada, 'app', 'No secret');
+      perform assert(false, 'quick sign-in 0089: an app key without a secret must be refused');
+    exception when check_violation then
+      perform assert(true, 'quick sign-in 0089: an app key needs its secret, a passkey its public key');
+    end;
+
+    perform act_as(ada);
+    perform assert((select count(*) from public.my_sign_in_keys()) = 2,
+      'quick sign-in 0089: a person lists their own keys only');
+    perform assert(not public.remove_my_sign_in_key(
+        (select id from public.sign_in_keys where user_id = bala limit 1)),
+      'quick sign-in 0089: nobody removes another person''s key');
+    perform assert(public.remove_my_sign_in_key(
+        (select id from public.sign_in_keys where user_id = ada and kind = 'passkey')),
+      'quick sign-in 0089: a person removes their own key');
+    perform assert((select count(*) from public.sign_in_keys where user_id = ada) = 1,
+      'quick sign-in 0089: only that key went');
+
+    -- A new password from the office ends every key.
+    perform act_as(boss);
+    update public.profiles set must_change_password = false where id = ada;
+    insert into public.sign_in_keys (user_id, kind, label, secret_hash)
+      values (ada, 'app', 'Ada''s second phone', repeat('c', 64));
+    update public.profiles set must_change_password = true where id = ada;
+    perform assert(not exists (select 1 from public.sign_in_keys where user_id = ada),
+      'quick sign-in 0089: a password reset removes the person''s keys');
+    -- So does a deactivation.
+    update public.profiles set is_active = false where id = bala;
+    perform assert(not exists (select 1 from public.sign_in_keys where user_id = bala),
+      'quick sign-in 0089: a deactivation removes the person''s keys');
+
+    raise exception 'quick-0089-done';
+  exception when others then
+    if sqlerrm <> 'quick-0089-done' then raise; end if;
+  end;
+  perform set_config('request.jwt.claims', '{"aal":"aal2"}', false);
+
   -- Test mode and resetting the test run (066). Every case runs in its
   -- own block that is rolled back, so the data stays for the RLS tests.
   -- ---------------------------------------------------------------
@@ -5663,7 +5710,7 @@ begin
                                 -- 0077: sign-in pauses run out by themselves; known devices stay known.
                                 'sign_in_lockouts', 'sign_in_trusted_devices',
                                 -- 0080: confirmations expire in minutes; staff deletions cascade.
-                                'recent_auth',
+                                'recent_auth', 'sign_in_keys',
                                 -- 0081: the places Xtend learned survive every reset.
                                 'known_places'];
     all_keys text[] := public.reset_category_keys();

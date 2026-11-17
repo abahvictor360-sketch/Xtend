@@ -177,6 +177,22 @@ sheet overlapping it (`-mt-10`, `rounded-t-[2rem]`).
   another site's page sent (403 `{ error: 'This request did not come from
   Xtend, so it was refused.', code: 'origin' }`); field staff's own pages
   and the app are the same site, so they never see it.
+- **Fingerprint and passkeys (0089)**: below **Sign in**, an "or" line and
+  **Sign in with fingerprint** (outline, fingerprint icon; in the app when
+  this phone has a key, `NativeBiometric.isCredentialsSaved({server:
+  'xtend-sign-in'})`) and **Sign in with a passkey** (outline, key icon; in
+  a browser that supports WebAuthn). Fingerprint: `getSecureCredentials`
+  ("Sign in to Xtend", "Use your fingerprint or face", "Use password") →
+  POST `/api/auth/biometric` → store the returned secret with
+  `setCredentials` (`accessControl` BIOMETRY_ANY, `authValidityDuration`
+  30). After a password sign-in, when the device can and nothing is set up
+  (and "Not now" was not chosen in the last 30 days, `localStorage`
+  `xtend.quick-sign-in-declined`), the form becomes "Sign in faster next
+  time?" with **Use my fingerprint** / **Add a passkey** and **Not now**.
+  You → Security holds the **Fingerprint and passkeys** card
+  (`QuickSignInSettings`): turn on or off for this phone, add a passkey,
+  list and remove each one. The field layout mounts the **Confirm it is
+  you** box.
 - **Sign-in lockout (0077)**, kept in Postgres. Wrong passwords pause the **phone or computer making them, not the
   account**. A device that has signed in to the account before carries a
   random `xt_dev` cookie (httpOnly, path `/api/auth`, 180 days, a new token

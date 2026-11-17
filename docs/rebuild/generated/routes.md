@@ -2,7 +2,7 @@
 
 # API routes
 
-126 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+134 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
 
 ## `POST /api/activity`
 
@@ -1266,6 +1266,36 @@ const schema = z.object({
 - Database functions: `flag_own_integrity`
 - Tables and views: `attendance`, `outlets`, `store_visits`
 
+## `POST /api/auth/biometric/enroll`
+
+- File: `src/app/api/auth/biometric/enroll/route.ts`
+- Who: public / own check
+
+Turning on fingerprint sign-in in the app (0089). The phone gets a key id
+and a long secret to keep behind the fingerprint; the server keeps only
+the secret's hash. A new way into the account, so the password must have
+been given in the last few minutes (a password sign-in counts).
+- Tables and views: `sign_in_keys`
+
+## `POST /api/auth/biometric`
+
+- File: `src/app/api/auth/biometric/route.ts`
+- Who: public / own check
+
+Signing in with the fingerprint in the app (0089): the phone opened its
+stored secret with the fingerprint and sends it here. A match signs the
+person in under the same rules as a password, and the answer carries a
+new secret for the phone to keep: each one works once. A wrong secret
+for a real key (a copied or old one) removes the key.
+
+```ts
+const schema = z.object({
+  key_id: z.string().guid(),
+  secret: z.string().min(20).max(200),
+})
+```
+- Tables and views: `sign_in_keys`
+
 ## `GET /api/auth/expired`
 
 - File: `src/app/api/auth/expired/route.ts`
@@ -1278,6 +1308,24 @@ a page, because only here can the session cookies be cleared.
 The server decides whether the login has expired, not the link: anyone
 can put this address in a page or a message, and opening it must not
 sign out somebody whose login is still good.
+
+## `DELETE /api/auth/keys/[id]`
+
+- File: `src/app/api/auth/keys/[id]/route.ts`
+- Who: public / own check
+
+Removes one of the person's own fingerprint or passkey sign-ins (0089).
+
+- Database functions: `remove_my_sign_in_key`
+
+## `GET /api/auth/keys`
+
+- File: `src/app/api/auth/keys/route.ts`
+- Who: public / own check
+
+The person's own fingerprint and passkey sign-ins (0089). Empty before it runs.
+
+- Database functions: `my_sign_in_keys`
 
 ## `POST /api/auth/mfa/done`
 
@@ -1295,6 +1343,52 @@ const schema = z.object({ event: z.enum(['enroll', 'verify']) })
 - Database functions: `confirm_recent_auth`
 - Tables and views: `audit_log`
 
+## `POST /api/auth/passkey/options`
+
+- File: `src/app/api/auth/passkey/options/route.ts`
+- Who: public / own check
+
+Step 1 of signing in with a passkey (0089), signed out: a challenge for
+any passkey this device holds for Xtend (the browser offers its own).
+
+## `POST /api/auth/passkey/register/options`
+
+- File: `src/app/api/auth/passkey/register/options/route.ts`
+- Who: public / own check
+
+Step 1 of adding a passkey (0089): the options the browser needs. A new
+way into the account, so the password must have been given in the last
+few minutes (a password sign-in counts; otherwise "Confirm it is you").
+- Tables and views: `sign_in_keys`
+
+## `POST /api/auth/passkey/register`
+
+- File: `src/app/api/auth/passkey/register/route.ts`
+- Who: public / own check
+
+Step 2 of adding a passkey (0089): check what the browser made, keep its public key.
+
+```ts
+const schema = z.object({ response: z.record(z.string(), z.unknown()) })
+```
+- Tables and views: `sign_in_keys`
+
+## `POST /api/auth/passkey`
+
+- File: `src/app/api/auth/passkey/route.ts`
+- Who: public / own check
+
+Step 2 of signing in with a passkey (0089): the device signed the
+challenge with a passkey; the stored public key checks it. Then the same
+rules as a password sign-in (lib/sign-in-finish.ts).
+
+```ts
+const schema = z.object({
+  response: z.object({ id: z.string().min(1).max(1024) }).passthrough(),
+})
+```
+- Tables and views: `sign_in_keys`
+
 ## `POST /api/auth/password`
 
 - File: `src/app/api/auth/password/route.ts`
@@ -1309,7 +1403,7 @@ const schema = z.object({
   current_password: z.string().max(200).optional(),
 })
 ```
-- Tables and views: `profiles`
+- Tables and views: `profiles`, `sign_in_keys`
 
 ## `POST /api/auth/reconfirm`
 
@@ -1335,7 +1429,20 @@ const schema = z.object({
 - File: `src/app/api/auth/sign-in/route.ts`
 - Who: public / own check
 
-A random token for a phone or computer that has signed in before (0077).
+Staff sign in with an email or a phone number. Supabase signs in on
+email, so a phone is turned into the email here, on the server, and the
+sign-in happens here too: the email never goes back to the browser, so
+nobody can use this to find out a staff member's email from their phone
+number. Every failure gives the same answer.
+
+Wrong passwords pause the phone or computer making them, not the account
+(0077): a device that has signed in to the account before is counted on
+its own, anything else by its address, and unknown devices together are
+capped per account. Postgres keeps the counts and decides.
+
+With the Turnstile keys set, the form's human-check token is confirmed
+with Cloudflare before the password is even looked at, so a bot without
+one never reaches the password check.
 
 ```ts
 const schema = z.object({
@@ -1346,7 +1453,7 @@ const schema = z.object({
 })
 ```
 
-- Database functions: `sign_in_lock_status`, `sign_in_device_status`, `sign_in_succeeded`, `sign_in_failed`
+- Database functions: `sign_in_lock_status`, `sign_in_failed`
 - Tables and views: `profiles`
 
 ## `POST /api/beacon`

@@ -440,6 +440,34 @@ Stored in `attendance.time_verdict` and `time_detail` (`offset_s`,
 `phone_clock_wrong` → `phone_clock_wrong` (medium, "N minutes ahead/behind");
 `network_was_available` → `late_sync_with_network` (low).
 
+### 2.5a Fingerprint, face and passkey sign-in (0089)
+
+- `sign_in_keys` (server only): `kind` `'passkey'` (WebAuthn: `credential_id`
+  unique, `public_key` base64url COSE, `sign_count`, `transports`) or
+  `'app'` (`secret_hash` unique = SHA-256 hex of a 32-byte base64url secret).
+  `my_sign_in_keys()` lists the caller's (id, kind, label, created_at,
+  last_used_at); `remove_my_sign_in_key(id)` removes one of the caller's.
+  Setting `must_change_password` (an office reset) or `is_active = false`
+  removes all of a person's keys (trigger); so does `/api/auth/password`.
+- Adding a key needs a session past the code step and `requireRecentAuth`
+  (a password sign-in now confirms for 10 minutes when the role needs no
+  code). Passkeys: `residentKey` and `userVerification` required,
+  attestation none, RP id = the public hostname, origin = `publicOrigin`;
+  the challenge waits in the `xt_wa` cookie (httpOnly, strict, path
+  `/api/auth`, 5 minutes, used once). App keys: only from the app
+  (`isAppRequest`).
+- Signing in: `/api/auth/passkey` (stored public key and counter checked,
+  counter updated) or `/api/auth/biometric` (`{key_id, secret}`, constant-
+  time hash compare; a wrong secret deletes the key, 401 `key_gone`; a match
+  answers `{ok, secret}` with a new secret and stores its hash). Limits: 30
+  per address per 15 minutes; fingerprint also 10 per key. Then
+  `signInProven` (`src/lib/sign-in-finish.ts`): active account with an
+  email, `sign_in_lock_status` not paused, a magic link made with the admin
+  API and verified at once on the user client (session cookies), then
+  `finishSignIn` exactly as for a password (app-only, devices, alerts,
+  `xt_seen`, activity `sign_in` with `detail.method`). The code step (0080)
+  still applies.
+
 ### 2.6 Daily reports (marketers)
 
 - Each report is for the whole day or one store visit (0088): `scope`

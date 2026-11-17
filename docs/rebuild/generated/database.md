@@ -747,6 +747,22 @@ Policies:
 Policies:
 - `scheduled_notifications_read` SELECT to public: using `(is_admin() OR (created_by = auth.uid()))`
 
+### `sign_in_keys`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| id | uuid(uuid) |  | gen_random_uuid() |
+| user_id | uuid(uuid) |  |  |
+| kind | text(text) |  |  |
+| label | text(text) |  | ''::text |
+| credential_id | text(text) | yes |  |
+| public_key | text(text) | yes |  |
+| sign_count | bigint(int8) |  | 0 |
+| transports | ARRAY(_text) |  | '{}'::text[] |
+| secret_hash | text(text) | yes |  |
+| created_at | timestamp with time zone(timestamptz) |  | now() |
+| last_used_at | timestamp with time zone(timestamptz) | yes |  |
+
 ### `sign_in_lockouts`
 
 | Column | Type | Null | Default |
@@ -1481,6 +1497,7 @@ Policies:
 - `my_open_store_visits()` → SETOF store_visit_detail · definer · 0086_close_stale_visit_on_check_in.sql
 - `my_outlets()` → SETOF outlets · definer · 0011_store_allocation.sql
 - `my_place_due()` → TABLE(id uuid, lat double precision, lng double precision, source_kind text, created_at timestamp with time zone) · definer · 0045_mandatory_place_naming.sql
+- `my_sign_in_keys()` → TABLE(id uuid, kind text, label text, created_at timestamp with time zone, last_used_at timestamp with time zone) · definer · 0089_quick_sign_in.sql
 - `my_staff()` → SETOF profiles · definer · 0072_hr_role.sql
 - `my_store_visits()` → SETOF store_visit_detail · definer · 0016_visits_without_allocation.sql
 - `my_supervisor()` → TABLE(id uuid, full_name text, avatar_path text) · definer · 0076_my_supervisor.sql
@@ -1554,6 +1571,7 @@ Policies:
 - `record_selfie_sweep(p_result jsonb)` → void · definer · 0012_selfie_retention_24h.sql
 - `release_reports_on_demotion()` → trigger · definer · 0018_reporting_line_upkeep.sql
 - `remember_address(p_lat double precision, p_lng double precision, p_address text)` → uuid · definer · 0068_place_lookups.sql
+- `remove_my_sign_in_key(p_id uuid)` → boolean · definer · 0089_quick_sign_in.sql
 - `remove_report_file(p_id uuid)` → text · definer · 0065_report_files_offline.sql
 - `remove_schedule_override(p_id uuid)` → void · definer · 0059_schedules_leave.sql
 - `reopen_support_thread(p_thread uuid)` → void · definer · 0053_support_notifications.sql
@@ -1613,6 +1631,7 @@ Policies:
 - `sign_in_device_key(p_account text, p_address text, p_device text)` → text · definer · 0077_sign_in_lockout.sql
 - `sign_in_device_status(p_account text, p_device text)` → jsonb · definer · 0080_zero_trust.sql
 - `sign_in_failed(p_account text, p_address text, p_device text)` → timestamp with time zone · definer · 0077_sign_in_lockout.sql
+- `sign_in_keys_clear_on_reset()` → trigger · definer · 0089_quick_sign_in.sql
 - `sign_in_known_device(p_account text, p_device text)` → boolean · definer · 0077_sign_in_lockout.sql
 - `sign_in_lock_status(p_account text, p_address text, p_device text)` → timestamp with time zone · definer · 0077_sign_in_lockout.sql
 - `sign_in_succeeded(p_account text, p_address text, p_device text, p_new_device text)` → void · definer · 0077_sign_in_lockout.sql
@@ -1698,6 +1717,7 @@ Policies:
 - `profiles`: `trg_profiles_supervisor_check` — BEFORE INSERT OR UPDATE OF supervisor_id ON public.profiles FOR EACH ROW EXECUTE FUNCTION profiles_supervisor_check()
 - `profiles`: `trg_profiles_touch` — BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION touch_updated_at()
 - `profiles`: `trg_profiles_zz_field_only_reporting` — BEFORE INSERT OR UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION profiles_field_only_reporting()
+- `profiles`: `trg_profiles_zz_sign_in_keys` — AFTER UPDATE OF must_change_password, is_active ON public.profiles FOR EACH ROW EXECUTE FUNCTION sign_in_keys_clear_on_reset()
 - `profiles`: `trg_release_reports_on_demotion` — AFTER UPDATE OF role ON public.profiles FOR EACH ROW EXECUTE FUNCTION release_reports_on_demotion()
 - `report_files`: `trg_report_file_limit` — BEFORE INSERT ON public.report_files FOR EACH ROW EXECUTE FUNCTION report_file_limit()
 - `report_photos`: `trg_report_photo_limit` — BEFORE INSERT ON public.report_photos FOR EACH ROW EXECUTE FUNCTION report_photo_limit()

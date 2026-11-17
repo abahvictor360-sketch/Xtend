@@ -1014,6 +1014,30 @@ the browser so it can create a subscription.
 
 Exports: `pushConfigured`, `PushTarget`, `PushOutcome`, `PushPayload`, `sendPush`, `VapidStatus`, `vapidStatus`
 
+## `src/lib/quick-sign-in-client.ts`
+
+Signing in with a fingerprint, face or passkey (0089), on the phone or
+in the browser. Passkeys are for browsers; the apps keep a secret behind
+the fingerprint (the NativeBiometric plugin), because the app's built-in
+browser cannot use passkeys on most phones.
+
+Exports: `QuickResult`, `appBiometricAvailable`, `appKeySaved`, `enrolAppKey`, `disableAppKey`, `signInWithAppKey`, `passkeysSupported`, `devicePasskeyAvailable`, `signInWithPasskey`, `addPasskey`, `offerAllowed`, `declineOffer`
+
+## `src/lib/quick-sign-in-rules.ts`
+
+The plain rules of quick sign-in (0089), kept pure so
+scripts/check-quick-sign-in.ts can test them.
+
+Exports: `APP_KEY_SERVER`, `keyLabelFrom`, `packAppKey`, `unpackAppKey`, `OFFER_AGAIN_DAYS`, `offerDue`
+
+## `src/lib/quick-sign-in.ts`
+
+Signing in with a fingerprint, face or passkey (0089). Passkeys are for
+the website (WebAuthn); the apps keep a secret behind the fingerprint.
+See lib/quick-sign-in-rules.ts for the parts the checks script tests.
+
+Exports: `relyingParty`, `keepChallenge`, `takeChallenge`, `newAppSecret`, `secretHash`, `secretMatches`, `keyLabel`, `auditKey`, `keysMissing`
+
 ## `src/lib/rate-limit.ts`
 
 A fixed-window counter. With REDIS_URL set it is kept in Redis, so every
@@ -1154,6 +1178,16 @@ Exports: `DEFAULT_SHIFT_START`, `HEADS_UP_MIN`, `SoonStage`, `shiftStartLabel`, 
 History kind for each heads-up.
 
 Exports: `flushShiftSoonReminders`
+
+## `src/lib/sign-in-finish.ts`
+
+What every way of signing in does once the person is proven: the
+password (/api/auth/sign-in), a passkey or the app's fingerprint key
+(0089). One place, so they all follow the same rules: app-only accounts
+stay out of browsers, the device becomes known, new office devices are
+announced, the office clocks start and the activity log hears of it.
+
+Exports: `WRONG`, `DEVICE_COOKIE`, `Service`, `Attempt`, `deviceHash`, `attemptFor`, `paused`, `readCookie`, `finishSignIn`, `signInProven`
 
 ## `src/lib/staff-logins.ts`
 
@@ -2156,6 +2190,15 @@ Exports: `NativeBridge`
 Server-rendered feedback while the requested screen fetches its data.
 
 Exports: `PageLoading`
+
+## `src/components/quick-sign-in-settings.tsx`
+
+"Fingerprint and passkeys" (0089): turn fingerprint sign-in on or off for
+this phone (in the app), add a passkey (in a browser), and see and remove
+every one the account has. Shown on the staff You page and the office's
+sign-in page.
+
+Exports: `QuickSignInSettings`
 
 ## `src/components/reconfirm.tsx`
 
