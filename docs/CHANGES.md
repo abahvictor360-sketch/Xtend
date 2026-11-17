@@ -55,6 +55,17 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-17
 
+### Fixing the record of someone who never clocked in
+- **What was done:** on **Attendance**, the names under **Not clocked in
+  today** can now be tapped, and so can the names under **Attendance
+  follow-up** on the Overview. Each opens that person's day, where **Fix
+  today's record** is.
+- **The impact:** when the app would not let someone clock in at all, the
+  office can now reach them and clock them in. Before, only people who
+  already had a clock-in today had a name to tap.
+- **What you need to do:** nothing new. It needs 0090 (in the list above)
+  and the latest code deployed.
+
 ### The office can fix a clock-in, clock-out or store visit (migration 0090)
 - **What was done:** on **Attendance → a person's day**, a new **Fix
   today's record** panel lets an admin, HR (for field staff) or the

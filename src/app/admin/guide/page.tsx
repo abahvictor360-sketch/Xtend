@@ -862,7 +862,7 @@ export default async function AdminGuidePage() {
                 q: 'The app would not clock someone in or out',
                 a: (
                   <>
-                    Open <Ui>Attendance</Ui>, tap their name, and use <Ui>Fix today&apos;s record</Ui> (today only). Once
+                    Open <Ui>Attendance</Ui>, tap their name (someone who has not clocked in is under <Ui>Not clocked in today</Ui>, or on Overview under <Ui>Attendance follow-up</Ui>), and use <Ui>Fix today&apos;s record</Ui> (today only). Once
                     you are sure they are at the store, <Ui>Clock … in</Ui> or <Ui>Clock … out</Ui> records it for them at
                     that store, at the time you give (not in the future), marked <Ui>By the office</Ui>, with no selfie.
                     Marketers can be checked in or out of a store the same way. If a capture went wrong, ask them to do
