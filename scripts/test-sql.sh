@@ -109,5 +109,6 @@ run supabase/migrations/0087_clock_in_checks_in.sql
 run supabase/migrations/0088_report_per_store_or_day.sql
 run supabase/migrations/0089_quick_sign_in.sql
 run supabase/migrations/0090_field_corrections.sql
+run supabase/migrations/0091_visit_checkout_photo.sql
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rules.sql 2>&1 | grep -E 'NOTICE|ERROR' | sed 's/^psql:[^ ]*: //'
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_counts.sql 2>&1 | grep -E 'NOTICE|ERROR|PASSED' | sed 's/^psql:[^ ]*: //'

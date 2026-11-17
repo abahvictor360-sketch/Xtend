@@ -669,9 +669,32 @@ begin
   perform act_as(grace);
   perform act_as(grace);
 
-  -- Check out, then move to the next store.
-  payload := public.end_store_visit(visit_id, 6.6019, 3.3516, 12, 'Ikeja City Mall', null);
+  -- Check out, then move to the next store. Since 0091 with a photo, which
+  -- must be in her own folder.
+  begin
+    perform public.end_store_visit(visit_id, 6.6019, 3.3516, 12, 'Ikeja City Mall', null,
+                                   bala || '/not-hers.jpg', null);
+    perform assert(false, 'a check-out photo from someone else''s folder is refused');
+  exception when others then
+    perform assert(sqlerrm like '%check-out photo is not yours%',
+      'visit 0091: a check-out photo from someone else''s folder is refused');
+  end;
+  begin
+    perform public.end_store_visit(visit_id, 6.6019, 3.3516, 12, 'Ikeja City Mall', null,
+                                   grace || '/../x/out.jpg', null);
+    perform assert(false, 'a check-out photo path with .. is refused');
+  exception when others then
+    perform assert(sqlerrm like '%check-out photo is not yours%',
+      'visit 0091: a check-out photo path that climbs out of the folder is refused');
+  end;
+  payload := public.end_store_visit(visit_id, 6.6019, 3.3516, 12, 'Ikeja City Mall', null,
+                                    grace || '/grace-v1-out.jpg', grace || '/grace-v1-out_thumb.jpg');
   perform assert(payload ->> 'status' = 'on_site', 'checking out at the store is on_site');
+  perform assert(
+    (select departed_selfie_path = grace || '/grace-v1-out.jpg'
+            and departed_thumb_path = grace || '/grace-v1-out_thumb.jpg'
+     from public.store_visit_detail where id = visit_id),
+    'visit 0091: the check-out photo is kept and shown with the visit');
   perform assert(
     (select status from public.store_visits where id = visit_id) = 'closed',
     'the visit closes');
@@ -6448,6 +6471,46 @@ begin
   exception when others then
     if sqlerrm <> 'app-update-0082-done' then raise; end if;
   end;
+
+  -- Check-out photos (0091): never set on insert; deleted with the others.
+  begin
+    perform act_as(grace);
+    declare
+      vid uuid;
+    begin
+      update public.store_visits set status = 'closed', departed_at = now()
+      where user_id = grace and status = 'open';
+      insert into public.store_visits
+        (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at, selfie_path,
+         departed_selfie_path, departed_thumb_path)
+      values (mall_id, 6.6019, 3.3516, 12, now(), fresh_photo('selfies', 'grace-v91.jpg'),
+              grace || '/sneaky-out.jpg', grace || '/sneaky-out_thumb.jpg')
+      returning id into vid;
+      perform assert((select departed_selfie_path is null and departed_thumb_path is null
+                      from public.store_visits where id = vid),
+        'visit 0091: a check-out photo cannot be set when checking in');
+      perform public.end_store_visit(vid, 6.6019, 3.3516, 12, null, null,
+                                     grace || '/v91-out.jpg', grace || '/v91-out_thumb.jpg');
+      perform set_config('request.jwt.claim.sub', '', false);
+      update public.store_visits set created_at = now() - interval '20 days' where id = vid;
+      perform assert(exists (select 1 from public.expired_selfie_paths() where path = grace || '/v91-out.jpg')
+                     and exists (select 1 from public.expired_selfie_paths() where path = grace || '/v91-out_thumb.jpg'),
+        'visit 0091: old check-out photos are due for deletion with the others');
+      perform public.forget_selfie_paths(array[grace || '/v91-out.jpg', grace || '/v91-out_thumb.jpg']);
+      perform assert((select departed_selfie_path is null and departed_thumb_path is null
+                      from public.store_visits where id = vid),
+        'visit 0091: once deleted, the visit forgets them');
+      perform assert(has_function_privilege('authenticated',
+                       'public.end_store_visit(uuid, double precision, double precision, double precision, text, text, text, text)', 'execute')
+                     and not has_function_privilege('anon',
+                       'public.end_store_visit(uuid, double precision, double precision, double precision, text, text, text, text)', 'execute'),
+        'visit 0091: signed-in staff can check out, signed-out callers cannot');
+      raise exception 'visit-0091-done';
+    end;
+  exception when others then
+    if sqlerrm <> 'visit-0091-done' then raise; end if;
+  end;
+  perform set_config('request.jwt.claim.sub', '', false);
 
   raise notice 'ALL RULES PASSED';
 end $$;

@@ -7,6 +7,9 @@ import { Badge } from '@/components/ui/badge'
 import { flagHeadline } from '@/lib/flag-labels'
 import { formatLagos, lagosDateString, longDate, metres } from '@/lib/utils'
 import { DayCorrections } from '@/components/admin/day-corrections'
+import { VisitPhotoList, toDayVisit } from '@/components/admin/visit-photo-list'
+import { signSelfies } from '@/lib/export/data'
+import type { VisitRow } from '@/lib/visit-review'
 import { CORRECTION_LABELS, type CorrectionAction } from '@/lib/field-corrections'
 
 export const dynamic = 'force-dynamic'
@@ -24,16 +27,6 @@ interface Clock {
   location_label: string | null
   device_info: { source?: string; reason?: string } | null
 }
-interface Visit {
-  id: string
-  status: string
-  arrived_at: string | null
-  departed_at: string | null
-  arrived_distance_m: number | null
-  arrived_place_name: string | null
-  outlets: { name: string } | null
-}
-
 /** One person, one day: everything Xtend recorded about it, on a single page. */
 interface DayReportRow {
   scope?: 'day' | 'store' | null
@@ -84,13 +77,14 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
       .eq('attendance_date', date)
       .order('created_at')
       .returns<Clock[]>(),
+    // Every check-in and check-out, with both photos (0091).
     supabase
-      .from('store_visits')
-      .select('id, status, arrived_at, departed_at, arrived_distance_m, arrived_place_name, outlets(name)')
+      .from('store_visit_detail')
+      .select('*')
       .eq('user_id', id)
       .eq('visit_date', date)
       .order('arrived_at')
-      .returns<Visit[]>(),
+      .returns<VisitRow[]>(),
     supabase
       .from('reports')
       // Every report of the day (0088: the whole day and each store). The
@@ -128,7 +122,13 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
   const closing = [...(clocks.data ?? [])].reverse().find((c) => c.type === 'closing') ?? null
   const hours = opening && closing ? (Date.parse(closing.created_at) - Date.parse(opening.created_at)) / 3_600_000 : null
   const qs = `person=${id}&date=${date}&until=${date}`
-  const visitList = visits.data ?? []
+  const visitList = (visits.data ?? []).map(toDayVisit)
+  // Visit photos are private: short-lived links, signed here (RLS on storage
+  // keeps a supervisor to their own team's photos).
+  const signed = await signSelfies(supabase, visitList.flatMap((v) => [v.in_photo, v.out_photo]))
+  const visitPhotos: Record<string, string | null> = Object.fromEntries(
+    visitList.flatMap((v) => [v.in_photo, v.out_photo]).filter((p): p is string => Boolean(p)).map((p) => [p, signed.get(p) ?? null]),
+  )
   // The whole-day report first, then each store's.
   const dayReports = [...(report.data ?? [])]
     .sort((a, b) => Number(a.scope === 'store') - Number(b.scope === 'store'))
@@ -215,7 +215,7 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
           clockedOut={Boolean(closing)}
           stores={fixStores}
           homeStoreId={person.outlet_id}
-          visits={visitList.map((v) => ({ id: v.id, name: v.outlets?.name ?? v.arrived_place_name ?? 'A place', status: v.status }))}
+          visits={visitList.map((v) => ({ id: v.id, name: v.store, status: v.status }))}
         />
       )}
       {corrections.length > 0 && (
@@ -264,23 +264,8 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
         )}
       </Block>
 
-      <Block title="Store visits">
-        {visitList.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No store check-ins.</p>
-        ) : (
-          <ul className="divide-y divide-border text-sm">
-            {visitList.map((v) => (
-              <li key={v.id} className="py-2">
-                <span className="font-semibold">{v.outlets?.name ?? v.arrived_place_name ?? 'A place'}</span>
-                <span className="block text-xs text-muted-foreground">
-                  In {v.arrived_at ? formatLagos(v.arrived_at, false) : '—'} · out{' '}
-                  {v.departed_at ? formatLagos(v.departed_at, false) : v.status === 'open' ? 'still there' : '—'}
-                  {v.arrived_distance_m !== null ? ` · ${metres(v.arrived_distance_m)} from the store pin` : ''}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
+      <Block title={`Store check-ins and check-outs (${visitList.length})`}>
+        <VisitPhotoList visits={visitList} photos={visitPhotos} name={person.full_name ?? 'They'} />
       </Block>
 
       <Block title={dayReports.length > 1 ? `Reports (${dayReports.length})` : 'Day report'}>

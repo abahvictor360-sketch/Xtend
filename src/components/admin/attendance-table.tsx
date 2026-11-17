@@ -20,6 +20,7 @@ import {
 } from '@/lib/attendance-report'
 import { cn, formatLagos, metres } from '@/lib/utils'
 import type { AttendanceDetail } from '@/lib/types'
+import { VisitPhotoList, type DayVisit } from '@/components/admin/visit-photo-list'
 
 export interface TablePerson {
   name: string
@@ -44,11 +45,14 @@ export function AttendanceTable({
   rows,
   people,
   total,
+  visits = {},
 }: {
   rows: Row[]
   people: Record<string, TablePerson>
   /** Days matching before the list was cut, when it was. */
   total: number
+  /** Store check-ins and check-outs by row key (`user|date`). */
+  visits?: Record<string, DayVisit[]>
 }) {
   const [view, setView] = useState<'table' | 'map'>('table')
   const [sort, setSort] = useState<{ key: SortKey; dir: 'asc' | 'desc' }>({ key: 'date', dir: 'desc' })
@@ -71,9 +75,10 @@ export function AttendanceTable({
         return
       }
       setExpanded(row.key)
-      const paths = [row.clockIn, row.clockOut]
-        .map((e) => e?.thumb_path ?? e?.selfie_path)
-        .filter((p): p is string => Boolean(p) && !(p! in photos))
+      const paths = [
+        ...[row.clockIn, row.clockOut].map((e) => e?.thumb_path ?? e?.selfie_path),
+        ...(visits[row.key] ?? []).flatMap((v) => [v.in_photo, v.out_photo]),
+      ].filter((p): p is string => Boolean(p) && !(p! in photos))
       if (!paths.length) return
       try {
         const res = await fetch('/api/signed-url', {
@@ -87,7 +92,7 @@ export function AttendanceTable({
         setPhotos((current) => ({ ...current, ...Object.fromEntries(paths.map((p) => [p, null])) }))
       }
     },
-    [expanded, photos],
+    [expanded, photos, visits],
   )
 
   const sortBy = (key: SortKey) =>
@@ -180,14 +185,14 @@ export function AttendanceTable({
                         {row.clockIn ? ` · ${metres(row.clockIn.distance_m)} from it` : ''}
                       </span>
                       <span className="mt-1.5 flex flex-wrap gap-1">
-                        <StatusBadges row={row} />
+                        <StatusBadges row={row} visits={visits[row.key]?.length ?? 0} />
                       </span>
                     </span>
                     <ChevronDown className={cn('mt-1 h-4 w-4 shrink-0 transition-transform', expanded === row.key && 'rotate-180')} />
                   </button>
                   {expanded === row.key && (
                     <div className="mt-3 border-t border-border pt-3">
-                      <DayDetail row={row} person={p} photos={photos} />
+                      <DayDetail row={row} person={p} photos={photos} visits={visits[row.key] ?? []} />
                     </div>
                   )}
                 </div>
@@ -236,7 +241,7 @@ export function AttendanceTable({
                         <TableCell className="tabular-nums">{row.clockIn ? metres(row.clockIn.distance_m) : '—'}</TableCell>
                         <TableCell>
                           <span className="flex flex-wrap gap-1">
-                            <StatusBadges row={row} />
+                            <StatusBadges row={row} visits={visits[row.key]?.length ?? 0} />
                           </span>
                         </TableCell>
                         <TableCell>
@@ -246,7 +251,7 @@ export function AttendanceTable({
                       {expanded === row.key && (
                         <TableRow className="bg-muted/30 hover:bg-muted/30">
                           <TableCell colSpan={9}>
-                            <DayDetail row={row} person={p} photos={photos} />
+                            <DayDetail row={row} person={p} photos={photos} visits={visits[row.key] ?? []} />
                           </TableCell>
                         </TableRow>
                       )}
@@ -276,7 +281,12 @@ function shortDate(d: string) {
   )
 }
 
-function StatusBadges({ row }: { row: Row }) {
+function StatusBadges({ row, visits = 0 }: { row: Row; visits?: number }) {
+  const stores = visits > 0 && (
+    <Badge variant="outline">
+      {visits} store{visits === 1 ? '' : 's'} visited
+    </Badge>
+  )
   if (!row.present) {
     if (row.clockOut) return <Badge variant="destructive">Clock-out only</Badge>
     if (row.status === 'off') return <Badge variant="outline">Day off</Badge>
@@ -294,6 +304,7 @@ function StatusBadges({ row }: { row: Row }) {
       {row.missingOut && <Badge variant="warning">No clock-out</Badge>}
       {row.onShift && <Badge variant="outline">On shift</Badge>}
       {(row.sentLateMin ?? 0) >= OFFLINE_MIN && <Badge variant="outline">Sent {lateness(row.sentLateMin!)} later</Badge>}
+      {stores}
     </>
   )
 }
@@ -314,7 +325,17 @@ function dayLinks(row: Row) {
   }
 }
 
-function DayDetail({ row, person, photos }: { row: Row; person?: TablePerson; photos: Record<string, string | null> }) {
+function DayDetail({
+  row,
+  person,
+  photos,
+  visits,
+}: {
+  row: Row
+  person?: TablePerson
+  photos: Record<string, string | null>
+  visits: DayVisit[]
+}) {
   const links = dayLinks(row)
   return (
     <div className="space-y-3 py-1">
@@ -327,6 +348,14 @@ function DayDetail({ row, person, photos }: { row: Row; person?: TablePerson; ph
           empty={row.onShift ? 'Still on shift: no clock-out yet.' : row.present ? 'They never clocked out.' : '—'}
         />
       </div>
+      {visits.length > 0 && (
+        <div className="space-y-2 border-t border-border pt-3">
+          <p className="text-sm font-bold">
+            Store check-ins and check-outs ({visits.length})
+          </p>
+          <VisitPhotoList visits={visits} photos={photos} name={person?.name ?? 'They'} />
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-border pt-2 text-sm">
         <span className="text-xs text-muted-foreground">
           {person?.role ?? 'Staff'}

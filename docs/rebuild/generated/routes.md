@@ -2198,6 +2198,9 @@ const schema = z.object({
   accuracy_m: z.number().nonnegative(),
   address: mapText(500),
   place_name: mapText(200),
+  // The check-out selfie (0091), in the person's own folder.
+  selfie_path: z.string().min(1).max(300).nullable().optional(),
+  thumb_path: z.string().min(1).max(300).nullable().optional(),
 })
 ```
 

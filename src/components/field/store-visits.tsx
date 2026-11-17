@@ -93,6 +93,41 @@ async function visitRecorded(id: string | undefined, closed: boolean): Promise<b
   }
 }
 
+/**
+ * Compresses, uploads and checks a visit selfie (check-in or check-out) in
+ * the person's own folder. Throws with a message the person can read.
+ */
+async function uploadVisitSelfie(photo: Blob, step: (label: string) => void) {
+  step('Compressing your selfie')
+  const { full, thumb } = await processSelfie(photo)
+
+  step('Uploading')
+  const client = supabase()
+  const {
+    data: { user },
+  } = await client.auth.getUser()
+  if (!user) throw new Error('Signed out')
+
+  const id = uuid()
+  const selfie_path = `${user.id}/${id}.jpg`
+  const thumb_path = `${user.id}/${id}_thumb.jpg`
+  const up1 = await client.storage.from('selfies').upload(selfie_path, full, { contentType: 'image/jpeg', upsert: true })
+  if (up1.error) throw new Error(up1.error.message)
+  const up2 = await client.storage.from('selfies').upload(thumb_path, thumb, { contentType: 'image/jpeg', upsert: true })
+  if (up2.error) throw new Error(up2.error.message)
+
+  step('Checking the photo')
+  try {
+    await checkPhoto('selfies', selfie_path, thumb_path)
+  } catch (err) {
+    throw new PhotoRefused(err instanceof Error ? err.message : 'That photo could not be checked.')
+  }
+  return { selfie_path, thumb_path }
+}
+
+/** The photo itself was not accepted: say why, and let them take another. */
+class PhotoRefused extends Error {}
+
 async function namePlace(lat: number, lng: number) {
   try {
     const res = await fetch(`/api/geocode?lat=${lat}&lng=${lng}`)
@@ -137,6 +172,8 @@ export function StoreVisits({
     fix: Fix
     place: { name: string | null; address: string | null }
   } | null>(null)
+  // Check-out (0091): the location first, then the camera, as at check-in.
+  const [leaving, setLeaving] = useState<{ fix: Fix; place: { name: string | null; address: string | null } } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
@@ -207,33 +244,13 @@ export function StoreVisits({
           place = await namePlace(fix.lat, fix.lng)
         }
 
-        setBusy('Compressing your selfie')
-        const { full, thumb } = await processSelfie(photo)
-
-        setBusy('Uploading')
-        const client = supabase()
-        const {
-          data: { user },
-        } = await client.auth.getUser()
-        if (!user) throw new Error('Signed out')
-
-        const id = uuid()
-        const selfie_path = `${user.id}/${id}.jpg`
-        const thumb_path = `${user.id}/${id}_thumb.jpg`
-        const up1 = await client.storage
-          .from('selfies')
-          .upload(selfie_path, full, { contentType: 'image/jpeg', upsert: true })
-        if (up1.error) throw new Error(up1.error.message)
-        const up2 = await client.storage
-          .from('selfies')
-          .upload(thumb_path, thumb, { contentType: 'image/jpeg', upsert: true })
-        if (up2.error) throw new Error(up2.error.message)
-
-        setBusy('Checking the photo')
+        let selfie_path: string
+        let thumb_path: string
         try {
-          await checkPhoto('selfies', selfie_path, thumb_path)
+          ;({ selfie_path, thumb_path } = await uploadVisitSelfie(photo, setBusy))
         } catch (err) {
-          setError(err instanceof Error ? err.message : 'That photo could not be checked.')
+          if (!(err instanceof PhotoRefused)) throw err
+          setError(err.message)
           return
         }
 
@@ -297,16 +314,49 @@ export function StoreVisits({
     [router, pending],
   )
 
-  const checkOut = useCallback(async () => {
+  /** Location first, camera second, as at check-in. */
+  const beginCheckOut = useCallback(async () => {
     if (!open) return
     setError(null)
     setNotice(null)
     try {
       setBusy('Checking your location')
       const fix = await requireFix()
-
       setBusy('Naming the place')
       const place = await namePlace(fix.lat, fix.lng)
+      setLeaving({ fix, place })
+    } catch (err) {
+      if (err instanceof GeoBlocked) setError(err.message)
+      else setError(err instanceof Error ? err.message : 'Could not read your location.')
+    } finally {
+      setBusy(null)
+    }
+  }, [open])
+
+  const checkOut = useCallback(async (photo: Blob) => {
+    const started = leaving
+    setLeaving(null)
+    if (!open || !started) return
+    setError(null)
+    setNotice(null)
+    try {
+      let fix = started.fix
+      let place = started.place
+      if (Date.now() - Date.parse(fix.captured_at) > STALE_FIX_MS) {
+        setBusy('Checking your location again')
+        fix = await requireFix()
+        place = await namePlace(fix.lat, fix.lng)
+      }
+
+      let selfie_path: string
+      let thumb_path: string
+      try {
+        ;({ selfie_path, thumb_path } = await uploadVisitSelfie(photo, setBusy))
+      } catch (err) {
+        if (!(err instanceof PhotoRefused)) throw err
+        setError(err.message)
+        return
+      }
 
       setBusy('Checking out')
       const res = await fetch(`/api/visits/${open.id}/end`, {
@@ -318,6 +368,8 @@ export function StoreVisits({
           accuracy_m: fix.accuracy_m,
           address: place.address,
           place_name: place.name,
+          selfie_path,
+          thumb_path,
         }),
       })
       const data = await res.json()
@@ -346,7 +398,7 @@ export function StoreVisits({
     } finally {
       setBusy(null)
     }
-  }, [open, router])
+  }, [open, leaving, router])
 
   return (
     <section className="space-y-3">
@@ -384,10 +436,11 @@ export function StoreVisits({
               </div>
             </div>
 
-            <Button size="xl" className="w-full" disabled={Boolean(busy)} onClick={checkOut}>
+            <Button size="xl" className="w-full" disabled={Boolean(busy)} onClick={() => void beginCheckOut()}>
               <LogOut className="h-5 w-5" />
               {busy ?? `Check out of ${open.store_label ?? open.outlet_name}`}
             </Button>
+            <p className="text-center text-xs text-muted-foreground">Checking out takes a selfie, like checking in.</p>
           </CardContent>
         </Card>
       ) : picking ? (
@@ -477,6 +530,15 @@ export function StoreVisits({
         subtitle={pending?.place.name ?? pending?.place.address ?? null}
         onCapture={(photo, at) => void checkIn(photo, at)}
         onClose={() => setPending(null)}
+        locate
+      />
+
+      <CameraCapture
+        open={leaving !== null}
+        title={open ? `Check out of ${open.store_label ?? open.outlet_name}` : 'Check out'}
+        subtitle={leaving?.place.name ?? leaving?.place.address ?? null}
+        onCapture={(photo) => void checkOut(photo)}
+        onClose={() => setLeaving(null)}
         locate
       />
 

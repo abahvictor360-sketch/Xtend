@@ -2513,10 +2513,10 @@ $$;
 
 
 --
--- Name: end_store_visit(uuid, double precision, double precision, double precision, text, text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: end_store_visit(uuid, double precision, double precision, double precision, text, text, text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.end_store_visit(p_visit_id uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_place_name text DEFAULT NULL::text, p_address text DEFAULT NULL::text) RETURNS jsonb
+CREATE FUNCTION public.end_store_visit(p_visit_id uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_place_name text DEFAULT NULL::text, p_address text DEFAULT NULL::text, p_selfie_path text DEFAULT NULL::text, p_thumb_path text DEFAULT NULL::text) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -2534,6 +2534,13 @@ begin
   if v.status <> 'open' then
     raise exception 'That visit is already closed';
   end if;
+  -- The photo must be in their own folder, like every other selfie.
+  if (p_selfie_path is not null and (split_part(p_selfie_path, '/', 1) <> v.user_id::text
+                                     or p_selfie_path like '%..%' or length(p_selfie_path) > 300))
+     or (p_thumb_path is not null and (split_part(p_thumb_path, '/', 1) <> v.user_id::text
+                                       or p_thumb_path like '%..%' or length(p_thumb_path) > 300)) then
+    raise exception 'That check-out photo is not yours';
+  end if;
 
   if v.outlet_lat is null then
     new_distance := null;
@@ -2548,15 +2555,17 @@ begin
   end if;
 
   update public.store_visits
-  set status              = 'closed',
-      departed_at         = now(),
-      departed_lat        = p_lat,
-      departed_lng        = p_lng,
-      departed_accuracy_m = p_accuracy_m,
-      departed_distance_m = new_distance,
-      departed_status     = new_status,
-      departed_place_name = p_place_name,
-      departed_address    = p_address
+  set status               = 'closed',
+      departed_at          = now(),
+      departed_lat         = p_lat,
+      departed_lng         = p_lng,
+      departed_accuracy_m  = p_accuracy_m,
+      departed_distance_m  = new_distance,
+      departed_status      = new_status,
+      departed_place_name  = p_place_name,
+      departed_address     = p_address,
+      departed_selfie_path = p_selfie_path,
+      departed_thumb_path  = p_thumb_path
   where id = p_visit_id;
 
   return jsonb_build_object(
@@ -2585,7 +2594,11 @@ CREATE FUNCTION public.expired_selfie_paths(p_hours integer DEFAULT 336) RETURNS
   union
   select unnest(array_remove(array[v.selfie_path, v.thumb_path], null))
   from public.store_visits v, cutoff c
-  where v.created_at < c.at and (v.selfie_path is not null or v.thumb_path is not null);
+  where v.created_at < c.at and (v.selfie_path is not null or v.thumb_path is not null)
+  union
+  select unnest(array_remove(array[v.departed_selfie_path, v.departed_thumb_path], null))
+  from public.store_visits v, cutoff c
+  where v.created_at < c.at and (v.departed_selfie_path is not null or v.departed_thumb_path is not null);
 $$;
 
 
@@ -3174,8 +3187,10 @@ begin
   get diagnostics a = row_count;
 
   update public.store_visits
-  set selfie_path = null, thumb_path = null
-  where created_at < cutoff and (selfie_path is not null or thumb_path is not null);
+  set selfie_path = null, thumb_path = null, departed_selfie_path = null, departed_thumb_path = null
+  where created_at < cutoff
+    and (selfie_path is not null or thumb_path is not null
+         or departed_selfie_path is not null or departed_thumb_path is not null);
   get diagnostics v = row_count;
   return a + v;
 end;
@@ -3202,8 +3217,11 @@ begin
 
   update public.store_visits
   set selfie_path = case when selfie_path = any(p_paths) then null else selfie_path end,
-      thumb_path  = case when thumb_path  = any(p_paths) then null else thumb_path end
-  where selfie_path = any(p_paths) or thumb_path = any(p_paths);
+      thumb_path  = case when thumb_path  = any(p_paths) then null else thumb_path end,
+      departed_selfie_path = case when departed_selfie_path = any(p_paths) then null else departed_selfie_path end,
+      departed_thumb_path  = case when departed_thumb_path  = any(p_paths) then null else departed_thumb_path end
+  where selfie_path = any(p_paths) or thumb_path = any(p_paths)
+     or departed_selfie_path = any(p_paths) or departed_thumb_path = any(p_paths);
   get diagnostics v = row_count;
   return a + v;
 end;
@@ -4095,7 +4113,11 @@ CREATE TABLE public.store_visits (
     outlet_radius_m integer,
     device_info jsonb DEFAULT '{}'::jsonb NOT NULL,
     client_captured_at timestamp with time zone NOT NULL,
-    created_at timestamp with time zone DEFAULT now() NOT NULL
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    departed_selfie_path text,
+    departed_thumb_path text,
+    CONSTRAINT store_visits_departed_selfie_path_check CHECK (((departed_selfie_path IS NULL) OR (length(departed_selfie_path) <= 300))),
+    CONSTRAINT store_visits_departed_thumb_path_check CHECK (((departed_thumb_path IS NULL) OR (length(departed_thumb_path) <= 300)))
 );
 
 
@@ -4151,7 +4173,9 @@ CREATE VIEW public.store_visit_detail WITH (security_invoker='true') AS
             ELSE NULL::text
         END) AS departed_label,
     v.outlet_lat,
-    v.outlet_lng
+    v.outlet_lng,
+    v.departed_selfie_path,
+    v.departed_thumb_path
    FROM ((public.store_visits v
      JOIN public.profiles p ON ((p.id = v.user_id)))
      LEFT JOIN public.outlets o ON ((o.id = v.outlet_id)));
@@ -6654,7 +6678,8 @@ begin
     paths := paths || array(select unnest(array[selfie_path, thumb_path]) from public.attendance);
   end if;
   if 'visits_places' = any(cats) then
-    paths := paths || array(select unnest(array[selfie_path, thumb_path]) from public.store_visits);
+    paths := paths || array(select unnest(array[selfie_path, thumb_path, departed_selfie_path, departed_thumb_path])
+                            from public.store_visits);
   end if;
   if 'reports' = any(cats) then
     paths := paths || array(select storage_path from public.report_photos)
@@ -7014,6 +7039,10 @@ CREATE FUNCTION public.retention_notice_due(p_through timestamp with time zone) 
     from public.store_visits v
     where v.created_at < p_through and (v.selfie_path is not null or v.thumb_path is not null)
     union all
+    select 'selfie', v.user_id
+    from public.store_visits v
+    where v.created_at < p_through and (v.departed_selfie_path is not null or v.departed_thumb_path is not null)
+    union all
     select 'photo', public.safe_uuid(split_part(o.path, '/', 1))
     from public.report_photo_orphans_before(p_through) o
     union all
@@ -7258,6 +7287,7 @@ CREATE FUNCTION public.selfie_retention_status() RETURNS jsonb
     'photos_held', (
       (select count(*) from public.attendance where selfie_path is not null)
       + (select count(*) from public.store_visits where selfie_path is not null)
+      + (select count(*) from public.store_visits where departed_selfie_path is not null)
     ),
     'overdue', (
       (select count(*) from public.attendance
@@ -7265,6 +7295,9 @@ CREATE FUNCTION public.selfie_retention_status() RETURNS jsonb
           and created_at < now() - make_interval(days => public.retention_days() + 1))
       + (select count(*) from public.store_visits
         where selfie_path is not null
+          and created_at < now() - make_interval(days => public.retention_days() + 1))
+      + (select count(*) from public.store_visits
+        where departed_selfie_path is not null
           and created_at < now() - make_interval(days => public.retention_days() + 1))
     )
   ) end;
@@ -8085,6 +8118,21 @@ begin
     raise exception 'Invalid capture timestamp';
   end if;
 
+  return new;
+end;
+$$;
+
+
+--
+-- Name: store_visit_no_departure_photo(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.store_visit_no_departure_photo() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+begin
+  new.departed_selfie_path := null;
+  new.departed_thumb_path := null;
   return new;
 end;
 $$;
@@ -13487,6 +13535,13 @@ CREATE TRIGGER trg_store_visit_enforce BEFORE INSERT ON public.store_visits FOR 
 
 
 --
+-- Name: store_visits trg_store_visit_no_departure_photo; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_store_visit_no_departure_photo BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION public.store_visit_no_departure_photo();
+
+
+--
 -- Name: store_visits trg_store_visit_selfie_check; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -16379,12 +16434,12 @@ GRANT ALL ON FUNCTION public.distance_metres(lat1 double precision, lng1 double 
 
 
 --
--- Name: FUNCTION end_store_visit(p_visit_id uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_place_name text, p_address text); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION end_store_visit(p_visit_id uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_place_name text, p_address text, p_selfie_path text, p_thumb_path text); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.end_store_visit(p_visit_id uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_place_name text, p_address text) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.end_store_visit(p_visit_id uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_place_name text, p_address text) TO authenticated;
-GRANT ALL ON FUNCTION public.end_store_visit(p_visit_id uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_place_name text, p_address text) TO service_role;
+REVOKE ALL ON FUNCTION public.end_store_visit(p_visit_id uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_place_name text, p_address text, p_selfie_path text, p_thumb_path text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.end_store_visit(p_visit_id uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_place_name text, p_address text, p_selfie_path text, p_thumb_path text) TO authenticated;
+GRANT ALL ON FUNCTION public.end_store_visit(p_visit_id uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_place_name text, p_address text, p_selfie_path text, p_thumb_path text) TO service_role;
 
 
 --

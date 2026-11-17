@@ -1769,6 +1769,15 @@ exactly the rounds on screen — no second set of options to keep in step.
 
 Exports: `VisitFilters`
 
+## `src/components/admin/visit-photo-list.tsx`
+
+One person's store visits on one day, as the office checks them: where
+and when they checked in and out, how far from the store, and both
+photos (check-in, and check-out from 0091). Shared by the Attendance
+table and a person's day page.
+
+Exports: `DayVisit`, `toDayVisit`, `VisitPhotoList`
+
 ## `src/components/admin/visit-views.tsx`
 
 In, stores, out: the shape of one person's day, in one line.
