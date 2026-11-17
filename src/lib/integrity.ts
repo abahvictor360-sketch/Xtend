@@ -40,6 +40,11 @@ export const FLAG_KINDS: Record<string, { label: string; meaning: string }> = {
     meaning:
       'Keeps clocking in, checking in or being found off-site at a place they named themselves that nobody else has visited. It could be their house given a shop name: look at the photo on the Places page.',
   },
+  photo_flagged: {
+    label: 'Photo flagged by the office',
+    meaning:
+      'An admin or supervisor looked at a clock-in, clock-out or store visit photo and flagged it: not the right person, not taken at the store, a photo of a photo or a screen, or unclear. The reason is in the summary.',
+  },
   selfie_at_home: {
     label: 'Selfie at home',
     meaning:
@@ -109,7 +114,7 @@ export const FLAG_KINDS: Record<string, { label: string; meaning: string }> = {
 export const FLAG_AREAS = {
   location: ['repeated_exact_location', 'perfect_accuracy', 'impossible_journey', 'own_named_place', 'vpn_suspected', 'ip_location_mismatch', 'gps_mock_fingerprint', 'mock_location_confirmed'],
   phone: ['backdated_clock', 'phone_clock_wrong', 'late_sync_with_network', 'timezone_mismatch', 'device_integrity_failed'],
-  photos: ['photo_rejected', 'photo_unchecked', 'selfie_at_home'],
+  photos: ['photo_rejected', 'photo_unchecked', 'selfie_at_home', 'photo_flagged'],
   stock: ['count_units_missing', 'count_identical', 'count_round_numbers', 'stock_discrepancy'],
   time: ['late_clock_in', 'early_clock_out'],
 } as const

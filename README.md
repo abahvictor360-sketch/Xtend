@@ -113,6 +113,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0089_quick_sign_in.sql                  # sign in with a fingerprint, face or passkey
    supabase/migrations/0090_field_corrections.sql              # the office fixes a clock-in, clock-out or store visit
    supabase/migrations/0091_visit_checkout_photo.sql           # a selfie at store check-out; kept 14 days like the others
+   supabase/migrations/0092_photo_flags.sql                    # the office flags a clock or visit photo that is not right
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

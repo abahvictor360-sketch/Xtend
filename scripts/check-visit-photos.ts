@@ -64,8 +64,9 @@ check(/\.\.\.\(visits\[row\.key\] \?\? \[\]\)\.flatMap\(\(v\) => \[v\.in_photo, 
     && /<VisitPhotoList visits=\{visits\}/.test(table) && /store\{visits === 1 \? '' : 's'\} visited/.test(table),
   'an Attendance row says how many stores, and opens to every check-in and check-out with both photos')
 const day = read('src/app/admin/attendance/day/page.tsx')
-check(/from\('store_visit_detail'\)/.test(day) && /<VisitPhotoList visits=\{visitList\}/.test(day),
-  'a person’s day lists the check-ins and check-outs with both photos')
+check(/from\('store_visit_detail'\)/.test(day) && /event: 'check_in' as const/.test(day)
+    && /event: 'check_out' as const/.test(day) && /<DayPhotoGallery photos=\{photos\}/.test(day),
+  'a person’s day shows every check-in and check-out photo (Photos of the day, 0092 redesign)')
 const views = read('src/components/admin/visit-views.tsx')
 check(/leftSelfie/.test(views) && /departed_selfie_path \?\? null/.test(read('src/app/admin/visits/page.tsx')),
   'Store visits shows the check-out photo beside the check-in one')
