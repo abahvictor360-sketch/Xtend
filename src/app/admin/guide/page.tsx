@@ -261,7 +261,7 @@ export default async function AdminGuidePage() {
           </Tip>
         </GuideSection>
 
-        <GuideSection topic={T.overview} intro="The top of the menu. Type in Find a page to jump to any page, and tap a group's name to fold it away. On a phone, tap the page name at the top to open navigation. Tap outside it or press Escape to close it.">
+        <GuideSection topic={T.overview} intro="The top of the menu. Type in Find a page to jump to any page, and tap a group's name to fold it away. Your name at the top opens your account (two-step sign-in, passkeys, password, sign out), and Add staff opens the new-staff form. On a phone, tap the page name at the top to open navigation. Tap outside it or press Escape to close it.">
           <p>Start with <Ui>Start here</Ui> on Overview, then tap a summary card to open its page. Attendance follow-up lists missing clock-ins. Expand <Ui>Live locations &amp; coverage</Ui> for details. On Alerts, expand <Ui>Filters &amp; downloads</Ui> to narrow results; notification settings are at the bottom.</p>
           <p>
             <Ui>Overview</Ui> is the first page each day: the week&apos;s clock-ins (point at a day for its

@@ -6,7 +6,6 @@ import { PushToggle } from '@/components/field/push-toggle'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
@@ -30,16 +29,12 @@ import { fetchAlerts } from '@/lib/export/alerts'
 import { flagHeadline } from '@/lib/flag-labels'
 import { movementHref } from '@/lib/visit-review'
 import { cn, formatLagos, lagosDateString } from '@/lib/utils'
+import { AlarmClock, Bell, CalendarDays, CircleAlert, Hourglass, ShieldAlert, Siren, SlidersHorizontal, Users } from 'lucide-react'
+import { Chip, EmptyState, IconTile, PageHeader, SectionTitle, StatCard, StatGrid, TabLinks } from '@/components/admin/page-kit'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Alerts — Xtend' }
 
-/** The tabs look like the app's filter chips; they are links, so pages can be bookmarked. */
-const chip = (active: boolean) =>
-  cn(
-    'inline-flex min-h-11 items-center rounded-full px-4 text-xs font-semibold transition-all',
-    active ? 'bg-brand text-primary-foreground shadow-lift' : 'bg-tint text-tint-foreground hover:brightness-95',
-  )
 const pill = 'inline-flex min-h-11 items-center gap-2 rounded-xl border border-border bg-card px-3 py-1 font-semibold hover:border-brand hover:bg-tint'
 
 interface FlagRow {
@@ -100,68 +95,68 @@ export default async function AlertsPage({
   const range = filter.from || filter.to ? `${filter.from ?? 'the start'} to ${filter.to ?? 'today'}` : null
 
   return (
-    <div className="space-y-5">
-      <header>
-        <p className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-brand">{session.profile.role === 'admin' ? 'Company review' : 'Team review'}</p>
-        <h1 className="text-3xl font-bold tracking-tight">Alerts</h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Review what happened, check the context, then follow up.{session.profile.role === 'admin' ? ' Resolve one alert or select several together.' : ' Your team only. Admins resolve alerts.'}</p>
-      </header>
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow={session.profile.role === 'admin' ? 'Company review' : 'Team review'}
+        title="Alerts"
+        note={`Review what happened, check the context, then follow up.${session.profile.role === 'admin' ? ' Resolve one alert or select several together.' : ' Your team only. Admins resolve alerts.'}`}
+        chips={
+          <>
+            {range && <Chip icon={CalendarDays}>{range}</Chip>}
+            <Chip icon={Siren}>{openLocation ?? 0} open</Chip>
+          </>
+        }
+      />
 
-      <div className="flex flex-wrap gap-2">
-        <Link href="/admin/alerts" aria-current={!activityTab ? 'page' : undefined} className={chip(!activityTab)}>
-          Location ({openLocation ?? 0} open)
-        </Link>
-        <Link
-          href="/admin/alerts?show=activity"
-          aria-current={activityTab ? 'page' : undefined}
-          className={chip(activityTab)}
-        >
-          Late &amp; suspicious ({activity.length})
-        </Link>
-      </div>
+      <TabLinks
+        tabs={[
+          { href: '/admin/alerts', label: <>Location <Count n={openLocation ?? 0} /></>, active: !activityTab },
+          { href: '/admin/alerts?show=activity', label: <>Late &amp; suspicious <Count n={activity.length} /></>, active: activityTab },
+        ]}
+      />
 
       {activityTab ? (
         activity.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-            Nothing late or suspicious waiting to be reviewed.
-          </p>
+          <EmptyState icon={ShieldAlert}>Nothing late or suspicious waiting to be reviewed.</EmptyState>
         ) : (
-          <div className="space-y-2">
-            {activity.map((flag) => (
-              <Card key={flag.id}>
-                <CardContent className="flex flex-col gap-2 p-4 pt-4 sm:flex-row sm:items-start sm:justify-between">
-                  <div className="min-w-0">
-                    <p className="font-medium">
-                      {flag.staff_name}
-                      <span className="ml-2 text-sm font-normal text-muted-foreground">
-                        {flag.outlet_name ?? 'No outlet'}
-                      </span>
-                    </p>
+          <section className="space-y-3">
+            <SectionTitle
+              icon={ShieldAlert}
+              title="Waiting to be reviewed"
+              note={`${activity.length} late clock-in${activity.length === 1 ? '' : 's'}, early clock-outs and suspicious activity · newest first`}
+            />
+            <ul className="grid gap-3 lg:grid-cols-2">
+              {activity.map((flag) => (
+                <li key={flag.id} className="surface flex items-start gap-3 p-4">
+                  <IconTile icon={flag.kind === 'late_clock_in' || flag.kind === 'early_clock_out' ? AlarmClock : ShieldAlert} tone={flag.severity === 'high' ? 'bad' : 'warn'} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <p className="font-semibold">{flag.staff_name}</p>
+                      <Badge variant={flag.severity === 'high' ? 'destructive' : 'warning'}>{flag.severity}</Badge>
+                    </div>
                     <p className="text-sm first-letter:uppercase">{flagHeadline(flag.kind)}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {flag.summary} · {formatLagos(flag.created_at)}
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {flag.summary} · {flag.outlet_name ?? 'No outlet'} · {formatLagos(flag.created_at)}
                     </p>
                   </div>
-                  <div className="flex shrink-0 items-center gap-2">
-                    <Badge variant={flag.severity === 'high' ? 'destructive' : 'warning'}>
-                      {flag.severity}
-                    </Badge>
-                    <Link
-                      href="/admin/integrity"
-                      className="text-sm font-semibold text-brand underline-offset-2 hover:underline"
-                    >
-                      Review
-                    </Link>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  <Link href="/admin/integrity" className={buttonVariants({ size: 'sm', variant: 'outline', className: 'shrink-0' })}>
+                    Review
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
         )
       ) : (
         <>
-          <details className="surface border border-border p-4 sm:p-5" open={Boolean(query)}>
-            <summary className="cursor-pointer py-2 text-sm font-semibold">Filters &amp; downloads {query ? "· filters applied" : "· all open alerts"}</summary>
+          <details className="surface group p-4 sm:p-5" open={Boolean(query)}>
+            <summary className="flex cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden">
+              <IconTile icon={SlidersHorizontal} />
+              <span className="min-w-0 flex-1">
+                <span className="block text-base font-bold">Filters &amp; downloads</span>
+                <span className="block text-xs text-muted-foreground">{query ? 'Filters applied' : 'Showing all open alerts'} · tap to {query ? 'change' : 'filter'}</span>
+              </span>
+            </summary>
           <form method="get" className="mt-4 space-y-4">
             <div className="flex flex-wrap items-end gap-3">
               <div className="w-full space-y-1.5 sm:w-36">
@@ -243,20 +238,37 @@ export default async function AlertsPage({
 
           {failed && <Alert variant="destructive">Could not load the alerts: {failed}</Alert>}
 
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Figure
+          <StatGrid>
+            <StatCard
+              icon={Bell}
               label={filter.state === 'open' ? 'Open alerts' : filter.state === 'resolved' ? 'Resolved alerts' : 'Alerts'}
               value={String(alerts.length)}
-              note={listed.truncated ? 'newest 500 shown' : (range ?? undefined)}
+              note={listed.truncated ? 'Newest 500 shown' : (range ?? 'In this view')}
             />
-            <Figure label="Still open" value={String(open.length)} warn={open.length > 0} />
-            <Figure label={`Open over ${STALE_HOURS} hours`} value={String(stale.length)} warn={stale.length > 0} />
-            <Figure
+            <StatCard
+              icon={Siren}
+              label="Still open"
+              value={String(open.length)}
+              tone={open.length ? 'bad' : 'muted'}
+              note={open.length ? 'Waiting for follow-up' : 'All followed up'}
+              bar={alerts.length ? (open.length / alerts.length) * 100 : null}
+            />
+            <StatCard
+              icon={Hourglass}
+              label={`Open over ${STALE_HOURS} hours`}
+              value={String(stale.length)}
+              tone={stale.length ? 'warn' : 'muted'}
+              note={stale.length ? 'Left too long' : 'None left too long'}
+              bar={open.length ? (stale.length / open.length) * 100 : null}
+            />
+            <StatCard
+              icon={Users}
               label="People"
               value={String(grouped.length)}
-              note={repeat.length ? `${repeat.length} with ${REPEAT_AT} or more` : undefined}
+              tone={repeat.length ? 'bad' : 'brand'}
+              note={repeat.length ? `${repeat.length} with ${REPEAT_AT} or more` : 'Nobody repeating'}
             />
-          </div>
+          </StatGrid>
 
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
             <span className="mr-1 font-semibold text-muted-foreground">By kind:</span>
@@ -274,35 +286,42 @@ export default async function AlertsPage({
           </div>
 
           {(repeat.length > 0 || stale.length > 0) && (
-            <Alert variant="destructive">
-              <p className="font-semibold">Worth a look</p>
-              <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
+            <section className="surface border-l-4 border-l-destructive p-4 sm:p-5">
+              <div className="flex items-center gap-2">
+                <CircleAlert className="h-5 w-5 text-destructive" />
+                <h2 className="text-base font-bold">Worth a look</h2>
+              </div>
+              <ul className="mt-3 grid gap-2 text-sm md:grid-cols-2">
                 {repeat.slice(0, 6).map((p) => (
-                  <li key={p.userId}>
+                  <li key={p.userId} className="rounded-xl bg-muted/40 px-3 py-2.5">
                     <Link href={`?${alertQueryString({ ...filter, person: p.userId })}`} className="font-semibold underline">
                       {p.name}
                     </Link>
                     : {p.total} alerts on {p.days} day{p.days === 1 ? '' : 's'} ({typeMix(p.types)})
                     {p.open ? `, ${p.open} still open` : ''}.{' '}
-                    <Link href={alertLinks({ user_id: p.userId, created_at: p.last }).movement} className="underline">
+                    <Link href={alertLinks({ user_id: p.userId, created_at: p.last }).movement} className="font-semibold text-brand hover:underline">
                       Movement on the latest day
                     </Link>
                   </li>
                 ))}
                 {stale.length > 0 && (
-                  <li>
+                  <li className="rounded-xl bg-muted/40 px-3 py-2.5">
                     {stale.length} alert{stale.length === 1 ? ' has' : 's have'} been open for more than {STALE_HOURS}{' '}
                     hours. The oldest: {stale[stale.length - 1].staff_name}, {formatLagos(stale[stale.length - 1].created_at)}.
                   </li>
                 )}
               </ul>
-            </Alert>
+            </section>
           )}
 
           {grouped.length > 1 && (
             <details className="surface group p-4 sm:p-5">
-              <summary className="cursor-pointer list-none text-sm font-bold [&::-webkit-details-marker]:hidden">
-                By person ({grouped.length}) <span className="font-normal text-muted-foreground">· most alerts first · tap to open</span>
+              <summary className="flex cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden">
+                <IconTile icon={Users} />
+                <span className="min-w-0 flex-1">
+                  <span className="block text-base font-bold">By person ({grouped.length})</span>
+                  <span className="block text-xs text-muted-foreground">Most alerts first · tap to open</span>
+                </span>
               </summary>
               <ul className="mt-3 divide-y divide-border text-sm">
                 {grouped.map((p) => (
@@ -354,20 +373,21 @@ export default async function AlertsPage({
           />
         </>
       )}
-      <details className="surface border border-border p-4">
-        <summary className="cursor-pointer py-2 text-sm font-semibold">Notification settings</summary>
+      <details className="surface p-4 sm:p-5">
+        <summary className="flex cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden">
+          <IconTile icon={Bell} tone="muted" />
+          <span className="text-base font-bold">Notification settings</span>
+        </summary>
         <div className="mt-3"><PushToggle title="Alerts on this device" hint="Turn on notifications on each computer or phone where you want to receive alerts." /></div>
       </details>
     </div>
   )
 }
 
-function Figure({ label, value, note, warn }: { label: string; value: string; note?: string; warn?: boolean }) {
+function Count({ n }: { n: number }) {
   return (
-    <div className="surface p-4">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className={cn('mt-1 text-xl font-extrabold tabular-nums', warn && 'text-destructive')}>{value}</p>
-      {note && <p className="text-xs text-muted-foreground">{note}</p>}
-    </div>
+    <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold tabular-nums', n ? 'bg-destructive/10 text-destructive' : 'bg-muted-foreground/15 text-muted-foreground')}>
+      {n}
+    </span>
   )
 }

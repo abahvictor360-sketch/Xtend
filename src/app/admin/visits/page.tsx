@@ -12,11 +12,9 @@ import {
   Figure,
   StatusBadge,
   VisitLine,
-  chip,
 } from '@/components/admin/visit-views'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { duration } from '@/lib/movement'
 import {
   SHORT_MINUTES,
@@ -35,7 +33,9 @@ import {
   type VisitRow,
   type VisitView,
 } from '@/lib/visit-review'
-import { formatLagos, lagosDateString } from '@/lib/utils'
+import { formatLagos, lagosDateString, longDate } from '@/lib/utils'
+import { CalendarDays, CircleAlert, Clock3, MapPin, Store, Users } from 'lucide-react'
+import { Chip, EmptyState, PageHeader, SectionTitle, StatCard, StatGrid, TabLinks } from '@/components/admin/page-kit'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Store visits — Xtend' }
@@ -116,32 +116,50 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
   for (const f of findings) flagsOf.set(f.visitId, [...(flagsOf.get(f.visitId) ?? []), f])
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold">Store visits</h1>
-        <p className="text-sm text-muted-foreground">
-          {filter.view === 'coverage'
+    <div className="space-y-6">
+      <PageHeader
+        title="Store visits"
+        note={
+          filter.view === 'coverage'
             ? 'Every store and when somebody last visited it, longest first.'
-            : `${ranged ? `${from} to ${to}` : from === today ? 'Today' : from}, Africa/Lagos. When each person clocked in, the stores they worked and for how long, and when they clocked out.`}{' '}
-          Tap a visit for where they checked in and out. Very short visits, check-ins away from the store and trips
-          between stores too fast to be real are called out. Download the same list as Excel, PDF, Word or CSV.
-        </p>
-      </div>
+            : 'Who worked which stores, for how long, with where they checked in and out. Lagos time.'
+        }
+        chips={
+          <>
+            <Chip icon={CalendarDays}>{ranged ? `${longDate(from)} to ${longDate(to)}` : from === today ? `Today, ${longDate(from)}` : longDate(from)}</Chip>
+            {filter.view !== 'coverage' && <Chip icon={Users}>{figures.people} {figures.people === 1 ? 'person' : 'people'}</Chip>}
+          </>
+        }
+      />
 
-      <VisitFilters filter={filter} staff={staff ?? []} outlets={outletList ?? []} teams={teams ?? null} today={today} />
+      <section className="surface p-4 sm:p-5">
+        <VisitFilters filter={filter} staff={staff ?? []} outlets={outletList ?? []} teams={teams ?? null} today={today} />
+        <details className="mt-3 text-xs text-muted-foreground">
+          <summary className="cursor-pointer font-semibold hover:text-foreground">How visits are read</summary>
+          <p className="mt-1.5 leading-relaxed">
+            Tap a visit for where they checked in and out, with both photos. Very short visits, check-ins away from the
+            store and trips between stores too fast to be real are called out. Download the same list as Excel, PDF, Word
+            or CSV.
+          </p>
+        </details>
+      </section>
 
       {visitsGot.error && <Alert variant="destructive">Could not load the visits: {visitsGot.error}</Alert>}
 
       {filter.view !== 'coverage' && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Figure label="Visits" value={String(figures.visits)} note={visits.length >= 1000 ? 'newest 1,000 shown' : undefined} />
-          <Figure label="Stores covered" value={String(figures.stores)} />
-          <Figure label="People" value={String(figures.people)} />
-          <Figure
+        <div className="space-y-3">
+        <StatGrid>
+          <StatCard icon={MapPin} label="Visits" value={String(figures.visits)} note={visits.length >= 1000 ? 'Newest 1,000 shown' : 'Store check-ins'} />
+          <StatCard icon={Store} label="Stores covered" value={String(figures.stores)} tone="good" note="Visited at least once" />
+          <StatCard icon={Users} label="People" value={String(figures.people)} note="Who checked in" />
+          <StatCard
+            icon={Clock3}
             label="Average time in a store"
             value={figures.averageMinutes != null ? duration(figures.averageMinutes) : '—'}
-            note={figures.minutes ? `${duration(figures.minutes)} in all` : undefined}
+            note={figures.minutes ? `${duration(figures.minutes)} in all` : 'No time recorded'}
           />
+        </StatGrid>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <Figure
             label={`Shorter than ${shortMinutes} min`}
             value={String(figures.short)}
@@ -162,54 +180,51 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
             href={covGot.error ? undefined : href({ view: 'coverage', gap: 7 })}
           />
         </div>
+        </div>
       )}
 
       {filter.view !== 'coverage' && findings.length > 0 && (
-        <Alert variant="destructive">
-          <p className="font-semibold">Worth a look ({findings.length})</p>
-          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">
+        <section className="surface border-l-4 border-l-destructive p-4 sm:p-5">
+          <div className="flex items-center gap-2">
+            <CircleAlert className="h-5 w-5 text-destructive" />
+            <h2 className="text-base font-bold">Worth a look</h2>
+            <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-bold text-destructive">{findings.length}</span>
+          </div>
+          <ul className="mt-3 grid gap-2 text-sm md:grid-cols-2">
             {findings.slice(0, 8).map((f, i) => (
-              <li key={`${f.visitId}-${f.kind}-${i}`}>
+              <li key={`${f.visitId}-${f.kind}-${i}`} className="rounded-xl bg-muted/40 px-3 py-2.5">
                 <span className="font-semibold">{f.name}</span>
                 {ranged ? ` (${f.date})` : ''} {f.text}.{' '}
-                <Link href={movementHref(f.userId, f.date)} className="underline">
+                <Link href={movementHref(f.userId, f.date)} className="font-semibold text-brand hover:underline">
                   Movement that day
                 </Link>
               </li>
             ))}
           </ul>
           {findings.length > 8 && (
-            <p className="mt-1 text-xs text-muted-foreground">
+            <p className="mt-2 text-xs text-muted-foreground">
               And {findings.length - 8} more, marked on the visits below and in the download.
             </p>
           )}
-        </Alert>
+        </section>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        {(Object.keys(VIEW_LABEL) as VisitView[]).map((v) => (
-          <Link
-            key={v}
-            href={href({ view: v, gap: v === 'coverage' ? filter.gap : null })}
-            aria-current={filter.view === v ? 'page' : undefined}
-            className={chip(filter.view === v)}
-          >
-            {VIEW_LABEL[v]}
-          </Link>
-        ))}
-      </div>
+      <TabLinks
+        tabs={(Object.keys(VIEW_LABEL) as VisitView[]).map((v) => ({
+          href: href({ view: v, gap: v === 'coverage' ? filter.gap : null }),
+          label: VIEW_LABEL[v],
+          active: filter.view === v,
+        }))}
+      />
 
       {filter.view === 'visits' && (
         <>
           {inStore.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>In a store right now</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ul className="divide-y divide-border text-sm">
+            <section className="surface space-y-3 p-4 sm:p-5">
+              <SectionTitle icon={Store} tone="good" title={`In a store right now (${inStore.length})`} note="Checked in and not yet checked out." />
+                <ul className="grid gap-x-6 text-sm sm:grid-cols-2">
                   {inStore.map((visit) => (
-                    <li key={visit.id} className="flex items-center justify-between gap-3 py-2">
+                    <li key={visit.id} className="flex items-center justify-between gap-3 border-t border-border py-2.5">
                       <span className="min-w-0">
                         <span className="block truncate font-semibold">{visit.staff_name}</span>
                         <span className="block truncate text-xs text-muted-foreground">
@@ -220,23 +235,30 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
                     </li>
                   ))}
                 </ul>
-              </CardContent>
-            </Card>
+            </section>
           )}
 
           {visits.length === 0 ? (
-            <p className="rounded-lg border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
-              No store visits recorded for that period.
-            </p>
+            <EmptyState icon={MapPin}>No store visits recorded for that period.</EmptyState>
           ) : (
             [...byPerson.values()].map((rows) => {
               const first = rows[0]
               const flagged = rows.filter((v) => flagsOf.has(v.id)).length
               return (
-                <Card key={first.user_id}>
-                  <CardHeader>
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <CardTitle>{first.staff_name}</CardTitle>
+                <section key={first.user_id} className="surface min-w-0 space-y-3 p-4 sm:p-5">
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-tint text-xs font-bold text-brand">
+                          {first.staff_name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('')}
+                        </span>
+                        <div className="min-w-0">
+                          <h2 className="truncate text-base font-bold">{first.staff_name}</h2>
+                          <p className="text-xs text-muted-foreground">
+                            {rows.length} visit{rows.length === 1 ? '' : 's'}
+                          </p>
+                        </div>
+                      </div>
                       <span className="flex flex-wrap gap-3 text-xs font-semibold">
                         {flagged > 0 && <Badge variant="destructive">{flagged} worth a look</Badge>}
                         <Link href={movementHref(first.user_id, from, to)} className="text-brand hover:underline">
@@ -254,8 +276,8 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
                       stores={new Set(rows.map((r) => r.outlet_id ?? r.store_label)).size}
                       minutes={rows.reduce((total, r) => total + r.minutes, 0)}
                     />
-                  </CardHeader>
-                  <CardContent className="space-y-1.5">
+                  </div>
+                  <div className="space-y-1.5">
                     {rows.map((visit) => (
                       <VisitLine
                         key={visit.id}
@@ -266,8 +288,8 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
                         leftSelfie={visit.departed_selfie_path ? (selfies.get(visit.departed_selfie_path) ?? null) : null}
                       />
                     ))}
-                  </CardContent>
-                </Card>
+                  </div>
+                </section>
               )
             })
           )}

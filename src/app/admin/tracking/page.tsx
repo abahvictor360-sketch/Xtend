@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { Radio } from 'lucide-react'
+import { CalendarDays, CircleAlert, ListOrdered, MapPinOff, Radio, Store, Users, WifiOff } from 'lucide-react'
+import { Chip, PageHeader, SectionTitle, StatCard, StatGrid } from '@/components/admin/page-kit'
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { Alert } from '@/components/ui/alert'
@@ -91,20 +92,21 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
   const quiet = onShift.filter((r) => (r.minutes_since_ping ?? 999) > 15).length
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {until === today && <AutoRefresh seconds={60} />}
 
-      <div>
-        <h1 className="text-2xl font-extrabold tracking-tight">Movement</h1>
-        <p className="text-sm text-muted-foreground">
-          Where staff are and where they have been since clocking in. While someone is on shift, the
-          app sends their position every 5 minutes (with no network, the phone keeps it and sends it
-          when the connection is back); Xtend also records every clock-in, store check-in and
-          check-out. Pick a person to see their journey over up to {MAX_DAYS} days: where they stayed,
-          how they travelled and when nothing was heard. {until === today && 'Updates every minute.'}
-        </p>
-      </div>
+      <PageHeader
+        title="Movement"
+        note={`Where staff are and where they have been since clocking in. Lagos time.${until === today ? ' Updates every minute.' : ''}`}
+        chips={
+          <>
+            <Chip icon={CalendarDays}>{date === until ? longDate(date) : `${longDate(date)} to ${longDate(until)}`}</Chip>
+            {liveView && <Chip icon={Users}>{onShift.length} on shift</Chip>}
+          </>
+        }
+      />
 
+      <section className="surface p-4 sm:p-5">
       <form className="space-y-3" method="get">
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-full space-y-1.5 sm:w-60">
@@ -154,16 +156,46 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
           </div>
         )}
       </form>
+        <details className="mt-3 text-xs text-muted-foreground">
+          <summary className="cursor-pointer font-semibold hover:text-foreground">How movement is recorded</summary>
+          <p className="mt-1.5 leading-relaxed">
+            While someone is on shift, the app sends their position every 5 minutes (with no network, the phone keeps it
+            and sends it when the connection is back); Xtend also records every clock-in, store check-in and check-out.
+            Pick a person to see their journey over up to {MAX_DAYS} days: where they stayed, how they travelled and when
+            nothing was heard.
+          </p>
+        </details>
+      </section>
 
       {problem && <Alert variant="destructive">{problem}</Alert>}
 
       {liveView && (
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Figure label="On shift" value={String(onShift.length)} />
-          <Figure label="In a store" value={String(inStore)} />
-          <Figure label="Away from their store" value={String(away)} warn={away > 0} />
-          <Figure label="Not heard in 15+ min" value={String(quiet)} warn={quiet > 0} />
-        </div>
+        <StatGrid>
+          <StatCard icon={Users} label="On shift" value={String(onShift.length)} tone="good" note="Clocked in and not out" />
+          <StatCard
+            icon={Store}
+            label="In a store"
+            value={String(inStore)}
+            note="Inside their store's area"
+            bar={onShift.length ? (inStore / onShift.length) * 100 : null}
+          />
+          <StatCard
+            icon={MapPinOff}
+            label="Away from their store"
+            value={String(away)}
+            tone={away ? 'bad' : 'muted'}
+            note={away ? 'Outside their store now' : 'Nobody away'}
+            bar={onShift.length ? (away / onShift.length) * 100 : null}
+          />
+          <StatCard
+            icon={WifiOff}
+            label="Not heard in 15+ min"
+            value={String(quiet)}
+            tone={quiet ? 'warn' : 'muted'}
+            note={quiet ? 'No position lately' : 'Everyone heard from'}
+            bar={onShift.length ? (quiet / onShift.length) * 100 : null}
+          />
+        </StatGrid>
       )}
 
       {liveView && (
@@ -172,12 +204,12 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
             <LiveMap rows={onShift} date={today} />
             <Legend />
           </div>
-          <div className="surface p-5">
-            <h2 className="text-lg font-bold">On shift now ({onShift.length})</h2>
-            <p className="mb-3 text-sm text-muted-foreground">
-              Click a photo on the map, or a name here, to see their route today. <strong>Follow live</strong>{' '}
-              shows them moving on the map, a few seconds behind.
-            </p>
+          <div className="surface min-w-0 space-y-3 p-4 sm:p-5">
+            <SectionTitle
+              icon={Users}
+              title={`On shift now (${onShift.length})`}
+              note="Tap a name for their route today; Follow live shows them moving, a few seconds behind."
+            />
             {onShift.length === 0 ? (
               <p className="text-sm text-muted-foreground">Nobody is on shift right now.</p>
             ) : (
@@ -234,7 +266,7 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
 
       {person && trail && summary && trip && (
         <>
-          <div className="flex items-center gap-3">
+          <div className="surface flex flex-wrap items-center gap-3 p-4 sm:p-5">
             {personPhoto ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -264,7 +296,7 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-8">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Figure
               label={days.length === 1 ? 'Clocked in' : 'First clock-in'}
               value={summary.clockedIn ? formatLagos(summary.clockedIn, days.length > 1) : '—'}
@@ -290,11 +322,14 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
           </div>
 
           {(trip.jumps.length > 0 || longSilences.length > 0 || trip.totals.elsewhereMinutes >= 60) && (
-            <Alert variant="destructive">
-              <p className="font-semibold">Worth a look</p>
-              <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">
+            <section className="surface border-l-4 border-l-destructive p-4 sm:p-5">
+              <div className="flex items-center gap-2">
+                <CircleAlert className="h-5 w-5 text-destructive" />
+                <h2 className="text-base font-bold">Worth a look</h2>
+              </div>
+              <ul className="mt-3 grid gap-2 text-sm md:grid-cols-2">
                 {trip.jumps.map((j, i) => (
-                  <li key={`j${i}`}>
+                  <li key={`j${i}`} className="rounded-xl bg-muted/40 px-3 py-2.5">
                     {formatLagos(j.from, days.length > 1)}: moved {metres(j.distanceM)} in{' '}
                     {duration(Math.max(1, (Date.parse(j.to) - Date.parse(j.from)) / 60000))}
                     {j.fromPlace || j.toPlace ? ` (${j.fromPlace ?? 'somewhere'} to ${j.toPlace ?? 'somewhere'})` : ''}, over{' '}
@@ -302,18 +337,18 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
                   </li>
                 ))}
                 {longSilences.map((g, i) => (
-                  <li key={`g${i}`}>
+                  <li key={`g${i}`} className="rounded-xl bg-muted/40 px-3 py-2.5">
                     Nothing heard for {duration(g.minutes)} from {formatLagos(g.from, days.length > 1)}.{' '}
                     <Link
                       href={`/admin/excuses?person=${person.id}&date=${lagosDateString(new Date(g.from))}&from=${formatLagos(g.from, false)}&until=${lagosDateString(new Date(g.to))}&to=${formatLagos(g.to, false)}`}
-                      className="font-semibold underline"
+                      className="font-semibold text-brand hover:underline"
                     >
                       Check an excuse for it
                     </Link>
                   </li>
                 ))}
                 {trip.totals.elsewhereMinutes >= 60 && (
-                  <li>
+                  <li className="rounded-xl bg-muted/40 px-3 py-2.5">
                     {duration(trip.totals.elsewhereMinutes)} spent staying somewhere other than their stores
                     {stops.filter((l) => l.kind === 'stop' && !l.inStore).length
                       ? `: ${[...new Set(stops.filter((l) => l.kind === 'stop' && !l.inStore).map((l) => (l as Extract<Leg, { kind: 'stop' }>).name))].slice(0, 4).join(', ')}`
@@ -322,7 +357,7 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
                   </li>
                 )}
               </ul>
-            </Alert>
+            </section>
           )}
 
           {trail.points.length === 0 ? (
@@ -331,11 +366,10 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
             </Alert>
           ) : (
             <>
-              <div className="surface space-y-3 p-5">
-                <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <h2 className="text-lg font-bold">Day by day</h2>
+              <div className="surface space-y-3 p-4 sm:p-5">
+                <SectionTitle icon={CalendarDays} title="Day by day" note="Where the time went, each day.">
                   <JourneyKey />
-                </div>
+                </SectionTitle>
                 {days.map((d) => (
                   <JourneyStrip key={d} date={d} legs={trip.legs} />
                 ))}
@@ -346,12 +380,14 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
                   <TrailMap trail={trail} name={person.full_name} photo={personPhoto} />
                   <Legend trail />
                 </div>
-                <div className="surface p-5">
-                  <h2 className="text-lg font-bold">Journey</h2>
-                  <p className="mb-3 text-sm text-muted-foreground">
-                    {stops.length} stop{stops.length === 1 ? '' : 's'} from {summary.positions} reading
-                    {summary.positions === 1 ? '' : 's'}. Readings rougher than {ROUGH_M} m are left out.
-                  </p>
+                <div className="surface min-w-0 p-4 sm:p-5">
+                  <div className="mb-3">
+                    <SectionTitle
+                      icon={ListOrdered}
+                      title="Journey"
+                      note={`${stops.length} stop${stops.length === 1 ? '' : 's'} from ${summary.positions} reading${summary.positions === 1 ? '' : 's'}. Readings rougher than ${ROUGH_M} m are left out.`}
+                    />
+                  </div>
                   <ol className="max-h-[520px] space-y-1 overflow-y-auto pr-1 text-sm">
                     {trip.legs.map((l, i) => {
                       const prev = trip.legs[i - 1]
@@ -468,13 +504,12 @@ function LegRow({ leg }: { leg: Leg }) {
   )
 }
 
+/** A compact figure for a person's journey: eight of them, four a row. */
 function Figure({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
   return (
-    <div className="surface p-4">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className={cn('mt-1 text-xl font-extrabold tabular-nums', warn && 'text-destructive')}>
-        {value}
-      </p>
+    <div className={cn('surface min-w-0 border-l-4 p-3.5 sm:p-4', warn ? 'border-l-destructive' : 'border-l-brand/40')}>
+      <p className="truncate text-xs font-semibold text-muted-foreground">{label}</p>
+      <p className={cn('mt-1 text-lg font-extrabold leading-tight tabular-nums', warn && 'text-destructive')}>{value}</p>
     </div>
   )
 }

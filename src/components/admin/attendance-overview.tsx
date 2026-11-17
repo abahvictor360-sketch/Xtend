@@ -3,58 +3,15 @@ import type { LucideIcon } from 'lucide-react'
 import { AlarmClock, CalendarCheck2, CircleAlert, Clock3, LogOut, MapPinOff, Phone, Route, Timer, TrendingUp, UserX } from 'lucide-react'
 import { clock, lateness, percent, type Summary } from '@/lib/attendance-report'
 import { cn } from '@/lib/utils'
+import { StatCard, TONE, type Tone } from '@/components/admin/page-kit'
+
+export { SectionTitle } from '@/components/admin/page-kit'
 
 /**
  * The Attendance page's overview, presentation only: the figures, today's
  * lists, the "worth a look" card and section headings. The page reads the
  * data (through RLS) and passes it in.
  */
-
-type Tone = 'brand' | 'good' | 'warn' | 'bad' | 'muted'
-
-const TONE: Record<Tone, { tile: string; bar: string; value: string }> = {
-  brand: { tile: 'bg-tint text-brand', bar: 'bg-brand', value: '' },
-  good: { tile: 'bg-success/10 text-success', bar: 'bg-success', value: '' },
-  warn: { tile: 'bg-warning/15 text-warning', bar: 'bg-warning', value: 'text-warning' },
-  bad: { tile: 'bg-destructive/10 text-destructive', bar: 'bg-destructive', value: 'text-destructive' },
-  muted: { tile: 'bg-muted text-muted-foreground', bar: 'bg-muted-foreground', value: '' },
-}
-
-function StatCard({
-  icon: Icon,
-  label,
-  value,
-  note,
-  tone = 'brand',
-  bar,
-}: {
-  icon: LucideIcon
-  label: string
-  value: string
-  note?: string
-  tone?: Tone
-  /** 0–100: a thin bar under the figure. */
-  bar?: number | null
-}) {
-  const t = TONE[tone]
-  return (
-    <div className="surface flex flex-col gap-3 p-4 sm:p-5">
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-sm font-semibold text-muted-foreground">{label}</p>
-        <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl', t.tile)}>
-          <Icon className="h-[18px] w-[18px]" />
-        </span>
-      </div>
-      <p className={cn('text-3xl font-extrabold leading-none tabular-nums', t.value)}>{value}</p>
-      {bar != null && (
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted" aria-hidden>
-          <div className={cn('h-full rounded-full', t.bar)} style={{ width: `${Math.max(0, Math.min(100, bar))}%` }} />
-        </div>
-      )}
-      {note && <p className="text-xs leading-snug text-muted-foreground">{note}</p>}
-    </div>
-  )
-}
 
 function MiniStat({ icon: Icon, label, value, warn }: { icon: LucideIcon; label: string; value: string; warn?: boolean }) {
   return (
@@ -250,35 +207,5 @@ export function WorthALook({ items }: { items: WorryItem[] }) {
         ))}
       </ul>
     </section>
-  )
-}
-
-/** A section heading with an icon, a line under it and room on the right. */
-export function SectionTitle({
-  icon: Icon,
-  title,
-  note,
-  children,
-  id,
-}: {
-  icon: LucideIcon
-  title: string
-  note?: string
-  children?: React.ReactNode
-  id?: string
-}) {
-  return (
-    <div id={id} className="flex scroll-mt-4 flex-wrap items-end justify-between gap-2">
-      <div className="flex items-center gap-3">
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-tint text-brand">
-          <Icon className="h-[18px] w-[18px]" />
-        </span>
-        <div>
-          <h2 className="text-lg font-bold leading-tight">{title}</h2>
-          {note && <p className="text-xs text-muted-foreground">{note}</p>}
-        </div>
-      </div>
-      {children}
-    </div>
   )
 }

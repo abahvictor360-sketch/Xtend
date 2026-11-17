@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Crosshair, Plus, Search, Trash2 } from 'lucide-react'
+import { Clock3, Crosshair, MapPin, Plus, Radius, Search, Store, Trash2, Users, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -196,8 +196,22 @@ export function OutletManager({
     <div className="space-y-4">
       {error && <Alert variant="destructive">{error}</Alert>}
 
+      <div className="flex flex-wrap items-center gap-2">
+      {outlets.length > 4 && (
+        <div className="relative min-w-0 flex-1 basis-60">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search outlets by name or address"
+            className="h-11 bg-card pl-9"
+            aria-label="Search outlets"
+          />
+        </div>
+      )}
       {!readOnly && (
         <Button
+          className="h-11"
           onClick={() => {
             setAdding((a) => !a)
             setEditing(null)
@@ -209,19 +223,7 @@ export function OutletManager({
           {adding ? 'Cancel' : 'Add outlet'}
         </Button>
       )}
-
-      {outlets.length > 4 && (
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search outlets by name or address"
-            className="pl-9"
-            aria-label="Search outlets"
-          />
-        </div>
-      )}
+      </div>
 
       {adding && !readOnly && (
         <Card>
@@ -321,14 +323,16 @@ export function OutletManager({
         </p>
       )}
 
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {shown.map((outlet) => (
-          <Card key={outlet.id}>
-            <CardContent className="space-y-2 p-4 pt-4">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{outlet.name}</p>
-                  <p className="truncate text-xs text-muted-foreground">{outlet.address ?? '—'}</p>
+          <div key={outlet.id} className={cn('surface flex min-w-0 flex-col gap-3 p-4', !outlet.is_active && 'opacity-70')}>
+              <div className="flex items-start gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-tint text-brand">
+                  <Store className="h-5 w-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold">{outlet.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">{outlet.address ?? 'No address'}</p>
                 </div>
                 {!outlet.is_active ? (
                   <Badge variant="outline">Inactive</Badge>
@@ -339,17 +343,19 @@ export function OutletManager({
                 )}
               </div>
 
-              <dl className="grid grid-cols-2 gap-1 text-xs text-muted-foreground">
-                <div>Geofence: {outlet.geofence_radius_m} m</div>
-                <div>
-                  Shift: {outlet.shift_start.slice(0, 5)}–{outlet.shift_end.slice(0, 5)}
-                </div>
-                <div>
-                  {outlet.lat !== null && outlet.lng !== null
-                    ? `${outlet.lat.toFixed(5)}, ${outlet.lng.toFixed(5)}`
-                    : 'Pinned from a clock-in, on Places'}
-                </div>
-                <div>Staff: {staffCounts[outlet.id] ?? 0}</div>
+              <dl className="grid grid-cols-2 gap-2 text-xs">
+                <Fact icon={Radius} label="Area" value={`${outlet.geofence_radius_m} m`} />
+                <Fact icon={Clock3} label="Shift" value={`${outlet.shift_start.slice(0, 5)}–${outlet.shift_end.slice(0, 5)}`} />
+                <Fact
+                  icon={MapPin}
+                  label="Location"
+                  value={
+                    outlet.lat !== null && outlet.lng !== null
+                      ? `${outlet.lat.toFixed(5)}, ${outlet.lng.toFixed(5)}`
+                      : 'From a clock-in, on Places'
+                  }
+                />
+                <Fact icon={Users} label="Staff" value={String(staffCounts[outlet.id] ?? 0)} />
               </dl>
 
               {!readOnly && confirmDelete === outlet.id && (
@@ -365,7 +371,7 @@ export function OutletManager({
               )}
 
               {!readOnly && confirmDelete !== outlet.id && (
-                <div className="flex gap-1">
+                <div className="mt-auto flex gap-1 border-t border-border pt-3">
                   <Button size="sm" variant="outline" onClick={() => edit(outlet)}>
                     Edit
                   </Button>
@@ -387,9 +393,20 @@ export function OutletManager({
                   </Button>
                 </div>
               )}
-            </CardContent>
-          </Card>
+          </div>
         ))}
+      </div>
+    </div>
+  )
+}
+
+function Fact({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+  return (
+    <div className="flex min-w-0 items-start gap-2 rounded-xl bg-muted/50 px-2.5 py-2">
+      <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand" />
+      <div className="min-w-0">
+        <dt className="text-[11px] text-muted-foreground">{label}</dt>
+        <dd className="truncate font-semibold">{value}</dd>
       </div>
     </div>
   )

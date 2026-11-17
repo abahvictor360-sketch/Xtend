@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { ArrowRight, Bell, ClipboardList, MapPin, Phone, Users } from 'lucide-react'
+import { ArrowRight, BarChart3, Bell, CalendarDays, MapPin, Phone, Radar, UserX, Users } from 'lucide-react'
+import { Chip, SectionTitle, StatCard, StatGrid } from '@/components/admin/page-kit'
 import { LiveAlertFeed } from '@/components/admin/live-alert-feed'
 import { LiveLocations, type LiveLocation } from '@/components/admin/live-locations'
 import { AttendanceChart, ON_TIME, LATE, type DayCount } from '@/components/admin/overview-charts'
@@ -79,21 +80,18 @@ export function OverviewView({ name, isAdmin, today, week, stats, away, tracked,
   const available = stats.staff_total !== undefined
   const weekTotal = week.reduce((sum, d) => sum + d.onTime + d.late, 0)
   const lowest = [...tracked].sort((a, b) => (a.coverage_pct ?? 0) - (b.coverage_pct ?? 0)).slice(0, 4)
-  const metrics = [
-    { label: 'Clocked in today', value: stats.clocked_in, note: total + ' staff in scope', href: '/admin/attendance', icon: Users },
-    { label: 'On shift now', value: stats.still_on_shift, note: 'View current locations', href: '/admin/tracking', icon: MapPin },
-    { label: 'Not clocked in', value: stats.absent, note: 'Assigned to work today', href: '#not-clocked-in', icon: ClipboardList },
-    { label: 'Open alerts', value: stats.open_alerts, note: 'Review and follow up', href: '/admin/alerts', icon: Bell },
-  ]
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="mb-1 text-xs font-bold uppercase tracking-[0.16em] text-brand">{isAdmin ? 'Company overview' : 'Your team'}</p>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">{greeting()}, {name.split(/\s+/)[0]}</h1>
-          <p className="mt-2 text-sm text-muted-foreground">{day(today, { weekday: 'long', day: 'numeric', month: 'long' })} · Lagos time</p>
+          <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{greeting()}, {name.split(/\s+/)[0]}</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">Today at a glance. Lagos time.</p>
         </div>
-        <Link href="/admin/attendance" className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border bg-card px-4 text-sm font-semibold hover:bg-tint">Attendance <ArrowRight className="h-4 w-4" /></Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Chip icon={CalendarDays}>{day(today, { weekday: 'long', day: 'numeric', month: 'long' })}</Chip>
+          <Chip icon={Users}>{total} staff</Chip>
+        </div>
       </header>
       <section className="rounded-2xl border border-brand/20 bg-tint p-5 sm:p-6" aria-labelledby="priority-heading">
         <div className="flex flex-wrap items-center justify-between gap-4">
@@ -105,21 +103,49 @@ export function OverviewView({ name, isAdmin, today, week, stats, away, tracked,
           <Link href={!available ? '/admin/attendance' : openAlerts ? '/admin/alerts' : missing ? '#not-clocked-in' : '/admin/users'} className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-brand px-5 text-sm font-semibold text-white hover:bg-brand-deep">{!available ? 'Open attendance' : openAlerts ? 'Review alerts' : missing ? 'See staff' : 'View staff'} <ArrowRight className="h-4 w-4" /></Link>
         </div>
       </section>
-      <section aria-label="Today's summary" className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-        {metrics.map(({ label, value, note, href, icon: Icon }) => (
-          <Link key={label} href={href} className="surface group min-w-0 border border-border p-4 transition-colors hover:border-brand/40 sm:p-5">
-            <div className="mb-4 flex items-start justify-between gap-2"><Icon className="h-5 w-5 text-brand" /><ArrowRight className="h-4 w-4 text-muted-foreground group-hover:text-brand" /></div>
-            <p className="text-3xl font-bold tabular-nums tracking-tight">{value ?? '—'}</p>
-            <h2 className="mt-1 text-sm font-semibold">{label}</h2>
-            <p className="mt-1 text-xs text-muted-foreground">{value === undefined ? 'Currently unavailable' : note}</p>
-          </Link>
-        ))}
+      <section aria-label="Today's summary">
+        <StatGrid>
+          <StatCard
+            icon={Users}
+            label="Clocked in today"
+            value={available ? String(stats.clocked_in ?? 0) : '—'}
+            tone="good"
+            note={available ? `of ${total} staff · ${stats.late ?? 0} late` : 'Currently unavailable'}
+            bar={total ? ((stats.clocked_in ?? 0) / total) * 100 : null}
+            href="/admin/attendance"
+          />
+          <StatCard
+            icon={MapPin}
+            label="On shift now"
+            value={available ? String(stats.still_on_shift ?? 0) : '—'}
+            note={`${stats.off_site ?? 0} away from their store`}
+            href="/admin/tracking"
+          />
+          <StatCard
+            icon={UserX}
+            label="Not clocked in"
+            value={available ? String(missing) : '—'}
+            tone={missing ? 'bad' : 'muted'}
+            note={missing ? 'Assigned to work today' : 'Nobody missing'}
+            bar={total ? (missing / total) * 100 : null}
+            href="#not-clocked-in"
+          />
+          <StatCard
+            icon={Bell}
+            label="Open alerts"
+            value={available ? String(openAlerts) : '—'}
+            tone={openAlerts ? 'warn' : 'muted'}
+            note={openAlerts ? 'Review and follow up' : 'All clear'}
+            href="/admin/alerts"
+          />
+        </StatGrid>
       </section>
       <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <section className="surface min-w-0 border border-border p-5 sm:p-6">
-          <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
-            <div><h2 className="text-lg font-bold">Attendance this week</h2><p className="mt-1 text-sm text-muted-foreground">{weekTotal} clock-ins over the last 7 days</p></div>
-            <div className="flex gap-3 text-xs text-muted-foreground"><Legend colour={ON_TIME} label="On time" /><Legend colour={LATE} label="Late" /></div>
+          <div className="mb-6">
+            <SectionTitle icon={BarChart3} title="Attendance this week" note={`${weekTotal} clock-ins over the last 7 days`}>
+              <div className="flex gap-3 text-xs text-muted-foreground"><Legend colour={ON_TIME} label="On time" /><Legend colour={LATE} label="Late" /></div>
+            </SectionTitle>
           </div>
           <AttendanceChart days={week} />
           <div className="mt-5 flex flex-wrap gap-x-6 gap-y-2 border-t border-border pt-4 text-sm"><span><strong>{stats.late ?? '—'}</strong> late today</span><span><strong>{stats.clocked_out ?? '—'}</strong> clocked out</span></div>
@@ -127,10 +153,14 @@ export function OverviewView({ name, isAdmin, today, week, stats, away, tracked,
         <LiveAlertFeed initial={alerts} />
       </div>
       <section id="not-clocked-in" className="surface scroll-mt-40 border border-border p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><h2 className="text-lg font-bold">Attendance follow-up</h2><p className="mt-1 text-sm text-muted-foreground">Assigned today, with no clock-in yet · {away.length} {away.length === 1 ? 'person' : 'people'}</p></div>
+        <SectionTitle
+          icon={UserX}
+          tone={away.length ? 'bad' : 'muted'}
+          title="Attendance follow-up"
+          note={`Assigned today, with no clock-in yet · ${away.length} ${away.length === 1 ? 'person' : 'people'}`}
+        >
           <Link href="/admin/attendance" className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-brand">View attendance <ArrowRight className="h-4 w-4" /></Link>
-        </div>
+        </SectionTitle>
         {away.length === 0 ? <p className="mt-5 rounded-xl bg-muted p-4 text-sm text-muted-foreground">No missing clock-ins in the records returned.</p> : (
           <ul className="mt-4 grid gap-x-8 sm:grid-cols-2 xl:grid-cols-3">
             {away.map(person => <li key={person.user_id} className="flex items-center gap-3 border-t border-border py-4">
@@ -142,7 +172,13 @@ export function OverviewView({ name, isAdmin, today, week, stats, away, tracked,
         )}
       </section>
       <details className="surface border border-border p-5 sm:p-6">
-        <summary className="cursor-pointer py-1 text-base font-bold">Live locations &amp; coverage <span className="ml-2 text-sm font-normal text-muted-foreground">{onShift.length} on the map</span></summary>
+        <summary className="flex cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-tint text-brand"><Radar className="h-[18px] w-[18px]" /></span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-lg font-bold leading-tight">Live locations &amp; coverage</span>
+            <span className="block text-xs text-muted-foreground">{onShift.length} on the map · tap to open</span>
+          </span>
+        </summary>
         <div className="mt-5 space-y-5">
           <LiveLocations rows={onShift} />
           <div><h2 className="font-semibold">Lowest location coverage</h2><p className="mt-1 text-sm text-muted-foreground">Share of shift time located. Open Movement for context.</p></div>

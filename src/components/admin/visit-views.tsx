@@ -418,21 +418,23 @@ export function Coverage({
   )
 }
 
+/** A compact figure: a coloured edge, the number, and a link to the rows behind it. */
 export function Figure({ label, value, note, warn, href }: { label: string; value: string; note?: string; warn?: boolean; href?: string }) {
   const body = (
     <>
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className={cn('mt-1 text-xl font-extrabold tabular-nums', warn && 'text-destructive')}>{value}</p>
+      <p className="truncate text-xs font-semibold text-muted-foreground">{label}</p>
+      <p className={cn('mt-1 text-lg font-extrabold leading-tight tabular-nums', warn && 'text-destructive')}>{value}</p>
       {note && <p className="text-xs text-muted-foreground">{note}</p>}
-      {href && <p className="text-xs font-semibold text-brand">Show them →</p>}
+      {href && <p className="mt-0.5 text-xs font-semibold text-brand">Show them →</p>}
     </>
   )
+  const cls = cn('surface block min-w-0 border-l-4 p-3.5 sm:p-4', warn ? 'border-l-destructive' : 'border-l-brand/40')
   return href ? (
-    <Link href={href} className="surface block p-4 hover:ring-1 hover:ring-brand/40">
+    <Link href={href} className={cn(cls, 'transition-shadow hover:ring-1 hover:ring-brand/40')}>
       {body}
     </Link>
   ) : (
-    <div className="surface p-4">{body}</div>
+    <div className={cls}>{body}</div>
   )
 }
 
