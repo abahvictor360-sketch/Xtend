@@ -767,7 +767,10 @@ export default async function AdminGuidePage() {
             filed), clock-in and clock-out with their status, every visit with arrival and the time between
             stores, the daily report, stock counts and X Metrics sales; the month adds a day-by-day table,
             a per-store table and each day&apos;s details. The daily report keeps a copy of that day&apos;s
-            visits written by the database each time it is saved, so the phone cannot change it.
+            visits written by the database each time it is saved, so the phone cannot change it. A marketer
+            chooses what each report is for: the whole day (one a day) or one store they checked in at (one
+            per store visit); they may file both. Each report in the download says what it is for, and the
+            Attendance day overview lists them all (migration 0088).
           </p>
           <p>
             <Ui>Report documents</Ui>: whoever files the daily report can attach up to five documents

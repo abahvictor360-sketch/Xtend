@@ -6,6 +6,9 @@ import { MAX_REPORT_FILES } from '@/lib/report-files'
 import { isOwnStoragePath } from '@/lib/storage-path'
 
 const schema = z.object({
+  // A report for the whole day, or for one store visit of today (0088).
+  scope: z.enum(['day', 'store']).default('day'),
+  store_visit_id: z.string().guid().nullable().optional(),
   // What the day, sales and stock were like must be said; competitors and
   // issues may be left empty. All of it in words, without links.
   body: writtenText(4000, 10, '"The day"'),
@@ -23,8 +26,9 @@ const schema = z.object({
 })
 
 /**
- * One report per person per day. A second submission updates the existing
- * row; the database refuses the update on any day but the day it was filed.
+ * One whole-day report per person per day, and one report per store visit
+ * (0088). Sending the same one again updates it; the database refuses an
+ * update on any day but the day it was filed.
  */
 export async function POST(request: Request) {
   try {
@@ -55,29 +59,69 @@ export async function POST(request: Request) {
       issues: input.issues,
     }
 
-    const { data: existing } = await supabase
-      .from('reports')
-      .select('id, report_date')
-      .eq('user_id', session.userId)
-      .order('report_date', { ascending: false })
-      .limit(1)
-      .maybeSingle<{ id: string; report_date: string }>()
+    if (input.scope === 'store' && !input.store_visit_id) {
+      return Response.json({ error: 'Pick the store this report is for.' }, { status: 400 })
+    }
 
     const { data: today } = await supabase.rpc('business_date')
-    let reportId = existing && existing.report_date === today ? existing.id : null
+    let lookup = supabase
+      .from('reports')
+      .select('id')
+      .eq('user_id', session.userId)
+      .eq('report_date', today as string)
+      .eq('scope', input.scope)
+    if (input.scope === 'store') lookup = lookup.eq('store_visit_id', input.store_visit_id!)
+    const { data: existing, error: lookupError } = await lookup.limit(1).maybeSingle<{ id: string }>()
+    // Before 0088 runs there is no scope column: one report per day, as
+    // before, whatever was picked.
+    const legacy = Boolean(lookupError && /scope|store_visit_id|42703|PGRST204/.test(`${lookupError.code} ${lookupError.message}`))
+    let reportId = existing?.id ?? null
+    if (legacy) {
+      const { data: old } = await supabase
+        .from('reports')
+        .select('id')
+        .eq('user_id', session.userId)
+        .eq('report_date', today as string)
+        .limit(1)
+        .maybeSingle<{ id: string }>()
+      reportId = old?.id ?? null
+    } else if (lookupError) {
+      return dbErrorResponse(lookupError)
+    }
 
     if (reportId) {
       const { error } = await supabase.from('reports').update(fields).eq('id', reportId)
       if (error) return dbErrorResponse(error)
     } else {
+      const row: Record<string, unknown> = legacy
+        ? { ...fields }
+        : {
+            ...fields,
+            scope: input.scope,
+            store_visit_id: input.scope === 'store' ? input.store_visit_id : null,
+          }
       const { data, error } = await supabase
         .from('reports')
-        .insert(fields)
+        .insert(row)
         .select('id')
         .single<{ id: string }>()
       if (error) {
         if (error.code === '23505') {
-          return Response.json({ error: 'Today’s report is already filed.' }, { status: 409 })
+          return Response.json(
+            {
+              error:
+                input.scope === 'store'
+                  ? 'The report for this store is already filed. Open it to edit.'
+                  : 'Today’s whole-day report is already filed. Open it to edit.',
+            },
+            { status: 409 },
+          )
+        }
+        if (error.message.includes('Pick a store')) {
+          return Response.json(
+            { error: 'Pick a store you checked in at today.', code: 'store_visit' },
+            { status: 400 },
+          )
         }
         return dbErrorResponse(error)
       }
@@ -88,7 +132,7 @@ export async function POST(request: Request) {
     // on today's report (a retry whose first answer was lost) is answered
     // with its row, never added twice; five at most; theirs, just uploaded.
     for (const [index, path] of [...new Set(input.photo_paths)].entries()) {
-      const { error } = await supabase.rpc('add_report_photo', { p_path: path })
+      const { error } = await supabase.rpc('add_report_photo', legacy ? { p_path: path } : { p_path: path, p_report: reportId })
       if (error) {
         return Response.json(
           { error: `Your report is saved, but photo ${index + 1} was not added: ${dbErrorMessage(error)}` },
@@ -98,7 +142,10 @@ export async function POST(request: Request) {
     }
 
     for (const file of input.files) {
-      const { error } = await supabase.rpc('add_report_file', { p_path: file.path, p_name: file.name })
+      const { error } = await supabase.rpc(
+        'add_report_file',
+        legacy ? { p_path: file.path, p_name: file.name } : { p_path: file.path, p_name: file.name, p_report: reportId },
+      )
       if (error) {
         return Response.json(
           { error: `Your report is saved, but ${file.name || 'a document'} was not attached: ${dbErrorMessage(error)}` },

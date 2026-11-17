@@ -1807,11 +1807,15 @@ Office downloads are audited.
 - File: `src/app/api/reports/route.ts`
 - Who: REPORTING_ROLES
 
-One report per person per day. A second submission updates the existing
-row; the database refuses the update on any day but the day it was filed.
+One whole-day report per person per day, and one report per store visit
+(0088). Sending the same one again updates it; the database refuses an
+update on any day but the day it was filed.
 
 ```ts
 const schema = z.object({
+  // A report for the whole day, or for one store visit of today (0088).
+  scope: z.enum(['day', 'store']).default('day'),
+  store_visit_id: z.string().guid().nullable().optional(),
   // What the day, sales and stock were like must be said; competitors and
   // issues may be left empty. All of it in words, without links.
   body: writtenText(4000, 10, '"The day"'),

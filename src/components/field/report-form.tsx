@@ -97,11 +97,16 @@ export function ReportForm({
   existing,
   photosAlready,
   files = [],
+  scope = 'day',
+  storeVisitId = null,
 }: {
   existing: ReportFields | null
   photosAlready: number
-  /** Documents already on today's report (0064). */
+  /** Documents already on this report (0064). */
   files?: SavedReportFile[]
+  /** The whole day, or one store visit of today (0088). */
+  scope?: 'day' | 'store'
+  storeVisitId?: string | null
 }) {
   const router = useRouter()
   const [fields, setFields] = useState<ReportFields>(existing ?? EMPTY)
@@ -176,6 +181,8 @@ export function ReportForm({
       }
       const result = await submitOrQueue({
         kind: 'report',
+        scope,
+        store_visit_id: scope === 'store' ? storeVisitId : null,
         ...fields,
         photos: photos.map((p) => ({ blob: p.blob, client_id: p.id })),
         files: docs.map((d) => ({ blob: d.blob, name: d.name, mime: d.mime, client_id: d.key })),
@@ -316,7 +323,7 @@ export function ReportForm({
       </Button>
 
       <p className="pb-2 text-center text-[11px] text-muted-foreground">
-        One report per day. Editable until midnight, not after.
+        One report for the whole day and one for each store you checked in at. Editable until midnight, not after.
       </p>
     </form>
   )

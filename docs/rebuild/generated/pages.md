@@ -466,7 +466,12 @@ Metrics. Both work offline and are sent when there is signal.
 
 - File: `src/app/field/report/page.tsx`
 - Who: public / own check
-- Components: `field/report-form`, `field/report-visits`, `field/report-files`, `field/screen`
+- Components: `field/report-form`, `field/report-visits`, `field/report-files`, `field/screen`, `ui/badge`
+
+The daily report. A marketer first says what it is for (0088): the whole
+day, or one store they checked in at today. Each has its own report.
+
+On screen: Write one for a store you checked in at, or one for your whole day. You can do both.
 
 ## `/field/support` — Message support — Xtend
 

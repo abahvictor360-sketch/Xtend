@@ -702,7 +702,7 @@ Pure on purpose (no Supabase, no server-only), so
 scripts/check-marketer-reports.ts can build one from made-up rows.
 Every date and time is Africa/Lagos.
 
-Exports: `ReportKind`, `ReportPerson`, `SourceClock`, `SourceVisit`, `SourceReport`, `SourceReportFile`, `SourceCount`, `SourceSale`, `ReportSource`, `VisitLine`, `ClockLine`, `ReportField`, `DayDetail`, `StoreLine`, `Tile`, `MarketerReport`, `ARRIVAL_LABEL`, `arrivalText`, `REPORT_FIELDS`, `minutesText`, `shortDate`, `monthName`, `isMonth`, `lastDayOfMonth`, `ReportRequest`, `parseReportRequest`, `reportQuery`, `visitLines`, `reportFieldsWithDocuments`, `visitTotals`, `buildDay`, `storeLines`, `buildMarketerReport`, `SnapshotVisit`, `snapshotText`
+Exports: `ReportKind`, `ReportPerson`, `SourceClock`, `SourceVisit`, `SourceReport`, `SourceReportFile`, `SourceCount`, `SourceSale`, `ReportSource`, `VisitLine`, `ClockLine`, `ReportField`, `DayDetail`, `StoreLine`, `Tile`, `MarketerReport`, `ARRIVAL_LABEL`, `arrivalText`, `REPORT_FIELDS`, `minutesText`, `shortDate`, `monthName`, `isMonth`, `lastDayOfMonth`, `ReportRequest`, `parseReportRequest`, `reportQuery`, `visitLines`, `DayReport`, `dayReportFields`, `dayReportNote`, `reportFieldsWithDocuments`, `visitTotals`, `buildDay`, `storeLines`, `buildMarketerReport`, `SnapshotVisit`, `snapshotText`
 
 ## `src/lib/messages.ts`
 

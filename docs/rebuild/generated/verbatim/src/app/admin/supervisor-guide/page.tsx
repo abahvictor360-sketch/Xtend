@@ -301,8 +301,9 @@ export default async function SupervisorGuidePage() {
           <p>
             <Ui>Marketer reports</Ui> (Attendance menu) lists your team. Pick <Ui>A day</Ui> or{' '}
             <Ui>A month</Ui> and download each person&apos;s report as PDF, Word or Excel: clock-in and
-            clock-out, every store visit with the time spent there, their daily report, stock counts and
-            sales. From <Ui>Store visits</Ui> → <Ui>By person</Ui>, <Ui>Day report</Ui> or{' '}
+            clock-out, every store visit with the time spent there, their reports, stock counts and
+            sales. A marketer can write a report for each store they checked in at, one for the whole
+            day, or both; each report says which it is for. From <Ui>Store visits</Ui> → <Ui>By person</Ui>, <Ui>Day report</Ui> or{' '}
             <Ui>Month report</Ui> opens the same thing.
           </p>
           <p>

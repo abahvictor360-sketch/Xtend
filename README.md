@@ -109,6 +109,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0085_late_tracking_points.sql        # movement saved with no signal is kept when it arrives after the clock-out
    supabase/migrations/0086_close_stale_visit_on_check_in.sql # a store check-in forgotten on an earlier day never blocks the next one
    supabase/migrations/0087_clock_in_checks_in.sql             # a marketer clocking in at one of their stores is checked in there too
+   supabase/migrations/0088_report_per_store_or_day.sql        # a marketer's report is for one store or for the whole day
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

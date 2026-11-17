@@ -169,13 +169,14 @@ export async function marketerReportXlsx(report: MarketerReport): Promise<Uint8A
     'Daily reports',
     [
       { header: 'Date', width: 12 },
+      { header: 'Report for', width: 24, wrap: true },
       { header: 'Filed at', width: 9 },
       ...['How the day went', 'Sales', 'Stock status', 'Competitor activity', 'Issues for the office'].map((h) => ({ header: h, width: 40, wrap: true })),
       { header: 'Documents attached', width: 40, wrap: true },
     ],
-    report.days
-      .filter((d) => d.report)
-      .map((d) => [d.date, d.report!.filedAt, ...d.report!.fields.map((f) => (f.empty ? '' : f.text)), d.report!.documents.join('; ')]),
+    report.days.flatMap((d) =>
+      d.reports.map((r) => [d.date, r.title, r.filedAt, ...r.fields.map((f) => (f.empty ? '' : f.text)), r.documents.join('; ')]),
+    ),
   )
 
   const stock = report.days.flatMap((d) => [

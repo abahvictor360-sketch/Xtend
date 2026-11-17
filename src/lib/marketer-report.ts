@@ -60,6 +60,10 @@ export interface SourceVisit {
 }
 
 export interface SourceReport {
+  /** Since 0088: which report, and what it is for. */
+  id?: string
+  scope?: 'day' | 'store' | null
+  store_label?: string | null
   report_date: string
   created_at: string
   updated_at: string | null
@@ -72,6 +76,8 @@ export interface SourceReport {
 
 /** A document attached to a daily report (0064). */
 export interface SourceReportFile {
+  /** The report it is on (0088: a day can have several). */
+  report_id?: string
   report_date: string
   name: string
   mime: string | null
@@ -164,7 +170,10 @@ export interface DayDetail {
   stores: number
   minutesInStores: number
   /** documents: "Price survey.pdf (PDF, 1.2 MB)" for each attached (0064). */
-  report: { filedAt: string; fields: ReportField[]; documents: string[] } | null
+  /** The first report of the day (the whole-day one if filed), for yes/no. */
+  report: DayReport | null
+  /** Every report of the day (0088): the whole day first, then each store. */
+  reports: DayReport[]
   counts: { store: string; product: string; inStore: string; sold: string }[]
   sales: { store: string; product: string; units: number }[]
   /** One plain sentence about the day. */
@@ -378,6 +387,36 @@ export function visitLines(visits: SourceVisit[], today: string): VisitLine[] {
  * The report's fields as the PDF and Word files print them: the five
  * sections, then "Documents attached" when there are any.
  */
+/** One report of a day: the whole day, or one store (0088). */
+export interface DayReport {
+  /** "The whole day" or the store's name. */
+  title: string
+  store: boolean
+  filedAt: string
+  fields: ReportField[]
+  documents: string[]
+}
+
+/**
+ * Every report of a day as one list of fields for the downloads. A day with
+ * just its whole-day report reads as before; otherwise each report starts
+ * with what it is for.
+ */
+export function dayReportFields(d: { reports: DayReport[] }): ReportField[] {
+  const plain = d.reports.length === 1 && !d.reports[0].store
+  return d.reports.flatMap((r) => [
+    ...(plain ? [] : [{ label: 'Report for', text: `${r.title} · filed at ${r.filedAt}`, empty: false }]),
+    ...reportFieldsWithDocuments(r),
+  ])
+}
+
+/** The note beside the "Daily report" heading. */
+export function dayReportNote(d: { reports: DayReport[] }): string | undefined {
+  if (!d.reports.length) return undefined
+  if (d.reports.length === 1) return `Filed at ${d.reports[0].filedAt}`
+  return `${d.reports.length} reports`
+}
+
 export function reportFieldsWithDocuments(report: { fields: ReportField[]; documents: string[] }): ReportField[] {
   if (!report.documents.length) return report.fields
   return [...report.fields, { label: 'Documents attached', text: report.documents.join('; '), empty: false }]
@@ -443,7 +482,23 @@ export function buildDay(
   const visits = src.visits.filter((v) => v.visit_date === date)
   const lines = visitLines(visits, src.today)
   const totals = visitTotals(visits)
-  const report = src.reports.find((r) => r.report_date === date) ?? null
+  // The whole-day report first, then each store's in the order filed (0088).
+  const dayRows = src.reports
+    .filter((r) => r.report_date === date)
+    .sort((a, b) => Number(a.scope === 'store') - Number(b.scope === 'store') || a.created_at.localeCompare(b.created_at))
+  const dayFiles = (src.files ?? []).filter((f) => f.report_date === date)
+  const reports: DayReport[] = dayRows.map((r) => ({
+    title: r.scope === 'store' ? (r.store_label ?? 'A store') : 'The whole day',
+    store: r.scope === 'store',
+    filedAt: time(r.updated_at && r.updated_at > r.created_at ? r.updated_at : r.created_at),
+    fields: REPORT_FIELDS.map((f) => {
+      const text = String(r[f.key] ?? '').trim()
+      return { label: f.label, text: text || 'Nothing reported.', empty: !text }
+    }),
+    // Files carry their report since 0088; before, a day had one report.
+    documents: dayFiles.filter((f) => !f.report_id || !r.id || f.report_id === r.id).map(reportFileLine),
+  }))
+  const report = reports[0] ?? null
   const late = Boolean(firstIn?.is_late)
   const missingOut = Boolean(firstIn && !lastOut && date < src.today)
 
@@ -461,16 +516,8 @@ export function buildDay(
     visits: lines,
     stores: totals.stores,
     minutesInStores: totals.minutes,
-    report: report
-      ? {
-          filedAt: time(report.updated_at && report.updated_at > report.created_at ? report.updated_at : report.created_at),
-          fields: REPORT_FIELDS.map((f) => {
-            const text = String(report[f.key] ?? '').trim()
-            return { label: f.label, text: text || 'Nothing reported.', empty: !text }
-          }),
-          documents: (src.files ?? []).filter((f) => f.report_date === date).map(reportFileLine),
-        }
-      : null,
+    report,
+    reports,
     counts: src.counts
       .filter((c) => c.count_date === date)
       .map((c) => ({

@@ -684,6 +684,9 @@ Policies:
 | created_at | timestamp with time zone(timestamptz) |  | now() |
 | updated_at | timestamp with time zone(timestamptz) |  | now() |
 | store_visits | jsonb(jsonb) |  | '[]'::jsonb |
+| scope | text(text) |  | 'day'::text |
+| store_visit_id | uuid(uuid) | yes |  |
+| store_label | text(text) | yes |  |
 
 Policies:
 - `reports_admin` ALL to public: using `is_admin()`; check `is_admin()`
@@ -1340,8 +1343,10 @@ Policies:
 - `absentees_today()` → TABLE(user_id uuid, full_name text, phone text, outlet_name text) · definer · 0059_schedules_leave.sql
 - `activity_feed(p_from date, p_to date, p_user uuid, p_kinds text[], p_limit integer)` → TABLE(at timestamp with time zone, user_id uuid, full_name text, role text, kind text, label text, detail jsonb, ip text, platform text, device text, user_agent text) · definer · 0062_user_activity.sql
 - `activity_platform(p_ua text)` → text · 0062_user_activity.sql
-- `add_report_file(p_path text, p_name text)` → uuid · definer · 0065_report_files_offline.sql
-- `add_report_photo(p_path text)` → uuid · definer · 0067_report_photos_offline.sql
+- `add_report_file(p_path text, p_name text)` → uuid · definer · 0088_report_per_store_or_day.sql
+- `add_report_file(p_path text, p_name text, p_report uuid)` → uuid · definer · 0088_report_per_store_or_day.sql
+- `add_report_photo(p_path text)` → uuid · definer · 0088_report_per_store_or_day.sql
+- `add_report_photo(p_path text, p_report uuid)` → uuid · definer · 0088_report_per_store_or_day.sql
 - `address_at(p_lat double precision, p_lng double precision)` → text · definer · 0068_place_lookups.sql
 - `admin_overview()` → jsonb · definer · 0059_schedules_leave.sql
 - `alert_watchers(p_user uuid)` → TABLE(user_id uuid, full_name text, role user_role) · definer · 0036_supervisor_alerts.sql
@@ -1553,8 +1558,8 @@ Policies:
 - `remove_schedule_override(p_id uuid)` → void · definer · 0059_schedules_leave.sql
 - `reopen_support_thread(p_thread uuid)` → void · definer · 0053_support_notifications.sql
 - `report_app_install(p_platform text, p_app_version text, p_app_build integer, p_web_build text)` → void · definer · 0057_app_updates.sql
-- `report_capture_visits()` → trigger · definer · 0060_marketer_visits_reports.sql
-- `report_enforce()` → trigger · definer · 0005_marketer_role.sql
+- `report_capture_visits()` → trigger · definer · 0088_report_per_store_or_day.sql
+- `report_enforce()` → trigger · definer · 0088_report_per_store_or_day.sql
 - `report_file_attached(p_name text)` → boolean · definer · 0064_count_sheets_any_time_report_files.sql
 - `report_file_limit()` → trigger · definer · 0064_count_sheets_any_time_report_files.sql
 - `report_file_mime_ok(p_mime text)` → boolean · 0064_count_sheets_any_time_report_files.sql
@@ -1564,6 +1569,7 @@ Policies:
 - `report_photo_limit()` → trigger · definer · 0002_logic.sql
 - `report_photo_orphans(p_hours integer, p_limit integer)` → TABLE(path text) · definer · 0067_report_photos_offline.sql
 - `report_photo_orphans_before(p_before timestamp with time zone)` → TABLE(path text, created_at timestamp with time zone) · definer · 0067_report_photos_offline.sql
+- `report_visit_snapshot(p_visit uuid)` → jsonb · definer · 0088_report_per_store_or_day.sql
 - `report_visits_snapshot(p_user uuid, p_date date)` → jsonb · definer · 0060_marketer_visits_reports.sql
 - `request_phone_check(p_user uuid)` → uuid · definer · 0026_phone_evidence.sql
 - `request_store_count(p_user_ids uuid[], p_due_date date, p_note text)` → uuid · definer · 0046_role_store_counts.sql

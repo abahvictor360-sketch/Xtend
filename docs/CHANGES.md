@@ -25,7 +25,8 @@ the live database, so it cannot tell which of these are already done.)
      0085 in one file);
    - `supabase/migrations/0084_app_only.sql`;
    - `supabase/migrations/0086_close_stale_visit_on_check_in.sql`;
-   - `supabase/migrations/0087_clock_in_checks_in.sql`.
+   - `supabase/migrations/0087_clock_in_checks_in.sql`;
+   - `supabase/migrations/0088_report_per_store_or_day.sql`.
 4. **Clock-out reminder fix (0069)**, if never pasted:
    ```sql
    alter table public.clock_out_reminders drop constraint if exists clock_out_reminders_stage_check;
@@ -45,6 +46,23 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-17
+
+### A report for one store, or for the whole day (migration 0088)
+- **What was done:** when a marketer taps **Report**, Xtend first asks
+  "What is this report for?": **The whole day**, or one of the stores they
+  checked in at today. Each choice shows **Filed · edit** or **Not yet**.
+  They can write one report for each store and one for the whole day. A
+  store report shows just that store's visit above the form; the whole-day
+  report shows all of today's visits. Photos and documents go on the report
+  they were added to.
+- **Impact:** the office can see what happened at each store, not only a
+  summary of the day. In **Marketer reports** (PDF, Word, Excel) and in the
+  Attendance overview of a person's day, every report is listed with what it
+  is for ("Report for Shoprite Ikeja · filed at 16:30"). Any report filed
+  today, store or whole day, counts as "report filed". Reports filed before
+  this change are whole-day reports. Until 0088 is run, the app keeps
+  working the old way (one report a day, no choice).
+- **What you need to do:** deploy, then run 0088.
 
 ### Clocking in at your store checks you in (migration 0087)
 - **What was done:** when a marketer clocks in standing inside one of their
