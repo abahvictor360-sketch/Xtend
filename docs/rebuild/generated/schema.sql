@@ -3836,37 +3836,6 @@ CREATE TABLE public.outlets (
 
 
 --
--- Name: my_outlets(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.my_outlets() RETURNS SETOF public.outlets
-    LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-  select o.* from public.outlets o
-  where o.id in (select outlet_id from public.outlets_for_user(auth.uid()))
-  order by o.name;
-$$;
-
-
---
--- Name: my_place_due(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.my_place_due() RETURNS TABLE(id uuid, lat double precision, lng double precision, source_kind text, created_at timestamp with time zone)
-    LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-  select d.id, d.lat, d.lng, d.source_kind, d.created_at
-  from public.place_naming_due d
-  where d.user_id = auth.uid() and d.due_date = public.business_date()
-    and d.named_at is null and d.dismissed_at is null
-  order by d.created_at
-  limit 1;
-$$;
-
-
---
 -- Name: profiles; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3888,20 +3857,6 @@ CREATE TABLE public.profiles (
     staff_role_id uuid,
     app_only boolean DEFAULT false NOT NULL
 );
-
-
---
--- Name: my_staff(); Type: FUNCTION; Schema: public; Owner: -
---
-
-CREATE FUNCTION public.my_staff() RETURNS SETOF public.profiles
-    LANGUAGE sql STABLE SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-  select p.* from public.profiles p
-  where public.is_admin() or public.supervises_user(p.id) or public.hr_sees(p.id) or p.id = auth.uid()
-  order by p.full_name;
-$$;
 
 
 --
@@ -3997,6 +3952,65 @@ CREATE VIEW public.store_visit_detail WITH (security_invoker='true') AS
    FROM ((public.store_visits v
      JOIN public.profiles p ON ((p.id = v.user_id)))
      LEFT JOIN public.outlets o ON ((o.id = v.outlet_id)));
+
+
+--
+-- Name: my_open_store_visits(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_open_store_visits() RETURNS SETOF public.store_visit_detail
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select * from public.store_visit_detail
+  where user_id = auth.uid() and status = 'open'
+  order by arrived_at desc;
+$$;
+
+
+--
+-- Name: my_outlets(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_outlets() RETURNS SETOF public.outlets
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select o.* from public.outlets o
+  where o.id in (select outlet_id from public.outlets_for_user(auth.uid()))
+  order by o.name;
+$$;
+
+
+--
+-- Name: my_place_due(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_place_due() RETURNS TABLE(id uuid, lat double precision, lng double precision, source_kind text, created_at timestamp with time zone)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select d.id, d.lat, d.lng, d.source_kind, d.created_at
+  from public.place_naming_due d
+  where d.user_id = auth.uid() and d.due_date = public.business_date()
+    and d.named_at is null and d.dismissed_at is null
+  order by d.created_at
+  limit 1;
+$$;
+
+
+--
+-- Name: my_staff(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_staff() RETURNS SETOF public.profiles
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select p.* from public.profiles p
+  where public.is_admin() or public.supervises_user(p.id) or public.hr_sees(p.id) or p.id = auth.uid()
+  order by p.full_name;
+$$;
 
 
 --
@@ -15921,6 +15935,15 @@ GRANT ALL ON FUNCTION public.my_notifications(p_limit integer) TO service_role;
 REVOKE ALL ON FUNCTION public.my_open_count_request() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.my_open_count_request() TO authenticated;
 GRANT ALL ON FUNCTION public.my_open_count_request() TO service_role;
+
+
+--
+-- Name: FUNCTION my_open_store_visits(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.my_open_store_visits() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.my_open_store_visits() TO authenticated;
+GRANT ALL ON FUNCTION public.my_open_store_visits() TO service_role;
 
 
 --

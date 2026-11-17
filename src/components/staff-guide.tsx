@@ -153,7 +153,8 @@ export function StaffGuide() {
             </>,
             <>
               When you leave, tap <Ui>Check out</Ui> before you go to the next store. You can
-              only be checked in at one store at a time.
+              only be checked in at one store at a time. If you forgot to check out of a store,
+              Home shows it with a <Ui>Check out</Ui> button: check out, then check in again.
             </>,
             <>
               See <Ui>No stores are allocated to you yet</Ui> or{' '}

@@ -99,8 +99,19 @@ export async function POST(request: Request) {
 
     if (error) {
       if (error.code === '23505') {
+        // Hand the open visit back, so the phone shows its Check out button
+        // (0086). Missing function: the plain answer.
+        const { data: open } = await supabase.rpc('my_open_store_visits')
+        const visit = ((open ?? []) as { store_label?: string | null; outlet_name?: string | null }[])[0] ?? null
+        const where = visit?.store_label ?? visit?.outlet_name
         return Response.json(
-          { error: 'You are already checked in to a store. Check out of it first.' },
+          {
+            error: where
+              ? `You are still checked in at ${where}. Check out of it below, then check in again.`
+              : 'You are already checked in to a store. Check out of it first.',
+            code: 'visit_open',
+            visit,
+          },
           { status: 409 },
         )
       }

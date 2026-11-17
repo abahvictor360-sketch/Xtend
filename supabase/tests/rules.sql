@@ -507,6 +507,10 @@ begin
   -- (Rolled back: the rest of the day's tests expect the open mall visit.)
   begin
     update public.store_visits set visit_date = public.business_date() - 1 where id = visit_id;
+    perform assert(
+      not exists (select 1 from public.my_store_visits() where id = visit_id)
+      and (select id from public.my_open_store_visits()) = visit_id,
+      'stale 0086: Home''s today list misses yesterday''s open visit, my_open_store_visits finds it');
     insert into public.store_visits
       (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
     values (kiosk_id, 9.0765, 7.3986, 12, now());

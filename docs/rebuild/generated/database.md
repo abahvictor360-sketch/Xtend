@@ -1472,6 +1472,7 @@ Policies:
 - `my_mfa_required()` → boolean · definer · 0080_zero_trust.sql
 - `my_notifications(p_limit integer)` → TABLE(id uuid, title text, body text, url text, sent_at timestamp with time zone, sender_name text, read_at timestamp with time zone) · definer · 0006_push_notifications.sql
 - `my_open_count_request()` → TABLE(id uuid, due_date date, note text, requested_by_name text) · definer · 0020_count_requests.sql
+- `my_open_store_visits()` → SETOF store_visit_detail · definer · 0086_close_stale_visit_on_check_in.sql
 - `my_outlets()` → SETOF outlets · definer · 0011_store_allocation.sql
 - `my_place_due()` → TABLE(id uuid, lat double precision, lng double precision, source_kind text, created_at timestamp with time zone) · definer · 0045_mandatory_place_naming.sql
 - `my_staff()` → SETOF profiles · definer · 0072_hr_role.sql

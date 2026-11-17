@@ -2094,5 +2094,7 @@ const schema = z.object({
   client_captured_at: z.string().datetime({ offset: true }),
 })
 ```
+
+- Database functions: `my_open_store_visits`
 - Tables and views: `attendance`, `store_visits`, `store_visit_detail`
 

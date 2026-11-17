@@ -392,7 +392,10 @@ The active item has a white background; all labels remain visible:
 
 Loads `my_day()` (DayState: date, can_file_report, profile, outlet with
 lat/lng/radius/shift times, opening, closing, report_filed),
-`my_store_visits()`, `my_visit_stores()` (the stores allocated to them for
+`my_store_visits()` plus `my_open_store_visits()` (0086: the open visit
+from any day, added when today's list does not have it, so Check out
+always shows; an earlier-day one reads "Checked in <date time> and never
+checked out"), `my_visit_stores()` (the stores allocated to them for
 the picker: id, name, address, lat, lng, geofence_radius_m, by name; **none**
 when nothing is allocated, migration 060), `can_visit_stores()`, count
 status, the user's avatar signed URL (1 hour), and
@@ -1183,8 +1186,13 @@ over 90 s); each check-out reads one at the tap. `scripts/check-location-require
 guards all of this.
 
 - Header "Store visits" with "<n> done today".
-- One open visit at a time (the database refuses a second: 409 "You are
-  already checked in to a store. Check out of it first.").
+- One open visit at a time (the database refuses a second: 409, code
+  `visit_open`, "You are still checked in at <store>. Check out of it
+  below, then check in again." with `visit` = the open one from
+  `my_open_store_visits()`; the phone then shows that visit's Check out
+  card at once. Without a store name, "You are already checked in to a
+  store. Check out of it first."). A visit left open on an earlier day is
+  closed as abandoned by the next check-in (0086).
 - The store list is **the person's own stores** (`my_visit_stores()`,
   migration 060: their allocated stores plus their home store, only once
   they have at least one allocation; otherwise empty), sorted nearest first
