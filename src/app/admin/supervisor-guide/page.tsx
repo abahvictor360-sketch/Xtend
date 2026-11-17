@@ -122,7 +122,7 @@ export default async function SupervisorGuidePage() {
           </Tip>
         </GuideSection>
 
-        <GuideSection topic={T.overview} intro="The top of the menu. On a phone, tap the page name at the top to open navigation. Tap outside it or press Escape to close it.">
+        <GuideSection topic={T.overview} intro="The top of the menu. Type in Find a page to jump to any page, and tap a group's name to fold it away. On a phone, tap the page name at the top to open navigation. Tap outside it or press Escape to close it.">
           <p>Start with <Ui>Start here</Ui> on Overview, then tap a summary card to open its page. Attendance follow-up lists missing clock-ins. Expand <Ui>Live locations &amp; coverage</Ui> for details. On Alerts, expand <Ui>Filters &amp; downloads</Ui> to narrow results; notification settings are at the bottom.</p>
           <p>
             <Ui>Overview</Ui> shows your team today: clocked in, late, not in their store, not in yet, and
@@ -365,7 +365,7 @@ export default async function SupervisorGuidePage() {
                 q: 'Can I protect my account with a code?',
                 a: (
                   <>
-                    Yes. Open <Ui>Two-step sign-in</Ui> in the menu (or go to <Ui>/mfa/setup</Ui>), scan the QR
+                    Yes. Tap your name at the bottom of the menu, then <Ui>Two-step sign-in</Ui> (or go to <Ui>/mfa/setup</Ui>), scan the QR
                     code with Google or Microsoft Authenticator and type the 6-digit code. After that Xtend asks
                     for a code from the app each time you sign in. Lost your phone? Ask an admin to reset it.
                   </>
@@ -375,7 +375,7 @@ export default async function SupervisorGuidePage() {
                 q: 'Can I sign in with my fingerprint?',
                 a: (
                   <>
-                    Yes. Open <Ui>Fingerprint and passkeys</Ui> in the menu: in the phone app, turn on
+                    Yes. Tap your name at the bottom of the menu, then <Ui>Fingerprint and passkeys</Ui>: in the phone app, turn on
                     fingerprint sign-in; in a browser, add a passkey. Your team can do the same from{' '}
                     <Ui>You</Ui> in their app. If someone loses their phone, <Ui>Reset password</Ui> on Staff
                     switches their fingerprint sign-in off.

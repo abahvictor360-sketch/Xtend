@@ -55,6 +55,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       testMode={testMode}
       isAdmin={session.profile.role === 'admin'}
       hr={hr}
+      badges={
+        hr ? {} : { '/admin/alerts': location ?? null, '/admin/integrity': flags ?? null }
+      }
     >
       <AdminLocation />
       <ActivityPing />

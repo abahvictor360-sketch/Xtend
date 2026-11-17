@@ -99,7 +99,8 @@ export default async function AdminGuidePage() {
               <Ui>Zero trust</Ui> (0080): Xtend checks the person on every request, wherever they are.
               Admins and HR enter a 6-digit code from an authenticator app (Google or Microsoft
               Authenticator) after their password; the first time, Xtend shows a QR code to scan.
-              Supervisors can turn it on under <Ui>Two-step sign-in</Ui> in the menu (or open{' '}
+              Supervisors can turn it on under <Ui>Two-step sign-in</Ui> (tap their name at the bottom of the
+              menu, or open{' '}
               <Ui>/mfa/setup</Ui>); field staff never see it. Without the code the database gives no admin or
               HR power, even with the right password. An office sign-in lasts 12 hours at most and ends
               after an hour with nothing done. Changing someone&apos;s role or email, deleting an account,
@@ -260,7 +261,7 @@ export default async function AdminGuidePage() {
           </Tip>
         </GuideSection>
 
-        <GuideSection topic={T.overview} intro="The top of the menu. On a phone, tap the page name at the top to open navigation. Tap outside it or press Escape to close it.">
+        <GuideSection topic={T.overview} intro="The top of the menu. Type in Find a page to jump to any page, and tap a group's name to fold it away. On a phone, tap the page name at the top to open navigation. Tap outside it or press Escape to close it.">
           <p>Start with <Ui>Start here</Ui> on Overview, then tap a summary card to open its page. Attendance follow-up lists missing clock-ins. Expand <Ui>Live locations &amp; coverage</Ui> for details. On Alerts, expand <Ui>Filters &amp; downloads</Ui> to narrow results; notification settings are at the bottom.</p>
           <p>
             <Ui>Overview</Ui> is the first page each day: the week&apos;s clock-ins (point at a day for its
