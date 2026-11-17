@@ -245,7 +245,13 @@ function TodayList({
             return (
               <li key={r.key} className="flex items-center gap-3 py-2">
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate font-semibold">{p.name}</span>
+                  {/* Their day, where the office can fix a clock-in that did not work (0090). */}
+                  <Link
+                    href={`/admin/attendance/day?person=${r.userId}&date=${today}`}
+                    className="block truncate font-semibold text-brand hover:underline"
+                  >
+                    {p.name}
+                  </Link>
                   <span className="block truncate text-xs text-muted-foreground">
                     {line(r, p)}
                     {p.teamName ? ` · ${p.teamName}’s team` : ''}

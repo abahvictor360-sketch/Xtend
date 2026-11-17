@@ -25,7 +25,7 @@ Conventions used below:
 
 ### Dashboard layout revision — 23 October 2026
 
-This layout supersedes the previous overview arrangement described below. The frame has a 240px sidebar, max 1600px content area and keyboard skip link. Overview order: role label and greeting; Start here action (unavailable summary, open location alerts, missing clock-ins, or staff); four linked summary cards; weekly attendance beside open alerts; Attendance follow-up with 44px phone links; expandable Live locations & coverage; photo retention note. Missing summary values display a dash. No repeated gauges or decorative tip blocks. Alerts use a concise role-aware introduction, existing category links, expandable Filters & downloads (open when a filter is active), existing summaries and results, and collapsed Notification settings last. Filter/download controls have 44px targets; resolution inputs have accessible labels. All reads, resolution permissions and audit behaviour are unchanged.
+This layout supersedes the previous overview arrangement described below. The frame has a 240px sidebar, max 1600px content area and keyboard skip link. Overview order: role label and greeting; Start here action (unavailable summary, open location alerts, missing clock-ins, or staff); four linked summary cards; weekly attendance beside open alerts; Attendance follow-up with 44px phone links (each name links to the person's day today); expandable Live locations & coverage; photo retention note. Missing summary values display a dash. No repeated gauges or decorative tip blocks. Alerts use a concise role-aware introduction, existing category links, expandable Filters & downloads (open when a filter is active), existing summaries and results, and collapsed Notification settings last. Filter/download controls have 44px targets; resolution inputs have accessible labels. All reads, resolution permissions and audit behaviour are unchanged.
 
 ## 1. The shell
 
@@ -472,7 +472,7 @@ A line "`<long date>`" (or "`<from long>` to `<to long>`") " · N person/people"
 
 Two cards side by side:
 
-- **"Not clocked in today (N)"**, note "`k` on shift now." when anyone is; each row: name, own store ("No store") and " · `<Supervisor>`’s team"; links **Call** (`tel:`) and **Movement** (`/admin/tracking?person=<id>&date=<today>&until=<today>`). Empty: "Everybody expected today has clocked in."
+- **"Not clocked in today (N)"**, note "`k` on shift now." when anyone is; each row: name (a link to their day, `/admin/attendance/day?person=<id>&date=<today>`, for **Fix today's record**), own store ("No store") and " · `<Supervisor>`’s team"; links **Call** (`tel:`) and **Movement** (`/admin/tracking?person=<id>&date=<today>&until=<today>`). Empty: "Everybody expected today has clocked in."
 - **"Late today (N)"**, most minutes late first; line "In at HH:MM, `X` late · store". Empty: "Nobody was late today."
 
 Lists scroll after 288 px.

@@ -3,7 +3,7 @@ import { ArrowRight, Bell, ClipboardList, MapPin, Phone, Users } from 'lucide-re
 import { LiveAlertFeed } from '@/components/admin/live-alert-feed'
 import { LiveLocations, type LiveLocation } from '@/components/admin/live-locations'
 import { AttendanceChart, ON_TIME, LATE, type DayCount } from '@/components/admin/overview-charts'
-import { TZ, cn, formatLagos } from '@/lib/utils'
+import { TZ, cn, formatLagos, lagosDateString } from '@/lib/utils'
 import type { AlertDetail } from '@/lib/types'
 interface Overview {
   date: string
@@ -135,7 +135,7 @@ export function OverviewView({ name, isAdmin, today, week, stats, away, tracked,
           <ul className="mt-4 grid gap-x-8 sm:grid-cols-2 xl:grid-cols-3">
             {away.map(person => <li key={person.user_id} className="flex items-center gap-3 border-t border-border py-4">
               <Avatar name={person.full_name} />
-              <div className="min-w-0 flex-1"><p className="break-words text-sm font-semibold">{person.full_name}</p><p className="text-xs text-muted-foreground">{person.outlet_name ?? 'No outlet assigned'}</p></div>
+              <div className="min-w-0 flex-1"><Link href={'/admin/attendance/day?person=' + person.user_id + '&date=' + lagosDateString()} className="break-words text-sm font-semibold text-brand hover:underline">{person.full_name}</Link><p className="text-xs text-muted-foreground">{person.outlet_name ?? 'No outlet assigned'}</p></div>
               {person.phone && <a href={'tel:' + person.phone} aria-label={'Call ' + person.full_name} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-border hover:bg-tint"><Phone className="h-4 w-4" /></a>}
             </li>)}
           </ul>
