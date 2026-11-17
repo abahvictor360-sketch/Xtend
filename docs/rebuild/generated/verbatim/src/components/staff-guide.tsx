@@ -152,7 +152,8 @@ export function StaffGuide() {
               <Ui>Pick the store myself</Ui>: it lists only the stores on your list.
             </>,
             <>
-              When you leave, tap <Ui>Check out</Ui> before you go to the next store. You can
+              When you leave, tap <Ui>Check out</Ui> and take a selfie, as when you checked in,
+              before you go to the next store. You can
               only be checked in at one store at a time. If you forgot to check out of a store,
               Home shows it with a <Ui>Check out</Ui> button: check out, then check in again.
               Starting your day at one of your stores? Clocking in there checks you in at that

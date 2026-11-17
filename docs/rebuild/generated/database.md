@@ -922,6 +922,8 @@ Policies:
 | device_info | jsonb(jsonb) |  | '{}'::jsonb |
 | client_captured_at | timestamp with time zone(timestamptz) |  |  |
 | created_at | timestamp with time zone(timestamptz) |  | now() |
+| departed_selfie_path | text(text) | yes |  |
+| departed_thumb_path | text(text) | yes |  |
 
 Policies:
 - `store_visits_insert_own` INSERT to public; check `((auth.uid() IS NOT NULL) AND can_visit_stores() AND (EXISTS ( SELECT 1`
@@ -1456,8 +1458,8 @@ Policies:
 - `distance_metres(lat1 double precision, lng1 double precision, lat2 double precision, lng2 double precision)` → double precision · 0001_init.sql
 - `encrypt(bytea, bytea, text)` → bytea
 - `encrypt_iv(bytea, bytea, bytea, text)` → bytea
-- `end_store_visit(p_visit_id uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_place_name text, p_address text)` → jsonb · definer · 0016_visits_without_allocation.sql
-- `expired_selfie_paths(p_hours integer)` → TABLE(path text) · definer · 0067_report_photos_offline.sql
+- `end_store_visit(p_visit_id uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_place_name text, p_address text, p_selfie_path text, p_thumb_path text)` → jsonb · definer · 0091_visit_checkout_photo.sql
+- `expired_selfie_paths(p_hours integer)` → TABLE(path text) · definer · 0091_visit_checkout_photo.sql
 - `field_topic(uid uuid)` → text · 0058_realtime_broadcast.sql
 - `finish_onboarding()` → void · definer · 0037_profile_photos.sql
 - `flag_location(p_user uuid, p_lat double precision, p_lng double precision, p_accuracy double precision, p_at timestamp with time zone, p_source text, p_check_repeat boolean, p_outlet uuid)` → void · definer · 0022_integrity_checks.sql
@@ -1479,8 +1481,8 @@ Policies:
 - `follow_tidy()` → integer · definer · 0070_follow_live.sql
 - `follow_topic(p_session uuid)` → text · 0070_follow_live.sql
 - `follow_window()` → interval · 0070_follow_live.sql
-- `forget_expired_selfies(p_hours integer)` → integer · definer · 0067_report_photos_offline.sql
-- `forget_selfie_paths(p_paths text[])` → integer · definer · 0067_report_photos_offline.sql
+- `forget_expired_selfies(p_hours integer)` → integer · definer · 0091_visit_checkout_photo.sql
+- `forget_selfie_paths(p_paths text[])` → integer · definer · 0091_visit_checkout_photo.sql
 - `gen_random_bytes(integer)` → bytea
 - `gen_random_uuid()` → uuid
 - `gen_salt(text)` → text
@@ -1629,7 +1631,7 @@ Policies:
 - `reset_files_pending()` → integer · definer · 0066_test_mode_reset.sql
 - `reset_resolve_categories(p_categories text[])` → text[] · 0066_test_mode_reset.sql
 - `reset_staff_tables()` → text[] · 0066_test_mode_reset.sql
-- `reset_test_data(p_actor uuid, p_categories text[])` → jsonb · definer · 0081_reset_keeps_places.sql
+- `reset_test_data(p_actor uuid, p_categories text[])` → jsonb · definer · 0091_visit_checkout_photo.sql
 - `resolve_alert(p_alert_id uuid, p_note text)` → void · definer · 0002_logic.sql
 - `resolve_alerts(p_alert_ids uuid[], p_note text)` → integer · definer · 0052_visits_alerts.sql
 - `resolve_notification_targets(p_audience notification_audience, p_detail jsonb)` → TABLE(user_id uuid, full_name text, role user_role, outlet_name text, devices integer) · definer · 0006_push_notifications.sql
@@ -1638,7 +1640,7 @@ Policies:
 - `retention_cutoff(p_hours integer)` → timestamp with time zone · definer · 0067_report_photos_offline.sql
 - `retention_days()` → integer · 0067_report_photos_offline.sql
 - `retention_delete_before()` → timestamp with time zone · definer · 0067_report_photos_offline.sql
-- `retention_notice_due(p_through timestamp with time zone)` → TABLE(user_id uuid, role text, selfies integer, report_photos integer, report_files integer) · definer · 0067_report_photos_offline.sql
+- `retention_notice_due(p_through timestamp with time zone)` → TABLE(user_id uuid, role text, selfies integer, report_photos integer, report_files integer) · definer · 0091_visit_checkout_photo.sql
 - `review_integrity_flag(p_id uuid, p_note text)` → void · definer · 0022_integrity_checks.sql
 - `review_integrity_flags(p_ids uuid[], p_note text)` → integer · definer · 0054_integrity_ask.sql
 - `revoke_tracking_tokens()` → void · definer · 0050_background_tracking.sql
@@ -1647,7 +1649,7 @@ Policies:
 - `schedule_guard(p_user uuid)` → void · definer · 0072_hr_role.sql
 - `schedule_notification(p_title text, p_body text, p_url text, p_audience notification_audience, p_detail jsonb, p_send_at timestamp with time zone)` → uuid · definer · 0053_support_notifications.sql
 - `selfie_check()` → trigger · definer · 0023_photo_checks.sql
-- `selfie_retention_status()` → jsonb · definer · 0067_report_photos_offline.sql
+- `selfie_retention_status()` → jsonb · definer · 0091_visit_checkout_photo.sql
 - `send_message(p_staff uuid, p_body text, p_attachment jsonb)` → jsonb · definer · 0075_message_attachments.sql
 - `session_aal()` → text · definer · 0080_zero_trust.sql
 - `set_count_sheet_template(p_path text, p_file_name text)` → uuid · definer · 0035_store_count_sheets.sql
@@ -1673,6 +1675,7 @@ Policies:
 - `store_visit_alert()` → trigger · definer · 0016_visits_without_allocation.sql
 - `store_visit_close_stale()` → trigger · definer · 0086_close_stale_visit_on_check_in.sql
 - `store_visit_enforce()` → trigger · definer · 0060_marketer_visits_reports.sql
+- `store_visit_no_departure_photo()` → trigger · 0091_visit_checkout_photo.sql
 - `store_visits_today()` → SETOF store_visit_detail · definer · 0016_visits_without_allocation.sql
 - `submit_count_sheet(p_outlet_id uuid, p_path text, p_file_name text)` → uuid · definer · 0064_count_sheets_any_time_report_files.sql
 - `submit_store_count(p_outlet_id uuid, p_lines jsonb, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_photo_path text)` → integer · definer · 0040_xpel_count_sheet.sql
@@ -1763,6 +1766,7 @@ Policies:
 - `store_visits`: `realtime_broadcast` — AFTER INSERT OR DELETE OR UPDATE ON public.store_visits FOR EACH ROW EXECUTE FUNCTION realtime_notify_field_owner()
 - `store_visits`: `trg_store_visit_alert` — AFTER INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION store_visit_alert()
 - `store_visits`: `trg_store_visit_enforce` — BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION store_visit_enforce()
+- `store_visits`: `trg_store_visit_no_departure_photo` — BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION store_visit_no_departure_photo()
 - `store_visits`: `trg_store_visit_selfie_check` — BEFORE INSERT ON public.store_visits FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION selfie_check()
 - `store_visits`: `trg_store_visit_zz_close_stale` — BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION store_visit_close_stale()
 - `store_visits`: `trg_store_visits_place_due_guard` — BEFORE INSERT ON public.store_visits FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION place_due_guard()

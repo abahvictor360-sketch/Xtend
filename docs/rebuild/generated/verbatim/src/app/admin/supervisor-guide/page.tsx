@@ -142,8 +142,9 @@ export default async function SupervisorGuidePage() {
             <Ui>Attendance</Ui> shows each person&apos;s day: clock-in and clock-out, on time or late, at
             their store or not. Pick dates or a quick range and narrow by person, store or kind of day. The
             calendar shows a square per person per day; open one to see the photo, the map and how far from
-            the store they were. <Ui>Worth a look</Ui> names repeat absences, lateness and missing
-            clock-outs.
+            the store they were. A marketer&apos;s row also opens to every store check-in and check-out, with
+            the times, how far from the store and both photos. <Ui>Worth a look</Ui> names repeat absences,
+            lateness and missing clock-outs.
           </p>
           <ul className="list-disc space-y-1.5 pl-5">
             <li>Late means after the store&apos;s shift start.</li>
@@ -182,7 +183,7 @@ export default async function SupervisorGuidePage() {
           </p>
           <p>
             <Ui>Store visits</Ui> shows your marketers&apos; rounds: which stores, when and for how long,
-            with the check-in photo. <Ui>Store coverage</Ui> shows stores nobody has visited for a while.
+            with the check-in and check-out photos. <Ui>Store coverage</Ui> shows stores nobody has visited for a while.
           </p>
           <Tip>Use what you see to ask, not to accuse: a phone with no network or no battery looks quiet too.</Tip>
         </GuideSection>

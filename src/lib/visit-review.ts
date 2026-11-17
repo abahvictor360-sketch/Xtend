@@ -32,6 +32,10 @@ export interface VisitRow {
   store_label: string | null
   store_label_source: 'outlet' | 'map' | null
   selfie_path: string | null
+  thumb_path?: string | null
+  // Migration 0091: the check-out photo.
+  departed_selfie_path?: string | null
+  departed_thumb_path?: string | null
   // Migration 052. Absent before it runs, so every use has a fallback.
   departed_lat?: number | null
   departed_lng?: number | null

@@ -1234,8 +1234,20 @@ because one daily clock can no longer say which.
 - `store_visit_alert`: accuracy > 100 m → `low_accuracy`; `off_site` →
   `off_site_clock`. A visit to an unknown shop raises nothing.
 
-### 5.3 Checking out (`end_store_visit`, 0016)
+### 5.3 Checking out (`end_store_visit`, 0016; photo 0091)
 
+`end_store_visit(p_visit_id, p_lat, p_lng, p_accuracy_m, p_place_name = null,
+p_address = null, p_selfie_path = null, p_thumb_path = null)` (authenticated
+and service role; the six-argument form was dropped in 0091). The photo
+paths, when given, must start with the visit owner's id and must not contain
+`..` or exceed 300 characters, else "That check-out photo is not yours";
+they are stored in `store_visits.departed_selfie_path` /
+`departed_thumb_path`, which a BEFORE INSERT trigger
+(`trg_store_visit_no_departure_photo`) always clears on insert, and which
+`store_visit_detail` lists last. The 14-day deletion
+(`expired_selfie_paths`, `forget_selfie_paths`, `forget_expired_selfies`,
+`selfie_retention_status`, `retention_notice_due`) and the test-run reset of
+store visits include them. Office check-outs (0090) send no photo.
 Only the owner, only an open visit ("That visit is already closed"). Status
 is judged the same way against the snapshot; no snapshot → null (or
 flagged). Returns minutes in store. Visits still open from an earlier day

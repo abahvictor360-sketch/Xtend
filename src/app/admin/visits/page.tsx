@@ -103,7 +103,10 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
     filter.view === 'visits'
       ? await signSelfies(
           supabase,
-          visits.filter((v) => v.selfie_path && Date.parse(v.arrived_at) > recent).map((v) => v.selfie_path),
+          visits
+            .filter((v) => Date.parse(v.arrived_at) > recent)
+            .flatMap((v) => [v.selfie_path, v.departed_selfie_path ?? null])
+            .filter(Boolean),
         )
       : new Map<string, string>()
 
@@ -260,6 +263,7 @@ export default async function VisitsPage({ searchParams }: { searchParams: Promi
                         ranged={ranged}
                         flags={flagsOf.get(visit.id) ?? []}
                         selfie={visit.selfie_path ? (selfies.get(visit.selfie_path) ?? null) : null}
+                        leftSelfie={visit.departed_selfie_path ? (selfies.get(visit.departed_selfie_path) ?? null) : null}
                       />
                     ))}
                   </CardContent>

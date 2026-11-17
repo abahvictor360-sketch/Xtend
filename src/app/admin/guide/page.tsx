@@ -299,6 +299,10 @@ export default async function AdminGuidePage() {
             repeat absences, lateness, off-site clock-ins and missing clock-outs. The calendar has one
             square per person per day; tap one, or open a row, to see the photo, the map, the distance
             from the store and the phone used, with links to Movement and Check an excuse for that day.
+            A marketer&apos;s row also says how many stores they visited; open it for every store check-in
+            and check-out: the store, the times, how long they stayed, how far from the store, where they
+            were, and the check-in and check-out photos (kept 14 days). A person&apos;s day page lists the
+            same.
           </p>
           <ul className="list-disc space-y-1.5 pl-5">
             <li>
@@ -364,7 +368,8 @@ export default async function AdminGuidePage() {
           </p>
           <p>
             <Ui>Store visits</Ui> shows marketers&apos; rounds: where they checked in and out, for how long,
-            how far from the store, with the check-in photo while it is kept. It points out very short
+            how far from the store, with the check-in and check-out photos while they are kept (14 days;
+            check-outs have a photo from November 2026). It points out very short
             visits, check-ins away from the store and visits too far apart to be real. <Ui>By store</Ui>,{' '}
             <Ui>By person</Ui> and <Ui>Store coverage</Ui> (stores nobody visited in 7, 14 or 30 days)
             add it up. A visit nobody checked out of by the end of the day shows as abandoned; it is

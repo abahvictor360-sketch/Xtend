@@ -1295,10 +1295,24 @@ Success messages:
 Store label with badge **"On site"** (green) or **"Off site"** (red), "In
 store since HH:MM · N min", button **"Check out of <store>"**.
 
-Check-out: location ("Checking your location"), geocode, "Checking out" →
-`POST /api/visits/{id}/end { lat, lng, accuracy_m, address, place_name }` →
-RPC `end_store_visit`. No selfie. 409 if already closed, 404 if not theirs.
-Message: "Checked out of <store> after N minutes."
+Under the button: "Checking out takes a selfie, like checking in."
+
+Check-out (0091), location first and camera second as at check-in: location
+("Checking your location"), geocode ("Naming the place"), then the in-app
+camera titled "Check out of <store>" (subtitle the place name or address,
+`locate`). On the shutter: the fix is read again if older than
+`STALE_FIX_MS` (90 s) ("Checking your location again"); the selfie goes
+through `uploadVisitSelfie()` shared with check-in ("Compressing your
+selfie", "Uploading" to `selfies/<uid>/<uuid>.jpg` and `_thumb.jpg`,
+"Checking the photo" via `checkPhoto`; a refused photo shows its message,
+`PhotoRefused`, and nothing is sent); then "Checking out" →
+`POST /api/visits/{id}/end { lat, lng, accuracy_m, address, place_name, selfie_path, thumb_path }`
+(each path must be the caller's own, `isOwnStoragePath`, else 400 "Selfie
+path does not belong to you") → RPC `end_store_visit(…, p_selfie_path,
+p_thumb_path)`; before 0091 the database has no such function (PGRST202) and
+the route checks out without the photo. 409 if already closed, 404 if not
+theirs, 400 "That check-out photo is not yours". Message:
+"Checked out of <store> after N minutes."
 
 ### 7.4 Done visits list
 

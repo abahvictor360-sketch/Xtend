@@ -78,7 +78,20 @@ export function StatusBadge({ status }: { status: string | null }) {
 }
 
 /** One visit, closed: the summary line. Open: arrival and departure in full. */
-export function VisitLine({ visit, ranged, flags, selfie }: { visit: VisitRow; ranged: boolean; flags: Finding[]; selfie: string | null }) {
+export function VisitLine({
+  visit,
+  ranged,
+  flags,
+  selfie,
+  leftSelfie = null,
+}: {
+  visit: VisitRow
+  ranged: boolean
+  flags: Finding[]
+  selfie: string | null
+  /** The check-out photo (0091). */
+  leftSelfie?: string | null
+}) {
   const arrivedMap = visit.arrived_lat != null ? `https://www.google.com/maps?q=${visit.arrived_lat},${visit.arrived_lng}` : null
   const leftMap = visit.departed_lat != null ? `https://www.google.com/maps?q=${visit.departed_lat},${visit.departed_lng}` : null
   const storeMap = visit.outlet_lat != null ? `https://www.google.com/maps?q=${visit.outlet_lat},${visit.outlet_lng}` : null
@@ -162,14 +175,32 @@ export function VisitLine({ visit, ranged, flags, selfie }: { visit: VisitRow; r
             </a>
           )}
         </div>
-        <div className="space-y-2">
-          {selfie ? (
-            <a href={selfie} target="_blank" rel="noreferrer" className="block w-fit">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={selfie} alt={`Check-in photo of ${visit.staff_name}`} className="h-24 w-24 rounded-xl object-cover ring-1 ring-border" />
-            </a>
-          ) : (
-            <p className="text-muted-foreground">{visit.selfie_path ? 'Photo deleted after 14 days' : 'No photo'}</p>
+        <div className="flex gap-3">
+          <figure className="space-y-1">
+            {selfie ? (
+              <a href={selfie} target="_blank" rel="noreferrer" className="block w-fit">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={selfie} alt={`Check-in photo of ${visit.staff_name}`} className="h-24 w-24 rounded-xl object-cover ring-1 ring-border" />
+              </a>
+            ) : (
+              <p className="w-24 text-muted-foreground">{visit.selfie_path ? 'Photo deleted after 14 days' : 'No photo'}</p>
+            )}
+            <figcaption className="font-semibold text-muted-foreground">In</figcaption>
+          </figure>
+          {visit.departed_at && (
+            <figure className="space-y-1">
+              {leftSelfie ? (
+                <a href={leftSelfie} target="_blank" rel="noreferrer" className="block w-fit">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={leftSelfie} alt={`Check-out photo of ${visit.staff_name}`} className="h-24 w-24 rounded-xl object-cover ring-1 ring-border" />
+                </a>
+              ) : (
+                <p className="w-24 text-muted-foreground">
+                  {visit.departed_selfie_path ? 'Photo deleted after 14 days' : 'No check-out photo'}
+                </p>
+              )}
+              <figcaption className="font-semibold text-muted-foreground">Out</figcaption>
+            </figure>
           )}
         </div>
         {flags.length > 0 && (

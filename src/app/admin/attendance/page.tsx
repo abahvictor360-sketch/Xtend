@@ -17,6 +17,8 @@ import {
 } from '@/lib/attendance-report'
 import { GRID_MAX_DAYS, MAX_RANGE_DAYS, loadAttendance, parseReportFilter, reportQuery } from '@/lib/attendance-server'
 import { cn, longDate } from '@/lib/utils'
+import { fetchVisits } from '@/lib/export/visits'
+import { toDayVisit, type DayVisit } from '@/components/admin/visit-photo-list'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Attendance — Xtend' }
@@ -58,6 +60,20 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
     people.map((p) => [p.id, { name: p.name, phone: p.phone, store: p.outletName, team: p.teamName ? `${p.teamName}’s team` : null, role: p.roleLabel }]),
   )
   const tableRows = shown.slice(0, TABLE_MAX)
+
+  // Store check-ins and check-outs (marketers, and anyone who visits
+  // stores) for the days in the table, with both photos when a row opens.
+  const visitsByDay: Record<string, DayVisit[]> = {}
+  try {
+    const wanted = new Set(tableRows.map((r) => r.key))
+    const rows = await fetchVisits(supabase, { from: filter.from, to: filter.to, user_id: filter.user_id, limit: 5000 })
+    for (const v of [...rows].sort((a, b) => Date.parse(a.arrived_at) - Date.parse(b.arrived_at))) {
+      const key = `${v.user_id}|${v.visit_date}`
+      if (wanted.has(key)) (visitsByDay[key] ??= []).push(toDayVisit(v))
+    }
+  } catch {
+    // Store visits are extra here: the attendance still shows without them.
+  }
 
   const todayRecords = filter.to === today ? records.filter((r) => r.date === today) : []
   const notIn = todayRecords.filter((r) => r.status === 'absent')
@@ -196,10 +212,10 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
           <h2 className="text-lg font-bold">Day by day</h2>
           <p className="text-xs text-muted-foreground">
             {shown.length} day{shown.length === 1 ? '' : 's'}
-            {filter.status ? ' matching' : ''} · tap a row for photos, map, phone and links
+            {filter.status ? ' matching' : ''} · tap a row for photos, store check-ins and check-outs, map, phone and links
           </p>
         </div>
-        <AttendanceTable rows={tableRows} people={tablePeople} total={shown.length} />
+        <AttendanceTable rows={tableRows} people={tablePeople} total={shown.length} visits={visitsByDay} />
       </section>
     </div>
   )
