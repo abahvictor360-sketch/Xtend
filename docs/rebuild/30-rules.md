@@ -2190,7 +2190,10 @@ calculation.
   `propose_count_request`, `propose_close_count_request`,
   `propose_phone_check`, `propose_flag_review`, `propose_sales_target`,
   `propose_xmetrics_store`, `propose_outlet_hours`, `propose_schedule`,
-  `propose_stock_count`, `propose_supply`, `propose_deactivate`.
+  `propose_stock_count`, `propose_supply`, `propose_deactivate`,
+  `propose_field_correction` (0090: today only; `planCorrection` in
+  `src/lib/field-corrections.ts` builds the card with the same choices as
+  **Fix today's record**; Apply calls `POST /api/admin/field-corrections`).
   The person sees the card and presses **Apply**. `/api/admin/ask/act`
   re-validates the payload (`actionSchema`) and calls **the same route the
   dashboard button uses**, in the same request with the same session: same

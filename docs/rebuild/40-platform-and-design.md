@@ -692,7 +692,10 @@ export route and `ask/act`, `ask/apply`, `ask/report` 60 s.
   `propose_notification`, `propose_count_request`, `propose_close_count_request`,
   `propose_phone_check`, `propose_flag_review`, `propose_sales_target`,
   `propose_xmetrics_store`, `propose_outlet_hours`, `propose_schedule`,
-  `propose_stock_count`, `propose_supply`, `propose_deactivate`.
+  `propose_stock_count`, `propose_supply`, `propose_deactivate`,
+  `propose_field_correction` (0090: today only; `planCorrection` in
+  `src/lib/field-corrections.ts` builds the card with the same choices as
+  **Fix today's record**; Apply calls `POST /api/admin/field-corrections`).
   `propose_stock_count` and `propose_supply` read a typed count/delivery or an
   attached count sheet, delivery note or invoice; the office count RPC
   `xm_office_count` records it with no GPS or photo under the admin.

@@ -132,7 +132,7 @@ export default async function SupervisorGuidePage() {
             <Ui>Ask Xtend</Ui> answers plain questions about your team (“who forgot to clock out
             yesterday?”, “show today&apos;s stock counts”) and makes reports to download. Ask it to do
             something, such as “remind everyone who has not clocked in to clock in now” or “ask my team
-            for a stock count by Friday”, and it shows a card saying exactly what will happen; nothing is
+            for a stock count by Friday” or “clock Ada in at Ikeja Mall, her phone would not open”, and it shows a card saying exactly what will happen; nothing is
             done until you press the card&apos;s button. Your chats are kept under <Ui>Earlier chats</Ui>.
           </p>
         </GuideSection>
@@ -342,7 +342,7 @@ export default async function SupervisorGuidePage() {
                     On <Ui>Attendance</Ui>, tap their name (under <Ui>Not clocked in today</Ui> if they have not clocked in) and use <Ui>Fix today&apos;s record</Ui>. When you are sure they
                     are at the store (call them), clock them in or out yourself, or check a marketer in or out of a
                     store. If the app recorded it wrongly, ask them to do it again instead. Give a reason each time: they
-                    see it, and the old record is kept.
+                    see it, and the old record is kept. Ask Xtend can do this too (“ask Ada to clock in again”).
                   </>
                 ),
               },

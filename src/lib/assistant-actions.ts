@@ -2,7 +2,8 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AllocationContext } from '@/lib/assistant-allocate'
 import { PAGES, type PageLink, type PageName, type ProposedAction } from '@/lib/assistant-action-types'
-import { addDays, lagosDateString, longDate, monthLabel } from '@/lib/utils'
+import { TZ, addDays, lagosDateString, longDate, monthLabel } from '@/lib/utils'
+import { CORRECTION_ACTIONS, planCorrection, type CorrectionAction, type CorrectionDay } from '@/lib/field-corrections'
 
 /**
  * Turns what the model proposes (with P…, S…, F…, R… references) into an
@@ -459,6 +460,61 @@ export class ActionBuilder {
       warning: 'They are signed out of the app the next time it checks.',
       verb: 'Deactivate',
       payload: { user_id: p.id },
+    }
+  }
+
+  /**
+   * Fixing someone's day (0090), as on Fix today's record: today only.
+   * Their day is read here under the caller's RLS (a supervisor sees only
+   * their team); the database decides again when Apply is pressed.
+   */
+  async fieldCorrection(input: Input): Promise<ProposedAction> {
+    const p = await this.person(input.person)
+    const action = input.action as CorrectionAction
+    if (!CORRECTION_ACTIONS.includes(action)) throw new Error('Say what to do: clock in or out, check in or out, or ask them to do it again.')
+    const storeId = input.store ? (await this.store(input.store)).id : null
+    const today = lagosDateString()
+    const [profile, clocks, visits, allowed] = await Promise.all([
+      this.supabase.from('profiles').select('role, is_active, outlet_id').eq('id', p.id).maybeSingle(),
+      this.supabase.from('attendance').select('type').eq('user_id', p.id).eq('attendance_date', today),
+      this.supabase
+        .from('store_visits')
+        .select('id, status, outlet_id, outlets(name)')
+        .eq('user_id', p.id)
+        .eq('visit_date', today)
+        .order('arrived_at'),
+      this.supabase.rpc('outlets_for_user', { target: p.id }),
+    ])
+    if (!profile.data) throw new Error('That person is not one you can manage.')
+    const ids = ((allowed.data ?? []) as { outlet_id: string }[]).map((r) => r.outlet_id)
+    const { data: stores } = ids.length
+      ? await this.supabase.from('outlets').select('id, name').in('id', ids).eq('is_active', true).not('lat', 'is', null).order('name')
+      : { data: [] }
+    const types = ((clocks.data ?? []) as { type: string }[]).map((c) => c.type)
+    const day: CorrectionDay = {
+      name: p.name,
+      role: profile.data.role as string,
+      active: Boolean(profile.data.is_active),
+      homeStoreId: (profile.data.outlet_id as string | null) ?? null,
+      stores: (stores ?? []) as { id: string; name: string }[],
+      clockedIn: types.includes('opening'),
+      clockedOut: types.includes('closing'),
+      visits: ((visits.data ?? []) as unknown as { id: string; status: string; outlet_id: string | null; outlets: { name: string } | null }[]).map(
+        (v) => ({ id: v.id, status: v.status, storeId: v.outlet_id, name: v.outlets?.name ?? 'a store' }),
+      ),
+    }
+    const now = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date())
+    const time = input.time == null || input.time === '' ? null : normTime(input.time)
+    if (input.time && !time) throw new Error('Give the time like 08:05 or 8am.')
+    const plan = planCorrection(p.id, day, { action, storeId, time, reason: str(input.reason, 500) }, today, now)
+    return {
+      key: key('fix'),
+      kind: 'field_correction',
+      title: plan.title,
+      lines: plan.lines,
+      warning: plan.warning,
+      verb: action.startsWith('redo_') ? 'Ask them' : 'Record it',
+      payload: plan.payload,
     }
   }
 

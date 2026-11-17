@@ -62,3 +62,151 @@ export function redoBanner(action: string): string | null {
   if (action === 'redo_clock_out') return 'The office asked you to clock out again.'
   return null
 }
+
+/** A person's day today, as Ask Xtend needs it to propose a correction. */
+export interface CorrectionDay {
+  name: string
+  role: string
+  active: boolean
+  homeStoreId: string | null
+  /** Their stores with a location: where the office can record them. */
+  stores: { id: string; name: string }[]
+  clockedIn: boolean
+  clockedOut: boolean
+  visits: { id: string; storeId: string | null; name: string; status: string }[]
+}
+
+export interface CorrectionAsk {
+  action: CorrectionAction
+  storeId: string | null
+  /** "HH:MM" today, already in 24-hour form; null for now. */
+  time: string | null
+  reason: string
+}
+
+export interface CorrectionPlan {
+  title: string
+  lines: string[]
+  warning: string | null
+  payload: {
+    user_id: string
+    action: CorrectionAction
+    reason: string
+    outlet_id: string | null
+    at: string | null
+    visit_id: string | null
+  }
+}
+
+/**
+ * What Ask Xtend's card for fixing someone's day says and sends (0090),
+ * with the same choices the Fix today's record panel offers. It throws
+ * plain words when the request does not fit their day; the database
+ * checks it all again when Apply is pressed.
+ */
+export function planCorrection(
+  userId: string,
+  day: CorrectionDay,
+  ask: CorrectionAsk,
+  today: string,
+  nowHHMM: string,
+): CorrectionPlan {
+  const first = day.name.split(' ')[0]
+  if (!day.active || (day.role !== 'merchandiser' && day.role !== 'marketer')) {
+    throw new Error('Only an active merchandiser or marketer can have their day fixed.')
+  }
+  const reason = ask.reason.trim().slice(0, 500)
+  if (reason.length < 3) throw new Error('Say why, in a few words (they see it).')
+
+  const a = ask.action
+  const needsStore = a === 'office_clock_in' || a === 'office_clock_out' || a === 'office_check_in'
+  const isClock = a === 'office_clock_in' || a === 'office_clock_out'
+  const openVisit = day.visits.find((v) => v.status === 'open') ?? null
+
+  if (a === 'office_clock_out' && !day.clockedIn) throw new Error(`${first} has not clocked in today. Clock them in first.`)
+  if (a === 'redo_clock_in' && !day.clockedIn) throw new Error(`${first} has not clocked in today, so there is nothing to redo. Clock them in instead.`)
+  if (a === 'redo_clock_in' && day.clockedOut) throw new Error(`${first} has already clocked out. Clock them in again yourself instead.`)
+  if (a === 'redo_clock_out' && !day.clockedOut) throw new Error(`${first} has not clocked out today, so there is nothing to redo.`)
+  if (a === 'office_check_in' || a === 'office_check_out' || a === 'redo_check_in' || a === 'redo_check_out') {
+    if (day.role !== 'marketer') throw new Error('Store check-ins are for marketers.')
+  }
+  if (a === 'office_check_in') {
+    if (!day.clockedIn) throw new Error(`${first} has not clocked in today. Clock them in first.`)
+    if (day.clockedOut) throw new Error(`${first} has clocked out for the day.`)
+    if (openVisit) throw new Error(`${first} is still checked in at ${openVisit.name}. Check them out of it first.`)
+  }
+  if (a === 'office_check_out' && !openVisit) throw new Error(`${first} is not checked in at any store now.`)
+
+  let store: { id: string; name: string } | null = null
+  if (needsStore) {
+    if (!day.stores.length) throw new Error(`${first} has no store with a location. Set one on Stores first.`)
+    if (ask.storeId) {
+      store = day.stores.find((s) => s.id === ask.storeId) ?? null
+      if (!store) throw new Error(`That store is not one of ${first}'s stores. Theirs: ${day.stores.map((s) => s.name).join(', ')}.`)
+    } else {
+      store = day.stores.find((s) => s.id === day.homeStoreId) ?? (day.stores.length === 1 ? day.stores[0] : null)
+      if (!store) throw new Error(`Say which store: ${day.stores.map((s) => s.name).join(', ')}.`)
+    }
+  }
+
+  let at: string | null = null
+  if (isClock && ask.time) {
+    if (!/^\d{2}:\d{2}$/.test(ask.time)) throw new Error('Give the time like 08:05.')
+    if (ask.time > nowHHMM) throw new Error('The time cannot be later than now.')
+    // Lagos is UTC+1 all year.
+    at = `${today}T${ask.time}:00+01:00`
+  }
+
+  let visit: CorrectionDay['visits'][number] | null = null
+  if (a === 'redo_check_in' || a === 'redo_check_out') {
+    const fits = day.visits.filter((v) => (a === 'redo_check_in' ? v.status !== 'abandoned' : v.status === 'closed'))
+    const atStore = ask.storeId ? fits.filter((v) => v.storeId === ask.storeId) : fits
+    if (!atStore.length) {
+      throw new Error(
+        a === 'redo_check_in'
+          ? `${first} has no store check-in today${ask.storeId ? ' at that store' : ''} to redo.`
+          : `${first} has no store check-out today${ask.storeId ? ' at that store' : ''} to redo.`,
+      )
+    }
+    if (atStore.length > 1 && !ask.storeId && new Set(atStore.map((v) => v.storeId)).size > 1) {
+      throw new Error(`Say which store visit: ${[...new Set(atStore.map((v) => v.name))].join(', ')}.`)
+    }
+    visit = atStore[atStore.length - 1]
+  }
+  if (a === 'office_check_out') visit = openVisit
+
+  const where = store?.name ?? visit?.name ?? null
+  const titles: Record<CorrectionAction, string> = {
+    office_clock_in: day.clockedIn ? `Clock ${day.name} in again` : `Clock ${day.name} in`,
+    office_clock_out: day.clockedOut ? `Clock ${day.name} out again` : `Clock ${day.name} out`,
+    office_check_in: `Check ${day.name} in at ${where}`,
+    office_check_out: `Check ${day.name} out of ${where}`,
+    redo_clock_in: `Ask ${day.name} to clock in again`,
+    redo_clock_out: `Ask ${day.name} to clock out again`,
+    redo_check_in: `Ask ${day.name} to check in at ${where} again`,
+    redo_check_out: `Ask ${day.name} to check out of ${where} again`,
+  }
+  const office = a.startsWith('office_')
+  const replaces = (a === 'office_clock_in' && day.clockedIn) || (a === 'office_clock_out' && day.clockedOut)
+  return {
+    title: titles[a],
+    lines: [
+      ...(where ? [`Store: ${where}`] : []),
+      ...(isClock ? [`Time: ${ask.time ?? 'now'}, today`] : []),
+      `Why: ${reason}`,
+      office
+        ? 'Recorded for them, marked By the office, with no selfie.'
+        : 'Their Home shows the request; what they capture next replaces the old record.',
+      'They get a notification with your reason. The old record is kept.',
+    ],
+    warning: replaces ? `This replaces the ${a === 'office_clock_in' ? 'clock-in' : 'clock-out'} they already have today.` : null,
+    payload: {
+      user_id: userId,
+      action: a,
+      reason,
+      outlet_id: store?.id ?? null,
+      at,
+      visit_id: a === 'redo_check_in' || a === 'redo_check_out' ? (visit?.id ?? null) : null,
+    },
+  }
+}
