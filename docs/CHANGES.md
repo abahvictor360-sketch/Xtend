@@ -57,6 +57,21 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-17
 
+### The side menu, tidier and quicker to use
+- **What was done:** the dashboard's side menu has a **Find a page** box at
+  the top: type "stock", "leave" or "visits" and only those pages show.
+  Each group (Attendance, Stock, Checks, People, Setup) now folds away with
+  a tap; the group of the page you are on opens by itself, and the menu
+  remembers which groups you opened. The page you are on stands out in
+  orange. **Alerts** shows how many alerts are open and **Integrity** how
+  many flags are waiting, with a red dot on a folded group that has some.
+  At the bottom, one card with your name opens Two-step sign-in,
+  Fingerprint and passkeys, Change password and Sign out. On a phone, the
+  menu has the same search box and counts.
+- **The impact:** a shorter, calmer menu where the things that need you
+  stand out. Nothing else changes.
+- **What you need to do:** redeploy the latest code. No migration.
+
 ### The Attendance page, tidied up and modernised
 - **What was done:** the Attendance page has a cleaner layout. The date and
   number of people sit in the header; the filters are in one card, with the

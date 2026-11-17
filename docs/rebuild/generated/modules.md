@@ -1438,7 +1438,7 @@ Exports: `AdminLocation`
 
 Shown to supervisors only (admins have their own version).
 
-Exports: `AdminSidebarNav`, `AdminNav`
+Exports: `NavBadges`, `matchesQuery`, `AdminSidebarNav`, `AdminNav`
 
 ## `src/components/admin/alerts-list.tsx`
 

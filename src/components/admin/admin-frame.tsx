@@ -1,7 +1,7 @@
 import Link from 'next/link'
-import { Bell, FlaskConical, KeyRound, MessageSquareText, Search, Sparkles, UserPlus } from 'lucide-react'
+import { Bell, ChevronsUpDown, Fingerprint, FlaskConical, KeyRound, Search, ShieldCheck, UserPlus } from 'lucide-react'
 import { SignOutButton } from '@/components/sign-out-button'
-import { AdminNav, AdminSidebarNav } from '@/components/admin/admin-nav'
+import { AdminNav, AdminSidebarNav, type NavBadges } from '@/components/admin/admin-nav'
 import { XpelMark } from '@/components/brand/logo'
 import { AssistantLauncher } from '@/components/admin/assistant-launcher'
 import { NativeBridge } from '@/components/native-bridge'
@@ -27,6 +27,9 @@ function initials(name: string) {
     .join('')
 }
 
+const accountLink =
+  'flex min-h-10 items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium leading-snug text-foreground/80 hover:bg-muted hover:text-foreground'
+
 /** A square white button in the top bar, as in the reference. */
 const squareButton =
   'relative flex h-11 w-11 items-center justify-center rounded-xl border border-border/80 bg-card transition-colors hover:bg-tint'
@@ -42,6 +45,7 @@ export function AdminFrame({
   testMode = false,
   isAdmin = false,
   hr = false,
+  badges = {},
   children,
 }: {
   name: string
@@ -57,6 +61,8 @@ export function AdminFrame({
   isAdmin?: boolean
   /** HR (0072): a shorter menu, people only. */
   hr?: boolean
+  /** Counts beside menu links: open location alerts, flags to review. */
+  badges?: NavBadges
   children: React.ReactNode
 }) {
   const bell = hr ? null : (
@@ -79,72 +85,46 @@ export function AdminFrame({
       <a href="#dashboard-content" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-xl focus:bg-card focus:p-4">Skip to dashboard content</a>
       {/* Desktop: the menu down the left, edge to edge, beside a grey workspace. */}
       <div className="lg:flex lg:min-h-dvh">
-        <aside className="sticky top-0 hidden h-dvh w-60 shrink-0 flex-col border-r border-border bg-card lg:flex">
-          <div className="px-6 pb-6 pt-7">
+        <aside className="sticky top-0 hidden h-dvh w-64 shrink-0 flex-col border-r border-border bg-card lg:flex">
+          <div className="px-5 pb-4 pt-6">
             <Brand />
           </div>
-          <div className="flex-1 overflow-y-auto px-4 pb-4">
-            <AdminSidebarNav readOnly={readOnly} xmEnabled={xmEnabled} hr={hr} />
+          <div className="flex-1 overflow-y-auto px-3 pb-4">
+            <AdminSidebarNav readOnly={readOnly} xmEnabled={xmEnabled} hr={hr} badges={badges} />
           </div>
 
-          {isAdmin && (
-            <div className="space-y-1.5 px-4 pb-3">
-              <p className="px-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">View as</p>
-              <RoleSwitch current="admin" />
-            </div>
-          )}
-
-          {/* Hidden on short screens, where the menu needs the room. */}
-          <div className="px-4 pb-3 [@media(max-height:1150px)]:hidden">
-            <div className="space-y-2 rounded-2xl border border-border/80 bg-card p-4">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-foreground text-background">
-                {assistant ? <Sparkles className="h-4 w-4" /> : <KeyRound className="h-4 w-4" />}
-              </span>
-              {assistant ? (
-                <>
-                  <p className="pt-1 text-base font-bold leading-tight">Ask Xtend</p>
-                  <p className="text-xs leading-snug text-muted-foreground">
-                    Who clocked in late? Who is off site? Ask in plain words.
-                  </p>
-                  <Link
-                    href="/admin/ask"
-                    className="mt-1 flex items-center justify-center gap-1.5 rounded-xl bg-foreground px-3 py-2.5 text-xs font-bold text-background transition-opacity hover:opacity-90"
-                  >
-                    <MessageSquareText className="h-3.5 w-3.5" />
-                    Ask a question
-                  </Link>
-                </>
-              ) : (
-                <>
-                  <p className="pt-1 text-base font-bold leading-tight">Your account</p>
-                  <p className="text-xs leading-snug text-muted-foreground">
-                    Keep your password private. Change it any time.
-                  </p>
-                  <Link
-                    href="/change-password"
-                    className="mt-1 flex items-center justify-center rounded-xl bg-foreground px-3 py-2.5 text-xs font-bold text-background transition-opacity hover:opacity-90"
-                  >
-                    Change password
-                  </Link>
-                </>
-              )}
-            </div>
-          </div>
-
-          <div className="space-y-1 px-4 pb-5">
-            <Link
-              href="/mfa/setup"
-              className="flex h-10 items-center rounded-xl px-3 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              Two-step sign-in
-            </Link>
-            <Link
-              href="/admin/sign-in-methods"
-              className="flex h-10 items-center rounded-xl px-3 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
-            >
-              Fingerprint and passkeys
-            </Link>
-            <SignOutButton className="h-10 w-full justify-start px-3 text-sm" />
+          <div className="space-y-3 border-t border-border p-3">
+            {isAdmin && (
+              <div className="space-y-1.5">
+                <p className="px-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">View as</p>
+                <RoleSwitch current="admin" />
+              </div>
+            )}
+            {/* Who is signed in, and their account: one card that opens upwards. */}
+            <details className="group relative">
+              <summary className="flex cursor-pointer list-none items-center gap-3 rounded-xl p-2 hover:bg-muted [&::-webkit-details-marker]:hidden">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-tint text-xs font-bold text-tint-foreground">
+                  {initials(name)}
+                </span>
+                <span className="min-w-0 flex-1 leading-tight">
+                  <span className="block truncate text-sm font-semibold">{name}</span>
+                  <span className="block text-xs text-muted-foreground">{role}</span>
+                </span>
+                <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+              </summary>
+              <div className="absolute bottom-full left-0 right-0 z-30 mb-2 space-y-0.5 rounded-2xl border border-border bg-card p-1.5 shadow-lg">
+                <Link href="/mfa/setup" className={accountLink}>
+                  <ShieldCheck className="h-4 w-4 text-muted-foreground" /> Two-step sign-in
+                </Link>
+                <Link href="/admin/sign-in-methods" className={accountLink}>
+                  <Fingerprint className="h-4 w-4 text-muted-foreground" /> Fingerprint and passkeys
+                </Link>
+                <Link href="/change-password" className={accountLink}>
+                  <KeyRound className="h-4 w-4 text-muted-foreground" /> Change password
+                </Link>
+                <SignOutButton className="mt-1 h-10 w-full justify-start px-3 text-sm" />
+              </div>
+            </details>
           </div>
         </aside>
 
@@ -167,7 +147,7 @@ export function AdminFrame({
                 <SignOutButton className="h-11 px-3 text-xs" />
               </div>
             </div>
-            <AdminNav readOnly={readOnly} xmEnabled={xmEnabled} hr={hr} />
+            <AdminNav readOnly={readOnly} xmEnabled={xmEnabled} hr={hr} badges={badges} />
             {isAdmin && (
               <div className="px-4 pb-3">
                 <RoleSwitch current="admin" />
