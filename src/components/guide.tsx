@@ -13,8 +13,33 @@ export interface GuideTopic {
   icon: LucideIcon
 }
 
-/** Jump links to each section, as chips that wrap. */
-export function GuideContents({ topics }: { topics: GuideTopic[] }) {
+/**
+ * Jump links to each section: chips that wrap (the staff guide), or a card of
+ * tiles with an icon each (the admin and supervisor guides).
+ */
+export function GuideContents({ topics, layout = 'chips' }: { topics: GuideTopic[]; layout?: 'chips' | 'cards' }) {
+  if (layout === 'cards') {
+    return (
+      <nav aria-label="In this guide" className="surface p-4 sm:p-5">
+        <p className="mb-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">In this guide</p>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+          {topics.map((t, i) => (
+            <a
+              key={t.id}
+              href={`#${t.id}`}
+              className="group flex min-h-12 items-center gap-3 rounded-xl border border-border px-3 py-2 text-sm font-semibold transition-colors hover:border-brand/40 hover:bg-tint"
+            >
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-tint text-brand">
+                <t.icon className="h-4 w-4" />
+              </span>
+              <span className="min-w-0 flex-1 leading-snug">{t.title}</span>
+              <span className="text-xs tabular-nums text-muted-foreground group-hover:text-brand">{i + 1}</span>
+            </a>
+          ))}
+        </div>
+      </nav>
+    )
+  }
   return (
     <nav aria-label="In this guide" className="flex flex-wrap gap-2">
       {topics.map((t) => (

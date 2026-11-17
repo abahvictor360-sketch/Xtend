@@ -12,6 +12,8 @@ import { monthStart, windowLabel } from '@/lib/metrics/shared'
 import { readXmFeatures } from '@/lib/metrics/features-server'
 import { xmDashboardParts, xmPageOn } from '@/lib/metrics/features'
 import { XmSwitchedOff } from '@/components/admin/xm/switched-off'
+import { Activity, BarChart3, CalendarClock, PackageX, PieChart, Store, Trophy } from 'lucide-react'
+import { IconTile } from '@/components/admin/page-kit'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'X Metrics — Xtend' }
@@ -95,7 +97,7 @@ export default async function MetricsOverview() {
   const dash = await dashboardPromise
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <XmHeader
         title="X Metrics"
         intro={
@@ -106,7 +108,7 @@ export default async function MetricsOverview() {
         readOnly={readOnly}
       />
 
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="surface flex flex-wrap items-center gap-3 p-3 sm:p-4">
         {!readOnly && (parts.reconcile || parts.expiry) && <RunChecksButton />}
         <ExportLinks kind="stock" label="Stock on hand" />
       </div>
@@ -118,7 +120,7 @@ export default async function MetricsOverview() {
           {(parts.sales || parts.supplies) && (
             <Card className={parts.sales || parts.reconcile ? 'min-w-0 xl:col-span-2' : 'min-w-0 xl:col-span-3'}>
               <CardHeader>
-                <CardTitle>{parts.sales ? 'Sales overview' : 'Supplies overview'}</CardTitle>
+                <CardTitle className="flex items-center gap-2.5"><IconTile icon={BarChart3} className="h-8 w-8" />{parts.sales ? 'Sales overview' : 'Supplies overview'}</CardTitle>
                 <CardDescription>
                   {parts.sales && parts.supplies ? 'Units sold and supplied' : parts.sales ? 'Units sold' : 'Units supplied'} across all
                   X Metrics stores, last 12 months.
@@ -132,7 +134,7 @@ export default async function MetricsOverview() {
           {(parts.sales || parts.reconcile) && (
             <Card className={parts.sales || parts.supplies ? 'min-w-0' : 'min-w-0 xl:col-span-3'}>
               <CardHeader>
-                <CardTitle>Stock statistic</CardTitle>
+                <CardTitle className="flex items-center gap-2.5"><IconTile icon={PieChart} className="h-8 w-8" />Stock statistic</CardTitle>
                 <CardDescription>
                   {parts.reconcile ? 'How well counts match, and sales against store targets, this month.' : 'Sales against store targets, this month.'}
                 </CardDescription>
@@ -153,7 +155,7 @@ export default async function MetricsOverview() {
       <div className="grid gap-5 xl:grid-cols-3">
         <Card className={parts.sales ? 'min-w-0 xl:col-span-2' : 'min-w-0 xl:col-span-3'}>
           <CardHeader>
-            <CardTitle>Recent activity</CardTitle>
+            <CardTitle className="flex items-center gap-2.5"><IconTile icon={Activity} className="h-8 w-8" />Recent activity</CardTitle>
             <CardDescription>
               The latest {['counts', parts.sales && 'daily sales', parts.supplies && 'supplies'].filter(Boolean).join(', ').replace(/, ([^,]*)$/, ' and $1')}.
             </CardDescription>
@@ -165,7 +167,7 @@ export default async function MetricsOverview() {
         {parts.sales && (
           <Card>
             <CardHeader>
-              <CardTitle>Top stores</CardTitle>
+              <CardTitle className="flex items-center gap-2.5"><IconTile icon={Trophy} className="h-8 w-8" />Top stores</CardTitle>
               <CardDescription>Units sold this month{dash.stores.some((s) => s.target) ? ', against each store\'s target' : ''}.</CardDescription>
             </CardHeader>
             <CardContent>
@@ -180,7 +182,7 @@ export default async function MetricsOverview() {
       {parts.reconcile && (
       <Card>
         <CardHeader>
-          <CardTitle>Stock gaps</CardTitle>
+          <CardTitle className="flex items-center gap-2.5"><IconTile icon={PackageX} className="h-8 w-8" />Stock gaps</CardTitle>
           <CardDescription>
             Counts that differ from what was expected (last count + supplied − sold) by more than the
             tolerance. Each one is also an integrity flag on the person, to review there.
@@ -236,7 +238,7 @@ export default async function MetricsOverview() {
       {parts.expiry && (
       <Card>
         <CardHeader>
-          <CardTitle>Expiry alerts</CardTitle>
+          <CardTitle className="flex items-center gap-2.5"><IconTile icon={CalendarClock} className="h-8 w-8" />Expiry alerts</CardTitle>
           <CardDescription>Batches entering an expiry window, soonest first.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -272,7 +274,7 @@ export default async function MetricsOverview() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Stores</CardTitle>
+          <CardTitle className="flex items-center gap-2.5"><IconTile icon={Store} className="h-8 w-8" />Stores</CardTitle>
           <CardDescription>
             Open a store for its stock{parts.sales ? ', sales' : ''}{parts.supplies ? ', supplies' : ''}{parts.reconcile ? ' and reconciliation' : ''}.
           </CardDescription>

@@ -66,7 +66,7 @@ export default async function SupervisorGuidePage() {
         )}
       </div>
 
-      <GuideContents topics={Object.values(T)} />
+      <GuideContents topics={Object.values(T)} layout="cards" />
 
       <div className="grid gap-5 xl:grid-cols-2">
         <GuideSection topic={T.team} intro="What you can see and do.">

@@ -2220,7 +2220,8 @@ Exports: `PolicyReadButton`, `XmMyScore`
 
 ## `src/components/guide.tsx`
 
-Jump links to each section, as chips that wrap.
+Jump links to each section: chips that wrap (the staff guide), or a card of
+tiles with an icon each (the admin and supervisor guides).
 
 Exports: `GuideTopic`, `GuideContents`, `GuideSection`, `Steps`, `Tip`, `Questions`, `Ui`, `GuideShot`
 

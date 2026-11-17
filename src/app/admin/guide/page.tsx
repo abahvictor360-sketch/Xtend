@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { Chip, PageHeader } from '@/components/admin/page-kit'
 import {
   BarChart3,
   Bell,
@@ -14,6 +15,7 @@ import {
   ShieldAlert,
   Smartphone,
   Users,
+  BookOpen,
 } from 'lucide-react'
 import { requireSession } from '@/lib/auth'
 import {
@@ -56,21 +58,23 @@ export default async function AdminGuidePage() {
   await requireSession(['admin', 'hr'])
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Admin guide</h1>
-        <p className="text-sm text-muted-foreground">
-          How to use the dashboard, page by page, in the order of the menu. Only admins can see this
-          guide. Staff have a short guide of their own at{' '}
-          <Link href="/guide" className="font-semibold text-brand hover:underline">
-            /guide
-          </Link>{' '}
-          (clocking in and out, stock counts, using the app and reporting a problem), which you can
-          share with them. Times everywhere are Lagos time.
-        </p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Admins only"
+        title="Admin guide"
+        note={
+          <>
+            How to use the dashboard, page by page, in the order of the menu. Staff have a short guide of their own at{' '}
+            <Link href="/guide" className="font-semibold text-brand hover:underline">
+              /guide
+            </Link>
+            , which you can share with them. Times everywhere are Lagos time.
+          </>
+        }
+        chips={<Chip icon={BookOpen}>{Object.keys(T).length} sections</Chip>}
+      />
 
-      <GuideContents topics={Object.values(T)} />
+      <GuideContents topics={Object.values(T)} layout="cards" />
 
       <div className="grid gap-5 xl:grid-cols-2">
         <GuideSection topic={T.news} intro="The latest changes, where to find them, and the one-off steps they need.">

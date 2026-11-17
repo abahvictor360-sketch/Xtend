@@ -3,10 +3,11 @@ import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { NotificationComposer, type Template } from '@/components/admin/notification-composer'
 import { ScheduledList, type ScheduledItem } from '@/components/admin/notification-tools'
-import { Detail, Figure, Reach } from '@/components/admin/notification-history'
+import { Detail, Reach } from '@/components/admin/notification-history'
+import { BellOff, CalendarClock, Eye, History, Send, Smartphone } from 'lucide-react'
+import { EmptyState, IconTile, Panel, PageHeader, StatCard, StatGrid } from '@/components/admin/page-kit'
 import { Alert } from '@/components/ui/alert'
 import { buttonVariants } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
@@ -149,17 +150,11 @@ export default async function NotificationsPage({
   }))
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold">Notifications</h1>
-        <p className="text-sm text-muted-foreground">
-          Send a push notification to staff phones, now or at a set time.{' '}
-          {session.profile.role === 'supervisor'
-            ? 'As a supervisor you can reach the staff in your own team.'
-            : 'You can reach everyone, a role, an outlet, or named people.'}{' '}
-          Below, see who got each one, who read it in the app, and send it again to anyone it missed.
-        </p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Notifications"
+        note={`Send a push notification to staff phones, now or at a set time. ${session.profile.role === 'supervisor' ? 'You can reach the staff in your own team.' : 'You can reach everyone, a role, an outlet, or named people.'} See who got each one and who read it.`}
+      />
 
       {missing && (
         <Alert variant="warning">
@@ -168,25 +163,42 @@ export default async function NotificationsPage({
         </Alert>
       )}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-        <Figure label="Sent this week" value={String(week.sent)} note="messages from the office" />
-        <Figure label="People reached" value={String(week.delivered)} note={`of ${week.recipients} aimed at`} />
-        <Figure label="Delivery rate" value={week.deliveryRate === null ? '—' : `${week.deliveryRate}%`} warn={week.deliveryRate !== null && week.deliveryRate < 80} />
-        <Figure label="Read in the app" value={week.readRate === null ? '—' : `${week.readRate}%`} note="of those delivered" />
-        <Figure
+      <StatGrid>
+        <StatCard icon={Send} label="Sent this week" value={String(week.sent)} note={`${week.delivered} reached of ${week.recipients} aimed at`} />
+        <StatCard
+          icon={Smartphone}
+          label="Delivery rate"
+          value={week.deliveryRate === null ? '—' : `${week.deliveryRate}%`}
+          tone={week.deliveryRate !== null && week.deliveryRate < 80 ? 'bad' : 'good'}
+          bar={week.deliveryRate}
+          note="Reached a phone"
+        />
+        <StatCard
+          icon={Eye}
+          label="Read in the app"
+          value={week.readRate === null ? '—' : `${week.readRate}%`}
+          bar={week.readRate}
+          note="Of those delivered"
+        />
+        <StatCard
+          icon={BellOff}
           label="Notifications off"
           value={String(off.length)}
+          tone={off.length ? 'bad' : 'muted'}
           note={`of ${fieldReach} field staff`}
-          warn={off.length > 0}
-          className="col-span-2 lg:col-span-1"
+          bar={fieldReach ? (off.length / fieldReach) * 100 : null}
+          href={off.length ? '#notifications-off' : undefined}
         />
-      </div>
+      </StatGrid>
 
       {off.length > 0 && (
-        <details className="surface p-4 text-sm">
-          <summary className="cursor-pointer font-semibold">
-            {off.length} field staff will not get notifications{' '}
-            <span className="font-normal text-muted-foreground">· see who</span>
+        <details id="notifications-off" className="surface scroll-mt-24 border-l-4 border-l-destructive p-4 text-sm sm:p-5">
+          <summary className="flex cursor-pointer list-none items-center gap-3 [&::-webkit-details-marker]:hidden">
+            <IconTile icon={BellOff} tone="bad" />
+            <span className="min-w-0 flex-1">
+              <span className="block text-base font-bold">{off.length} field staff will not get notifications</span>
+              <span className="block text-xs text-muted-foreground">Tap to see who</span>
+            </span>
           </summary>
           <p className="mt-2 text-xs text-muted-foreground">
             They have no phone with Xtend notifications turned on. Ask them to open Xtend and allow notifications;
@@ -214,23 +226,12 @@ export default async function NotificationsPage({
       />
 
       {scheduledItems.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Scheduled</CardTitle>
-            <CardDescription>Waiting to go out. Cancel one, or send it now instead.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ScheduledList items={scheduledItems} now={now.toISOString()} />
-          </CardContent>
-        </Card>
+        <Panel icon={CalendarClock} title={`Scheduled (${scheduledItems.length})`} note="Waiting to go out. Cancel one, or send it now instead.">
+          <ScheduledList items={scheduledItems} now={now.toISOString()} />
+        </Panel>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>History</CardTitle>
-          <CardDescription>Newest first. Open one to see who got it, who read it and who did not.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <Panel icon={History} title="History" note="Newest first. Open one to see who got it, who read it and who did not.">
           <form method="get" className="flex flex-wrap items-end gap-3">
             <input type="hidden" name="kind" value={filter.kind} />
             <div className="w-full space-y-1.5 sm:w-60">
@@ -267,7 +268,7 @@ export default async function NotificationsPage({
           </div>
 
           {rows.length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">Nothing sent in this time.</p>
+            <EmptyState icon={Send}>Nothing sent in this time.</EmptyState>
           ) : (
             <ul className="space-y-2">
               {rows.map((row) => {
@@ -312,8 +313,7 @@ export default async function NotificationsPage({
           {log.length >= 1000 && (
             <p className="text-xs text-muted-foreground">Showing the newest 1,000. Pick a shorter time to see fewer.</p>
           )}
-        </CardContent>
-      </Card>
+      </Panel>
     </div>
   )
 }

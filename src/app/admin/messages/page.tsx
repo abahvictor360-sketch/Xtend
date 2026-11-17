@@ -1,5 +1,6 @@
 import Link from 'next/link'
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, MailWarning, MessageSquarePlus, MessagesSquare, Users, type LucideIcon } from 'lucide-react'
+import { EmptyState, PageHeader, SectionTitle, StatCard, StatGrid } from '@/components/admin/page-kit'
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { Alert } from '@/components/ui/alert'
@@ -50,20 +51,46 @@ export default async function AdminMessagesPage({
   const unread = all.reduce((n, r) => n + r.unread, 0)
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       <AutoRefresh seconds={60} />
       <Header supervisor={session.profile.role === 'supervisor'} />
 
-      <div className="flex flex-wrap items-end justify-between gap-3">
+      <StatGrid>
+        <StatCard icon={Users} label="People" value={String(all.length)} note="You can message" />
+        <StatCard
+          icon={MessagesSquare}
+          label="Conversations"
+          value={String(all.filter((r) => r.last_message_at).length)}
+          tone="good"
+          note="With at least one message"
+          bar={all.length ? (all.filter((r) => r.last_message_at).length / all.length) * 100 : null}
+        />
+        <StatCard
+          icon={MailWarning}
+          label="Unread"
+          value={String(unread)}
+          tone={unread ? 'bad' : 'muted'}
+          note={unread ? `From ${all.filter((r) => r.unread > 0).length} ${all.filter((r) => r.unread > 0).length === 1 ? 'person' : 'people'}` : 'Nothing unread'}
+        />
+        <StatCard
+          icon={MessageSquarePlus}
+          label="No conversation yet"
+          value={String(all.filter((r) => !r.last_message_at).length)}
+          tone="muted"
+          note="Start one below"
+        />
+      </StatGrid>
+
+      <div className="surface flex flex-wrap items-end justify-between gap-3 p-4 sm:p-5">
         <form method="get" className="flex w-full items-end gap-2 sm:w-auto">
           <Input
             name="q"
             defaultValue={q}
             placeholder="Find a name or store"
             aria-label="Find a name or store"
-            className="h-10 flex-1 sm:w-64"
+            className="h-11 flex-1 sm:w-72"
           />
-          <button type="submit" className={buttonVariants({ size: 'sm', className: 'h-10' })}>
+          <button type="submit" className={buttonVariants({ size: 'sm', className: 'h-11' })}>
             Find
           </button>
         </form>
@@ -73,13 +100,11 @@ export default async function AdminMessagesPage({
       </div>
 
       {all.length === 0 ? (
-        <p className="rounded-2xl bg-muted/60 p-4 text-sm text-muted-foreground">
-          No merchandisers or marketers to message yet.
-        </p>
+        <EmptyState icon={MessagesSquare}>No merchandisers or marketers to message yet.</EmptyState>
       ) : (
         <>
-          <List title="Conversations" rows={talking} empty="No messages yet." />
-          <List title="Start a conversation" rows={quiet} empty="Everybody here has a conversation." />
+          <List icon={MessagesSquare} title={`Conversations (${talking.length})`} rows={talking} empty="No messages yet." />
+          <List icon={MessageSquarePlus} title={`Start a conversation (${quiet.length})`} rows={quiet} empty="Everybody here has a conversation." />
         </>
       )}
     </div>
@@ -88,23 +113,23 @@ export default async function AdminMessagesPage({
 
 function Header({ supervisor }: { supervisor: boolean }) {
   return (
-    <div>
-      <h1 className="text-xl font-semibold">Messages</h1>
-      <p className="text-sm text-muted-foreground">
-        {supervisor
+    <PageHeader
+      title="Messages"
+      note={
+        supervisor
           ? 'Talk to the merchandisers and marketers on your team. They get your reply in their app straight away.'
-          : 'Every merchandiser and marketer has one conversation with their supervisor. You can read and reply in any of them.'}
-      </p>
-    </div>
+          : 'Every merchandiser and marketer has one conversation with their supervisor. You can read and reply in any of them.'
+      }
+    />
   )
 }
 
-function List({ title, rows, empty }: { title: string; rows: InboxRow[]; empty: string }) {
+function List({ icon, title, rows, empty }: { icon: LucideIcon; title: string; rows: InboxRow[]; empty: string }) {
   return (
-    <section className="space-y-2">
-      <h2 className="text-sm font-semibold text-muted-foreground">{title}</h2>
+    <section className="space-y-3">
+      <SectionTitle icon={icon} title={title} />
       {rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">{empty}</p>
+        <EmptyState>{empty}</EmptyState>
       ) : (
         <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
           {rows.map((r) => (
@@ -113,6 +138,14 @@ function List({ title, rows, empty }: { title: string; rows: InboxRow[]; empty: 
                 href={`/admin/messages/${r.staff_id}`}
                 className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50"
               >
+                <span
+                  className={cn(
+                    'flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-bold',
+                    r.unread > 0 ? 'bg-brand text-white' : 'bg-tint text-brand',
+                  )}
+                >
+                  {r.full_name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('')}
+                </span>
                 <div className="min-w-0 flex-1">
                   <p className="flex items-center gap-2">
                     <span className={cn('truncate text-sm', r.unread > 0 ? 'font-bold' : 'font-semibold')}>
