@@ -43,7 +43,9 @@ the live database, so it cannot tell which of these are already done.)
    installed". Staff must uninstall, then install again.
 7. **New phone app builds**: several fixes below say "needs a new app build".
    Publish the latest APK (and TestFlight build) so staff get them.
-8. **Try fingerprint sign-in on one Android phone and one iPhone** before
+8. **Add `SITE_URL=https://www.withxtend.com`** to the environment in
+   Dokploy (no rebuild), so the server always knows its real address.
+9. **Try fingerprint sign-in on one Android phone and one iPhone** before
    telling all staff (it could not be tested on a real phone here). Sign in
    with the password in the new app, tap **Use my fingerprint**, sign out,
    then tap **Sign in with fingerprint**.
@@ -51,6 +53,27 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-17
+
+### "Try again" in the app no longer opens Chrome on localhost
+- **What was done:** when Xtend sent a person to the login page (after
+  clocking out, at the start of a new day, or when the app reopened with an
+  old login, often right after **Try again** on the "No connection" page),
+  the server named the address itself. Behind your server's proxy it could
+  only see its own name, `localhost:3000`, so the app opened Chrome on
+  "localhost refused to connect". Now the server names no address at all:
+  the phone moves to the login page on the address it is already on. The
+  server's own idea of the site's address also no longer settles for
+  localhost when the browser reports the real one. A new setting `SITE_URL`
+  pins it for good.
+- **Impact:** after clock-out, at a new day and after **Try again**, staff
+  land on the Xtend login page inside the app, never in Chrome. The phone's
+  background tracking address and passkeys can no longer pick up localhost.
+  (The app's own "No connection" page was already fixed on 10 November; a
+  phone with an app installed before then still has the old button.)
+- **What you need to do:** deploy. In Dokploy, add the environment
+  variable `SITE_URL=https://www.withxtend.com` and redeploy (no rebuild
+  needed). Anyone whose app was installed before 10 November should
+  install the latest one from www.withxtend.com/download.
 
 ### Sign in with a fingerprint, face or passkey (migration 0089)
 - **What was done:**

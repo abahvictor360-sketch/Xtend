@@ -5,7 +5,7 @@ it, and how to change it safely. Keep it current: **every change to the
 project updates this guide in the same commit** (see
 [Keeping this guide current](#13-keeping-this-guide-current)).
 
-_Last updated: 2026-11-17, after signing in with a fingerprint, face or passkey (0089), marketers choosing a report for one store or for the whole day (0088), the owner's change record `docs/CHANGES.md`, clocking in at one of a marketer's own stores checking them in there too (0087) and forgotten store check-ins never blocking the next one (0086); see earlier entries for 2026-11-13 and before._
+_Last updated: 2026-11-17, after leaving after clock-out or at a new day no longer opening Chrome on localhost (`SITE_URL`), signing in with a fingerprint, face or passkey (0089), marketers choosing a report for one store or for the whole day (0088), the owner's change record `docs/CHANGES.md`, clocking in at one of a marketer's own stores checking them in there too (0087) and forgotten store check-ins never blocking the next one (0086); see earlier entries for 2026-11-13 and before._
 
 ---
 
@@ -824,6 +824,7 @@ Set in `.env.local` for development, and for production in Vercel or, on the VPS
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | Yes | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Browser and server client |
+| `SITE_URL` | Recommended on a server behind a proxy | Read at run time (no rebuild; the older `NEXT_PUBLIC_SITE_URL` only counts if set when the image was built). The address people use (`https://www.withxtend.com`): the phone's background-tracking address (`/api/track/token`) and passkeys (the site they belong to) use it. Blank: worked out from `X-Forwarded-Host`/`Host`, and when those only say localhost, from the browser's `Origin`/`Referer` (`publicOrigin`, `src/lib/origin.ts`) |
 | `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server-only writes; never in the browser |
 | `CRON_SECRET` | Yes | Bearer token the scheduled jobs must send |
 | `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Yes for web push | Generate with `node -e "console.log(require('web-push').generateVAPIDKeys())"` |
@@ -995,7 +996,7 @@ for s in check-allocate check-assistant-actions check-attendance check-audit \
          check-schedules-leave check-marketer-reports check-clock-out-reminder check-activity \
          check-xm-features check-report-files check-system-reset check-report-photos check-retention \
          check-places-usage check-shift-reminders check-follow-live check-bot-guard \
-         check-security-fixes check-assistant-cache check-redis check-zero-trust check-quick-sign-in \
+         check-security-fixes check-assistant-cache check-redis check-zero-trust check-quick-sign-in check-origin \
          check-location-required check-downloads check-background-required check-app-only check-clock-notices \
          check-store-allocation; do
   npx tsx --tsconfig tsconfig.scripts.json scripts/$s.ts | tail -1
@@ -1089,6 +1090,7 @@ Newest first. Dates are when the work landed on the main branch.
 
 | Date | Change | Migration |
 |---|---|---|
+| 2026-11-17 | **No more localhost after clock-out, a new day or Try again**: `/api/auth/expired` answered with a redirect built from the server's own address; behind a proxy that passes only the container's name that was `https://localhost:3000/login…`, which the app opened in Chrome. It now answers with a small page that moves the browser to `/login?reason=…` itself (`sameSiteRedirect`, `src/lib/origin.ts`; no host named, sign-out cookies still sent). `publicOrigin` no longer settles for a local host: it uses the browser's `Origin`/`Referer` then; new runtime variable `SITE_URL` (the build-time `NEXT_PUBLIC_SITE_URL` still counts) pins it. New check `scripts/check-origin.ts` | — |
 | 2026-11-17 | **Sign in with a fingerprint, face or passkey**: in a browser, **Sign in with a passkey** on the login page (WebAuthn via `@simplewebauthn/server` 14.0.3 and `@simplewebauthn/browser` 14.0.0; `/api/auth/passkey/options` → `/api/auth/passkey`; passkeys added on You → Security or the office's **Fingerprint and passkeys** page, `/api/auth/passkey/register/options` → `/api/auth/passkey/register`); in the Android and iPhone apps, **Sign in with fingerprint** (`@capgo/capacitor-native-biometric` 8.9.1: a secret kept in the Keystore/Keychain behind the fingerprint, `/api/auth/biometric/enroll` and `/api/auth/biometric`, a new secret every use, a wrong one removes the key). After a password sign-in the login page offers to set it up ("Not now" waits 30 days). Both mint the session with a one-time magic link made and used on the server, then follow the password's rules (`src/lib/sign-in-finish.ts`: lockout pause, app-only, known devices, new-device alerts, office clocks, activity log `method`). Two-step sign-in still asks admins and HR for their code. A password sign-in now confirms the person for 10 minutes when their role needs no code, so setting it up right after asks for nothing more. Changing your own password, an office reset or a deactivation removes every key. New check `scripts/check-quick-sign-in.ts` (a software passkey made and used). Needs a new app build | 0089 |
 | 2026-11-17 | **A report for one store or for the whole day**: the marketer's Report tab first asks "What is this report for?": **The whole day** or one of today's store check-ins, each marked **Filed · edit** or **Not yet**; one whole-day report a day and one per store visit, both allowed. `/api/reports` takes `scope` and `store_visit_id` and puts photos and documents on that report; the outbox carries them. Marketer reports downloads (PDF, Word, Excel) and the Attendance day overview list every report of a day with what it is for. Before 0088 runs everything works as before (one report a day). Checks added to `scripts/check-marketer-reports.ts` | 0088 |
 | 2026-11-17 | **Owner's change record**: new `docs/CHANGES.md`, in plain English, newest first: what was done, its impact and what the owner needs to do, for every change since the first build, with a "Waiting on you" list at the top (deploy, migrations to run, TOTP, the 0069 fix, scheduled jobs, Android signing, app builds). `CLAUDE.md` and section 13 now require an entry for every change | — |

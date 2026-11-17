@@ -236,6 +236,22 @@ export default {
 Tailwind's default `rounded-xl` (0.75rem), `rounded-2xl` (1rem), `rounded-3xl`
 (1.5rem) and `rounded-full` are used heavily alongside these.
 
+### 1.7a The site's own address (`src/lib/origin.ts`)
+
+- `publicOrigin(request)`: `SITE_URL` (run time) or `NEXT_PUBLIC_SITE_URL`
+  (build time) when set; else `X-Forwarded-Host` (first), `Host`, the
+  request URL's host, with `X-Forwarded-Proto` or https (http only for a
+  local host); when that host is local (`isLocalHost`: localhost, 127.x,
+  0.0.0.0, ::1), the browser's `Origin` then `Referer` when they are real
+  http(s) addresses. Used for the tracking endpoint and passkeys.
+- `sameSiteRedirect(path)`: moves within the site without a server redirect
+  (Next.js would turn even a relative `Location` into a full address from
+  the reported host): 200, `text/html`, `Cache-Control: no-store`, a page
+  with `<meta http-equiv="refresh" content="0;url=PATH">` and
+  `location.replace(PATH)` and a "Continue to Xtend" link; paths only
+  (anything not starting with a single `/` becomes `/`), characters escaped.
+  `/api/auth/expired` uses it for `/` and `/login?reason=…`.
+
 ### 1.8 Middleware (`src/middleware.ts`)
 
 - **First, bots** (only when `NODE_ENV === 'production'`, so `next dev`

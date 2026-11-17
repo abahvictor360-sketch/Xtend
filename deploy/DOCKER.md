@@ -73,6 +73,7 @@ app-download settings you use. Plus:
 | Name | Value |
 |---|---|
 | `TRUSTED_PROXY_HOPS` | `1` (Traefik in front, DNS only) |
+| `SITE_URL` | `https://www.withxtend.com`: the address people use. The phone's background-tracking address and passkeys are built from it, so it never comes out as the container's own `localhost:3000`. No rebuild needed |
 
 Get the caller's address right: the audit log, the VPN checks and the
 sign-in lockout read it. Traefik throws away any `X-Forwarded-For` a caller

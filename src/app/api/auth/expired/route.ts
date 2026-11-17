@@ -1,8 +1,7 @@
-import { NextResponse } from 'next/server'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth'
 import { recordActivity } from '@/lib/activity-server'
-import { publicOrigin } from '@/lib/origin'
+import { sameSiteRedirect } from '@/lib/origin'
 
 /**
  * Ends a login that no longer counts (yesterday's, or one that has already
@@ -15,9 +14,8 @@ import { publicOrigin } from '@/lib/origin'
  */
 export async function GET(request: Request) {
   const url = new URL(request.url)
-  const origin = publicOrigin(request)
   const session = await getSession()
-  if (session && !session.relogin) return NextResponse.redirect(new URL('/', origin))
+  if (session && !session.relogin) return sameSiteRedirect('/')
 
   if (session) {
     await recordActivity(session.userId, 'sign_out', request.headers, { detail: { reason: session.relogin } })
@@ -28,5 +26,8 @@ export async function GET(request: Request) {
   const given = url.searchParams.get('reason')
   const asked = given === 'clocked-out' || given === 'office-time' || given === 'idle' ? given : 'new-day'
   const reason = session?.relogin ?? asked
-  return NextResponse.redirect(new URL(`/login?reason=${reason}`, origin))
+  // Not a server redirect: the phone moves itself and stays on the address
+  // it is on, whatever the proxy tells the server (a redirect built from
+  // the server's own idea of its address opened Chrome on localhost).
+  return sameSiteRedirect(`/login?reason=${reason}`)
 }
