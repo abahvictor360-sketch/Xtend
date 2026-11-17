@@ -6512,5 +6512,103 @@ begin
   end;
   perform set_config('request.jwt.claim.sub', '', false);
 
+  -- The office flags a photo (0092).
+  begin
+    declare
+      pic text;
+      owner uuid;
+      sup uuid;
+      other_sup uuid;
+      someone uuid;
+      fid uuid;
+      fid2 uuid;
+    begin
+      perform set_config('request.jwt.claim.sub', '', false);
+      select a.selfie_path, a.user_id, p.supervisor_id into pic, owner, sup
+      from public.attendance a join public.profiles p on p.id = a.user_id
+      where a.selfie_path is not null and p.supervisor_id is not null
+      limit 1;
+      perform assert(pic is not null, 'photo flags 0092: (a clock-in photo of someone with a supervisor to test with)');
+      select id into other_sup from public.profiles
+      where role = 'supervisor' and id <> sup and not public.supervisor_covers(id, owner) limit 1;
+      select id into someone from public.profiles
+      where role in ('merchandiser', 'marketer') and id <> owner limit 1;
+
+      perform act_as(someone);
+      begin
+        perform public.flag_photo(pic, 'not_them', null);
+        perform assert(false, 'photo flags 0092: staff cannot flag');
+      exception when others then
+        perform assert(sqlerrm like 'Only an admin or their supervisor%', 'photo flags 0092: staff cannot flag a photo');
+      end;
+      if other_sup is not null then
+        perform act_as(other_sup);
+        begin
+          perform public.flag_photo(pic, 'not_them', null);
+          perform assert(false, 'photo flags 0092: another supervisor cannot flag');
+        exception when others then
+          perform assert(sqlerrm like 'Only an admin or their supervisor%',
+            'photo flags 0092: a supervisor cannot flag someone outside their team');
+        end;
+      end if;
+
+      perform act_as(sup);
+      begin
+        perform public.flag_photo(pic, 'because', null);
+        perform assert(false, 'photo flags 0092: unknown reason');
+      exception when others then
+        perform assert(sqlerrm like 'Choose why%', 'photo flags 0092: a reason from the list is needed');
+      end;
+      begin
+        perform public.flag_photo(pic, 'other', '   ');
+        perform assert(false, 'photo flags 0092: other needs a note');
+      exception when others then
+        perform assert(sqlerrm like 'Say what is wrong%', 'photo flags 0092: "other" needs a note');
+      end;
+      begin
+        perform public.flag_photo(owner || '/never-uploaded.jpg', 'not_them', null);
+        perform assert(false, 'photo flags 0092: unknown photo');
+      exception when others then
+        perform assert(sqlerrm like 'That photo is not part of%', 'photo flags 0092: only a clock or visit photo can be flagged');
+      end;
+
+      fid := public.flag_photo(pic, 'not_them', 'Looks like her sister');
+      perform assert((select kind = 'photo_flagged' and severity = 'high' and user_id = owner
+                             and notified_at is not null and detail->>'path' = pic
+                             and detail->>'event' in ('clock_in', 'clock_out')
+                             and (detail->>'flagged_by')::uuid = sup
+                             and summary like '%not the right person (Looks like her sister)%'
+                      from public.integrity_flags where id = fid),
+        'photo flags 0092: their supervisor flags it, with the event, the reason and who, already notified');
+      perform assert((select flag_date from public.integrity_flags where id = fid)
+                       = (select attendance_date from public.attendance where selfie_path = pic),
+        'photo flags 0092: the flag is on the day of the photo');
+      fid2 := public.flag_photo(pic, 'photo_of_photo', null);
+      perform assert(fid2 = fid and (select count(*) from public.integrity_flags
+                                     where kind = 'photo_flagged' and detail->>'path' = pic) = 1
+                     and (select detail->>'reason' from public.integrity_flags where id = fid) = 'photo_of_photo',
+        'photo flags 0092: flagging again changes the reason, it does not add a second flag');
+
+      perform act_as(someone);
+      begin
+        perform public.unflag_photo(pic);
+        perform assert(false, 'photo flags 0092: staff cannot unflag');
+      exception when others then
+        perform assert(sqlerrm like 'Only an admin or their supervisor%', 'photo flags 0092: staff cannot take a flag off');
+      end;
+      perform act_as(boss);
+      perform assert(public.unflag_photo(pic), 'photo flags 0092: (unflag answers true)');
+      perform assert(not exists (select 1 from public.integrity_flags where id = fid),
+        'photo flags 0092: an admin takes the flag off');
+      perform assert(not public.unflag_photo(pic), 'photo flags 0092: taking off a flag that is not there does nothing');
+      perform assert(not has_function_privilege('anon', 'public.flag_photo(text, text, text)', 'execute'),
+        'photo flags 0092: signed-out callers cannot flag');
+      raise exception 'photo-flags-0092-done';
+    end;
+  exception when others then
+    if sqlerrm <> 'photo-flags-0092-done' then raise; end if;
+  end;
+  perform set_config('request.jwt.claim.sub', '', false);
+
   raise notice 'ALL RULES PASSED';
 end $$;

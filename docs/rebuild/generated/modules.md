@@ -943,6 +943,13 @@ is worse than letting a doubtful one through to the integrity flags.
 
 Exports: `PhotoKind`, `PhotoSetting`, `PhotoVerdict`, `photoCheckConfigured`, `judgePhoto`
 
+## `src/lib/photo-flags.ts`
+
+Flagging a photo that is not right (migration 0092). Pure: shared by the
+route, the day page and scripts/check-photo-flags.ts.
+
+Exports: `PHOTO_FLAG_REASONS`, `PhotoFlagReason`, `PHOTO_FLAG_LABEL`, `isPhotoFlagReason`
+
 ## `src/lib/photo-quality.ts`
 
 A first, instant look at a frame before it leaves the phone: too dark,
@@ -1538,6 +1545,12 @@ clock-in, clock-out, check-in or check-out for them, or asks them to do
 one again. Every one needs a reason; the database keeps them all.
 
 Exports: `FixVisit`, `DayCorrections`
+
+## `src/components/admin/day-photo-gallery.tsx`
+
+One photo of a person's day, with where and when it was taken.
+
+Exports: `PhotoEvent`, `DayPhoto`, `EVENT_TITLE`, `DayPhotoGallery`
 
 ## `src/components/admin/excuse-timeline.tsx`
 

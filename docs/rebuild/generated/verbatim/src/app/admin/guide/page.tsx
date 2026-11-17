@@ -301,8 +301,15 @@ export default async function AdminGuidePage() {
             from the store and the phone used, with links to Movement and Check an excuse for that day.
             A marketer&apos;s row also says how many stores they visited; open it for every store check-in
             and check-out: the store, the times, how long they stayed, how far from the store, where they
-            were, and the check-in and check-out photos (kept 14 days). A person&apos;s day page lists the
-            same.
+            were, and the check-in and check-out photos (kept 14 days). Tap a person&apos;s name for their whole
+            day on one page: <Ui>Photos of the day</Ui> shows every clock-in, clock-out, store check-in and
+            check-out photo large, with the time, the store, where they were and how far from the store (tap a
+            photo to open it full size, <Ui>Map</Ui> for the spot). If one is not right, tap{' '}
+            <Ui>Flag this photo</Ui> and pick why: not the right person, not taken at the store, a photo of a
+            photo or a screen, face not clear, or something else (with a note). The flag goes to{' '}
+            <Ui>Integrity</Ui> with the others; <Ui>Change the flag</Ui> or <Ui>Remove flag</Ui> on the same
+            photo. The person is not told. The page also has the day in order, their reports and the flags of
+            the day, with arrows for the day before and after.
           </p>
           <ul className="list-disc space-y-1.5 pl-5">
             <li>

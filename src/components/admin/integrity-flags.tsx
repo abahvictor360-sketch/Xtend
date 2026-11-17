@@ -367,7 +367,7 @@ function FlagItem({
 }
 
 /** The kinds of flag that are about a photo the person should look at. */
-const PHOTO_KINDS = new Set(['photo_unchecked', 'photo_rejected', 'selfie_at_home'])
+const PHOTO_KINDS = new Set(['photo_unchecked', 'photo_rejected', 'selfie_at_home', 'photo_flagged'])
 
 /**
  * The photo behind a photo flag, opened on request through a short-lived

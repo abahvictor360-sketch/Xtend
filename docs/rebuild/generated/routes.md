@@ -2,7 +2,7 @@
 
 # API routes
 
-135 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+136 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
 
 ## `POST /api/activity`
 
@@ -850,6 +850,24 @@ const schema = z.object({ user_id: z.string().guid() })
 
 - Database functions: `request_phone_check`
 - Tables and views: `phone_checks`
+
+## `POST, DELETE /api/admin/photo-flags`
+
+- File: `src/app/api/admin/photo-flags/route.ts`
+- Who: ['admin', 'supervisor']
+
+Flags a clock-in, clock-out or store visit photo as not right (0092).
+flag_photo() decides who may: an admin, or the person's own supervisor.
+
+```ts
+const flagSchema = z.object({
+  path,
+  reason: z.enum(PHOTO_FLAG_REASONS, { error: 'Choose why the photo is not right' }),
+  note: note(300),
+})
+```
+
+- Database functions: `flag_photo`, `unflag_photo`
 
 ## `POST /api/admin/places/[id]/pin`
 

@@ -68,6 +68,7 @@ export const ACTION_GROUPS: Record<string, string> = {
   app: 'Updates',
   system: 'System',
   follow: 'Movement',
+  photo: 'Photos',
 }
 
 const LABELS: Record<string, string> = {
@@ -125,6 +126,8 @@ const LABELS: Record<string, string> = {
   'follow.start': 'Started following someone live',
   'follow.extend': 'Kept following someone live',
   'follow.stop': 'Stopped following someone live',
+  'photo.flag': 'Flagged a photo',
+  'photo.unflag': 'Took a flag off a photo',
 }
 
 export function actionGroup(action: string) {

@@ -2739,6 +2739,90 @@ $$;
 
 
 --
+-- Name: flag_photo(text, text, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.flag_photo(p_path text, p_reason text, p_note text DEFAULT NULL::text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  actor uuid := auth.uid();
+  ev record;
+  note text := nullif(btrim(coalesce(p_note, '')), '');
+  summary text;
+  flag_id uuid;
+begin
+  if actor is null then
+    raise exception 'Sign in to flag a photo';
+  end if;
+  if p_reason is null or not (p_reason = any(public.photo_flag_reasons())) then
+    raise exception 'Choose why the photo is not right';
+  end if;
+  if p_reason = 'other' and note is null then
+    raise exception 'Say what is wrong with the photo';
+  end if;
+  if note is not null and length(note) > 300 then
+    raise exception 'Keep the note under 300 characters';
+  end if;
+
+  -- The photo must be one of a clock-in, clock-out or store visit.
+  select * into ev from (
+    select a.user_id, a.attendance_date as day,
+           case a.type when 'opening' then 'clock_in' else 'clock_out' end as event,
+           a.id as event_id, a.outlet_id, a.created_at as at
+    from public.attendance a
+    where p_path in (a.selfie_path, a.thumb_path)
+    union all
+    select v.user_id, v.visit_date, 'check_in', v.id, v.outlet_id, v.arrived_at
+    from public.store_visits v
+    where p_path in (v.selfie_path, v.thumb_path)
+    union all
+    select v.user_id, v.visit_date, 'check_out', v.id, v.outlet_id, v.departed_at
+    from public.store_visits v
+    where p_path in (v.departed_selfie_path, v.departed_thumb_path)
+  ) x
+  limit 1;
+  if not found then
+    raise exception 'That photo is not part of anyone''s clock-in, clock-out or store visit';
+  end if;
+  if not (public.is_admin() or public.supervises_user(ev.user_id)) then
+    raise exception 'Only an admin or their supervisor can flag this photo';
+  end if;
+
+  summary := case ev.event
+               when 'clock_in' then 'Clock-in photo'
+               when 'clock_out' then 'Clock-out photo'
+               when 'check_in' then 'Store check-in photo'
+               else 'Store check-out photo'
+             end
+             || ' flagged by the office: '
+             || case p_reason
+                  when 'not_them' then 'not the right person'
+                  when 'not_at_store' then 'not taken at the store'
+                  when 'photo_of_photo' then 'a photo of a photo or a screen'
+                  when 'unclear' then 'face not clear'
+                  else 'other'
+                end
+             || coalesce(' (' || note || ')', '');
+
+  insert into public.integrity_flags
+    (user_id, kind, severity, summary, detail, outlet_id, flag_date, notified_at)
+  values
+    (ev.user_id, 'photo_flagged', 'high', summary,
+     jsonb_build_object('path', p_path, 'reason', p_reason, 'note', note, 'event', ev.event,
+                        'event_id', ev.event_id, 'event_at', ev.at, 'flagged_by', actor),
+     ev.outlet_id, ev.day, now())
+  on conflict ((detail->>'path')) where kind = 'photo_flagged'
+  do update set summary = excluded.summary, detail = excluded.detail, created_at = now(),
+                reviewed_by = null, reviewed_at = null, review_note = null
+  returning id into flag_id;
+  return flag_id;
+end;
+$$;
+
+
+--
 -- Name: follow_active_count(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4939,6 +5023,17 @@ CREATE FUNCTION public.photo_already_used(p_path text) RETURNS boolean
                  where a.selfie_path = p_path or a.thumb_path = p_path)
       or exists (select 1 from public.store_visits v
                  where v.selfie_path = p_path or v.thumb_path = p_path);
+$$;
+
+
+--
+-- Name: photo_flag_reasons(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.photo_flag_reasons() RETURNS text[]
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  select array['not_them', 'not_at_store', 'photo_of_photo', 'unclear', 'other'];
 $$;
 
 
@@ -8593,6 +8688,31 @@ $$;
 
 
 --
+-- Name: unflag_photo(text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.unflag_photo(p_path text) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  f record;
+begin
+  select id, user_id into f from public.integrity_flags
+  where kind = 'photo_flagged' and detail->>'path' = p_path;
+  if f is null then
+    return false;
+  end if;
+  if not (public.is_admin() or public.supervises_user(f.user_id)) then
+    raise exception 'Only an admin or their supervisor can take this flag off';
+  end if;
+  delete from public.integrity_flags where id = f.id;
+  return true;
+end;
+$$;
+
+
+--
 -- Name: unlock_sign_in(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10284,7 +10404,7 @@ CREATE TABLE public.integrity_flags (
     reviewed_at timestamp with time zone,
     review_note text,
     notified_at timestamp with time zone,
-    CONSTRAINT integrity_flags_kind_check CHECK ((kind = ANY (ARRAY['repeated_exact_location'::text, 'perfect_accuracy'::text, 'impossible_journey'::text, 'count_units_missing'::text, 'count_identical'::text, 'count_round_numbers'::text, 'photo_rejected'::text, 'photo_unchecked'::text, 'own_named_place'::text, 'selfie_at_home'::text, 'backdated_clock'::text, 'phone_clock_wrong'::text, 'late_sync_with_network'::text, 'vpn_suspected'::text, 'ip_location_mismatch'::text, 'timezone_mismatch'::text, 'gps_mock_fingerprint'::text, 'mock_location_confirmed'::text, 'device_integrity_failed'::text, 'late_clock_in'::text, 'early_clock_out'::text, 'stock_discrepancy'::text]))),
+    CONSTRAINT integrity_flags_kind_check CHECK ((kind = ANY (ARRAY['repeated_exact_location'::text, 'perfect_accuracy'::text, 'impossible_journey'::text, 'count_units_missing'::text, 'count_identical'::text, 'count_round_numbers'::text, 'photo_rejected'::text, 'photo_unchecked'::text, 'own_named_place'::text, 'selfie_at_home'::text, 'backdated_clock'::text, 'phone_clock_wrong'::text, 'late_sync_with_network'::text, 'vpn_suspected'::text, 'ip_location_mismatch'::text, 'timezone_mismatch'::text, 'gps_mock_fingerprint'::text, 'mock_location_confirmed'::text, 'device_integrity_failed'::text, 'late_clock_in'::text, 'early_clock_out'::text, 'stock_discrepancy'::text, 'photo_flagged'::text]))),
     CONSTRAINT integrity_flags_review_note_check CHECK (((review_note IS NULL) OR (length(review_note) <= 500))),
     CONSTRAINT integrity_flags_severity_check CHECK ((severity = ANY (ARRAY['low'::text, 'medium'::text, 'high'::text])))
 );
@@ -12769,6 +12889,13 @@ CREATE INDEX follow_sessions_open_by_subject ON public.follow_sessions USING btr
 --
 
 CREATE INDEX integrity_flags_by_user ON public.integrity_flags USING btree (user_id, created_at DESC);
+
+
+--
+-- Name: integrity_flags_one_per_photo; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX integrity_flags_one_per_photo ON public.integrity_flags USING btree (((detail ->> 'path'::text))) WHERE (kind = 'photo_flagged'::text);
 
 
 --
@@ -16475,6 +16602,15 @@ GRANT ALL ON FUNCTION public.flag_own_integrity(p_kind text, p_severity text, p_
 
 
 --
+-- Name: FUNCTION flag_photo(p_path text, p_reason text, p_note text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.flag_photo(p_path text, p_reason text, p_note text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.flag_photo(p_path text, p_reason text, p_note text) TO authenticated;
+GRANT ALL ON FUNCTION public.flag_photo(p_path text, p_reason text, p_note text) TO service_role;
+
+
+--
 -- Name: FUNCTION follow_active_count(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -17908,6 +18044,15 @@ REVOKE ALL ON FUNCTION public.touch_updated_at() FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.tracking_coverage(p_user uuid, p_date date) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.tracking_coverage(p_user uuid, p_date date) TO authenticated;
 GRANT ALL ON FUNCTION public.tracking_coverage(p_user uuid, p_date date) TO service_role;
+
+
+--
+-- Name: FUNCTION unflag_photo(p_path text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.unflag_photo(p_path text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.unflag_photo(p_path text) TO authenticated;
+GRANT ALL ON FUNCTION public.unflag_photo(p_path text) TO service_role;
 
 
 --

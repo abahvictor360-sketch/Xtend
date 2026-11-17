@@ -1,13 +1,18 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
+import { ChevronLeft, ChevronRight, Flag, LogIn, LogOut, MapPin, Phone, Store, TriangleAlert } from 'lucide-react'
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { flagHeadline } from '@/lib/flag-labels'
 import { formatLagos, lagosDateString, longDate, metres } from '@/lib/utils'
 import { DayCorrections } from '@/components/admin/day-corrections'
-import { VisitPhotoList, toDayVisit } from '@/components/admin/visit-photo-list'
+import { toDayVisit } from '@/components/admin/visit-photo-list'
+import { DayPhotoGallery, type DayPhoto } from '@/components/admin/day-photo-gallery'
+import { isPhotoFlagReason, type PhotoFlagReason } from '@/lib/photo-flags'
+import { avatarUrls } from '@/lib/avatars'
+import { addDays, cn } from '@/lib/utils'
+import type { AttendanceDetail } from '@/lib/types'
 import { signSelfies } from '@/lib/export/data'
 import type { VisitRow } from '@/lib/visit-review'
 import { CORRECTION_LABELS, type CorrectionAction } from '@/lib/field-corrections'
@@ -18,15 +23,6 @@ export const metadata = { title: 'Day overview — Xtend' }
 type Search = Record<string, string | string[] | undefined>
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? ''
 
-interface Clock {
-  type: 'opening' | 'closing'
-  created_at: string
-  outlet_name: string | null
-  distance_m: number | null
-  status: string | null
-  location_label: string | null
-  device_info: { source?: string; reason?: string } | null
-}
 /** One person, one day: everything Xtend recorded about it, on a single page. */
 interface DayReportRow {
   scope?: 'day' | 'store' | null
@@ -56,7 +52,7 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
   const supabase = await createServerSupabase()
   const { data: person } = await supabase
     .from('profiles')
-    .select('id, full_name, phone, role, is_active, supervisor_id, outlet_id')
+    .select('id, full_name, phone, role, is_active, supervisor_id, outlet_id, avatar_path')
     .eq('id', id)
     .maybeSingle<{
       id: string
@@ -66,17 +62,19 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
       is_active: boolean
       supervisor_id: string | null
       outlet_id: string | null
+      avatar_path: string | null
     }>()
   if (!person) notFound()
 
   const [clocks, visits, report, flags, alerts, pings] = await Promise.all([
+    // attendance_detail: the place, the distance and the photo paths too.
     supabase
-      .from('attendance')
-      .select('type, created_at, outlet_name, distance_m, status, location_label, device_info')
+      .from('attendance_detail')
+      .select('*')
       .eq('user_id', id)
       .eq('attendance_date', date)
       .order('created_at')
-      .returns<Clock[]>(),
+      .returns<AttendanceDetail[]>(),
     // Every check-in and check-out, with both photos (0091).
     supabase
       .from('store_visit_detail')
@@ -96,10 +94,10 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
       .returns<DayReportRow[]>(),
     supabase
       .from('integrity_flags')
-      .select('kind, severity, summary')
+      .select('kind, severity, summary, detail, reviewed_at')
       .eq('user_id', id)
       .eq('flag_date', date)
-      .returns<{ kind: string; severity: string; summary: string }[]>(),
+      .returns<{ kind: string; severity: string; summary: string; detail: Record<string, unknown> | null; reviewed_at: string | null }[]>(),
     supabase
       .from('location_alerts')
       .select('alert_type, distance_m, created_at')
@@ -122,13 +120,129 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
   const closing = [...(clocks.data ?? [])].reverse().find((c) => c.type === 'closing') ?? null
   const hours = opening && closing ? (Date.parse(closing.created_at) - Date.parse(opening.created_at)) / 3_600_000 : null
   const qs = `person=${id}&date=${date}&until=${date}`
-  const visitList = (visits.data ?? []).map(toDayVisit)
-  // Visit photos are private: short-lived links, signed here (RLS on storage
-  // keeps a supervisor to their own team's photos).
-  const signed = await signSelfies(supabase, visitList.flatMap((v) => [v.in_photo, v.out_photo]))
-  const visitPhotos: Record<string, string | null> = Object.fromEntries(
-    visitList.flatMap((v) => [v.in_photo, v.out_photo]).filter((p): p is string => Boolean(p)).map((p) => [p, signed.get(p) ?? null]),
-  )
+  const clockList = clocks.data ?? []
+  const visitRows = visits.data ?? []
+  const visitList = visitRows.map(toDayVisit)
+
+  // The office's own photo flags (0092), by photo.
+  const photoFlags = new Map<string, { reason: PhotoFlagReason; note: string | null }>()
+  for (const f of flags.data ?? []) {
+    const path = typeof f.detail?.path === 'string' ? f.detail.path : null
+    const reason = f.detail?.reason
+    if (f.kind === 'photo_flagged' && path && isPhotoFlagReason(reason)) {
+      photoFlags.set(path, { reason, note: typeof f.detail?.note === 'string' ? f.detail.note : null })
+    }
+  }
+
+  // Every photo of the day, in time order, full size. Private: short-lived
+  // links signed here (storage keeps a supervisor to their own team's).
+  const storeName = (v: VisitRow) => v.store_label ?? v.outlet_name ?? 'A place'
+  const photos: DayPhoto[] = [
+    ...clockList.map((c) => ({
+      path: c.selfie_path,
+      url: null,
+      event: (c.type === 'opening' ? 'clock_in' : 'clock_out') as DayPhoto['event'],
+      at: c.created_at,
+      store: c.outlet_name,
+      where: c.location_label,
+      distance_m: c.distance_m,
+      radius_m: c.outlet_radius_m,
+      status: c.status,
+      lat: c.lat,
+      lng: c.lng,
+      byOffice: (c.device_info as { source?: string } | null)?.source === 'office',
+      flag: c.selfie_path ? (photoFlags.get(c.selfie_path) ?? null) : null,
+    })),
+    ...visitRows.flatMap((v) => [
+      {
+        path: v.selfie_path,
+        url: null,
+        event: 'check_in' as const,
+        at: v.arrived_at,
+        store: storeName(v),
+        where: v.arrived_label,
+        distance_m: v.arrived_distance_m,
+        radius_m: v.outlet_radius_m ?? null,
+        status: v.arrived_status,
+        lat: v.arrived_lat ?? null,
+        lng: v.arrived_lng ?? null,
+        flag: v.selfie_path ? (photoFlags.get(v.selfie_path) ?? null) : null,
+      },
+      ...(v.departed_at
+        ? [
+            {
+              path: v.departed_selfie_path ?? null,
+              url: null,
+              event: 'check_out' as const,
+              at: v.departed_at,
+              store: storeName(v),
+              where: v.departed_label ?? null,
+              distance_m: v.departed_distance_m,
+              radius_m: v.outlet_radius_m ?? null,
+              status: v.departed_status,
+              lat: v.departed_lat ?? null,
+              lng: v.departed_lng ?? null,
+              flag: v.departed_selfie_path ? (photoFlags.get(v.departed_selfie_path) ?? null) : null,
+            },
+          ]
+        : []),
+    ]),
+  ].sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
+  const [signed, avatars] = await Promise.all([
+    signSelfies(supabase, photos.map((p) => p.path)),
+    avatarUrls(supabase, person.avatar_path ? [person.id] : []),
+  ])
+  for (const p of photos) p.url = p.path ? (signed.get(p.path) ?? null) : null
+  const avatar = avatars.get(person.id) ?? null
+  const flaggedPhotos = photos.filter((p) => p.flag).length
+
+  // Who reports to whom and their home store, for the header.
+  const [{ data: sup }, { data: home }] = await Promise.all([
+    person.supervisor_id
+      ? supabase.from('profiles').select('full_name').eq('id', person.supervisor_id).maybeSingle<{ full_name: string }>()
+      : Promise.resolve({ data: null }),
+    person.outlet_id
+      ? supabase.from('outlets').select('name').eq('id', person.outlet_id).maybeSingle<{ name: string }>()
+      : Promise.resolve({ data: null }),
+  ])
+
+  // The day, in order: clock events, store visits and location alerts.
+  const timeline = [
+    ...clockList.map((c) => ({
+      at: c.created_at,
+      icon: c.type === 'opening' ? 'in' : 'out',
+      text: `${c.type === 'opening' ? 'Clocked in' : 'Clocked out'}${c.outlet_name ? ` · ${c.outlet_name}` : ''}`,
+      note: c.distance_m != null ? `${metres(c.distance_m)} from the store` : c.location_label,
+      bad: Boolean(c.status && c.status !== 'on_site'),
+    })),
+    ...visitRows.flatMap((v) => [
+      {
+        at: v.arrived_at,
+        icon: 'store',
+        text: `Checked in at ${storeName(v)}`,
+        note: v.arrived_distance_m != null ? `${metres(v.arrived_distance_m)} from the store` : v.arrived_label,
+        bad: Boolean(v.arrived_status && v.arrived_status !== 'on_site'),
+      },
+      ...(v.departed_at
+        ? [
+            {
+              at: v.departed_at,
+              icon: 'store',
+              text: `Checked out of ${storeName(v)} after ${v.minutes} min`,
+              note: v.departed_distance_m != null ? `${metres(v.departed_distance_m)} from the store` : (v.departed_label ?? null),
+              bad: Boolean(v.departed_status && v.departed_status !== 'on_site'),
+            },
+          ]
+        : []),
+    ]),
+    ...(alerts.data ?? []).map((a) => ({
+      at: a.created_at,
+      icon: 'alert',
+      text: a.alert_type.replaceAll('_', ' ').replace(/^\w/, (c) => c.toUpperCase()),
+      note: a.distance_m !== null ? metres(a.distance_m) : null,
+      bad: true,
+    })),
+  ].sort((a, b) => Date.parse(a.at) - Date.parse(b.at))
   // The whole-day report first, then each store's.
   const dayReports = [...(report.data ?? [])]
     .sort((a, b) => Number(a.scope === 'store') - Number(b.scope === 'store'))
@@ -178,31 +292,97 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
       ])
     : [[] as { id: string; name: string }[], [] as CorrectionRow[]]
 
+  const canFlag = viewer === 'admin' || (viewer === 'supervisor' && person.supervisor_id === session.userId)
+  const prev = addDays(date, -1)
+  const next = addDays(date, 1)
+  const dayHref = (d: string) => `/admin/attendance/day?person=${id}&date=${d}`
+  const initials = person.full_name
+    .split(/\s+/)
+    .map((w) => w[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
+  const otherFlags = (flags.data ?? []).filter((f) => f.kind !== 'photo_flagged')
+
   return (
     <div className="space-y-5">
-      <div>
-        <Link href={`/admin/attendance?from=${date}&to=${date}`} className="text-xs font-semibold text-brand hover:underline">
-          Back to attendance
-        </Link>
-        <h1 className="text-xl font-semibold">{person.full_name}</h1>
-        <p className="text-sm text-muted-foreground">
-          {longDate(date)}
-          {person.phone && (
-            <>
-              {' · '}
-              <a href={`tel:${person.phone}`} className="font-semibold text-brand hover:underline">
-                Call {person.phone}
-              </a>
-            </>
-          )}
-        </p>
-      </div>
+      <Link href={`/admin/attendance?from=${date}&to=${date}`} className="text-xs font-semibold text-brand hover:underline">
+        ← Back to attendance
+      </Link>
 
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <Box label="Clocked in" value={opening ? formatLagos(opening.created_at, false) : 'No'} warn={!opening} />
+      {/* Who, and which day. */}
+      <header className="surface flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:p-5">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
+          {avatar ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={avatar} alt="" className="h-16 w-16 shrink-0 rounded-2xl object-cover ring-1 ring-border" />
+          ) : (
+            <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-tint text-xl font-extrabold text-brand">
+              {initials}
+            </span>
+          )}
+          <div className="min-w-0">
+            <h1 className="truncate text-xl font-extrabold">{person.full_name}</h1>
+            <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+              <Badge variant="outline" className="capitalize">
+                {person.role}
+              </Badge>
+              {!person.is_active && <Badge variant="destructive">Inactive</Badge>}
+              <span>{home?.name ? `Home store: ${home.name}` : 'No home store'}</span>
+              {sup?.full_name && <span>· {sup.full_name}&rsquo;s team</span>}
+            </p>
+            {person.phone && (
+              <a href={`tel:${person.phone}`} className="mt-1 inline-flex items-center gap-1 text-sm font-semibold text-brand hover:underline">
+                <Phone className="h-3.5 w-3.5" /> Call {person.phone}
+              </a>
+            )}
+          </div>
+        </div>
+        <nav aria-label="Day" className="flex items-center gap-2">
+          <Link href={dayHref(prev)} aria-label="The day before" className="flex h-11 w-11 items-center justify-center rounded-xl border border-border hover:bg-tint">
+            <ChevronLeft className="h-5 w-5" />
+          </Link>
+          <form method="get" className="flex items-center">
+            <input type="hidden" name="person" value={id} />
+            <input
+              type="date"
+              name="date"
+              defaultValue={date}
+              max={today}
+              aria-label="Pick a day"
+              className="h-11 rounded-xl border border-input bg-card px-3 text-sm"
+            />
+            <button type="submit" className="ml-2 h-11 rounded-xl bg-brand px-3 text-sm font-semibold text-primary-foreground">
+              Go
+            </button>
+          </form>
+          {next <= today ? (
+            <Link href={dayHref(next)} aria-label="The day after" className="flex h-11 w-11 items-center justify-center rounded-xl border border-border hover:bg-tint">
+              <ChevronRight className="h-5 w-5" />
+            </Link>
+          ) : (
+            <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-border opacity-40" aria-hidden>
+              <ChevronRight className="h-5 w-5" />
+            </span>
+          )}
+        </nav>
+      </header>
+      <h2 className="text-lg font-bold">
+        {longDate(date)}
+        {date === today && <span className="ml-2 text-sm font-semibold text-brand">Today</span>}
+      </h2>
+
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <Box
+          label="Clocked in"
+          value={opening ? formatLagos(opening.created_at, false) : 'No'}
+          note={opening ? (opening.is_late ? 'Late' : 'On time') : undefined}
+          warn={!opening || Boolean(opening?.is_late)}
+        />
         <Box label="Clocked out" value={closing ? formatLagos(closing.created_at, false) : opening ? 'Not yet' : '—'} />
         <Box label="Hours" value={hours === null ? '—' : `${Math.round(hours * 10) / 10} h`} />
-        <Box label="Store visits" value={String(visitList.length)} />
+        <Box label="Stores visited" value={String(visitList.length)} />
+        <Box label="Photos flagged" value={String(flaggedPhotos)} warn={flaggedPhotos > 0} />
       </section>
 
       {canFix && (
@@ -218,6 +398,105 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
           visits={visitList.map((v) => ({ id: v.id, name: v.store, status: v.status }))}
         />
       )}
+
+      <Block
+        title={`Photos of the day (${photos.length})`}
+        note={
+          canFlag
+            ? 'Every clock-in, clock-out and store visit photo, with where it was taken. Tap a photo to open it full size; flag one that is not right.'
+            : 'Every clock-in, clock-out and store visit photo, with where it was taken. Tap a photo to open it full size.'
+        }
+      >
+        <DayPhotoGallery photos={photos} canFlag={canFlag} />
+      </Block>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Block title="The day, in order">
+          {timeline.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nothing recorded on this day.</p>
+          ) : (
+            <ol className="relative space-y-3 border-l-2 border-border pl-5">
+              {timeline.map((t, i) => (
+                <li key={i} className="relative">
+                  <span
+                    className={cn(
+                      'absolute -left-[31px] top-0 flex h-6 w-6 items-center justify-center rounded-full border-2 border-card',
+                      t.bad ? 'bg-destructive text-white' : 'bg-tint text-brand',
+                    )}
+                  >
+                    {t.icon === 'in' ? (
+                      <LogIn className="h-3 w-3" />
+                    ) : t.icon === 'out' ? (
+                      <LogOut className="h-3 w-3" />
+                    ) : t.icon === 'store' ? (
+                      <Store className="h-3 w-3" />
+                    ) : (
+                      <TriangleAlert className="h-3 w-3" />
+                    )}
+                  </span>
+                  <p className="text-sm">
+                    <span className="font-semibold tabular-nums">{formatLagos(t.at, false)}</span> {t.text}
+                  </p>
+                  {t.note && <p className="text-xs text-muted-foreground">{t.note}</p>}
+                </li>
+              ))}
+            </ol>
+          )}
+          <p className="mt-3 flex items-center gap-1 text-sm">
+            <MapPin className="h-4 w-4 text-brand" />
+            {pings.count ?? 0} position{pings.count === 1 ? '' : 's'} recorded.{' '}
+            <Link href={`/admin/tracking?${qs}`} className="font-semibold text-brand hover:underline">
+              See the movement
+            </Link>
+          </p>
+        </Block>
+
+        <Block title={dayReports.length > 1 ? `Reports (${dayReports.length})` : 'Day report'}>
+          {dayReports.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No report sent for this day.</p>
+          ) : (
+            <div className="space-y-4">
+              {dayReports.map((r, i) => (
+                <div key={i} className="space-y-2">
+                  {(dayReports.length > 1 || r.title !== 'The whole day') && (
+                    <p className="text-sm font-semibold">Report for {r.title}</p>
+                  )}
+                  <dl className="space-y-2 text-sm">
+                    {r.fields.map(([label, value]) => (
+                      <div key={label}>
+                        <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</dt>
+                        <dd className="whitespace-pre-wrap break-words">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              ))}
+            </div>
+          )}
+        </Block>
+      </div>
+
+      {(otherFlags.length > 0 || flaggedPhotos > 0) && (
+        <Block title="Flags raised this day">
+          <ul className="space-y-1.5 text-sm">
+            {(flags.data ?? []).map((f, i) => (
+              <li key={i} className="flex gap-2">
+                <Flag className={cn('mt-0.5 h-4 w-4 shrink-0', f.reviewed_at ? 'text-muted-foreground' : 'text-destructive')} />
+                <span>
+                  <span className="font-semibold">{flagHeadline(f.kind)}</span>: {f.summary}
+                  {f.reviewed_at && <span className="text-muted-foreground"> · looked at</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+          {viewer !== 'hr' && (
+            <Link href={`/admin/integrity?person=${id}&from=${date}&to=${date}&status=all`} className="mt-2 inline-block text-sm font-semibold text-brand hover:underline">
+              Open in Integrity
+            </Link>
+          )}
+        </Block>
+      )}
+
       {corrections.length > 0 && (
         <Block title="Corrections today">
           <ul className="divide-y divide-border text-sm">
@@ -233,113 +512,26 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
           </ul>
         </Block>
       )}
-
-      <Block title="Clock records">
-        {(clocks.data ?? []).length === 0 ? (
-          <p className="text-sm text-muted-foreground">No clock-in or clock-out on this day.</p>
-        ) : (
-          <ul className="divide-y divide-border text-sm">
-            {clocks.data!.map((c) => (
-              <li key={c.created_at + c.type} className="py-2">
-                <span className="font-semibold">{c.type === 'opening' ? 'Clock-in' : 'Clock-out'}</span> at{' '}
-                {formatLagos(c.created_at, false)}
-                {c.device_info?.source === 'office' && (
-                  <Badge variant="outline" className="ml-2">
-                    By the office
-                  </Badge>
-                )}
-                {c.status && c.status !== 'on_site' && (
-                  <Badge variant="destructive" className="ml-2">
-                    {c.status === 'flagged' ? 'Flagged' : 'Off site'}
-                  </Badge>
-                )}
-                <span className="block text-xs text-muted-foreground">
-                  {c.outlet_name ?? 'No store'}
-                  {c.distance_m !== null ? ` · ${metres(c.distance_m)} from it` : ''}
-                  {c.location_label ? ` · ${c.location_label}` : ''}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Block>
-
-      <Block title={`Store check-ins and check-outs (${visitList.length})`}>
-        <VisitPhotoList visits={visitList} photos={visitPhotos} name={person.full_name ?? 'They'} />
-      </Block>
-
-      <Block title={dayReports.length > 1 ? `Reports (${dayReports.length})` : 'Day report'}>
-        {dayReports.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No report sent for this day.</p>
-        ) : (
-          <div className="space-y-4">
-            {dayReports.map((r, i) => (
-              <div key={i} className="space-y-2">
-                {(dayReports.length > 1 || r.title !== 'The whole day') && (
-                  <p className="text-sm font-semibold">Report for {r.title}</p>
-                )}
-                <dl className="space-y-2 text-sm">
-                  {r.fields.map(([label, value]) => (
-                    <div key={label}>
-                      <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</dt>
-                      <dd className="whitespace-pre-wrap break-words">{value}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </div>
-            ))}
-          </div>
-        )}
-      </Block>
-
-      <Block title="Movement and alerts">
-        <p className="text-sm">
-          {pings.count ?? 0} position{pings.count === 1 ? '' : 's'} recorded.{' '}
-          <Link href={`/admin/tracking?${qs}`} className="font-semibold text-brand hover:underline">
-            See the movement
-          </Link>
-        </p>
-        {(alerts.data ?? []).length > 0 && (
-          <ul className="mt-2 list-disc space-y-0.5 pl-5 text-sm">
-            {alerts.data!.map((a) => (
-              <li key={a.created_at}>
-                {formatLagos(a.created_at, false)}: {a.alert_type.replaceAll('_', ' ')}
-                {a.distance_m !== null ? ` (${metres(a.distance_m)})` : ''}
-              </li>
-            ))}
-          </ul>
-        )}
-      </Block>
-
-      {(flags.data ?? []).length > 0 && (
-        <Alert variant="warning">
-          <p className="font-semibold">Flags raised this day</p>
-          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">
-            {flags.data!.map((f, i) => (
-              <li key={i}>
-                {flagHeadline(f.kind)}: {f.summary}
-              </li>
-            ))}
-          </ul>
-        </Alert>
-      )}
     </div>
   )
 }
 
-function Box({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
+function Box({ label, value, note, warn }: { label: string; value: string; note?: string; warn?: boolean }) {
   return (
     <div className="surface p-4">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className={`mt-1 text-lg font-extrabold tabular-nums ${warn ? 'text-destructive' : ''}`}>{value}</p>
+      {note && <p className={`text-xs font-semibold ${warn ? 'text-destructive' : 'text-muted-foreground'}`}>{note}</p>}
     </div>
   )
 }
 
-function Block({ title, children }: { title: string; children: React.ReactNode }) {
+function Block({ title, note, children }: { title: string; note?: string; children: React.ReactNode }) {
   return (
     <section className="surface p-4 sm:p-5">
-      <h2 className="mb-2 text-base font-bold">{title}</h2>
+      <h2 className="text-base font-bold">{title}</h2>
+      {note && <p className="mb-3 mt-0.5 text-sm text-muted-foreground">{note}</p>}
+      {!note && <div className="mb-2" />}
       {children}
     </section>
   )

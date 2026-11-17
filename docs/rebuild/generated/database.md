@@ -1464,6 +1464,7 @@ Policies:
 - `finish_onboarding()` → void · definer · 0037_profile_photos.sql
 - `flag_location(p_user uuid, p_lat double precision, p_lng double precision, p_accuracy double precision, p_at timestamp with time zone, p_source text, p_check_repeat boolean, p_outlet uuid)` → void · definer · 0022_integrity_checks.sql
 - `flag_own_integrity(p_kind text, p_severity text, p_summary text, p_detail jsonb, p_outlet uuid)` → void · definer · 0032_native_integrity.sql
+- `flag_photo(p_path text, p_reason text, p_note text)` → uuid · definer · 0092_photo_flags.sql
 - `follow_active_count()` → integer · definer · 0070_follow_live.sql
 - `follow_end_at_clock_out()` → trigger · definer · 0070_follow_live.sql
 - `follow_extend(p_session uuid)` → jsonb · definer · 0070_follow_live.sql
@@ -1570,6 +1571,7 @@ Policies:
 - `pgp_sym_encrypt_bytea(bytea, text)` → bytea
 - `pgp_sym_encrypt_bytea(bytea, text, text)` → bytea
 - `photo_already_used(p_path text)` → boolean · definer · 0022_integrity_checks.sql
+- `photo_flag_reasons()` → text[] · 0092_photo_flags.sql
 - `photo_is_fresh(p_bucket text, p_path text, p_minutes integer)` → boolean · definer · 0023_photo_checks.sql
 - `photo_verdict(p_path text)` → text · definer · 0023_photo_checks.sql
 - `pin_store_from_place(p_place uuid, p_outlet uuid)` → void · definer · 0034_stores_pinned_from_clock_in.sql
@@ -1688,6 +1690,7 @@ Policies:
 - `text_is_clean(p_text text)` → boolean · 0039_field_rules.sql
 - `touch_updated_at()` → trigger · 0002_logic.sql
 - `tracking_coverage(p_user uuid, p_date date)` → jsonb · definer · 0004_tracking_coverage.sql
+- `unflag_photo(p_path text)` → boolean · definer · 0092_photo_flags.sql
 - `unlock_sign_in(p_user uuid)` → boolean · definer · 0077_sign_in_lockout.sql
 - `unread_messages()` → integer · definer · 0073_messages.sql
 - `visit_place_due()` → trigger · definer · 0045_mandatory_place_naming.sql

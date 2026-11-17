@@ -7,6 +7,7 @@ export const FLAG_HEADLINE: Record<string, string> = {
   perfect_accuracy: 'location looks faked',
   photo_rejected: 'photo rejected',
   selfie_at_home: 'selfie taken at home',
+  photo_flagged: 'photo flagged by the office',
   backdated_clock: 'clock-in time was changed',
   phone_clock_wrong: 'phone clock was changed',
   own_named_place: 'keeps using a place only they named',

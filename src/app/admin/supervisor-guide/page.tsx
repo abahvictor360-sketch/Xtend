@@ -143,7 +143,10 @@ export default async function SupervisorGuidePage() {
             their store or not. Pick dates or a quick range and narrow by person, store or kind of day. The
             calendar shows a square per person per day; open one to see the photo, the map and how far from
             the store they were. A marketer&apos;s row also opens to every store check-in and check-out, with
-            the times, how far from the store and both photos. <Ui>Worth a look</Ui> names repeat absences,
+            the times, how far from the store and both photos. Tap a name for their whole day: every photo
+            of the day with where it was taken, and <Ui>Flag this photo</Ui> when one is not right (not
+            them, not at the store, a photo of a photo); it goes to Integrity, and they are not told.{' '}
+            <Ui>Worth a look</Ui> names repeat absences,
             lateness and missing clock-outs.
           </p>
           <ul className="list-disc space-y-1.5 pl-5">
