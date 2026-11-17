@@ -1,6 +1,6 @@
 import Link from 'next/link'
-import { Bell, ChevronsUpDown, Fingerprint, FlaskConical, KeyRound, Search, ShieldCheck, UserPlus } from 'lucide-react'
-import { SignOutButton } from '@/components/sign-out-button'
+import { Bell, FlaskConical, Search, UserPlus } from 'lucide-react'
+import { AccountMenu } from '@/components/admin/account-menu'
 import { AdminNav, AdminSidebarNav, type NavBadges } from '@/components/admin/admin-nav'
 import { XpelMark } from '@/components/brand/logo'
 import { AssistantLauncher } from '@/components/admin/assistant-launcher'
@@ -17,18 +17,6 @@ function Brand() {
     </Link>
   )
 }
-
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase())
-    .join('')
-}
-
-const accountLink =
-  'flex min-h-10 items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium leading-snug text-foreground/80 hover:bg-muted hover:text-foreground'
 
 /** A square white button in the top bar, as in the reference. */
 const squareButton =
@@ -101,30 +89,7 @@ export function AdminFrame({
               </div>
             )}
             {/* Who is signed in, and their account: one card that opens upwards. */}
-            <details className="group relative">
-              <summary className="flex cursor-pointer list-none items-center gap-3 rounded-xl p-2 hover:bg-muted [&::-webkit-details-marker]:hidden">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-tint text-xs font-bold text-tint-foreground">
-                  {initials(name)}
-                </span>
-                <span className="min-w-0 flex-1 leading-tight">
-                  <span className="block truncate text-sm font-semibold">{name}</span>
-                  <span className="block text-xs text-muted-foreground">{role}</span>
-                </span>
-                <ChevronsUpDown className="h-4 w-4 shrink-0 text-muted-foreground" />
-              </summary>
-              <div className="absolute bottom-full left-0 right-0 z-30 mb-2 space-y-0.5 rounded-2xl border border-border bg-card p-1.5 shadow-lg">
-                <Link href="/mfa/setup" className={accountLink}>
-                  <ShieldCheck className="h-4 w-4 text-muted-foreground" /> Two-step sign-in
-                </Link>
-                <Link href="/admin/sign-in-methods" className={accountLink}>
-                  <Fingerprint className="h-4 w-4 text-muted-foreground" /> Fingerprint and passkeys
-                </Link>
-                <Link href="/change-password" className={accountLink}>
-                  <KeyRound className="h-4 w-4 text-muted-foreground" /> Change password
-                </Link>
-                <SignOutButton className="mt-1 h-10 w-full justify-start px-3 text-sm" />
-              </div>
-            </details>
+            <AccountMenu name={name} role={role} variant="sidebar" />
           </div>
         </aside>
 
@@ -144,12 +109,13 @@ export function AdminFrame({
               <Brand />
               <div className="flex items-center gap-2">
                 {bell}
-                <SignOutButton className="h-11 px-3 text-xs" />
+                <AccountMenu name={name} role={role} variant="phone" />
               </div>
             </div>
             <AdminNav readOnly={readOnly} xmEnabled={xmEnabled} hr={hr} badges={badges} />
             {isAdmin && (
-              <div className="px-4 pb-3">
+              <div className="flex items-center gap-2 px-4 pb-3">
+                <span className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">View as</span>
                 <RoleSwitch current="admin" />
               </div>
             )}
@@ -169,18 +135,10 @@ export function AdminFrame({
             </form>
             <div className="flex min-w-0 flex-wrap items-center gap-2.5">
               {bell}
-              <div className="flex h-11 items-center gap-2.5 rounded-xl border border-border/80 bg-card pl-1.5 pr-4">
-                <span className="flex h-8 w-8 items-center justify-center rounded-full bg-tint text-xs font-bold text-tint-foreground">
-                  {initials(name)}
-                </span>
-                <span className="leading-tight">
-                  <span className="block max-w-[11rem] truncate text-sm font-semibold">{name}</span>
-                  <span className="block text-xs text-muted-foreground">{role}</span>
-                </span>
-              </div>
+              <AccountMenu name={name} role={role} variant="topbar" />
               <Link
                 href="/admin/users?new=1"
-                className="flex h-11 items-center gap-2 rounded-xl border border-border/80 bg-card px-4 text-sm font-semibold transition-colors hover:bg-tint"
+                className="flex h-11 items-center gap-2 rounded-xl bg-brand px-4 text-sm font-semibold text-white shadow-soft transition-colors hover:bg-brand-deep"
               >
                 <UserPlus className="h-4 w-4" />
                 Add staff

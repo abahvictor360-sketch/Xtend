@@ -7,7 +7,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { buttonVariants } from '@/components/ui/button'
-import { lagosDateString } from '@/lib/utils'
+import { lagosDateString, longDate } from '@/lib/utils'
+import { CalendarCheck, CalendarDays, CalendarX, Hourglass, ListChecks, Plane } from 'lucide-react'
+import { Chip, PageHeader, SectionTitle, StatCard, StatGrid } from '@/components/admin/page-kit'
 import { LEAVE_STATUS, isLeaveStatus, sortLeave } from '@/lib/schedule'
 
 export const dynamic = 'force-dynamic'
@@ -43,30 +45,47 @@ export default async function LeaveAdminPage({ searchParams }: { searchParams: P
   const rows = sortLeave((data ?? []) as LeaveItem[])
   const waiting = (pending ?? []).length
   const narrowed = Boolean(status || person || from || to)
+  const approved = rows.filter((r) => r.status === 'approved').length
+  const rejected = rows.filter((r) => r.status === 'rejected').length
+  const awayToday = rows.filter((r) => r.status === 'approved' && r.from_date <= today && r.to_date >= today).length
 
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold">Leave</h1>
-        <p className="text-sm text-muted-foreground">
-          {isAdmin ? 'Leave requests from every merchandiser and marketer.' : 'Leave requests from your team.'} Approve
-          or reject each one; the person gets a message either way. Approved days are not counted as absent and nobody
-          is chased for not clocking in on them. Requests still waiting come first.
-        </p>
-      </div>
+    <div className="space-y-6">
+      <PageHeader
+        title="Leave"
+        note={`${isAdmin ? 'Leave requests from every merchandiser and marketer.' : 'Leave requests from your team.'} Requests still waiting come first.`}
+        chips={<Chip icon={CalendarDays}>{longDate(today)}</Chip>}
+      />
 
-      {waiting > 0 && (
-        <Alert variant="warning">
-          {waiting} request{waiting === 1 ? ' is' : 's are'} waiting for a decision.{' '}
-          {status !== 'pending' && (
-            <Link href="/admin/leave?status=pending" className="font-semibold text-brand hover:underline">
-              Show only those
-            </Link>
-          )}
-        </Alert>
-      )}
+      <StatGrid>
+        <StatCard
+          icon={Hourglass}
+          label="Waiting for you"
+          value={String(waiting)}
+          tone={waiting ? 'warn' : 'muted'}
+          note={waiting ? 'Approve or reject each one' : 'Nothing waiting'}
+          href={waiting && status !== 'pending' ? '/admin/leave?status=pending' : undefined}
+        />
+        <StatCard icon={Plane} label="Away today" value={String(awayToday)} tone="brand" note="Approved leave covering today" />
+        <StatCard
+          icon={CalendarCheck}
+          label="Approved"
+          value={String(approved)}
+          tone="good"
+          note={narrowed ? 'In this view' : 'Latest 500 requests'}
+          bar={rows.length ? (approved / rows.length) * 100 : null}
+        />
+        <StatCard
+          icon={CalendarX}
+          label="Rejected"
+          value={String(rejected)}
+          tone={rejected ? 'bad' : 'muted'}
+          note={narrowed ? 'In this view' : 'Latest 500 requests'}
+          bar={rows.length ? (rejected / rows.length) * 100 : null}
+        />
+      </StatGrid>
 
-      <form className="surface flex flex-col gap-3 p-4 sm:flex-row sm:flex-wrap sm:items-end">
+      <form className="surface flex flex-col gap-3 p-4 sm:flex-row sm:flex-wrap sm:items-end sm:p-5">
         <div className="space-y-1.5 sm:w-40">
           <Label htmlFor="status">Status</Label>
           <Select id="status" name="status" defaultValue={status ?? 'all'} className="h-10 text-sm">
@@ -114,7 +133,14 @@ export default async function LeaveAdminPage({ searchParams }: { searchParams: P
       {error ? (
         <Alert variant="destructive">Could not load leave requests: {error.message}</Alert>
       ) : (
-        <LeaveDecisions rows={rows} selfId={session.userId} today={today} />
+        <section className="space-y-3">
+          <SectionTitle
+            icon={ListChecks}
+            title="Requests"
+            note={`${rows.length} request${rows.length === 1 ? '' : 's'}${narrowed ? ' matching' : ''} · approved days are not counted as absent, and the person gets a message either way`}
+          />
+          <LeaveDecisions rows={rows} selfId={session.userId} today={today} />
+        </section>
       )}
     </div>
   )

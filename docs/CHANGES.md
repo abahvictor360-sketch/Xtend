@@ -57,6 +57,27 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-17
 
+### Eight more dashboard pages in the new look, and the top bar fixed
+- **What was done:** Overview, Alerts, Movement, Store visits, Leave,
+  Schedules, Outlets and Places now look like the Attendance page: a clear
+  title with the date, four figure cards with coloured icons and small
+  bars (tap one to see the people or records behind it), headings with
+  icons, a red-edged "Worth a look" card, and the long explanations folded
+  under "How … works". New figures: **Leave** shows requests waiting, who
+  is away today, approved and rejected; **Schedules** shows who works
+  today, who is off and who is on leave; **Outlets** shows stores with no
+  location yet and stores with nobody in them; **Places** shows names to
+  check and stores waiting for their location. Store and leave cards were
+  redesigned too. **Top bar:** your name and role at the top are now a
+  button that opens your account (two-step sign-in, fingerprint and
+  passkeys, change password, sign out); on a phone it is the round button
+  with your initials. **Add staff** now always opens the new-staff form and
+  jumps to it, even when you are already on the Staff page. Tapping
+  **Admin** under "View as" takes you back to the Overview.
+- **The impact:** every page reads the same way, and what needs you stands
+  out. The two top-bar buttons now do something when tapped.
+- **What you need to do:** redeploy the latest code. No migration.
+
 ### The side menu, tidier and quicker to use
 - **What was done:** the dashboard's side menu has a **Find a page** box at
   the top: type "stock", "leave" or "visits" and only those pages show.

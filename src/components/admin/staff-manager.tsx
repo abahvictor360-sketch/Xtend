@@ -1,8 +1,8 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { UserPlus } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -90,6 +90,24 @@ export function StaffManager({
   const router = useRouter()
   const [draft, setDraft] = useState<Draft>(EMPTY)
   const [creating, setCreating] = useState(startCreating)
+  const params = useSearchParams()
+  // "Add staff" in the top bar links here with ?new=1, from any page and from
+  // this one: open the form, bring it into view and clear the address, so the
+  // button works again the next time it is pressed.
+  const askedNew = params.get('new') === '1'
+  useEffect(() => {
+    if (!askedNew) return
+    setCreating(true)
+    const rest = new URLSearchParams(params.toString())
+    rest.delete('new')
+    router.replace(`/admin/users${rest.size ? `?${rest}` : ''}`, { scroll: false })
+    // No clean-up: clearing ?new=1 re-runs this effect, and the form must still come into view.
+    window.setTimeout(() => {
+      const first = document.getElementById('new-name')
+      first?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      first?.focus({ preventScroll: true })
+    }, 80)
+  }, [askedNew, params, router])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [issued, setIssued] = useState<{ name: string; password: string } | null>(null)

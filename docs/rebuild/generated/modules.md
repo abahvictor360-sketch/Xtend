@@ -1414,6 +1414,15 @@ At most one call from this page every few minutes; the database keeps one per 30
 
 Exports: `ActivityPing`
 
+## `src/components/admin/account-menu.tsx`
+
+Who is signed in, as a button that opens their account: two-step sign-in,
+fingerprint and passkeys, password and sign out. `variant` places it:
+the bottom of the side menu (opens upwards), the desktop top bar, or the
+phone top bar (initials only). Closes on a tap outside, Escape or a new page.
+
+Exports: `AccountMenu`
+
 ## `src/components/admin/activity-view.tsx`
 
 How each kind of activity is marked in the timeline.
@@ -1519,7 +1528,7 @@ The Attendance page's overview, presentation only: the figures, today's
 lists, the "worth a look" card and section headings. The page reads the
 data (through RLS) and passes it in.
 
-Exports: `AttendanceStats`, `TodayItem`, `TodayPanel`, `WorryItem`, `WorthALook`, `SectionTitle`
+Exports: `AttendanceStats`, `TodayItem`, `TodayPanel`, `WorryItem`, `WorthALook`
 
 ## `src/components/admin/attendance-table.tsx`
 
@@ -1663,6 +1672,14 @@ Exports: `DayCount`, `niceMax`, `AttendanceChart`, `Part`, `SegmentBar`, `Gauge`
 Priorities first, with detailed monitoring available below.
 
 Exports: `OverviewData`, `OverviewView`
+
+## `src/components/admin/page-kit.tsx`
+
+The dashboard's page parts, in the Attendance page's look, shared by every
+page: a header with chips and actions, figure cards with a coloured icon
+and a thin bar, section headings and panels. Presentation only.
+
+Exports: `Tone`, `TONE`, `IconTile`, `PageHeader`, `Chip`, `StatCard`, `StatGrid`, `SectionTitle`, `Panel`, `EmptyState`, `TabLinks`
 
 ## `src/components/admin/phone-check.tsx`
 

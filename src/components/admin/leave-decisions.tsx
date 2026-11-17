@@ -7,7 +7,7 @@ import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { formatLagos } from '@/lib/utils'
+import { cn, formatLagos } from '@/lib/utils'
 import { LEAVE_KINDS, LEAVE_STATUS, leaveRangeText, type LeaveKind, type LeaveStatus } from '@/lib/schedule'
 
 export interface LeaveItem {
@@ -62,18 +62,35 @@ export function LeaveDecisions({ rows, selfId, today }: { rows: LeaveItem[]; sel
     }
   }
 
-  if (!rows.length) return <p className="surface p-4 text-sm text-muted-foreground">No leave requests match.</p>
+  if (!rows.length)
+    return (
+      <p className="rounded-2xl border border-dashed border-border bg-card/60 px-4 py-8 text-center text-sm text-muted-foreground">
+        No leave requests match.
+      </p>
+    )
 
   return (
     <div className="space-y-3">
       {error && <Alert variant="destructive">{error}</Alert>}
       {notice && <Alert variant="success">{notice}</Alert>}
+      <div className="grid gap-3 lg:grid-cols-2">
       {rows.map((r) => (
-        <div key={r.id} className="surface space-y-2 p-4">
+        <div
+          key={r.id}
+          className={cn(
+            'surface min-w-0 space-y-2 border-l-4 p-4',
+            r.status === 'pending' ? 'border-l-warning' : r.status === 'approved' ? 'border-l-success' : 'border-l-border',
+          )}
+        >
           <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="min-w-0">
-              <p className="font-semibold">{r.staff_name}</p>
-              <p className="text-xs text-muted-foreground">{r.outlet_name ?? 'No store'}</p>
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-tint text-xs font-bold text-brand">
+                {r.staff_name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('')}
+              </span>
+              <div className="min-w-0">
+                <p className="truncate font-semibold">{r.staff_name}</p>
+                <p className="truncate text-xs text-muted-foreground">{r.outlet_name ?? 'No store'}</p>
+              </div>
             </div>
             <Badge variant={BADGE[r.status]}>{LEAVE_STATUS[r.status]}</Badge>
           </div>
@@ -119,6 +136,7 @@ export function LeaveDecisions({ rows, selfId, today }: { rows: LeaveItem[]; sel
           )}
         </div>
       ))}
+      </div>
     </div>
   )
 }

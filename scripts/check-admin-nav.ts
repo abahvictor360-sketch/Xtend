@@ -28,8 +28,25 @@ const layout = read('src/app/admin/layout.tsx')
 check(/'\/admin\/alerts': location \?\? null, '\/admin\/integrity': flags \?\? null/.test(layout) && /hr \? \{\}/.test(layout),
   'open alerts beside Alerts and flags to review beside Integrity; none for HR')
 const frame = read('src/components/admin/admin-frame.tsx')
-check(/href="\/mfa\/setup"/.test(frame) && /href="\/admin\/sign-in-methods"/.test(frame) && /href="\/change-password"/.test(frame) && /<SignOutButton/.test(frame),
-  'the account card keeps two-step sign-in, fingerprint and passkeys, password and sign out')
+const account = read('src/components/admin/account-menu.tsx')
+check(/href="\/mfa\/setup"/.test(account) && /href="\/admin\/sign-in-methods"/.test(account) && /href="\/change-password"/.test(account) && /<SignOutButton/.test(account),
+  'the account menu keeps two-step sign-in, fingerprint and passkeys, password and sign out')
+check(['sidebar', 'topbar', 'phone'].every((v) => frame.includes(`variant="${v}"`)), 'the name in the sidebar, the top bar and the phone bar opens the account menu')
+check(/pointerdown/.test(account) && /Escape/.test(account) && /pathname/.test(account), 'the account menu closes on a tap outside, Escape or a new page')
+check(/href="\/admin\/users\?new=1"/.test(frame), 'Add staff links to the new-staff form')
+const staff = read('src/components/admin/staff-manager.tsx')
+check(/params\.get\('new'\) === '1'/.test(staff) && /setCreating\(true\)/.test(staff) && /rest\.delete\('new'\)/.test(staff),
+  'the Staff page opens the form on ?new=1 and clears it, so Add staff works from the Staff page too')
+check(/if \(role === current\)[\s\S]{0,80}router\.push\('\/admin'\)/.test(read('src/components/role-switch.tsx')), 'pressing Admin under View as goes to the Overview')
+
+// Every redesigned page uses the shared page parts.
+for (const page of [
+  'src/components/admin/overview-view.tsx', 'src/app/admin/alerts/page.tsx', 'src/app/admin/tracking/page.tsx',
+  'src/app/admin/visits/page.tsx', 'src/app/admin/leave/page.tsx', 'src/app/admin/schedules/page.tsx',
+  'src/app/admin/outlets/page.tsx', 'src/app/admin/places/page.tsx', 'src/components/admin/attendance-overview.tsx',
+]) {
+  check(/from '@\/components\/admin\/page-kit'/.test(read(page)) && /StatCard/.test(read(page)), `${page.split('/').slice(-2).join('/')} uses the shared page look`)
+}
 
 // The table keeps its own padding and alignment and adds the caller's classes.
 const table = read('src/components/ui/table.tsx')

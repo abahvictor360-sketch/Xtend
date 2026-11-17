@@ -23,7 +23,13 @@ export function RoleSwitch({ current, className }: { current: Role; className?: 
   const [busy, setBusy] = useState<Role | null>(null)
 
   async function pick(role: Role) {
-    if (role === current || busy) return
+    if (busy) return
+    // Already in this role: the button still answers, taking an admin back
+    // to the start of the dashboard rather than doing nothing.
+    if (role === current) {
+      if (current === 'admin') router.push('/admin')
+      return
+    }
     setBusy(role)
     try {
       const res = await fetch('/api/admin/acting', {
@@ -56,6 +62,7 @@ export function RoleSwitch({ current, className }: { current: Role; className?: 
             key={value}
             type="button"
             aria-pressed={active}
+            title={active ? `You are viewing as ${label}` : `View the app as a ${label.toLowerCase()}`}
             disabled={pending || busy !== null}
             onClick={() => void pick(value)}
             className={cn(

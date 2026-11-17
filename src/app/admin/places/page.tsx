@@ -6,6 +6,8 @@ import { PlaceDues, type PlaceDueRow } from '@/components/admin/place-dues'
 import { PlaceLookups } from '@/components/admin/place-lookups'
 import { parseLimit } from '@/lib/place-resolve'
 import { lagosDateString } from '@/lib/utils'
+import { Hourglass, MapPinned, SearchCheck, Store } from 'lucide-react'
+import { PageHeader, StatCard, StatGrid } from '@/components/admin/page-kit'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Places — Xtend' }
@@ -56,21 +58,57 @@ export default async function PlacesPage() {
     }
   }
 
+  const checked = places.filter((p) => p.verified).length
+  const toCheck = places.filter((p) => !p.verified && p.source === 'staff').length
+  const namingDue = ((dues ?? []) as PlaceDueRow[]).filter((d) => !d.named_at && !d.dismissed_at).length
+
   return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold">Places</h1>
-        <p className="text-sm text-muted-foreground">
-          Places Xtend has learned. When someone clocks in or checks in somewhere no store, learned
-          place or map can name, they must add it before they go on: standing outside, they type the
-          name on the sign, take a photo of the building with the sign and a selfie holding one of our
-          products, both live in the app, and the phone&apos;s GPS gives the position. Next time anyone
-          stands there, Xtend recognises it. Check the names against the photos, correct any that are
-          wrong, or turn a place into one of your stores. Stores added without a location get it here:
-          when someone allocated to one clocks in away from their other stores, the spot is listed with
-          the stores it could be, and you confirm which.
+    <div className="space-y-6">
+      <PageHeader
+        title="Places"
+        note="Places Xtend has learned from staff, checked against their photos, and stores waiting for their location."
+      />
+
+      {!error && (
+        <StatGrid>
+          <StatCard icon={MapPinned} label="Places learned" value={String(places.length)} note={`${checked} checked by the office`} bar={places.length ? (checked / places.length) * 100 : null} />
+          <StatCard
+            icon={SearchCheck}
+            label="Names to check"
+            value={String(toCheck)}
+            tone={toCheck ? 'warn' : 'muted'}
+            note={toCheck ? 'Typed by staff, not yet checked' : 'Every name checked'}
+          />
+          <StatCard
+            icon={Store}
+            label="Stores with no location"
+            value={String((waiting ?? []).length)}
+            tone={(waiting ?? []).length ? 'bad' : 'muted'}
+            note={(waiting ?? []).length ? 'Confirm the spot below' : 'Every store pinned'}
+          />
+          <StatCard
+            icon={Hourglass}
+            label="Waiting to be named"
+            value={String(namingDue)}
+            tone={namingDue ? 'warn' : 'muted'}
+            note="Spots staff still have to name"
+          />
+        </StatGrid>
+      )}
+
+      <details className="surface p-4 text-sm sm:p-5">
+        <summary className="cursor-pointer font-semibold">How places are learned</summary>
+        <p className="mt-2 leading-relaxed text-muted-foreground">
+          When someone clocks in or checks in somewhere no store, learned place or map can name, they must add it before
+          they go on: standing outside, they type the name on the sign, take a photo of the building with the sign and a
+          selfie holding one of our products, both live in the app, and the phone&apos;s GPS gives the position. Next
+          time anyone stands there, Xtend recognises it. Check the names against the photos, correct any that are wrong,
+          or turn a place into one of your stores. Stores added without a location get it here: when someone allocated to
+          one clocks in away from their other stores, the spot is listed with the stores it could be, and you confirm
+          which.
         </p>
-      </div>
+      </details>
+
       {error ? (
         <p className="text-sm text-destructive">
           Places could not be loaded. Has migration 024 been run in Supabase?

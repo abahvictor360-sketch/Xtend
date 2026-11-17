@@ -16,11 +16,7 @@ Everybody's activity in Xtend (migration 062). Admins only.
 
 - File: `src/app/admin/alerts/page.tsx`
 - Who: ['admin', 'supervisor']
-- Components: `admin/alerts-list`, `field/push-toggle`, `ui/alert`, `ui/badge`, `ui/button`, `ui/card`, `ui/input`, `ui/label`, `ui/select`
-
-The tabs look like the app's filter chips; they are links, so pages can be bookmarked.
-
-On screen: Review what happened, check the context, then follow up.
+- Components: `admin/alerts-list`, `field/push-toggle`, `ui/alert`, `ui/badge`, `ui/button`, `ui/input`, `ui/label`, `ui/select`, `admin/page-kit`
 
 ## `/admin/analytics` — Analytics — Xtend
 
@@ -120,7 +116,7 @@ On screen: Things that look wrong: signs of a fake-location app, phone clocks ch
 
 - File: `src/app/admin/leave/page.tsx`
 - Who: ['admin', 'supervisor', 'hr']
-- Components: `admin/leave-decisions`, `ui/alert`, `ui/input`, `ui/label`, `ui/select`, `ui/button`
+- Components: `admin/leave-decisions`, `ui/alert`, `ui/input`, `ui/label`, `ui/select`, `ui/button`, `admin/page-kit`
 
 ## `/admin/marketer-reports` — Marketer reports — Xtend
 
@@ -242,7 +238,7 @@ On screen: Load the July customer list, or paste your own — names and addresse
 
 - File: `src/app/admin/outlets/page.tsx`
 - Who: ['admin', 'supervisor']
-- Components: `ui/button`, `admin/outlet-manager`
+- Components: `ui/button`, `admin/outlet-manager`, `admin/page-kit`
 
 ## `/admin` — Overview — Xtend
 
@@ -254,9 +250,9 @@ On screen: Load the July customer list, or paste your own — names and addresse
 
 - File: `src/app/admin/places/page.tsx`
 - Who: ['admin']
-- Components: `admin/place-manager`, `admin/place-dues`, `admin/place-lookups`
+- Components: `admin/place-manager`, `admin/place-dues`, `admin/place-lookups`, `admin/page-kit`
 
-On screen: Places Xtend has learned. When someone clocks in or checks in somewhere no store, learned place or map can name, they must add it before they go on: standing outside, they type the name on the sign, take a photo of the building with the sign and a selfie holding one of our products, both live in the app, and the phone&apos;s GPS gives the position. Next time anyone
+On screen: When someone clocks in or checks in somewhere no store, learned place or map can name, they must add it before they go on: standing outside, they type the name on the sign, take a photo of the building with the sign and a selfie holding one of our products, both live in the app, and the phone&apos;s GPS gives the position. Next time anyone stands there, Xtend recognis
 
 ## `/admin/roles` — Roles — Xtend
 
@@ -272,7 +268,7 @@ On screen: Add a role with its own name, such as Account Receivable or Promoter,
 
 - File: `src/app/admin/schedules/page.tsx`
 - Who: ['admin', 'supervisor', 'hr']
-- Components: `admin/schedule-manager`, `ui/alert`
+- Components: `admin/schedule-manager`, `ui/alert`, `admin/page-kit`
 
 ## `/admin/sign-in-methods` — Fingerprint and passkeys — Xtend
 
@@ -336,9 +332,11 @@ On screen: Put merchandisers and marketers on a supervisor&apos;s team. A superv
 
 - File: `src/app/admin/tracking/page.tsx`
 - Who: ['admin', 'supervisor']
-- Components: `ui/alert`, `ui/button`, `ui/input`, `ui/label`, `ui/select`, `admin/movement-map`, `admin/journey-strip`, `admin/live-locations`
+- Components: `admin/page-kit`, `ui/alert`, `ui/button`, `ui/input`, `ui/label`, `ui/select`, `admin/movement-map`, `admin/journey-strip`, `admin/live-locations`
 
-On screen: Where staff are and where they have been since clocking in. While someone is on shift, the app sends their position every 5 minutes (with no network, the phone keeps it and sends it when the connection is back); Xtend also records every clock-in, store check-in and check-out. Pick a person to see their journey over up to
+A compact figure for a person's journey: eight of them, four a row.
+
+On screen: Nothing heard for
 
 ## `/admin/updates` — Updates — Xtend
 
@@ -366,9 +364,7 @@ On screen: Upload a CSV with the columns
 
 - File: `src/app/admin/visits/page.tsx`
 - Who: ['admin', 'supervisor']
-- Components: `admin/visit-filters`, `admin/visit-views`, `ui/alert`, `ui/badge`, `ui/card`
-
-On screen: No store visits recorded for that period.
+- Components: `admin/visit-filters`, `admin/visit-views`, `ui/alert`, `ui/badge`, `admin/page-kit`
 
 ## `/app-only` — Use the Xtend app — Xtend
 
