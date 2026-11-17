@@ -536,7 +536,7 @@ The office fixing someone's day (0090): the actions, what each is
 called, and what the person is told. Pure, so
 scripts/check-field-corrections.ts can test it.
 
-Exports: `CORRECTION_ACTIONS`, `CorrectionAction`, `CORRECTION_LABELS`, `correctionNotice`, `redoBanner`
+Exports: `CORRECTION_ACTIONS`, `CorrectionAction`, `CORRECTION_LABELS`, `correctionNotice`, `redoBanner`, `CorrectionDay`, `CorrectionAsk`, `CorrectionPlan`, `planCorrection`
 
 ## `src/lib/fields.ts`
 

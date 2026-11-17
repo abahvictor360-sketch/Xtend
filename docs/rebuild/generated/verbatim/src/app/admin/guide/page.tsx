@@ -275,7 +275,7 @@ export default async function AdminGuidePage() {
             week&apos;s attendance report”). Attach a list or a photo of a sheet and it prepares store
             allocations or team changes. Ask it to do something (“remind everyone who has not clocked in
             to clock in now”, “ask all merchandisers for a stock count by Friday”, “check Ada&apos;s
-            phone”, “set Ikeja Mall&apos;s target to 500 units for October”, “deactivate Bala”, “show me
+            phone”, “set Ikeja Mall&apos;s target to 500 units for October”, “deactivate Bala”, “clock Ada in at Ikeja Mall at 8:05, her phone would not open”, “show me
             Ada&apos;s movement yesterday”) and it shows a card saying exactly what will happen and to
             whom. Nothing happens until you press the card&apos;s button, and it is recorded in the audit
             log. Chats are kept under <Ui>Earlier chats</Ui>, for you alone.
@@ -867,7 +867,7 @@ export default async function AdminGuidePage() {
                     that store, at the time you give (not in the future), marked <Ui>By the office</Ui>, with no selfie.
                     Marketers can be checked in or out of a store the same way. If a capture went wrong, ask them to do
                     it again: <Ui>Ask them to clock in again</Ui> (or out, or to check in or out of a store again); their
-                    next capture replaces the old one. A reason is always needed; they get a notification with it, the
+                    next capture replaces the old one. You can also ask <Ui>Ask Xtend</Ui> (“clock Ada in at Ikeja Mall at 8:05, her phone would not open”); it shows a card to check first. A reason is always needed; they get a notification with it, the
                     old record is kept under <Ui>Corrections today</Ui>, and it is in the audit log as{' '}
                     <Ui>field.office_clock_in</Ui> and so on. Supervisors can do this for their own team, HR for field
                     staff. Lateness still counts from the time you give.

@@ -55,6 +55,20 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-17
 
+### Ask Xtend can fix someone's clock-in, clock-out or store visit
+- **What was done:** you can now tell **Ask Xtend** things like "clock Ada
+  in at Ikeja Mall at 8:05, her phone would not open", "clock Bala out, he
+  left at 6" or "ask Kemi to clock in again". It shows a card saying exactly
+  what it will do (who, which store, what time, your reason). Nothing
+  happens until you press the button.
+- **The impact:** the same as **Fix today's record** on the person's day,
+  without opening the page. The same rules apply: today only, merchandisers
+  and marketers only, a supervisor only for their own team, and a reason
+  every time. The person is told, it is marked **By the office**, and it is
+  recorded in the audit log.
+- **What you need to do:** nothing new. It needs 0090 (in the list above)
+  and the latest code deployed.
+
 ### Fixing the record of someone who never clocked in
 - **What was done:** on **Attendance**, the names under **Not clocked in
   today** can now be tapped, and so can the names under **Attendance

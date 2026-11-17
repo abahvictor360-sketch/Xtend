@@ -138,6 +138,7 @@ Doing things on the dashboard: when the user asks you to do something rather tha
 - propose_supply (admins): log a delivery to a store, from what the user typed or a document they attached, with the date and each product's units (and batch and expiry where given). Use this for "we delivered…", "log the supply", a delivery note or invoice.
 - When a user attaches a count sheet, stock take, delivery note or invoice, read it and fill the lines yourself; ask only if a product, a number or the store is missing or unclear. Give the product names exactly as written; the dashboard matches them.
 - propose_deactivate: stop someone signing in (their records are kept).
+- propose_field_correction: fix a merchandiser's or marketer's day, today only, when the app would not let them clock in, clock out, or check in or out of a store, or recorded it wrongly. Either record it for them (office_clock_in, office_clock_out, office_check_in, office_check_out; only once the user is sure they are at the store) or ask them to do it again (redo_clock_in, redo_clock_out, redo_check_in, redo_check_out). Give the store (S…) when the user names one, and a time (HH:MM, 24-hour) only when they give one for a clock-in or clock-out; otherwise null. A reason is always needed and the person sees it: use the user's words, and ask for one if they gave none. Check attendance_on_day for today first when you are unsure what they have done.
 - open_page: give the user a button to a dashboard page, filtered to the person and dates (for "show me", "take me to", "open"). Opening a page changes nothing, so no Apply is needed.
 People and stores always come from match_names first (P… and S… references); never guess one. If a name is ambiguous, ask which one. If the request is unclear (no date, no message), ask rather than invent it; for a notification, you may write the title and message yourself from what the user said, keeping their meaning. Propose each action once. After proposing, reply in one or two sentences: what the card will do and that nothing happens until they press its button. Only admins can do the admin-marked ones; say so to a supervisor. Things you cannot do (delete records, change passwords, change roles, change a store's name, location or geofence): say so and give an open_page button to where they can.
 
@@ -659,6 +660,27 @@ const tools: Anthropic.Beta.BetaTool[] = [
     },
   },
   {
+    name: 'propose_field_correction',
+    description:
+      "Proposes fixing a merchandiser's or marketer's record today: clock them in or out, check them in or out of a store (marked By the office), or ask them to do one again. Today only.",
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        person: { type: 'string', description: 'A P… reference.' },
+        action: {
+          type: 'string',
+          enum: ['office_clock_in', 'office_clock_out', 'office_check_in', 'office_check_out', 'redo_clock_in', 'redo_clock_out', 'redo_check_in', 'redo_check_out'],
+        },
+        store: { type: ['string', 'null'], description: 'An S… reference, or null for their usual store (or, for a redo, the only visit).' },
+        time: { type: ['string', 'null'], description: 'HH:MM today for a clock-in or clock-out, or null for now.' },
+        reason: { type: 'string', description: 'Why, in plain words; the person sees it.' },
+      },
+      required: ['person', 'action', 'store', 'time', 'reason'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'open_page',
     description:
       'Gives the user a button to a dashboard page. person (P…) and from/to filter movement, excuse, attendance, visits and integrity; from/to filter the audit log. Changes nothing.',
@@ -712,6 +734,7 @@ const PROPOSE: Record<string, keyof ActionBuilder> = {
   propose_stock_count: 'stockCount',
   propose_supply: 'supply',
   propose_deactivate: 'deactivate',
+  propose_field_correction: 'fieldCorrection',
 }
 
 async function runTool(

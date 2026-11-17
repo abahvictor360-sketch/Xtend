@@ -12,6 +12,8 @@ import { PATCH as updateUser } from '@/app/api/admin/users/[id]/route'
 import { POST as setSchedule } from '@/app/api/admin/schedules/route'
 import { POST as officeCount } from '@/app/api/admin/metrics/count/route'
 import { POST as logSupply } from '@/app/api/admin/metrics/supplies/route'
+import { POST as fixDay } from '@/app/api/admin/field-corrections/route'
+import { CORRECTION_LABELS } from '@/lib/field-corrections'
 
 export const maxDuration = 60
 
@@ -155,6 +157,13 @@ export async function POST(request: Request) {
         const id = action.payload.user_id
         const r = await call(updateUser as Handler, `/api/admin/users/${id}`, { is_active: false }, { id }, 'PATCH')
         result = r.ok ? { ok: true, detail: 'Deactivated.' } : { ok: false, detail: r.error }
+        break
+      }
+      case 'field_correction': {
+        const r = await call(fixDay as Handler, '/api/admin/field-corrections', action.payload)
+        result = r.ok
+          ? { ok: true, detail: `${CORRECTION_LABELS[action.payload.action]}. They have been told.` }
+          : { ok: false, detail: r.error }
         break
       }
     }

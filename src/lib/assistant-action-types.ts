@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { CORRECTION_ACTIONS } from '@/lib/field-corrections'
 
 /**
  * Things Ask Xtend can do on the dashboard when asked: send a notification,
@@ -22,6 +23,7 @@ export const ACTION_KINDS = [
   'xm_count',
   'xm_supply',
   'deactivate',
+  'field_correction',
 ] as const
 export type ActionKind = (typeof ACTION_KINDS)[number]
 
@@ -139,6 +141,17 @@ export const actionSchema = z.discriminatedUnion('kind', [
     }),
   }),
   z.object({ kind: z.literal('deactivate'), payload: z.object({ user_id: uuid }) }),
+  z.object({
+    kind: z.literal('field_correction'),
+    payload: z.object({
+      user_id: uuid,
+      action: z.enum(CORRECTION_ACTIONS),
+      reason: z.string().min(3).max(500),
+      outlet_id: uuid.nullable(),
+      at: z.string().datetime({ offset: true }).nullable(),
+      visit_id: uuid.nullable(),
+    }),
+  }),
 ])
 
 export type ActionRequest = z.infer<typeof actionSchema>

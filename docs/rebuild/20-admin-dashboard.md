@@ -2233,6 +2233,14 @@ Office document rows wrap full filenames and staff details on small screens. Doc
 - Staff Home: a warning alert per open request, "The office asked you to
   clock in again." / "…clock out again." with the reason; the clock button
   shows again.
+- Ask Xtend does the same (`propose_field_correction`): a card titled e.g.
+  "Clock Ada Obi in" / "Ask Ada Obi to clock in again" with lines Store,
+  Time ("now, today" when none), Why, "Recorded for them, marked By the
+  office, with no selfie." or "Their Home shows the request…", "They get a
+  notification with your reason. The old record is kept."; a warning when it
+  replaces a clock-in or clock-out; button **Record it** or **Ask them**.
+  Refusals in plain words (not clocked in, already clocked out, not their
+  store, time later than now, which store visit, no reason).
 
 ## Fingerprint and passkeys (0089)
 
