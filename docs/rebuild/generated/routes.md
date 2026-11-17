@@ -2,7 +2,7 @@
 
 # API routes
 
-134 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+135 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
 
 ## `POST /api/activity`
 
@@ -311,6 +311,28 @@ One person's journey, as on the Movement page: stops, travel and silences.
 Store visits as Excel, Word, PDF or CSV. The file is generated here, from
 whatever filter is on screen, so an admin never has to assemble one. On
 the store coverage view, the file is that list of stores instead.
+
+## `POST /api/admin/field-corrections`
+
+- File: `src/app/api/admin/field-corrections/route.ts`
+- Who: ['admin', 'supervisor', 'hr']
+
+A clock-in or clock-out time today (ISO); left out: now.
+
+```ts
+const schema = z.object({
+  user_id: z.string().guid(),
+  action: z.enum(CORRECTION_ACTIONS),
+  reason: z.string().trim().min(3, 'Say why, in a few words.').max(500),
+  outlet_id: z.string().guid().nullable().optional(),
+  /** A clock-in or clock-out time today (ISO); left out: now. */
+  at: z.string().datetime({ offset: true }).nullable().optional(),
+  visit_id: z.string().guid().nullable().optional(),
+})
+```
+
+- Database functions: `office_record_clock`, `office_record_visit`, `office_request_redo`
+- Tables and views: `outlets`
 
 ## `POST /api/admin/follow/[id]`
 

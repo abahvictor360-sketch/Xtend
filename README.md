@@ -111,6 +111,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0087_clock_in_checks_in.sql             # a marketer clocking in at one of their stores is checked in there too
    supabase/migrations/0088_report_per_store_or_day.sql        # a marketer's report is for one store or for the whole day
    supabase/migrations/0089_quick_sign_in.sql                  # sign in with a fingerprint, face or passkey
+   supabase/migrations/0090_field_corrections.sql              # the office fixes a clock-in, clock-out or store visit
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

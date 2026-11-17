@@ -5,7 +5,9 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { flagHeadline } from '@/lib/flag-labels'
-import { formatLagos, longDate, metres } from '@/lib/utils'
+import { formatLagos, lagosDateString, longDate, metres } from '@/lib/utils'
+import { DayCorrections } from '@/components/admin/day-corrections'
+import { CORRECTION_LABELS, type CorrectionAction } from '@/lib/field-corrections'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Day overview — Xtend' }
@@ -20,6 +22,7 @@ interface Clock {
   distance_m: number | null
   status: string | null
   location_label: string | null
+  device_info: { source?: string; reason?: string } | null
 }
 interface Visit {
   id: string
@@ -42,8 +45,16 @@ interface DayReportRow {
   issues: string | null
 }
 
+interface CorrectionRow {
+  action: CorrectionAction
+  reason: string
+  created_at: string
+  status: string
+  profiles: { full_name: string } | null
+}
+
 export default async function DayOverview({ searchParams }: { searchParams: Promise<Search> }) {
-  await requireSession(['admin', 'supervisor', 'hr'])
+  const session = await requireSession(['admin', 'supervisor', 'hr'])
   const q = await searchParams
   const id = one(q.person)
   const date = one(q.date)
@@ -52,15 +63,23 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
   const supabase = await createServerSupabase()
   const { data: person } = await supabase
     .from('profiles')
-    .select('id, full_name, phone')
+    .select('id, full_name, phone, role, is_active, supervisor_id, outlet_id')
     .eq('id', id)
-    .maybeSingle<{ id: string; full_name: string; phone: string | null }>()
+    .maybeSingle<{
+      id: string
+      full_name: string
+      phone: string | null
+      role: string
+      is_active: boolean
+      supervisor_id: string | null
+      outlet_id: string | null
+    }>()
   if (!person) notFound()
 
   const [clocks, visits, report, flags, alerts, pings] = await Promise.all([
     supabase
       .from('attendance')
-      .select('type, created_at, outlet_name, distance_m, status, location_label')
+      .select('type, created_at, outlet_name, distance_m, status, location_label, device_info')
       .eq('user_id', id)
       .eq('attendance_date', date)
       .order('created_at')
@@ -124,6 +143,41 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
       ] as const).filter(([, v]) => v),
     }))
 
+  // Fixing today's record (0090): today only, for active field staff, by an
+  // admin, HR, or their own supervisor. The database checks it again.
+  const today = lagosDateString()
+  const viewer = session.profile.role
+  const canFix =
+    date === today &&
+    person.is_active &&
+    (person.role === 'merchandiser' || person.role === 'marketer') &&
+    (viewer === 'admin' || viewer === 'hr' || person.supervisor_id === session.userId)
+  const [fixStores, corrections] = canFix
+    ? await Promise.all([
+        supabase
+          .rpc('outlets_for_user', { target: id })
+          .then(async ({ data }) => {
+            const ids = ((data ?? []) as { outlet_id: string }[]).map((r) => r.outlet_id)
+            if (!ids.length) return [] as { id: string; name: string }[]
+            const { data: rows } = await supabase
+              .from('outlets')
+              .select('id, name')
+              .in('id', ids)
+              .eq('is_active', true)
+              .not('lat', 'is', null)
+              .order('name')
+            return (rows ?? []) as { id: string; name: string }[]
+          }),
+        supabase
+          .from('field_corrections')
+          .select('action, reason, created_at, status, profiles!field_corrections_requested_by_fkey(full_name)')
+          .eq('user_id', id)
+          .eq('correction_date', date)
+          .order('created_at')
+          .then(({ data }) => (data ?? []) as unknown as CorrectionRow[]),
+      ])
+    : [[] as { id: string; name: string }[], [] as CorrectionRow[]]
+
   return (
     <div className="space-y-5">
       <div>
@@ -151,6 +205,35 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
         <Box label="Store visits" value={String(visitList.length)} />
       </section>
 
+      {canFix && (
+        <DayCorrections
+          personId={id}
+          personName={person.full_name}
+          date={date}
+          marketer={person.role === 'marketer'}
+          clockedIn={Boolean(opening)}
+          clockedOut={Boolean(closing)}
+          stores={fixStores}
+          homeStoreId={person.outlet_id}
+          visits={visitList.map((v) => ({ id: v.id, name: v.outlets?.name ?? v.arrived_place_name ?? 'A place', status: v.status }))}
+        />
+      )}
+      {corrections.length > 0 && (
+        <Block title="Corrections today">
+          <ul className="divide-y divide-border text-sm">
+            {corrections.map((c, i) => (
+              <li key={i} className="py-2">
+                <span className="font-semibold">{CORRECTION_LABELS[c.action] ?? c.action}</span>
+                {c.status === 'open' && <Badge variant="outline" className="ml-2">Waiting for them</Badge>}
+                <span className="block text-xs text-muted-foreground">
+                  {formatLagos(c.created_at, false)} · by {c.profiles?.full_name ?? 'the office'} · {c.reason}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Block>
+      )}
+
       <Block title="Clock records">
         {(clocks.data ?? []).length === 0 ? (
           <p className="text-sm text-muted-foreground">No clock-in or clock-out on this day.</p>
@@ -160,6 +243,11 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
               <li key={c.created_at + c.type} className="py-2">
                 <span className="font-semibold">{c.type === 'opening' ? 'Clock-in' : 'Clock-out'}</span> at{' '}
                 {formatLagos(c.created_at, false)}
+                {c.device_info?.source === 'office' && (
+                  <Badge variant="outline" className="ml-2">
+                    By the office
+                  </Badge>
+                )}
                 {c.status && c.status !== 'on_site' && (
                   <Badge variant="destructive" className="ml-2">
                     {c.status === 'flagged' ? 'Flagged' : 'Off site'}

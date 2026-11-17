@@ -530,6 +530,14 @@ same words the server would use.
 
 Exports: `problemWith`
 
+## `src/lib/field-corrections.ts`
+
+The office fixing someone's day (0090): the actions, what each is
+called, and what the person is told. Pure, so
+scripts/check-field-corrections.ts can test it.
+
+Exports: `CORRECTION_ACTIONS`, `CorrectionAction`, `CORRECTION_LABELS`, `correctionNotice`, `redoBanner`
+
 ## `src/lib/fields.ts`
 
 What every form field accepts, in one place, so a name is a name, a phone
@@ -1522,6 +1530,14 @@ Exports: `CountTemplateCard`
 ## `src/components/admin/csv-importer.tsx`
 
 Exports: `CsvImporter`
+
+## `src/components/admin/day-corrections.tsx`
+
+"Fix today's record" on a person's day (0090): the office records a
+clock-in, clock-out, check-in or check-out for them, or asks them to do
+one again. Every one needs a reason; the database keeps them all.
+
+Exports: `FixVisit`, `DayCorrections`
 
 ## `src/components/admin/excuse-timeline.tsx`
 

@@ -27,7 +27,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0086_close_stale_visit_on_check_in.sql`;
    - `supabase/migrations/0087_clock_in_checks_in.sql`;
    - `supabase/migrations/0088_report_per_store_or_day.sql`;
-   - `supabase/migrations/0089_quick_sign_in.sql`.
+   - `supabase/migrations/0089_quick_sign_in.sql`;
+   - `supabase/migrations/0090_field_corrections.sql`.
 4. **Clock-out reminder fix (0069)**, if never pasted:
    ```sql
    alter table public.clock_out_reminders drop constraint if exists clock_out_reminders_stage_check;
@@ -53,6 +54,28 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-17
+
+### The office can fix a clock-in, clock-out or store visit (migration 0090)
+- **What was done:** on **Attendance → a person's day**, a new **Fix
+  today's record** panel lets an admin, HR (for field staff) or the
+  person's own supervisor:
+  - **record it for them**: clock in or clock out at one of their stores,
+    at a time today they give (never in the future), or check a marketer
+    in or out of a store. It is recorded at the store, with no selfie, and
+    marked **By the office** with who did it and why;
+  - **ask them to do it again**: clock in again, clock out again, check in
+    again or check out again. Their Home shows "The office asked you to
+    clock in again" with the reason, and their next capture replaces the
+    old one.
+  A reason is always required. The person gets a notification each time.
+- **Impact:** when a phone fails (no GPS, a broken camera, no data) staff
+  are no longer marked absent, and a wrong capture can be fixed the same
+  day. Nothing is lost: the old record is kept word for word under
+  **Corrections today** and in the audit log, and a replaced clock-in keeps
+  the day's movement trail. Only the phone checks are skipped for an office
+  entry; lateness still counts from the time given. Today only; past days
+  cannot be changed.
+- **What you need to do:** deploy, then run 0090.
 
 ### "Try again" in the app no longer opens Chrome on localhost
 - **What was done:** when Xtend sent a person to the login page (after
