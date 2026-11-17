@@ -336,6 +336,17 @@ export default async function SupervisorGuidePage() {
                 a: <>Reset it on Staff. They choose a new one when they sign in.</>,
               },
               {
+                q: 'The app would not clock someone in or out',
+                a: (
+                  <>
+                    On <Ui>Attendance</Ui>, tap their name and use <Ui>Fix today&apos;s record</Ui>. When you are sure they
+                    are at the store (call them), clock them in or out yourself, or check a marketer in or out of a
+                    store. If the app recorded it wrongly, ask them to do it again instead. Give a reason each time: they
+                    see it, and the old record is kept.
+                  </>
+                ),
+              },
+              {
                 q: 'Someone is locked out',
                 a: (
                   <>

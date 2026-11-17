@@ -225,6 +225,27 @@ Policies:
 Policies:
 - `excuse_checks_read` SELECT to public: using `(is_admin() OR supervises_user(user_id))`
 
+### `field_corrections`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| id | uuid(uuid) |  | gen_random_uuid() |
+| user_id | uuid(uuid) |  |  |
+| action | text(text) |  |  |
+| reason | text(text) |  |  |
+| requested_by | uuid(uuid) | yes |  |
+| correction_date | date(date) |  | business_date() |
+| status | text(text) |  | 'open'::text |
+| record_id | uuid(uuid) | yes |  |
+| old_record | jsonb(jsonb) | yes |  |
+| ping_ids | ARRAY(_uuid) |  | '{}'::uuid[] |
+| new_record_id | uuid(uuid) | yes |  |
+| created_at | timestamp with time zone(timestamptz) |  | now() |
+| done_at | timestamp with time zone(timestamptz) | yes |  |
+
+Policies:
+- `field_corrections_read` SELECT to public: using `((user_id = auth.uid()) OR is_admin() OR is_hr() OR supervises_user(user_id))`
+
 ### `follow_sessions`
 
 | Column | Type | Null | Default |
@@ -1372,12 +1393,15 @@ Policies:
 - `assign_support_thread(p_thread uuid, p_assignee uuid)` → void · definer · 0053_support_notifications.sql
 - `assistant_conversation_touch()` → trigger · 0054_integrity_ask.sql
 - `attendance_alert()` → trigger · definer · 0001_init.sql
+- `attendance_correction_done()` → trigger · definer · 0090_field_corrections.sql
 - `attendance_enforce()` → trigger · definer · 0034_stores_pinned_from_clock_in.sql
 - `attendance_integrity()` → trigger · definer · 0022_integrity_checks.sql
 - `attendance_learn_waiting_store()` → trigger · definer · 0034_stores_pinned_from_clock_in.sql
+- `attendance_office_time()` → trigger · definer · 0090_field_corrections.sql
 - `attendance_place_due()` → trigger · definer · 0045_mandatory_place_naming.sql
 - `attendance_punctuality()` → trigger · definer · 0036_supervisor_alerts.sql
 - `attendance_push_check()` → trigger · definer · 0027_notifications_required.sql
+- `attendance_replace_for_correction()` → trigger · definer · 0090_field_corrections.sql
 - `attendance_store_check_in()` → trigger · definer · 0087_clock_in_checks_in.sql
 - `attendance_timing()` → trigger · definer · 0026_phone_evidence.sql
 - `attendance_timing_flag()` → trigger · definer · 0026_phone_evidence.sql
@@ -1481,6 +1505,7 @@ Policies:
 - `locked_accounts()` → TABLE(user_id uuid, locked_until timestamp with time zone, whole_account boolean) · definer · 0077_sign_in_lockout.sql
 - `log_location_block(p_reason text, p_accuracy_m double precision)` → uuid · definer · 0002_logic.sql
 - `mark_notifications_read()` → integer · definer · 0006_push_notifications.sql
+- `may_correct_field(p_user uuid)` → boolean · definer · 0090_field_corrections.sql
 - `message_file_readable(p_name text)` → boolean · definer · 0079_security_fixes.sql
 - `message_inbox()` → TABLE(staff_id uuid, full_name text, role user_role, outlet_name text, supervisor_name text, last_message_at timestamp with time zone, last_body text, last_from_staff boolean, unread integer) · definer · 0075_message_attachments.sql
 - `mfa_required_for(p_role user_role)` → boolean · definer · 0080_zero_trust.sql
@@ -1490,7 +1515,7 @@ Policies:
 - `movement_trail(p_user uuid, p_date date)` → jsonb · definer · 0029_offline_positions.sql
 - `my_calendar(p_from date, p_to date)` → TABLE(day date, kind text, clocked_in boolean, missed boolean) · definer · 0059_schedules_leave.sql
 - `my_coverage()` → jsonb · definer · 0004_tracking_coverage.sql
-- `my_day()` → jsonb · definer · 0005_marketer_role.sql
+- `my_day()` → jsonb · definer · 0090_field_corrections.sql
 - `my_mfa_required()` → boolean · definer · 0080_zero_trust.sql
 - `my_notifications(p_limit integer)` → TABLE(id uuid, title text, body text, url text, sent_at timestamp with time zone, sender_name text, read_at timestamp with time zone) · definer · 0006_push_notifications.sql
 - `my_open_count_request()` → TABLE(id uuid, due_date date, note text, requested_by_name text) · definer · 0020_count_requests.sql
@@ -1510,7 +1535,13 @@ Policies:
 - `note_place_visit(p_id uuid)` → void · definer · 0068_place_lookups.sql
 - `note_place_visit_for(p_user uuid, p_id uuid)` → void · definer · 0068_place_lookups.sql
 - `notification_sent_by_me(p_notification uuid)` → boolean · definer · 0053_support_notifications.sql
+- `office_act_as(p_user uuid, p_actor uuid)` → void · definer · 0090_field_corrections.sql
+- `office_act_done()` → void · definer · 0090_field_corrections.sql
+- `office_entry_on()` → boolean · 0090_field_corrections.sql
 - `office_name(p uuid)` → text · definer · 0053_support_notifications.sql
+- `office_record_clock(p_user uuid, p_type attendance_type, p_outlet uuid, p_at timestamp with time zone, p_reason text)` → uuid · definer · 0090_field_corrections.sql
+- `office_record_visit(p_user uuid, p_action text, p_outlet uuid, p_reason text)` → uuid · definer · 0090_field_corrections.sql
+- `office_request_redo(p_user uuid, p_action text, p_reason text, p_visit uuid)` → uuid · definer · 0090_field_corrections.sql
 - `open_support_thread(p_subject text, p_body text)` → uuid · definer · 0031_support_messages.sql
 - `outlet_containing(p_lat double precision, p_lng double precision)` → uuid · definer · 0016_visits_without_allocation.sql
 - `outlets_for_user(target uuid)` → TABLE(outlet_id uuid) · definer · 0079_security_fixes.sql
@@ -1592,7 +1623,7 @@ Policies:
 - `request_phone_check(p_user uuid)` → uuid · definer · 0026_phone_evidence.sql
 - `request_store_count(p_user_ids uuid[], p_due_date date, p_note text)` → uuid · definer · 0046_role_store_counts.sql
 - `reset_category_keys()` → text[] · 0066_test_mode_reset.sql
-- `reset_category_tables()` → TABLE(category text, table_name text, step integer) · 0082_app_update_notices.sql
+- `reset_category_tables()` → TABLE(category text, table_name text, step integer) · 0090_field_corrections.sql
 - `reset_files_done(p_bucket text, p_names text[])` → integer · definer · 0066_test_mode_reset.sql
 - `reset_files_next(p_limit integer)` → TABLE(bucket text, name text) · definer · 0066_test_mode_reset.sql
 - `reset_files_pending()` → integer · definer · 0066_test_mode_reset.sql
@@ -1695,14 +1726,17 @@ Policies:
 - `attendance`: `realtime_broadcast` — AFTER INSERT OR DELETE OR UPDATE ON public.attendance FOR EACH ROW EXECUTE FUNCTION realtime_notify_field_owner()
 - `attendance`: `trg_attendance_alert` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_alert()
 - `attendance`: `trg_attendance_enforce` — BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_enforce()
-- `attendance`: `trg_attendance_integrity` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_integrity()
-- `attendance`: `trg_attendance_learn_waiting_store` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_learn_waiting_store()
+- `attendance`: `trg_attendance_integrity` — AFTER INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_integrity()
+- `attendance`: `trg_attendance_learn_waiting_store` — AFTER INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_learn_waiting_store()
 - `attendance`: `trg_attendance_punctuality` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_punctuality()
-- `attendance`: `trg_attendance_push_check` — BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_push_check()
-- `attendance`: `trg_attendance_selfie_check` — BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION selfie_check()
-- `attendance`: `trg_attendance_timing` — BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_timing()
-- `attendance`: `trg_attendance_timing_flag` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_timing_flag()
-- `attendance`: `trg_attendance_zz_place_due` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_place_due()
+- `attendance`: `trg_attendance_push_check` — BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_push_check()
+- `attendance`: `trg_attendance_selfie_check` — BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION selfie_check()
+- `attendance`: `trg_attendance_timing` — BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_timing()
+- `attendance`: `trg_attendance_timing_flag` — AFTER INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_timing_flag()
+- `attendance`: `trg_attendance_zy_office_time` — BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_office_time()
+- `attendance`: `trg_attendance_zz_correction` — BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_replace_for_correction()
+- `attendance`: `trg_attendance_zz_correction_done` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_correction_done()
+- `attendance`: `trg_attendance_zz_place_due` — AFTER INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_place_due()
 - `attendance`: `trg_attendance_zz_store_check_in` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_store_check_in()
 - `attendance`: `trg_follow_end_at_clock_out` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION follow_end_at_clock_out()
 - `audit_log`: `trg_audit_fill_context` — BEFORE INSERT ON public.audit_log FOR EACH ROW EXECUTE FUNCTION audit_fill_context()
@@ -1729,10 +1763,10 @@ Policies:
 - `store_visits`: `realtime_broadcast` — AFTER INSERT OR DELETE OR UPDATE ON public.store_visits FOR EACH ROW EXECUTE FUNCTION realtime_notify_field_owner()
 - `store_visits`: `trg_store_visit_alert` — AFTER INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION store_visit_alert()
 - `store_visits`: `trg_store_visit_enforce` — BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION store_visit_enforce()
-- `store_visits`: `trg_store_visit_selfie_check` — BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION selfie_check()
+- `store_visits`: `trg_store_visit_selfie_check` — BEFORE INSERT ON public.store_visits FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION selfie_check()
 - `store_visits`: `trg_store_visit_zz_close_stale` — BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION store_visit_close_stale()
-- `store_visits`: `trg_store_visits_place_due_guard` — BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION place_due_guard()
-- `store_visits`: `trg_store_visits_zz_place_due` — AFTER INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION visit_place_due()
+- `store_visits`: `trg_store_visits_place_due_guard` — BEFORE INSERT ON public.store_visits FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION place_due_guard()
+- `store_visits`: `trg_store_visits_zz_place_due` — AFTER INSERT ON public.store_visits FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION visit_place_due()
 - `support_messages`: `realtime_broadcast` — AFTER INSERT OR DELETE OR UPDATE ON public.support_messages FOR EACH ROW EXECUTE FUNCTION realtime_notify_support_message()
 - `support_threads`: `realtime_broadcast` — AFTER INSERT OR DELETE OR UPDATE ON public.support_threads FOR EACH ROW EXECUTE FUNCTION realtime_notify_field_owner()
 - `system_settings`: `trg_system_settings_guard` — BEFORE DELETE OR UPDATE ON public.system_settings FOR EACH ROW EXECUTE FUNCTION system_settings_guard()

@@ -52,7 +52,7 @@ On screen: Choose which stores each person works. A marketer with stores here ca
 
 - File: `src/app/admin/attendance/day/page.tsx`
 - Who: ['admin', 'supervisor', 'hr']
-- Components: `ui/alert`, `ui/badge`
+- Components: `ui/alert`, `ui/badge`, `admin/day-corrections`
 
 One person, one day: everything Xtend recorded about it, on a single page.
 

@@ -5699,6 +5699,143 @@ begin
   end;
   perform set_config('request.jwt.claims', '{"aal":"aal2"}', false);
 
+  -- The office fixes a clock-in, clock-out or visit (0090).
+  declare
+    sup uuid := gen_random_uuid();
+    fia uuid := gen_random_uuid();
+    kai uuid := gen_random_uuid();
+    mo  uuid := gen_random_uuid();
+    first_in uuid;
+    second_in uuid;
+    ping uuid;
+    vid uuid;
+    day jsonb;
+  begin
+    perform act_as(boss);
+    insert into auth.users (id, email) values
+      (sup, 'sup.fc@xpel.ng'), (fia, 'fia.fc@xpel.ng'), (kai, 'kai.fc@xpel.ng'), (mo, 'mo.fc@xpel.ng');
+    insert into public.profiles (id, full_name, email, role, outlet_id) values
+      (sup, 'Sola Ade', 'sup.fc@xpel.ng', 'supervisor', null);
+    insert into public.profiles (id, full_name, email, role, outlet_id, supervisor_id) values
+      (fia, 'Fia Obi',  'fia.fc@xpel.ng', 'merchandiser', mall_id, sup),
+      (kai, 'Kai Eze',  'kai.fc@xpel.ng', 'merchandiser', mall_id, null),
+      (mo,  'Mo Bello', 'mo.fc@xpel.ng',  'marketer',     mall_id, sup);
+    perform notifications_on(fia);
+    insert into public.work_patterns (user_id, days) values
+      (fia, '{0,1,2,3,4,5,6}'), (kai, '{0,1,2,3,4,5,6}'), (mo, '{0,1,2,3,4,5,6}');
+
+    -- Who may: the supervisor for their team only; never staff themselves.
+    perform act_as(sup);
+    begin
+      perform public.office_record_clock(kai, 'opening', mall_id, null, 'Phone would not open');
+      perform assert(false, 'corrections 0090: a supervisor cannot fix someone off their team');
+    exception when others then
+      perform assert(sqlerrm like 'You can only fix%', 'corrections 0090: a supervisor fixes only their own team');
+    end;
+    perform act_as(fia);
+    begin
+      perform public.office_record_clock(fia, 'opening', mall_id, null, 'Clocking myself in');
+      perform assert(false, 'corrections 0090: staff cannot record for themselves');
+    exception when others then
+      perform assert(sqlerrm like 'You can only fix%', 'corrections 0090: staff cannot use the office entry');
+    end;
+
+    -- The supervisor clocks Fia in: at the store, marked as the office's.
+    perform act_as(sup);
+    begin
+      perform public.office_record_clock(fia, 'opening', mall_id, now() + interval '1 hour', 'Phone broke');
+      perform assert(false, 'corrections 0090: a future time must be refused');
+    exception when others then
+      perform assert(sqlerrm like '%future%', 'corrections 0090: no time in the future');
+    end;
+    begin
+      perform public.office_record_clock(fia, 'closing', mall_id, null, 'Phone broke');
+      perform assert(false, 'corrections 0090: no clock-out before a clock-in');
+    exception when others then
+      perform assert(sqlerrm like 'They have not clocked in%', 'corrections 0090: a clock-out needs a clock-in');
+    end;
+    first_in := public.office_record_clock(fia, 'opening', mall_id, null, 'Phone broke at the door');
+    perform assert(
+      (select user_id from public.attendance where id = first_in) = fia
+      and (select status from public.attendance where id = first_in) = 'on_site'
+      and (select device_info->>'source' from public.attendance where id = first_in) = 'office'
+      and (select device_info->>'recorded_by' from public.attendance where id = first_in) = sup::text,
+      'corrections 0090: the office clock-in is the person''s, on site, marked as the office''s and by whom');
+    -- Lateness is real and still counts; the phone's evidence is not asked for.
+    perform assert(not exists (select 1 from public.integrity_flags where user_id = fia and kind <> 'late_clock_in'),
+      'corrections 0090: an office entry raises no phone-evidence flags');
+    perform assert(
+      (select status from public.field_corrections where user_id = fia and action = 'office_clock_in') = 'done'
+      and (select new_record_id from public.field_corrections where user_id = fia and action = 'office_clock_in') = first_in,
+      'corrections 0090: the correction is kept, done, pointing at the new record');
+    perform assert(public.is_admin() = false and auth.uid() = sup,
+      'corrections 0090: the caller is the caller again afterwards');
+
+    -- Asked to clock in again: Home offers it, the new capture replaces it.
+    insert into public.location_pings (user_id, attendance_id, lat, lng, accuracy_m)
+      values (fia, first_in, 6.6019, 3.3516, 10) returning id into ping;
+    perform public.office_request_redo(fia, 'redo_clock_in', 'Please clock in with your selfie');
+    perform act_as(fia);
+    day := public.my_day();
+    perform assert(day->'opening' = 'null'::jsonb and jsonb_array_length(day->'redo') = 1
+                   and day->'redo'->0->>'reason' = 'Please clock in with your selfie',
+      'corrections 0090: Home shows them not clocked in, with the office''s reason');
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+    values ('opening', 6.6019, 3.3516, 12, fresh_photo('selfies', 'fia-again.jpg'), now())
+    returning id into second_in;
+    perform assert((select count(*) from public.attendance where user_id = fia and type = 'opening') = 1
+                   and not exists (select 1 from public.attendance where id = first_in),
+      'corrections 0090: the new clock-in replaces the old one (one a day still)');
+    perform assert((select lp.attendance_id from public.location_pings lp where lp.id = ping) = second_in,
+      'corrections 0090: the movement trail moves to the new clock-in');
+    perform assert(
+      (select old_record->>'id' from public.field_corrections where user_id = fia and action = 'redo_clock_in') = first_in::text
+      and (select status from public.field_corrections where user_id = fia and action = 'redo_clock_in') = 'done',
+      'corrections 0090: the old clock-in is kept, word for word, in the correction');
+    perform assert(public.my_day()->'opening'->>'id' = second_in::text and jsonb_array_length(public.my_day()->'redo') = 0,
+      'corrections 0090: Home shows the new clock-in and no more request');
+
+    -- Store visits for a marketer: check in, out, and redo both.
+    perform act_as(sup);
+    perform public.office_record_clock(mo, 'opening', mall_id, null, 'GPS would not lock');
+    vid := public.office_record_visit(mo, 'check_in', mall_id, 'Confirmed by phone call');
+    perform assert(
+      (select status from public.store_visits where id = vid) = 'open'
+      and (select user_id from public.store_visits where id = vid) = mo
+      and (select device_info->>'source' from public.store_visits where id = vid) = 'office',
+      'corrections 0090: the office checks a marketer in at the store');
+    begin
+      perform public.office_request_redo(mo, 'redo_check_out', 'Check out again', vid);
+      perform assert(false, 'corrections 0090: no redo of a check-out that has not happened');
+    exception when others then
+      perform assert(sqlerrm like 'They have not checked out%', 'corrections 0090: only a done check-out can be redone');
+    end;
+    perform public.office_record_visit(mo, 'check_out', null, 'Left at 4 pm, phone was off');
+    perform assert((select status from public.store_visits where id = vid) = 'closed',
+      'corrections 0090: the office checks them out');
+    perform public.office_request_redo(mo, 'redo_check_out', 'Check out again at the door', vid);
+    perform assert((select status from public.store_visits where id = vid) = 'open'
+                   and (select departed_at from public.store_visits where id = vid) is null,
+      'corrections 0090: asked to check out again, the visit is open again');
+    perform public.office_request_redo(mo, 'redo_check_in', 'Wrong store, check in again', vid);
+    perform public.office_record_clock(mo, 'closing', mall_id, null, 'Phone died before clock-out');
+    begin
+      perform public.office_request_redo(mo, 'redo_clock_in', 'Clock in again');
+      perform assert(false, 'corrections 0090: no redo of a clock-in after the clock-out');
+    exception when others then
+      perform assert(sqlerrm like 'They have already clocked out%', 'corrections 0090: after the clock-out, the office records it instead');
+    end;
+    perform assert((select status from public.store_visits where id = vid) = 'abandoned',
+      'corrections 0090: asked to check in again, the visit is set aside as abandoned');
+    perform assert((select count(*) from public.field_corrections where user_id = mo) = 6,
+      'corrections 0090: every correction is kept');
+
+    raise exception 'corr-0090-done';
+  exception when others then
+    if sqlerrm <> 'corr-0090-done' then raise; end if;
+  end;
+  perform set_config('request.jwt.claims', '{"aal":"aal2"}', false);
+
   -- Test mode and resetting the test run (066). Every case runs in its
   -- own block that is rolled back, so the data stays for the RLS tests.
   -- ---------------------------------------------------------------
@@ -5731,6 +5868,8 @@ begin
     insert into public.assistant_conversations (user_id, title) values (boss, 'Test run questions');
     insert into public.follow_sessions (watcher_id, subject_id, expires_at, ended_at, end_reason)
     values (boss, ada, now(), now(), 'stopped');
+    insert into public.field_corrections (user_id, action, reason, requested_by, status, done_at)
+    values (ada, 'office_check_in', 'Test run correction', boss, 'done', now());
     alter table public.xm_monthly_grades disable trigger trg_xm_monthly_grades_feature_guard;
     insert into public.xm_monthly_grades (month, user_id, grade, score, band)
     values (date_trunc('month', now())::date, ada, '{}', 70, 'Strong');

@@ -813,5 +813,27 @@ select assert(not has_table_privilege('authenticated', 'public.sign_in_keys', 's
                 and not has_function_privilege('anon', 'public.my_sign_in_keys()', 'execute'),
   'rls: sign-in keys are server only; people list their own through my_sign_in_keys');
 
+-- Office corrections (0090): the person, their supervisor, admins and HR
+-- read them; nobody writes them directly.
+reset role;
+delete from public.field_corrections;
+insert into public.field_corrections (user_id, action, reason, requested_by, status, done_at) values
+  (:'ada', 'office_clock_in', 'Phone broke', :'boss', 'done', now()),
+  (:'bala', 'office_clock_in', 'Phone broke', :'boss', 'done', now());
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'ada', false);
+select assert((select count(*) from public.field_corrections) = 1
+                and (select user_id from public.field_corrections) = :'ada'::uuid,
+  'rls: a person reads only their own corrections');
+select set_config('request.jwt.claim.sub', :'boss', false);
+select assert((select count(*) from public.field_corrections) = 2,
+  'rls: an admin reads every correction');
+reset role;
+select assert(not has_table_privilege('authenticated', 'public.field_corrections', 'insert')
+                and not has_table_privilege('authenticated', 'public.field_corrections', 'update')
+                and not has_function_privilege('authenticated', 'public.office_act_as(uuid, uuid)', 'execute'),
+  'rls: corrections are written only through the office functions');
+delete from public.field_corrections;
+
 reset role;
 select 'ALL RLS CHECKS PASSED';

@@ -115,6 +115,8 @@ export interface DayState {
   opening: ClockSummary | null
   closing: ClockSummary | null
   report_filed: boolean
+  /** What the office asked them to do again today (0090). Missing before it runs. */
+  redo?: { action: string; reason: string; at: string }[]
 }
 
 export interface ClockSummary {

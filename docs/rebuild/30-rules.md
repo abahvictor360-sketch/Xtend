@@ -468,6 +468,37 @@ Stored in `attendance.time_verdict` and `time_detail` (`offset_s`,
   `xt_seen`, activity `sign_in` with `detail.method`). The code step (0080)
   still applies.
 
+### 2.5b The office fixes someone's day (0090)
+
+- `field_corrections` keeps every correction (see 0090 in the build guide).
+  Allowed for an active merchandiser or marketer, by an admin, HR or their
+  supervisor (`may_correct_field`), today only, with a reason (3–500).
+- `office_record_clock(user, type, outlet, at, reason)`: the outlet must be
+  one of theirs, active, with a position; `at` (default now) today and not
+  in the future; a clock-out needs today's clock-in and comes after it. It
+  inserts as the person at the store (accuracy 5, `selfie_path` '',
+  `place_source` 'office', `device_info` `{source:'office', recorded_by,
+  reason}`), at `at`; an existing record of that kind is replaced (kept in
+  the correction). Errors: "You can only fix the day of active field staff
+  you look after", "Say why, so the record explains itself", "The time
+  cannot be in the future", "Only today can be fixed", "Pick one of their
+  stores", "That store has no location yet", "They have not clocked in
+  today. Clock them in first", "The clock-out cannot be before they clocked
+  in".
+- `office_record_visit(user, 'check_in'|'check_out', outlet, reason)`:
+  check-in needs today's clock-in, no clock-out and no open visit; check-out
+  ends their open visit at its store (`end_store_visit`).
+- `office_request_redo(user, action, reason, visit)`: `redo_clock_in` /
+  `redo_clock_out` need today's record (not a clock-in already followed by
+  a clock-out: "They have already clocked out today: clock them in yourself
+  instead") and open a request: `my_day()` then shows that record as not
+  done and lists it under `redo`; the next capture of that kind replaces
+  the old row (pings re-pointed), and the request is done.
+  `redo_check_in` sets the visit `abandoned`; `redo_check_out` reopens a
+  closed visit (none other open).
+- Office entries skip only the phone-evidence triggers; punctuality and
+  location alerts still run.
+
 ### 2.6 Daily reports (marketers)
 
 - Each report is for the whole day or one store visit (0088): `scope`

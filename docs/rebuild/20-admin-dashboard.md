@@ -2212,6 +2212,28 @@ summary notes wrap rather than truncate; below 380px the three figures stack.
 Office document rows wrap full filenames and staff details on small screens. Document downloads, marketer export buttons and activity presets/exports have a minimum 44px height. Document and marketer export links have descriptive accessible names.
 
 
+## Fix today's record (0090)
+
+- On `/admin/attendance/day` for today, when the viewer may fix this
+  person (admin, HR, or their supervisor; active merchandiser or
+  marketer): a card **Fix today's record** (wrench icon) with buttons by
+  state: **Clock <first name> in** (or "in again (replace)"), **Ask them to
+  clock in again**, **Clock <first name> out** (or "out again (replace)"),
+  **Ask them to clock out again**, for marketers **Check <name> in at a
+  store** / **Check <name> out of <store>**, and per visit **Ask them to
+  check in again (<store>)** / **Ask them to check out again (<store>)**.
+  Each opens a form: **Store** (their stores with a position; home store
+  first), **Time today (leave empty for now)** for clock entries, **Why**
+  (required), **Confirm** / **Cancel**. POST `/api/admin/field-corrections`
+  `{user_id, action, reason, outlet_id, at, visit_id}`; success "<label>.
+  <name> has been told." The person gets a push (`correctionNotice`).
+- **Corrections today** lists each (label, time, who, reason; "Waiting for
+  them" while a redo is open). Clock records made by the office carry a
+  **By the office** badge.
+- Staff Home: a warning alert per open request, "The office asked you to
+  clock in again." / "…clock out again." with the reason; the clock button
+  shows again.
+
 ## Fingerprint and passkeys (0089)
 
 - Sidebar, under **Two-step sign-in**: a plain link **Fingerprint and

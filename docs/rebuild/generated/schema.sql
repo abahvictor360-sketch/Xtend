@@ -780,6 +780,33 @@ $$;
 
 
 --
+-- Name: attendance_correction_done(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.attendance_correction_done() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  cid uuid := nullif(current_setting('xtend.correction', true), '')::uuid;
+  c public.field_corrections;
+begin
+  if cid is null then
+    return null;
+  end if;
+  perform set_config('xtend.correction', '', true);
+  select * into c from public.field_corrections where id = cid and user_id = new.user_id and status = 'open';
+  if not found then
+    return null;
+  end if;
+  update public.location_pings set attendance_id = new.id where id = any(c.ping_ids);
+  update public.field_corrections set status = 'done', done_at = now(), new_record_id = new.id where id = cid;
+  return null;
+end;
+$$;
+
+
+--
 -- Name: attendance_enforce(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -920,6 +947,23 @@ $$;
 
 
 --
+-- Name: attendance_office_time(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.attendance_office_time() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if public.office_entry_on() then
+    new.created_at := least(new.client_captured_at, now());
+  end if;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: attendance_place_due(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1011,6 +1055,48 @@ begin
      and not public.has_live_push(auth.uid()) then
     raise exception 'Turn on Xtend notifications before clocking in';
   end if;
+  return new;
+end;
+$$;
+
+
+--
+-- Name: attendance_replace_for_correction(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.attendance_replace_for_correction() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  req public.field_corrections;
+  old public.attendance;
+  pings uuid[];
+begin
+  select * into req from public.field_corrections c
+  where c.user_id = new.user_id and c.status = 'open'
+    and c.correction_date = new.attendance_date
+    and c.action = any(case new.type
+                         when 'opening' then array['redo_clock_in', 'office_clock_in']
+                         else array['redo_clock_out', 'office_clock_out'] end)
+  order by c.created_at desc
+  limit 1;
+  if not found then
+    return new;
+  end if;
+
+  select * into old from public.attendance a
+  where a.user_id = new.user_id and a.attendance_date = new.attendance_date and a.type = new.type;
+  if found then
+    select coalesce(array_agg(p.id), '{}') into pings from public.location_pings p where p.attendance_id = old.id;
+    update public.location_pings set attendance_id = null where attendance_id = old.id;
+    delete from public.attendance where id = old.id;
+    update public.field_corrections
+       set old_record = coalesce(old_record, to_jsonb(old)), record_id = coalesce(record_id, old.id), ping_ids = pings
+     where id = req.id;
+    new.device_info := coalesce(new.device_info, '{}'::jsonb) || jsonb_build_object('replaces', old.id);
+  end if;
+  perform set_config('xtend.correction', req.id::text, true);
   return new;
 end;
 $$;
@@ -3601,6 +3687,21 @@ $$;
 
 
 --
+-- Name: may_correct_field(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.may_correct_field(p_user uuid) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select exists (
+    select 1 from public.profiles p
+    where p.id = p_user and p.is_active and p.role in ('merchandiser', 'marketer')
+  ) and (public.is_admin() or public.is_hr() or public.supervises_user(p_user));
+$$;
+
+
+--
 -- Name: message_file_readable(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3838,6 +3939,9 @@ CREATE FUNCTION public.my_day() RETURNS jsonb
       from public.attendance a
       where a.user_id = auth.uid() and a.attendance_date = public.business_date()
         and a.type = 'opening'
+        and not exists (select 1 from public.field_corrections c where c.user_id = auth.uid()
+                        and c.status = 'open' and c.action = 'redo_clock_in'
+                        and c.correction_date = public.business_date())
     ),
     'closing', (
       select jsonb_build_object('id', a.id, 'at', a.created_at, 'status', a.status,
@@ -3845,11 +3949,21 @@ CREATE FUNCTION public.my_day() RETURNS jsonb
       from public.attendance a
       where a.user_id = auth.uid() and a.attendance_date = public.business_date()
         and a.type = 'closing'
+        and not exists (select 1 from public.field_corrections c where c.user_id = auth.uid()
+                        and c.status = 'open' and c.action = 'redo_clock_out'
+                        and c.correction_date = public.business_date())
     ),
     'report_filed', exists (
       select 1 from public.reports r
       where r.user_id = auth.uid() and r.report_date = public.business_date()
-    )
+    ),
+    'redo', coalesce((
+      select jsonb_agg(jsonb_build_object('action', c.action, 'reason', c.reason, 'at', c.created_at)
+                       order by c.created_at)
+      from public.field_corrections c
+      where c.user_id = auth.uid() and c.status = 'open' and c.action like 'redo_%'
+        and c.correction_date = public.business_date()
+    ), '[]'::jsonb)
   );
 $$;
 
@@ -4395,6 +4509,52 @@ $$;
 
 
 --
+-- Name: office_act_as(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.office_act_as(p_user uuid, p_actor uuid) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  perform set_config('xtend.office_caller_claims', coalesce(current_setting('request.jwt.claims', true), ''), true);
+  perform set_config('xtend.office_caller_sub', coalesce(current_setting('request.jwt.claim.sub', true), ''), true);
+  perform set_config('xtend.office_entry', p_actor::text, true);
+  perform set_config('request.jwt.claim.sub', p_user::text, true);
+  perform set_config('request.jwt.claims',
+    jsonb_build_object('sub', p_user, 'role', 'authenticated', 'aal', 'aal1')::text, true);
+end;
+$$;
+
+
+--
+-- Name: office_act_done(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.office_act_done() RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  perform set_config('request.jwt.claims', current_setting('xtend.office_caller_claims', true), true);
+  perform set_config('request.jwt.claim.sub', current_setting('xtend.office_caller_sub', true), true);
+  perform set_config('xtend.office_entry', '', true);
+end;
+$$;
+
+
+--
+-- Name: office_entry_on(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.office_entry_on() RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+  select coalesce(current_setting('xtend.office_entry', true), '') <> '';
+$$;
+
+
+--
 -- Name: office_name(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4407,6 +4567,237 @@ CREATE FUNCTION public.office_name(p uuid) RETURNS text
   where pr.id = p
     and pr.role in ('admin'::user_role, 'supervisor'::user_role)
     and public.can_send_notifications();
+$$;
+
+
+--
+-- Name: office_record_clock(uuid, public.attendance_type, uuid, timestamp with time zone, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.office_record_clock(p_user uuid, p_type public.attendance_type, p_outlet uuid, p_at timestamp with time zone, p_reason text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  actor uuid := auth.uid();
+  o record;
+  at_time timestamptz := coalesce(p_at, now());
+  opening timestamptz;
+  new_id uuid;
+begin
+  if actor is null or not public.may_correct_field(p_user) then
+    raise exception 'You can only fix the day of active field staff you look after';
+  end if;
+  if length(btrim(coalesce(p_reason, ''))) < 3 then
+    raise exception 'Say why, so the record explains itself';
+  end if;
+  if at_time > now() + interval '1 minute' then
+    raise exception 'The time cannot be in the future';
+  end if;
+  if (at_time at time zone 'Africa/Lagos')::date <> public.business_date() then
+    raise exception 'Only today can be fixed';
+  end if;
+
+  select x.id, x.name, x.address, x.lat, x.lng into o
+  from public.outlets x
+  where x.id = p_outlet and x.is_active
+    and x.id in (select f.outlet_id from public.outlets_for_user(p_user) f);
+  if not found then
+    raise exception 'Pick one of their stores';
+  end if;
+  if o.lat is null or o.lng is null then
+    raise exception 'That store has no location yet';
+  end if;
+
+  if p_type = 'closing' then
+    select a.created_at into opening from public.attendance a
+    where a.user_id = p_user and a.attendance_date = public.business_date() and a.type = 'opening';
+    if opening is null then
+      raise exception 'They have not clocked in today. Clock them in first';
+    end if;
+    if at_time < opening then
+      raise exception 'The clock-out cannot be before they clocked in';
+    end if;
+  end if;
+
+  -- Any record already there is replaced, and kept in the correction.
+  insert into public.field_corrections (user_id, action, reason, requested_by)
+  values (p_user, case p_type when 'opening' then 'office_clock_in' else 'office_clock_out' end,
+          btrim(p_reason), actor)
+  on conflict (user_id, correction_date, action) where status = 'open'
+  do update set reason = excluded.reason, requested_by = excluded.requested_by, created_at = now();
+  -- An open request to redo it themselves is overtaken by this.
+  update public.field_corrections set status = 'done', done_at = now()
+  where user_id = p_user and status = 'open' and correction_date = public.business_date()
+    and action = case p_type when 'opening' then 'redo_clock_in' else 'redo_clock_out' end;
+
+  perform public.office_act_as(p_user, actor);
+  insert into public.attendance (type, lat, lng, accuracy_m, address, place_name, place_source,
+                                 selfie_path, device_info, client_captured_at)
+  values (p_type, o.lat, o.lng, 5, o.address, o.name, 'office', '',
+          jsonb_build_object('source', 'office', 'recorded_by', actor, 'reason', btrim(p_reason)),
+          at_time)
+  returning id into new_id;
+  perform public.office_act_done();
+  return new_id;
+end;
+$$;
+
+
+--
+-- Name: office_record_visit(uuid, text, uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.office_record_visit(p_user uuid, p_action text, p_outlet uuid, p_reason text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  actor uuid := auth.uid();
+  o record;
+  v record;
+  new_id uuid;
+begin
+  if actor is null or not public.may_correct_field(p_user) then
+    raise exception 'You can only fix the day of active field staff you look after';
+  end if;
+  if length(btrim(coalesce(p_reason, ''))) < 3 then
+    raise exception 'Say why, so the record explains itself';
+  end if;
+  if p_action not in ('check_in', 'check_out') then
+    raise exception 'Unknown action';
+  end if;
+
+  if p_action = 'check_in' then
+    if not exists (select 1 from public.attendance a where a.user_id = p_user
+                   and a.attendance_date = public.business_date() and a.type = 'opening') then
+      raise exception 'They have not clocked in today. Clock them in first';
+    end if;
+    if exists (select 1 from public.attendance a where a.user_id = p_user
+               and a.attendance_date = public.business_date() and a.type = 'closing') then
+      raise exception 'They have clocked out for today';
+    end if;
+    if exists (select 1 from public.store_visits s where s.user_id = p_user and s.status = 'open'
+               and s.visit_date = public.business_date()) then
+      raise exception 'They are still checked in at a store. Check them out first';
+    end if;
+    select x.id, x.name, x.address, x.lat, x.lng into o
+    from public.outlets x
+    where x.id = p_outlet and x.is_active
+      and x.id in (select f.outlet_id from public.outlets_for_user(p_user) f);
+    if not found then
+      raise exception 'Pick one of their stores';
+    end if;
+    if o.lat is null or o.lng is null then
+      raise exception 'That store has no location yet';
+    end if;
+
+    perform public.office_act_as(p_user, actor);
+    insert into public.store_visits (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m,
+                                     arrived_address, arrived_place_name, device_info, client_captured_at)
+    values (o.id, o.lat, o.lng, 5, o.address, o.name,
+            jsonb_build_object('source', 'office', 'recorded_by', actor, 'reason', btrim(p_reason)), now())
+    returning id into new_id;
+    perform public.office_act_done();
+
+    insert into public.field_corrections (user_id, action, reason, requested_by, status, done_at, new_record_id)
+    values (p_user, 'office_check_in', btrim(p_reason), actor, 'done', now(), new_id);
+    return new_id;
+  end if;
+
+  select s.id, s.outlet_id, s.arrived_lat, s.arrived_lng, s.arrived_address, s.arrived_place_name into v
+  from public.store_visits s
+  where s.user_id = p_user and s.status = 'open'
+  order by s.arrived_at desc limit 1;
+  if not found then
+    raise exception 'They are not checked in at any store';
+  end if;
+  select x.lat, x.lng, x.name, x.address into o from public.outlets x where x.id = v.outlet_id;
+
+  perform public.office_act_as(p_user, actor);
+  perform public.end_store_visit(v.id, coalesce(o.lat, v.arrived_lat), coalesce(o.lng, v.arrived_lng), 5,
+                                 coalesce(o.name, v.arrived_place_name), coalesce(o.address, v.arrived_address));
+  perform public.office_act_done();
+
+  insert into public.field_corrections (user_id, action, reason, requested_by, status, done_at, record_id, new_record_id)
+  values (p_user, 'office_check_out', btrim(p_reason), actor, 'done', now(), v.id, v.id);
+  return v.id;
+end;
+$$;
+
+
+--
+-- Name: office_request_redo(uuid, text, text, uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.office_request_redo(p_user uuid, p_action text, p_reason text, p_visit uuid DEFAULT NULL::uuid) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  actor uuid := auth.uid();
+  a public.attendance;
+  v public.store_visits;
+  new_id uuid;
+begin
+  if actor is null or not public.may_correct_field(p_user) then
+    raise exception 'You can only fix the day of active field staff you look after';
+  end if;
+  if length(btrim(coalesce(p_reason, ''))) < 3 then
+    raise exception 'Say why, so they know what to do';
+  end if;
+
+  if p_action in ('redo_clock_in', 'redo_clock_out') then
+    select * into a from public.attendance x
+    where x.user_id = p_user and x.attendance_date = public.business_date()
+      and x.type = case p_action when 'redo_clock_in' then 'opening'::attendance_type else 'closing'::attendance_type end;
+    if not found then
+      raise exception 'There is nothing to redo today: they have not done that yet';
+    end if;
+    if p_action = 'redo_clock_in' and exists (
+         select 1 from public.attendance x where x.user_id = p_user
+           and x.attendance_date = public.business_date() and x.type = 'closing') then
+      raise exception 'They have already clocked out today: clock them in yourself instead';
+    end if;
+    insert into public.field_corrections (user_id, action, reason, requested_by, record_id, old_record)
+    values (p_user, p_action, btrim(p_reason), actor, a.id, to_jsonb(a))
+    on conflict (user_id, correction_date, action) where status = 'open'
+    do update set reason = excluded.reason, requested_by = excluded.requested_by, created_at = now()
+    returning id into new_id;
+    return new_id;
+  end if;
+
+  if p_action not in ('redo_check_in', 'redo_check_out') then
+    raise exception 'Unknown action';
+  end if;
+  select * into v from public.store_visits s
+  where s.id = p_visit and s.user_id = p_user and s.visit_date = public.business_date();
+  if not found then
+    raise exception 'Pick one of their store visits from today';
+  end if;
+
+  if p_action = 'redo_check_in' then
+    -- The visit stays in the record as abandoned; they check in again.
+    update public.store_visits set status = 'abandoned' where id = v.id;
+  else
+    if v.status <> 'closed' then
+      raise exception 'They have not checked out of that store yet';
+    end if;
+    if exists (select 1 from public.store_visits s where s.user_id = p_user and s.status = 'open') then
+      raise exception 'They are checked in at another store. Check them out of it first';
+    end if;
+    -- Open again, so they check out once more.
+    update public.store_visits
+       set status = 'open', departed_at = null, departed_lat = null, departed_lng = null,
+           departed_distance_m = null, departed_status = null
+     where id = v.id;
+  end if;
+
+  insert into public.field_corrections (user_id, action, reason, requested_by, status, done_at, record_id, old_record)
+  values (p_user, p_action, btrim(p_reason), actor, 'done', now(), v.id, to_jsonb(v))
+  returning id into new_id;
+  return new_id;
+end;
 $$;
 
 
@@ -6106,7 +6497,8 @@ CREATE FUNCTION public.reset_category_tables() RETURNS TABLE(category text, tabl
     'clock_ins:location_alerts',
     'clock_ins:location_pings', 'clock_ins:excuse_checks', 'clock_ins:phone_checks',
     'clock_ins:photo_checks', 'clock_ins:device_beacons', 'clock_ins:clock_out_reminders',
-    'clock_ins:tracking_tokens', 'clock_ins:integrity_flags', 'clock_ins:attendance',
+    'clock_ins:tracking_tokens', 'clock_ins:integrity_flags', 'clock_ins:field_corrections',
+    'clock_ins:attendance',
     'leave_schedules:leave_requests', 'leave_schedules:schedule_overrides',
     'leave_schedules:work_patterns', 'support:message_reads', 'support:messages',
     'support:message_threads', 'support:support_messages', 'support:support_threads',
@@ -9803,6 +10195,30 @@ CREATE VIEW public.excuse_check_detail WITH (security_invoker='true') AS
 
 
 --
+-- Name: field_corrections; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.field_corrections (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    action text NOT NULL,
+    reason text NOT NULL,
+    requested_by uuid,
+    correction_date date DEFAULT public.business_date() NOT NULL,
+    status text DEFAULT 'open'::text NOT NULL,
+    record_id uuid,
+    old_record jsonb,
+    ping_ids uuid[] DEFAULT '{}'::uuid[] NOT NULL,
+    new_record_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    done_at timestamp with time zone,
+    CONSTRAINT field_corrections_action_check CHECK ((action = ANY (ARRAY['office_clock_in'::text, 'office_clock_out'::text, 'office_check_in'::text, 'office_check_out'::text, 'redo_clock_in'::text, 'redo_clock_out'::text, 'redo_check_in'::text, 'redo_check_out'::text]))),
+    CONSTRAINT field_corrections_reason_check CHECK (((length(btrim(reason)) >= 3) AND (length(btrim(reason)) <= 500))),
+    CONSTRAINT field_corrections_status_check CHECK ((status = ANY (ARRAY['open'::text, 'done'::text])))
+);
+
+
+--
 -- Name: integrity_flags; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -11510,6 +11926,14 @@ ALTER TABLE ONLY public.excuse_checks
 
 
 --
+-- Name: field_corrections field_corrections_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.field_corrections
+    ADD CONSTRAINT field_corrections_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: follow_sessions follow_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -12265,6 +12689,20 @@ CREATE INDEX excuse_checks_by_user ON public.excuse_checks USING btree (user_id,
 
 
 --
+-- Name: field_corrections_by_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX field_corrections_by_user ON public.field_corrections USING btree (user_id, correction_date DESC);
+
+
+--
+-- Name: field_corrections_one_open; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX field_corrections_one_open ON public.field_corrections USING btree (user_id, correction_date, action) WHERE (status = 'open'::text);
+
+
+--
 -- Name: follow_sessions_by_watcher; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -12814,14 +13252,14 @@ CREATE TRIGGER trg_attendance_enforce BEFORE INSERT ON public.attendance FOR EAC
 -- Name: attendance trg_attendance_integrity; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER trg_attendance_integrity AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION public.attendance_integrity();
+CREATE TRIGGER trg_attendance_integrity AFTER INSERT ON public.attendance FOR EACH ROW WHEN ((NOT public.office_entry_on())) EXECUTE FUNCTION public.attendance_integrity();
 
 
 --
 -- Name: attendance trg_attendance_learn_waiting_store; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER trg_attendance_learn_waiting_store AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION public.attendance_learn_waiting_store();
+CREATE TRIGGER trg_attendance_learn_waiting_store AFTER INSERT ON public.attendance FOR EACH ROW WHEN ((NOT public.office_entry_on())) EXECUTE FUNCTION public.attendance_learn_waiting_store();
 
 
 --
@@ -12835,35 +13273,56 @@ CREATE TRIGGER trg_attendance_punctuality AFTER INSERT ON public.attendance FOR 
 -- Name: attendance trg_attendance_push_check; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER trg_attendance_push_check BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION public.attendance_push_check();
+CREATE TRIGGER trg_attendance_push_check BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT public.office_entry_on())) EXECUTE FUNCTION public.attendance_push_check();
 
 
 --
 -- Name: attendance trg_attendance_selfie_check; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER trg_attendance_selfie_check BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION public.selfie_check();
+CREATE TRIGGER trg_attendance_selfie_check BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT public.office_entry_on())) EXECUTE FUNCTION public.selfie_check();
 
 
 --
 -- Name: attendance trg_attendance_timing; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER trg_attendance_timing BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION public.attendance_timing();
+CREATE TRIGGER trg_attendance_timing BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT public.office_entry_on())) EXECUTE FUNCTION public.attendance_timing();
 
 
 --
 -- Name: attendance trg_attendance_timing_flag; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER trg_attendance_timing_flag AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION public.attendance_timing_flag();
+CREATE TRIGGER trg_attendance_timing_flag AFTER INSERT ON public.attendance FOR EACH ROW WHEN ((NOT public.office_entry_on())) EXECUTE FUNCTION public.attendance_timing_flag();
+
+
+--
+-- Name: attendance trg_attendance_zy_office_time; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_attendance_zy_office_time BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION public.attendance_office_time();
+
+
+--
+-- Name: attendance trg_attendance_zz_correction; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_attendance_zz_correction BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION public.attendance_replace_for_correction();
+
+
+--
+-- Name: attendance trg_attendance_zz_correction_done; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_attendance_zz_correction_done AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION public.attendance_correction_done();
 
 
 --
 -- Name: attendance trg_attendance_zz_place_due; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER trg_attendance_zz_place_due AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION public.attendance_place_due();
+CREATE TRIGGER trg_attendance_zz_place_due AFTER INSERT ON public.attendance FOR EACH ROW WHEN ((NOT public.office_entry_on())) EXECUTE FUNCTION public.attendance_place_due();
 
 
 --
@@ -13031,7 +13490,7 @@ CREATE TRIGGER trg_store_visit_enforce BEFORE INSERT ON public.store_visits FOR 
 -- Name: store_visits trg_store_visit_selfie_check; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER trg_store_visit_selfie_check BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION public.selfie_check();
+CREATE TRIGGER trg_store_visit_selfie_check BEFORE INSERT ON public.store_visits FOR EACH ROW WHEN ((NOT public.office_entry_on())) EXECUTE FUNCTION public.selfie_check();
 
 
 --
@@ -13045,14 +13504,14 @@ CREATE TRIGGER trg_store_visit_zz_close_stale BEFORE INSERT ON public.store_visi
 -- Name: store_visits trg_store_visits_place_due_guard; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER trg_store_visits_place_due_guard BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION public.place_due_guard();
+CREATE TRIGGER trg_store_visits_place_due_guard BEFORE INSERT ON public.store_visits FOR EACH ROW WHEN ((NOT public.office_entry_on())) EXECUTE FUNCTION public.place_due_guard();
 
 
 --
 -- Name: store_visits trg_store_visits_zz_place_due; Type: TRIGGER; Schema: public; Owner: -
 --
 
-CREATE TRIGGER trg_store_visits_zz_place_due AFTER INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION public.visit_place_due();
+CREATE TRIGGER trg_store_visits_zz_place_due AFTER INSERT ON public.store_visits FOR EACH ROW WHEN ((NOT public.office_entry_on())) EXECUTE FUNCTION public.visit_place_due();
 
 
 --
@@ -13257,6 +13716,22 @@ ALTER TABLE ONLY public.excuse_checks
 
 ALTER TABLE ONLY public.excuse_checks
     ADD CONSTRAINT excuse_checks_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: field_corrections field_corrections_requested_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.field_corrections
+    ADD CONSTRAINT field_corrections_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: field_corrections field_corrections_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.field_corrections
+    ADD CONSTRAINT field_corrections_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 
 
 --
@@ -14368,6 +14843,19 @@ CREATE POLICY excuse_checks_read ON public.excuse_checks FOR SELECT USING ((publ
 
 
 --
+-- Name: field_corrections; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.field_corrections ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: field_corrections field_corrections_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY field_corrections_read ON public.field_corrections FOR SELECT USING (((user_id = auth.uid()) OR public.is_admin() OR public.is_hr() OR public.supervises_user(user_id)));
+
+
+--
 -- Name: follow_sessions; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -15444,6 +15932,13 @@ REVOKE ALL ON FUNCTION public.attendance_alert() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION attendance_correction_done(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.attendance_correction_done() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION attendance_enforce(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -15465,6 +15960,13 @@ REVOKE ALL ON FUNCTION public.attendance_learn_waiting_store() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION attendance_office_time(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.attendance_office_time() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION attendance_place_due(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -15483,6 +15985,13 @@ REVOKE ALL ON FUNCTION public.attendance_punctuality() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public.attendance_push_check() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION attendance_replace_for_correction(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.attendance_replace_for_correction() FROM PUBLIC;
 
 
 --
@@ -16173,6 +16682,15 @@ GRANT ALL ON FUNCTION public.mark_notifications_read() TO service_role;
 
 
 --
+-- Name: FUNCTION may_correct_field(p_user uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.may_correct_field(p_user uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.may_correct_field(p_user uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.may_correct_field(p_user uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION message_file_readable(p_name text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -16401,12 +16919,53 @@ GRANT ALL ON FUNCTION public.notification_sent_by_me(p_notification uuid) TO ser
 
 
 --
+-- Name: FUNCTION office_act_as(p_user uuid, p_actor uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.office_act_as(p_user uuid, p_actor uuid) FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION office_act_done(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.office_act_done() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION office_name(p uuid); Type: ACL; Schema: public; Owner: -
 --
 
 REVOKE ALL ON FUNCTION public.office_name(p uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.office_name(p uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.office_name(p uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION office_record_clock(p_user uuid, p_type public.attendance_type, p_outlet uuid, p_at timestamp with time zone, p_reason text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.office_record_clock(p_user uuid, p_type public.attendance_type, p_outlet uuid, p_at timestamp with time zone, p_reason text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.office_record_clock(p_user uuid, p_type public.attendance_type, p_outlet uuid, p_at timestamp with time zone, p_reason text) TO authenticated;
+GRANT ALL ON FUNCTION public.office_record_clock(p_user uuid, p_type public.attendance_type, p_outlet uuid, p_at timestamp with time zone, p_reason text) TO service_role;
+
+
+--
+-- Name: FUNCTION office_record_visit(p_user uuid, p_action text, p_outlet uuid, p_reason text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.office_record_visit(p_user uuid, p_action text, p_outlet uuid, p_reason text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.office_record_visit(p_user uuid, p_action text, p_outlet uuid, p_reason text) TO authenticated;
+GRANT ALL ON FUNCTION public.office_record_visit(p_user uuid, p_action text, p_outlet uuid, p_reason text) TO service_role;
+
+
+--
+-- Name: FUNCTION office_request_redo(p_user uuid, p_action text, p_reason text, p_visit uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.office_request_redo(p_user uuid, p_action text, p_reason text, p_visit uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.office_request_redo(p_user uuid, p_action text, p_reason text, p_visit uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.office_request_redo(p_user uuid, p_action text, p_reason text, p_visit uuid) TO service_role;
 
 
 --
@@ -17649,6 +18208,13 @@ GRANT SELECT ON TABLE public.count_request_progress TO authenticated;
 --
 
 GRANT SELECT ON TABLE public.excuse_check_detail TO authenticated;
+
+
+--
+-- Name: TABLE field_corrections; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT ON TABLE public.field_corrections TO authenticated;
 
 
 --

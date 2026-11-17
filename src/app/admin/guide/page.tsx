@@ -859,6 +859,22 @@ export default async function AdminGuidePage() {
                 a: <>Reset it on the Staff page. They choose a new one when they sign in.</>,
               },
               {
+                q: 'The app would not clock someone in or out',
+                a: (
+                  <>
+                    Open <Ui>Attendance</Ui>, tap their name, and use <Ui>Fix today&apos;s record</Ui> (today only). Once
+                    you are sure they are at the store, <Ui>Clock … in</Ui> or <Ui>Clock … out</Ui> records it for them at
+                    that store, at the time you give (not in the future), marked <Ui>By the office</Ui>, with no selfie.
+                    Marketers can be checked in or out of a store the same way. If a capture went wrong, ask them to do
+                    it again: <Ui>Ask them to clock in again</Ui> (or out, or to check in or out of a store again); their
+                    next capture replaces the old one. A reason is always needed; they get a notification with it, the
+                    old record is kept under <Ui>Corrections today</Ui>, and it is in the audit log as{' '}
+                    <Ui>field.office_clock_in</Ui> and so on. Supervisors can do this for their own team, HR for field
+                    staff. Lateness still counts from the time you give.
+                  </>
+                ),
+              },
+              {
                 q: 'Someone is locked out',
                 a: (
                   <>

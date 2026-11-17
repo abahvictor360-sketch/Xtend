@@ -474,6 +474,16 @@ export function StaffGuide() {
               a: <>Check your data or Wi-Fi, then tap <Ui>Try again</Ui>.</>,
             },
             {
+              q: 'The app would not clock me in or out',
+              a: (
+                <>
+                  Call your supervisor. When they confirm you are at the store, they can clock you in or out
+                  for you, and you get a notification. If they ask you to clock in or out again, Home shows it:
+                  just do it again as usual.
+                </>
+              ),
+            },
+            {
               q: 'I forgot my password',
               a: <>Ask your supervisor or admin to reset it. You will choose a new one when you sign in.</>,
             },

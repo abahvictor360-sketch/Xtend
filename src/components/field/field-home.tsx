@@ -26,6 +26,8 @@ import { addDays, cn, dayOfMonth, formatLagos, metres, weekdayShort } from '@/li
 import type { DayState } from '@/lib/types'
 import { calendarMark, type CalendarDay } from '@/lib/schedule'
 import { CalendarLegend, MARK_CLASS, MARK_WORD, WORD_CLASS } from '@/components/field/calendar-marks'
+import { redoBanner } from '@/lib/field-corrections'
+import { Alert } from '@/components/ui/alert'
 
 type Tab = 'stores' | 'day' | 'outlet'
 
@@ -100,8 +102,16 @@ export function FieldHome({
   // Still checked in at a store: that comes first, then the clock-out.
   const openVisit = visits.find((v) => v.status === 'open') ?? null
 
+  // What the office asked them to do again today (0090).
+  const redo = (day.redo ?? []).filter((r) => redoBanner(r.action))
+
   return (
     <div className="space-y-5">
+      {redo.map((r) => (
+        <Alert key={r.action} variant="warning">
+          <span className="font-semibold">{redoBanner(r.action)}</span> {r.reason}
+        </Alert>
+      ))}
       <ClockOutPrompt
         state={{ date: day.date, shiftEnd: day.outlet?.shift_end ?? null, clockedIn: Boolean(day.opening), clockedOut: Boolean(day.closing) }}
         openVisitLabel={openVisit ? (openVisit.store_label ?? openVisit.outlet_name) : null}

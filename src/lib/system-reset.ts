@@ -41,10 +41,11 @@ export const RESET_CATEGORIES: ResetCategory[] = [
   {
     key: 'clock_ins',
     label: 'Clock-ins and locations',
-    line: 'Clock-ins and clock-outs, location trail, alerts, integrity flags, excuse checks, phone reports, clock-out reminders and live follow sessions.',
+    line: 'Clock-ins and clock-outs, location trail, alerts, integrity flags, excuse checks, phone reports, clock-out reminders, live follow sessions and the office\u2019s corrections.',
     tables: [
       'attendance', 'location_pings', 'location_alerts', 'integrity_flags', 'excuse_checks', 'phone_checks',
       'photo_checks', 'device_beacons', 'clock_out_reminders', 'tracking_tokens', 'follow_sessions',
+      'field_corrections',
     ],
     files: 'clock-in selfies',
   },
