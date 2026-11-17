@@ -114,9 +114,12 @@ Applies only to `merchandiser` and `marketer` (not admins, not supervisors).
 `GET /api/auth/expired` (`src/app/api/auth/expired/route.ts`): the server
 decides, not the link. If a session exists and does not need re-login,
 redirect to `/` (opening the link never signs out a valid login). Otherwise
-sign out (clearing cookies) and redirect to `/login?reason=<reason>`, where
-reason is the session's own reason, else the query's `clocked-out`, else
-`new-day`.
+sign out (clearing cookies) and go to `/login?reason=<reason>`, where
+reason is the session's own reason, else the query's `clocked-out`,
+`office-time` or `idle`, else `new-day`. Both moves use
+`sameSiteRedirect` (a page that sends the browser there itself), never a
+server redirect: behind a proxy that passes only `localhost`, a redirect
+named `https://localhost:3000/…` and the app opened Chrome on it.
 
 ### 1.5 Login page (`src/app/login/page.tsx`, `login-form.tsx`)
 

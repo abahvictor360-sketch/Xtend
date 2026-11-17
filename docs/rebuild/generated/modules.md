@@ -874,12 +874,17 @@ Exports: `PermanentJobError`, `NamePlaceFirstError`, `checkPhoto`, `noticeStore`
 ## `src/lib/origin.ts`
 
 The address people actually use to reach the site. Behind Dokploy's proxy
-`request.url` is the container's own (http://localhost:3000), so a redirect
-built from it sends the person to a page that does not exist for them.
-The proxy's forwarded headers carry the real host; NEXT_PUBLIC_SITE_URL
-(when set) wins.
+`request.url` is the container's own (http://localhost:3000), so anything
+built from it sends the person to a page that does not exist for them
+(in the phone app, Chrome opens on "localhost refused to connect").
 
-Exports: `publicOrigin`
+In order: SITE_URL (or the older NEXT_PUBLIC_SITE_URL) when set; the proxy's forwarded host; and,
+when that is still only a local name (a proxy that does not pass the real
+host along), the address the browser itself says it is on (Origin, then
+Referer). Moves within the site should not need this at all: see
+sameSiteRedirect, which lets the browser keep the address it is on.
+
+Exports: `publicOrigin`, `isLocalHost`, `sameSiteRedirect`
 
 ## `src/lib/outlet-search.ts`
 
