@@ -60,11 +60,11 @@ One person, one day: everything Xtend recorded about it, on a single page.
 
 - File: `src/app/admin/attendance/page.tsx`
 - Who: ['admin', 'supervisor', 'hr']
-- Components: `ui/alert`, `admin/attendance-filters`, `admin/attendance-grid`, `admin/attendance-table`, `admin/visit-photo-list`
+- Components: `ui/alert`, `admin/attendance-overview`, `admin/attendance-filters`, `admin/attendance-grid`, `admin/attendance-table`, `admin/visit-photo-list`
 
 Days handed to the table at once; the download has the rest.
 
-On screen: Who came, when, and where, day by day: on time or late (against their store’s opening time), at the store or away from it, and whether they clocked out. A working day on someone’s schedule without a clock-in counts as absent; their days off and approved leave do not. Times are Lagos time; clock records cannot be changed or deleted.
+On screen: Who came, when and where, day by day. Lagos time.
 
 ## `/admin/audit` — Audit log — Xtend
 

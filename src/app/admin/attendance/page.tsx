@@ -1,7 +1,15 @@
-import Link from 'next/link'
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { Alert } from '@/components/ui/alert'
+import { AlarmClock, CalendarDays, Grid3X3, ListChecks, UserX, Users } from 'lucide-react'
+import {
+  AttendanceStats,
+  SectionTitle,
+  TodayPanel,
+  WorthALook,
+  type TodayItem,
+  type WorryItem,
+} from '@/components/admin/attendance-overview'
 import { AttendanceFilters } from '@/components/admin/attendance-filters'
 import { AttendanceGrid } from '@/components/admin/attendance-grid'
 import { AttendanceTable, type TablePerson } from '@/components/admin/attendance-table'
@@ -82,119 +90,110 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
   const person = new Map(people.map((p) => [p.id, p]))
   const range = single ? longDate(filter.from) : `${longDate(filter.from)} to ${longDate(filter.to)}`
 
-  return (
-    <div className="space-y-5">
-      <div>
-        <h1 className="text-xl font-semibold">Attendance</h1>
-        <p className="text-sm text-muted-foreground">
-          Who came, when, and where, day by day: on time or late (against their store’s opening time), at the store or
-          away from it, and whether they clocked out. A working day on someone’s schedule without a clock-in counts as
-          absent; their days off and approved leave do not. Times are Lagos time; clock records cannot be changed or
-          deleted.
-        </p>
-      </div>
+  const todayItem = (r: DayRecord, line: string): TodayItem => {
+    const p = person.get(r.userId)!
+    return {
+      key: r.key,
+      name: p.name,
+      line,
+      team: p.teamName ? `${p.teamName}’s team` : null,
+      phone: p.phone,
+      dayHref: `/admin/attendance/day?person=${r.userId}&date=${today}`,
+      movementHref: `/admin/tracking?person=${p.id}&date=${today}&until=${today}`,
+    }
+  }
+  const worryItems: WorryItem[] = worry.map((c) => {
+    const last = c.dates[c.dates.length - 1]
+    return {
+      key: `${c.userId}-${c.kind}`,
+      text: c.text,
+      daysHref: `?${reportQuery({ ...filter, user_id: c.userId, status: null })}`,
+      excuse:
+        c.kind === 'absent' || c.kind === 'late'
+          ? {
+              href: `/admin/excuses?person=${c.userId}&date=${last}&until=${last}&from=06:00&to=12:00`,
+              label: `Check an excuse for ${last === today ? 'today' : 'the last one'}`,
+            }
+          : undefined,
+    }
+  })
 
-      <AttendanceFilters
-        mode="attendance"
-        filter={filter}
-        choices={choices}
-        today={today}
-        presets={presets(today, ['today', 'yesterday', 'week', '7d', '30d', 'month'])}
-        presetHref={(p) => `?${reportQuery({ ...filter, from: p.from, to: p.to })}`}
-        downloads={[
-          { label: 'Download day by day', base: '/api/admin/export/attendance', query },
-          { label: 'Every clock-in and out', base: '/api/admin/export', query: rawQuery },
-        ]}
-      />
+  return (
+    <div className="space-y-6">
+      <header className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-extrabold tracking-tight">Attendance</h1>
+          <p className="text-sm text-muted-foreground">Who came, when and where, day by day. Lagos time.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 font-semibold">
+            <CalendarDays className="h-4 w-4 text-brand" />
+            {range}
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 font-semibold">
+            <Users className="h-4 w-4 text-brand" />
+            {summary.people} {summary.people === 1 ? 'person' : 'people'}
+          </span>
+        </div>
+      </header>
+
+      <section className="surface p-4 sm:p-5">
+        <AttendanceFilters
+          mode="attendance"
+          filter={filter}
+          choices={choices}
+          today={today}
+          presets={presets(today, ['today', 'yesterday', 'week', '7d', '30d', 'month'])}
+          presetHref={(p) => `?${reportQuery({ ...filter, from: p.from, to: p.to })}`}
+          downloads={[
+            { label: 'Download day by day', base: '/api/admin/export/attendance', query },
+            { label: 'Every clock-in and out', base: '/api/admin/export', query: rawQuery },
+          ]}
+        />
+        <details className="mt-3 text-xs text-muted-foreground">
+          <summary className="cursor-pointer font-semibold hover:text-foreground">How attendance is counted</summary>
+          <p className="mt-1.5 leading-relaxed">
+            On time or late is against their store’s opening time; at the store or away from it is measured from the
+            clock-in. A working day on someone’s schedule without a clock-in counts as absent; their days off and approved
+            leave do not. Clock records cannot be changed or deleted, only corrected by the office on the day.
+          </p>
+        </details>
+      </section>
 
       {filter.clipped && <Alert variant="info">Showing the last {MAX_RANGE_DAYS} days of the range you picked.</Alert>}
       {report.truncated && (
         <Alert variant="warning">There are more clock records in this range than one page can read. Pick fewer days.</Alert>
       )}
 
-      <p className="text-sm font-semibold">
-        {range} · {summary.people} {summary.people === 1 ? 'person' : 'people'}
-      </p>
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 xl:grid-cols-8">
-        <Figure label="Came in" value={String(summary.present)} note={`of ${summary.expected} working day${summary.expected === 1 ? '' : 's'}`} />
-        <Figure
-          label={filter.to === today ? 'Absent or not in yet' : 'Absent'}
-          value={String(summary.absent)}
-          warn={summary.absent > 0}
-        />
-        <Figure
-          label="Late"
-          value={String(summary.late)}
-          note={summary.avgLateMin !== null ? `${lateness(summary.avgLateMin)} late on average` : undefined}
-          warn={summary.late > 0}
-        />
-        <Figure label="Off site or flagged" value={String(summary.offSite)} warn={summary.offSite > 0} />
-        <Figure label="No clock-out" value={String(summary.missingOut)} warn={summary.missingOut > 0} />
-        <Figure label="On time" value={percent(summary.punctuality)} note="of those who came" />
-        <Figure label="Turned up" value={percent(summary.turnout)} note="of working days" />
-        <Figure
-          label="Usual clock-in"
-          value={clock(summary.avgIn)}
-          note={summary.avgHours !== null ? `${Math.round(summary.avgHours * 10) / 10} h on shift on average` : undefined}
-        />
-      </div>
+      <AttendanceStats summary={summary} endsToday={filter.to === today} />
 
       {filter.to === today && todayRecords.length > 0 && (
         <div className="grid gap-4 lg:grid-cols-2">
-          <TodayList
-            title={`Not clocked in today (${notIn.length})`}
+          <TodayPanel
+            title="Not clocked in today"
+            icon={UserX}
+            tone="bad"
+            note={onShift ? `${onShift} on shift now` : undefined}
             empty="Everybody expected today has clocked in."
-            rows={notIn}
-            person={person}
-            note={onShift ? `${onShift} on shift now.` : undefined}
-            line={(r, p) => p.outletName ?? 'No store'}
-            today={today}
+            items={notIn.map((r) => todayItem(r, person.get(r.userId)?.outletName ?? 'No store'))}
           />
-          <TodayList
-            title={`Late today (${lateToday.length})`}
+          <TodayPanel
+            title="Late today"
+            icon={AlarmClock}
+            tone="warn"
             empty="Nobody was late today."
-            rows={lateToday}
-            person={person}
-            line={(r) => `In at ${clock(r.inMinutes)}${r.minutesLate ? `, ${lateness(r.minutesLate)} late` : ''} · ${r.outletName ?? 'No store'}`}
-            today={today}
+            items={lateToday.map((r) =>
+              todayItem(r, `In at ${clock(r.inMinutes)}${r.minutesLate ? `, ${lateness(r.minutesLate)} late` : ''} · ${r.outletName ?? 'No store'}`),
+            )}
           />
         </div>
       )}
 
-      {worry.length > 0 && (
-        <Alert variant="destructive">
-          <p className="font-semibold">Worth a look</p>
-          <ul className="mt-1 list-disc space-y-0.5 pl-5 text-sm">
-            {worry.map((c) => (
-              <li key={`${c.userId}-${c.kind}`}>
-                {c.text}{' '}
-                <Link href={`?${reportQuery({ ...filter, user_id: c.userId, status: null })}`} className="font-semibold underline">
-                  See their days
-                </Link>
-                {(c.kind === 'absent' || c.kind === 'late') && (
-                  <>
-                    {' · '}
-                    <Link
-                      href={`/admin/excuses?person=${c.userId}&date=${c.dates[c.dates.length - 1]}&until=${c.dates[c.dates.length - 1]}&from=06:00&to=12:00`}
-                      className="font-semibold underline"
-                    >
-                      Check an excuse for {c.dates[c.dates.length - 1] === today ? 'today' : 'the last one'}
-                    </Link>
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
-        </Alert>
-      )}
+      <WorthALook items={worryItems} />
 
       {!single && days.length <= GRID_MAX_DAYS && (
-        <section className="surface space-y-3 p-4 sm:p-5">
-          <div>
-            <h2 className="text-lg font-bold">Calendar</h2>
-            <p className="text-sm text-muted-foreground">One square per day. Point at a square for the times; tap it to open that day.</p>
-          </div>
+        <section className="surface space-y-4 p-4 sm:p-5">
+          <SectionTitle icon={Grid3X3} title="Calendar" note="One square per person per day. Point at a square for the times; tap it to open that day." />
           <AttendanceGrid
             people={people}
             records={records}
@@ -207,88 +206,15 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
         <p className="text-sm text-muted-foreground">Pick {GRID_MAX_DAYS} days or fewer to see the calendar.</p>
       )}
 
-      <section id="days" className="space-y-3">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-lg font-bold">Day by day</h2>
-          <p className="text-xs text-muted-foreground">
-            {shown.length} day{shown.length === 1 ? '' : 's'}
-            {filter.status ? ' matching' : ''} · tap a row for photos, store check-ins and check-outs, map, phone and links
-          </p>
-        </div>
+      <section className="space-y-3">
+        <SectionTitle
+          id="days"
+          icon={ListChecks}
+          title="Day by day"
+          note={`${shown.length} day${shown.length === 1 ? '' : 's'}${filter.status ? ' matching' : ''} · tap a row for photos, store check-ins and check-outs, map and links; tap a name for their whole day`}
+        />
         <AttendanceTable rows={tableRows} people={tablePeople} total={shown.length} visits={visitsByDay} />
       </section>
-    </div>
-  )
-}
-
-function Figure({ label, value, note, warn }: { label: string; value: string; note?: string; warn?: boolean }) {
-  return (
-    <div className="surface p-4">
-      <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className={cn('mt-1 text-xl font-extrabold tabular-nums', warn && 'text-destructive')}>{value}</p>
-      {note && <p className="mt-0.5 text-[11px] leading-tight text-muted-foreground">{note}</p>}
-    </div>
-  )
-}
-
-function TodayList({
-  title,
-  empty,
-  rows,
-  person,
-  line,
-  note,
-  today,
-}: {
-  title: string
-  empty: string
-  rows: DayRecord[]
-  person: Map<string, Person>
-  line: (r: DayRecord, p: Person) => string
-  note?: string
-  today: string
-}) {
-  return (
-    <div className="surface p-4 sm:p-5">
-      <h2 className="text-base font-bold">{title}</h2>
-      {note && <p className="text-xs text-muted-foreground">{note}</p>}
-      {rows.length === 0 ? (
-        <p className="mt-2 text-sm text-muted-foreground">{empty}</p>
-      ) : (
-        <ul className="mt-2 max-h-72 divide-y divide-border overflow-y-auto text-sm">
-          {rows.map((r) => {
-            const p = person.get(r.userId)!
-            return (
-              <li key={r.key} className="flex items-center gap-3 py-2">
-                <span className="min-w-0 flex-1">
-                  {/* Their day, where the office can fix a clock-in that did not work (0090). */}
-                  <Link
-                    href={`/admin/attendance/day?person=${r.userId}&date=${today}`}
-                    className="block truncate font-semibold text-brand hover:underline"
-                  >
-                    {p.name}
-                  </Link>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {line(r, p)}
-                    {p.teamName ? ` · ${p.teamName}’s team` : ''}
-                  </span>
-                </span>
-                {p.phone && (
-                  <a href={`tel:${p.phone}`} className="shrink-0 text-xs font-semibold text-brand hover:underline">
-                    Call
-                  </a>
-                )}
-                <Link
-                  href={`/admin/tracking?person=${p.id}&date=${today}&until=${today}`}
-                  className="shrink-0 text-xs font-semibold text-brand hover:underline"
-                >
-                  Movement
-                </Link>
-              </li>
-            )
-          })}
-        </ul>
-      )}
     </div>
   )
 }

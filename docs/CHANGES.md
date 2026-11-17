@@ -28,7 +28,9 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0087_clock_in_checks_in.sql`;
    - `supabase/migrations/0088_report_per_store_or_day.sql`;
    - `supabase/migrations/0089_quick_sign_in.sql`;
-   - `supabase/migrations/0090_field_corrections.sql`.
+   - `supabase/migrations/0090_field_corrections.sql`;
+   - `supabase/migrations/0091_visit_checkout_photo.sql`;
+   - `supabase/migrations/0092_photo_flags.sql`.
 4. **Clock-out reminder fix (0069)**, if never pasted:
    ```sql
    alter table public.clock_out_reminders drop constraint if exists clock_out_reminders_stage_check;
@@ -54,6 +56,52 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-17
+
+### The Attendance page, tidied up and modernised
+- **What was done:** the Attendance page has a cleaner layout. The date and
+  number of people sit in the header; the filters are in one card, with the
+  long explanation folded under **How attendance is counted**. The figures
+  are four large cards (Came in, Absent, Late, Off site) with an icon and a
+  bar showing the share, plus a strip with On time, Usual clock-in, Hours on
+  shift and No clock-out. **Not clocked in today** and **Late today** show
+  initials, a count and round **Call** and **Movement** buttons. **Worth a
+  look** is a tidy card instead of a red block. The calendar and the day by
+  day table have clear section titles.
+- **Also fixed:** every table in the dashboard was losing its cell spacing
+  and its column headings were not lined up with the columns. They now
+  line up, on every page with a table.
+- **The impact:** easier to read at a glance, on a computer and on a phone.
+  Nothing changes in what is counted.
+- **What you need to do:** redeploy the latest code. No migration.
+
+### A person's day, redesigned, with every photo and a way to flag one (migration 0092)
+- **What was done:** tap a name on **Attendance** to open their whole day on
+  one page: their photo, role, store, team and a **Call** button, arrows for
+  the day before and after, the main figures, **Photos of the day** (every
+  clock-in, clock-out, store check-in and check-out photo, large, with the
+  time, store, where they were, how far from the store and a map link), the
+  day in order, their reports and the flags of the day. Under each photo,
+  admins and the person's own supervisor can **Flag this photo** (not the
+  right person, not taken at the store, a photo of a photo or a screen,
+  face not clear, or something else with a note).
+- **The impact:** you can check every photo by location in one place. A
+  flagged photo gets a red border and goes to **Integrity** with the other
+  flags, where it can be looked at; it can be changed or removed. The
+  person is never told. Every flag is in the audit log.
+- **What you need to do:** run `0092_photo_flags.sql` (after 0091, in the
+  list above) and redeploy.
+
+### Store check-ins and check-outs with both photos (migration 0091)
+- **What was done:** marketers now take a selfie when they check out of a
+  store, as when they check in. **Attendance** rows say how many stores
+  were visited and open to every check-in and check-out with the times,
+  how long they stayed, how far from the store and both photos. **Store
+  visits** shows the check-out photo too.
+- **The impact:** you can see where marketers were both when they arrived
+  and when they left each store. Photos are deleted after 14 days like the
+  others. Until 0091 is run, check-outs still work, just without the photo.
+- **What you need to do:** run `0091_visit_checkout_photo.sql` and redeploy.
+  No new app build (it is part of the website).
 
 ### Ask Xtend can fix someone's clock-in, clock-out or store visit
 - **What was done:** you can now tell **Ask Xtend** things like "clock Ada

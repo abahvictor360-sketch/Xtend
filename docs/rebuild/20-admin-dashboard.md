@@ -410,7 +410,7 @@ The "Your team" section is the plain statement of supervisor rights: they can ad
 
 Files: `src/app/admin/attendance/page.tsx`, `src/components/admin/attendance-filters.tsx`, `attendance-grid.tsx`, `attendance-table.tsx`, `attendance-map.tsx`; logic in `src/lib/attendance-report.ts` (pure, tested by `scripts/check-attendance.ts`) and `src/lib/attendance-server.ts`. Title "Attendance — Xtend".
 
-Heading **"Attendance"**; intro: "Who came, when, and where, day by day: on time or late (against their store’s opening time), at the store or away from it, and whether they clocked out. A working day on someone’s schedule without a clock-in counts as absent; their days off and approved leave do not. Times are Lagos time; clock records cannot be changed or deleted."
+Layout (redesigned 2026-11-17; presentation in `src/components/admin/attendance-overview.tsx`): a header with **"Attendance"** (h1, 2xl extrabold) and "Who came, when and where, day by day. Lagos time.", on the right two pills (calendar icon + "`<long date>`" or "`<from>` to `<to>`"; people icon + "N person/people"). The filters sit in a card; under them a collapsed **"How attendance is counted"**: "On time or late is against their store’s opening time; at the store or away from it is measured from the clock-in. A working day on someone’s schedule without a clock-in counts as absent; their days off and approved leave do not. Clock records cannot be changed or deleted, only corrected by the office on the day." Page spacing 24 px.
 
 ### The day model (shared with Analytics and the downloads)
 
@@ -453,33 +453,31 @@ Value `all` means no filter. Button **"Show"** submits. Under the form a **"Quic
 - More than 40 000 clock events in range (`MAX_EVENTS`, read 1000 per page): warning "There are more clock records in this range than one page can read. Pick fewer days."
 - Load failure: heading plus red alert "Could not load attendance: <message>".
 
-### Summary cards
+### Summary cards (`AttendanceStats`)
 
-A line "`<long date>`" (or "`<from long>` to `<to long>`") " · N person/people". Then 8 cards (2 / 4 / 8 columns at phone / `sm` / `xl`); a value turns red when it is a warning and above 0:
+Four headline cards (2 / 4 columns at phone / `lg`), each with the label, a 36 px icon tile on the right, the figure (3xl extrabold), a thin bar (0–100) and a note:
 
-| Card | Value | Note |
-|---|---|---|
-| Came in | present | "of N working day(s)" |
-| Absent or not in yet (when range ends today) / Absent | absent (red if > 0) | — |
-| Late | late (red if > 0) | "`X` late on average" (e.g. "12 min", "1 h 15 min") |
-| Off site or flagged | offSite (red) | — |
-| No clock-out | missingOut (red) | — |
-| On time | punctuality % | "of those who came" |
-| Turned up | turnout % | "of working days" |
-| Usual clock-in | avgIn as HH:MM | "`x.x` h on shift on average" |
+| Card | Icon, tone | Value | Bar | Note |
+|---|---|---|---|---|
+| Came in | calendar-check, green | present | turnout % | "of N working day(s) · P% turned up" |
+| Absent or not in yet (range ends today) / Absent | user-x, red when > 0 else grey | absent | absent ÷ expected | "Working days with no clock-in" / "Nobody missing" |
+| Late | alarm clock, amber when > 0 | late | late ÷ present | "`X` late on average" / "Nobody late" |
+| Off site or flagged | map-pin-off, red when > 0 | offSite | offSite ÷ present | "Clocked in away from the store" / "All at their store" |
+
+Then one strip card split in 2 / 4 cells (icon, label, value): **On time** (punctuality %), **Usual clock-in** (HH:MM), **Hours on shift** ("x.x h avg"), **No clock-out** (red when > 0).
 
 ### Today lists (only when the range ends today and there are records today)
 
-Two cards side by side:
+Two panels (`TodayPanel`, side by side from `lg`; `min-w-0` so long lines truncate on phones), each with an icon tile, the title, an optional note and a count pill:
 
-- **"Not clocked in today (N)"**, note "`k` on shift now." when anyone is; each row: name (a link to their day, `/admin/attendance/day?person=<id>&date=<today>`, for **Fix today's record**), own store ("No store") and " · `<Supervisor>`’s team"; links **Call** (`tel:`) and **Movement** (`/admin/tracking?person=<id>&date=<today>&until=<today>`). Empty: "Everybody expected today has clocked in."
-- **"Late today (N)"**, most minutes late first; line "In at HH:MM, `X` late · store". Empty: "Nobody was late today."
+- **"Not clocked in today"** (user-x, red), note "`k` on shift now" when anyone is; line = own store ("No store").
+- **"Late today"** (alarm clock, amber), most minutes late first; line "In at HH:MM, `X` late · store".
 
-Lists scroll after 288 px.
+Each row: initials circle, name (a link to their day, `/admin/attendance/day?person=<id>&date=<today>`, for **Fix today's record**), the line and " · `<Supervisor>`’s team", then round 36 px buttons **Call** (`tel:`, aria "Call <name>") and **Movement** (`/admin/tracking?person=<id>&date=<today>&until=<today>`, aria "<name>'s movement today"). Empty: "Everybody expected today has clocked in." / "Nobody was late today." in a grey box. Lists scroll after 320 px.
 
 ### Worth a look (`concerns`, `attendance-report.ts`)
 
-Shown as a red alert titled **"Worth a look"** when any pattern reaches its threshold within the range. Thresholds (`CONCERN_AT`): absent **2** days, late **3**, off site **2**, missing clock-out **2**, sent late **2** (a clock-in received **30+** minutes after it was taken, `SENT_LATE_MIN = 30`). Ranked by count × weight (absent 5, off site 4, sent late 3, missing out 2, late 1), then name; at most **10** on the page (20 in the download). Sentences:
+Shown (`WorthALook`) as a card with a red left edge, a red alert icon, **"Worth a look"** and a count pill, the items in a 1 / 2 column grid of grey boxes (sentence, then **See their days** and, for absent or late, **Check an excuse for today | the last one**), when any pattern reaches its threshold within the range. Thresholds (`CONCERN_AT`): absent **2** days, late **3**, off site **2**, missing clock-out **2**, sent late **2** (a clock-in received **30+** minutes after it was taken, `SENT_LATE_MIN = 30`). Ranked by count × weight (absent 5, off site 4, sent late 3, missing out 2, late 1), then name; at most **10** on the page (20 in the download). Sentences:
 
 - "`Name` did not clock in on N days."
 - "`Name` was late on N days, by `X` on average."
@@ -491,7 +489,7 @@ Each line ends with a link **"See their days"** (same filter, that person, statu
 
 ### Calendar (only when the range is more than one day and at most **62 days**, `GRID_MAX_DAYS`)
 
-Card **"Calendar"** / "One square per day. Point at a square for the times; tap it to open that day." A table with a sticky first column "Person" (truncated at 8.5 rem / 12 rem), a column per day (header: weekday initial from "SMTWTFS" over the day number, all muted), and a last column **"Came"** = "came/expected" (expected = present or absent days). 24 px squares, 3 px apart, 5 px radius:
+Card with a section title (grid icon) **"Calendar"** / "One square per person per day. Point at a square for the times; tap it to open that day." A table with a sticky first column "Person" (truncated at 8.5 rem / 12 rem), a column per day (header: weekday initial from "SMTWTFS" over the day number, all muted), and a last column **"Came"** = "came/expected" (expected = present or absent days). 24 px squares, 3 px apart, 5 px radius:
 
 | Status | Fill | Letter |
 |---|---|---|
@@ -509,7 +507,7 @@ A small dot in the top-right corner marks a missing clock-out (dark `#52281a` on
 
 Which days are listed (`inDayTable`): with a status picked, the days matching it; with none, every counted day plus days of leave, and, when one person is picked, their days off too (for everyone, days off would bury the rest).
 
-Heading **"Day by day"**, right: "N day(s)[ matching] · tap a row for photos, map, phone and links". The page hands at most **1500** rows (`TABLE_MAX`) to the table, newest first; above that: "The newest 1500 of N days are listed here. The download has them all."
+Section title (list icon) **"Day by day"** with the note "N day(s)[ matching] · tap a row for photos, store check-ins and check-outs, map and links; tap a name for their whole day". The desktop table sits in a card (`surface`, no padding) with a tinted header row; a phone card gets a brand ring while open. The page hands at most **1500** rows (`TABLE_MAX`) to the table, newest first; above that: "The newest 1500 of N days are listed here. The download has them all."
 
 Toggle **Table** / **Map**.
 
