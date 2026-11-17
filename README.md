@@ -10,6 +10,9 @@ in-app selfie; admins manage staff and audit attendance from a web dashboard.
 - **Build guide:** [`docs/BUILD_GUIDE.md`](docs/BUILD_GUIDE.md): building Xtend
   from nothing, every migration, setup, checks and the change log. Kept current
   with every change.
+- **What changed and what it means:** [`docs/CHANGES.md`](docs/CHANGES.md):
+  every change in plain English (what was done, its impact, what the owner
+  needs to do), with a "Waiting on you" list at the top.
 - **Timezone of record:** Africa/Lagos. **Scale:** 30–100 staff, one outlet each.
 
 ## The architectural rule
