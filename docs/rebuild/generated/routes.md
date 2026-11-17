@@ -1264,7 +1264,7 @@ const schema = z.object({
 ```
 
 - Database functions: `flag_own_integrity`
-- Tables and views: `attendance`, `outlets`
+- Tables and views: `attendance`, `outlets`, `store_visits`
 
 ## `GET /api/auth/expired`
 

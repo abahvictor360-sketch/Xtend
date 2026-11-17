@@ -986,6 +986,64 @@ $$;
 
 
 --
+-- Name: attendance_store_check_in(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.attendance_store_check_in() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  store uuid;
+begin
+  if new.type <> 'opening' or auth.uid() is null or auth.uid() <> new.user_id then
+    return null;
+  end if;
+  if not public.can_visit_stores() or not public.has_allocated_stores(new.user_id) then
+    return null;
+  end if;
+  if new.accuracy_m is null or new.accuracy_m > 100
+     or new.client_captured_at < now() - interval '30 minutes' then
+    return null;
+  end if;
+
+  select x.id into store
+  from public.outlets x
+  where x.id in (select f.outlet_id from public.outlets_for_user(new.user_id) f)
+    and x.is_active
+    and public.distance_metres(new.lat, new.lng, x.lat, x.lng) <= x.geofence_radius_m
+  order by public.distance_metres(new.lat, new.lng, x.lat, x.lng)
+  limit 1;
+  if store is null then
+    return null;
+  end if;
+
+  if exists (select 1 from public.store_visits
+             where user_id = new.user_id and status = 'open'
+               and visit_date = public.business_date()) then
+    return null;
+  end if;
+
+  begin
+    insert into public.store_visits
+      (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m,
+       arrived_address, arrived_place_name, device_info, client_captured_at)
+    values
+      (store, new.lat, new.lng, new.accuracy_m,
+       new.address, new.place_name,
+       coalesce(new.device_info, '{}'::jsonb)
+         || jsonb_build_object('source', 'clock_in', 'attendance_id', new.id),
+       new.client_captured_at);
+  exception when others then
+    -- No automatic check-in; the clock-in stands.
+    null;
+  end;
+  return null;
+end;
+$$;
+
+
+--
 -- Name: attendance_timing(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -12588,6 +12646,13 @@ CREATE TRIGGER trg_attendance_zz_place_due AFTER INSERT ON public.attendance FOR
 
 
 --
+-- Name: attendance trg_attendance_zz_store_check_in; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_attendance_zz_store_check_in AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION public.attendance_store_check_in();
+
+
+--
 -- Name: audit_log trg_audit_fill_context; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -15158,6 +15223,13 @@ REVOKE ALL ON FUNCTION public.attendance_punctuality() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public.attendance_push_check() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION attendance_store_check_in(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.attendance_store_check_in() FROM PUBLIC;
 
 
 --

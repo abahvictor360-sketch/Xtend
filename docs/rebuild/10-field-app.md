@@ -1193,6 +1193,11 @@ guards all of this.
   card at once. Without a store name, "You are already checked in to a
   store. Check out of it first."). A visit left open on an earlier day is
   closed as abandoned by the next check-in (0086).
+- Clocking in inside one of their own stores checks a marketer in there
+  too (0087); `/api/attendance` returns `attendance.store_check_in` (the
+  store's name) and the clock result adds "You are also checked in at
+  <store>: check out of it before you leave for the next store." Home then
+  shows that visit's Check out card.
 - The store list is **the person's own stores** (`my_visit_stores()`,
   migration 060: their allocated stores plus their home store, only once
   they have at least one allocation; otherwise empty), sorted nearest first

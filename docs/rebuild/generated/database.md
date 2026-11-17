@@ -1357,6 +1357,7 @@ Policies:
 - `attendance_place_due()` → trigger · definer · 0045_mandatory_place_naming.sql
 - `attendance_punctuality()` → trigger · definer · 0036_supervisor_alerts.sql
 - `attendance_push_check()` → trigger · definer · 0027_notifications_required.sql
+- `attendance_store_check_in()` → trigger · definer · 0087_clock_in_checks_in.sql
 - `attendance_timing()` → trigger · definer · 0026_phone_evidence.sql
 - `attendance_timing_flag()` → trigger · definer · 0026_phone_evidence.sql
 - `audit_context_columns(p jsonb)` → TABLE(ip text, user_agent text, device jsonb, lat double precision, lng double precision, accuracy_m double precision, location_source text, place text, country text, vpn boolean) · definer · 0049_audit_context.sql
@@ -1677,6 +1678,7 @@ Policies:
 - `attendance`: `trg_attendance_timing` — BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_timing()
 - `attendance`: `trg_attendance_timing_flag` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_timing_flag()
 - `attendance`: `trg_attendance_zz_place_due` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_place_due()
+- `attendance`: `trg_attendance_zz_store_check_in` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_store_check_in()
 - `attendance`: `trg_follow_end_at_clock_out` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION follow_end_at_clock_out()
 - `audit_log`: `trg_audit_fill_context` — BEFORE INSERT ON public.audit_log FOR EACH ROW EXECUTE FUNCTION audit_fill_context()
 - `location_pings`: `trg_ping_alert` — AFTER INSERT ON public.location_pings FOR EACH ROW EXECUTE FUNCTION ping_alert()

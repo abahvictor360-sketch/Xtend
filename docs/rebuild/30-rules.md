@@ -1173,6 +1173,15 @@ They are also closed the moment the same person checks in again (0086,
 `trg_store_visit_zz_close_stale`), so a missed nightly job never leaves a
 marketer blocked by a visit Home does not show (Home lists today's only).
 
+A marketer's clock-in can open a visit too (0087, AFTER INSERT trigger
+`trg_attendance_zz_store_check_in` → `attendance_store_check_in()`): an
+`opening` by the caller, who `can_visit_stores()` and
+`has_allocated_stores()`, accuracy ≤ 100 m, `client_captured_at` within 30
+minutes, inside the fence of the nearest active store in
+`outlets_for_user(user)`, with no visit open today → insert a visit at
+that store (no selfie; `device_info` gets `source: 'clock_in'` and
+`attendance_id`). Errors are swallowed so the clock-in always stands.
+
 ### 5.4 Store labels (`store_visit_detail`, 0016, 0052)
 
 `store_label` = the outlet's name when on site; else the map's place name;
