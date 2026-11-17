@@ -162,7 +162,7 @@ export function AttendanceTable({
             {visible.map((row) => {
               const p = people[row.userId]
               return (
-                <div key={row.key} className="surface p-3">
+                <div key={row.key} className={cn('surface p-3.5', expanded === row.key && 'ring-2 ring-brand/30')}>
                   <button type="button" className="flex w-full items-start gap-3 text-left" onClick={() => void open(row)}>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center justify-between gap-2">
@@ -200,10 +200,10 @@ export function AttendanceTable({
             })}
           </div>
 
-          <div className="hidden rounded-lg border border-border md:block">
+          <div className="surface hidden overflow-hidden p-0 md:block">
             <Table>
-              <TableHeader>
-                <TableRow>
+              <TableHeader className="bg-muted/40">
+                <TableRow className="hover:bg-transparent">
                   {head('date', 'Day')}
                   {head('name', 'Person')}
                   {head('store', 'Store')}

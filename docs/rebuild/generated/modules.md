@@ -1513,6 +1513,14 @@ redraws the pins and fits the view to them.
 
 Exports: `AttendanceMap`
 
+## `src/components/admin/attendance-overview.tsx`
+
+The Attendance page's overview, presentation only: the figures, today's
+lists, the "worth a look" card and section headings. The page reads the
+data (through RLS) and passes it in.
+
+Exports: `AttendanceStats`, `TodayItem`, `TodayPanel`, `WorryItem`, `WorthALook`, `SectionTitle`
+
 ## `src/components/admin/attendance-table.tsx`
 
 A clock event that reached the server this long after the phone took it was saved offline.

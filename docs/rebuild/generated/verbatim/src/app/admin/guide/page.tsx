@@ -295,7 +295,8 @@ export default async function AdminGuidePage() {
           <p>
             <Ui>Attendance</Ui> shows each person&apos;s day: clock-in and clock-out, on time or late, at
             their store or not, and whether they clocked out. Pick a quick range or dates, then narrow by
-            person, store, team, role or kind of day. The cards add it up; <Ui>Worth a look</Ui> names
+            person, store, team, role or kind of day. The four cards and the strip under them add it up (tap{' '}
+            <Ui>How attendance is counted</Ui> under the filters for the rules); <Ui>Worth a look</Ui> names
             repeat absences, lateness, off-site clock-ins and missing clock-outs. The calendar has one
             square per person per day; tap one, or open a row, to see the photo, the map, the distance
             from the store and the phone used, with links to Movement and Check an excuse for that day.
