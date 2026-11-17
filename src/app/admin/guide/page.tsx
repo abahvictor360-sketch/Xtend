@@ -357,7 +357,8 @@ export default async function AdminGuidePage() {
             how far from the store, with the check-in photo while it is kept. It points out very short
             visits, check-ins away from the store and visits too far apart to be real. <Ui>By store</Ui>,{' '}
             <Ui>By person</Ui> and <Ui>Store coverage</Ui> (stores nobody visited in 7, 14 or 30 days)
-            add it up.
+            add it up. A visit nobody checked out of by the end of the day shows as abandoned; it is
+            closed overnight, or as soon as that person checks in at a store again.
           </p>
           <p className="font-semibold">How location is recorded (not shown to staff)</p>
           <ul className="list-disc space-y-1.5 pl-5">

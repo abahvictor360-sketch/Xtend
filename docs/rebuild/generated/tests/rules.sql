@@ -503,6 +503,27 @@ begin
     perform assert(true, 'a marketer cannot be in two stores at once');
   end;
 
+  -- 0086: a check-in forgotten on an earlier day does not block today's.
+  -- (Rolled back: the rest of the day's tests expect the open mall visit.)
+  begin
+    update public.store_visits set visit_date = public.business_date() - 1 where id = visit_id;
+    insert into public.store_visits
+      (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
+    values (kiosk_id, 9.0765, 7.3986, 12, now());
+    perform assert(
+      (select status from public.store_visits where id = visit_id) = 'abandoned',
+      'stale 0086: yesterday''s forgotten check-in is closed as abandoned');
+    perform assert(
+      (select count(*) from public.store_visits where user_id = grace and status = 'open') = 1,
+      'stale 0086: and the new check-in is the one open visit');
+    raise exception 'stale-0086-done';
+  exception when others then
+    if sqlerrm <> 'stale-0086-done' then raise; end if;
+  end;
+  perform assert(
+    (select status from public.store_visits where id = visit_id) = 'open',
+    'stale 0086: today''s open visit is left alone');
+
   -- Check out, then move to the next store.
   payload := public.end_store_visit(visit_id, 6.6019, 3.3516, 12, 'Ikeja City Mall', null);
   perform assert(payload ->> 'status' = 'on_site', 'checking out at the store is on_site');

@@ -1613,6 +1613,7 @@ Policies:
 - `staff_no_show(p_grace_minutes integer)` → TABLE(user_id uuid, full_name text, phone text, outlet_id uuid, outlet_name text, shift_start time without time zone, minutes_late integer) · definer · 0059_schedules_leave.sql
 - `store_count_status()` → jsonb · definer · 0020_count_requests.sql
 - `store_visit_alert()` → trigger · definer · 0016_visits_without_allocation.sql
+- `store_visit_close_stale()` → trigger · definer · 0086_close_stale_visit_on_check_in.sql
 - `store_visit_enforce()` → trigger · definer · 0060_marketer_visits_reports.sql
 - `store_visits_today()` → SETOF store_visit_detail · definer · 0016_visits_without_allocation.sql
 - `submit_count_sheet(p_outlet_id uuid, p_path text, p_file_name text)` → uuid · definer · 0064_count_sheets_any_time_report_files.sql
@@ -1700,6 +1701,7 @@ Policies:
 - `store_visits`: `trg_store_visit_alert` — AFTER INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION store_visit_alert()
 - `store_visits`: `trg_store_visit_enforce` — BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION store_visit_enforce()
 - `store_visits`: `trg_store_visit_selfie_check` — BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION selfie_check()
+- `store_visits`: `trg_store_visit_zz_close_stale` — BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION store_visit_close_stale()
 - `store_visits`: `trg_store_visits_place_due_guard` — BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION place_due_guard()
 - `store_visits`: `trg_store_visits_zz_place_due` — AFTER INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION visit_place_due()
 - `support_messages`: `realtime_broadcast` — AFTER INSERT OR DELETE OR UPDATE ON public.support_messages FOR EACH ROW EXECUTE FUNCTION realtime_notify_support_message()

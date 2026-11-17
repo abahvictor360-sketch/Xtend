@@ -7383,6 +7383,25 @@ $$;
 
 
 --
+-- Name: store_visit_close_stale(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.store_visit_close_stale() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  update public.store_visits
+     set status = 'abandoned'
+   where user_id = new.user_id
+     and status = 'open'
+     and visit_date < public.business_date();
+  return new;
+end;
+$$;
+
+
+--
 -- Name: store_visit_enforce(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -12709,6 +12728,13 @@ CREATE TRIGGER trg_store_visit_selfie_check BEFORE INSERT ON public.store_visits
 
 
 --
+-- Name: store_visits trg_store_visit_zz_close_stale; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_store_visit_zz_close_stale BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION public.store_visit_close_stale();
+
+
+--
 -- Name: store_visits trg_store_visits_place_due_guard; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -16783,6 +16809,13 @@ GRANT ALL ON FUNCTION public.store_count_status() TO service_role;
 --
 
 REVOKE ALL ON FUNCTION public.store_visit_alert() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION store_visit_close_stale(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.store_visit_close_stale() FROM PUBLIC;
 
 
 --

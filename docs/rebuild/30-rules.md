@@ -1168,6 +1168,10 @@ Only the owner, only an open visit ("That visit is already closed"). Status
 is judged the same way against the snapshot; no snapshot → null (or
 flagged). Returns minutes in store. Visits still open from an earlier day
 are marked `abandoned` by the nightly job (`close_abandoned_visits`).
+They are also closed the moment the same person checks in again (0086,
+`store_visit_close_stale()`, BEFORE INSERT trigger
+`trg_store_visit_zz_close_stale`), so a missed nightly job never leaves a
+marketer blocked by a visit Home does not show (Home lists today's only).
 
 ### 5.4 Store labels (`store_visit_detail`, 0016, 0052)
 
