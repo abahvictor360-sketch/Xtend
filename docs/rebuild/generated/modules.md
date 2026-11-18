@@ -2390,7 +2390,7 @@ and joins them. Screens use the app's own parts and words; phone system
 screens are plain drawings (every phone looks a little different).
 Like the written guide, it says what to switch on, never why.
 
-Exports: `Scene`, `CHAPTERS`, `SCENES`, `SceneFrame`, `SceneView`
+Exports: `Scene`, `CHAPTERS`, `SCENES`, `VOICE`, `SceneFrame`, `SceneView`
 
 ## `src/middleware.ts`
 

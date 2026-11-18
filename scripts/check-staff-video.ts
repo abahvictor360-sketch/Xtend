@@ -2,6 +2,7 @@
  * The staff video guide (public/guide/xtend-staff-guide.mp4):
  *   npx tsx --tsconfig tsconfig.scripts.json scripts/check-staff-video.ts
  */
+import { execFileSync } from 'node:child_process'
 import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { STAFF_VIDEO } from '@/lib/staff-video'
@@ -33,6 +34,21 @@ const scenes = read('src/components/video/staff-video-scenes.tsx')
 const said = [...scenes.matchAll(/(?:title|sub): '([^']*)'|(?:title|sub): `([^`]*)`/g)].map((m) => m[1] ?? m[2]).join(' ')
 check(!/\b(track|tracking|monitor|watch(ed|ing)? you|follow(ed|ing)? you|integrity|alert)\b/i.test(said),
   'the video says what to switch on, never how staff are monitored')
+// The voice-over: every scene speaks, and never about monitoring.
+const voiceStart = scenes.indexOf('export const VOICE')
+const voice = scenes.slice(voiceStart, scenes.indexOf('\n}\n', voiceStart))
+const ids = [...scenes.matchAll(/\bid: '([a-z0-9-]+)'/g)].map((m) => m[1])
+const spoken = new Set([...voice.matchAll(/^\s+'?([a-z0-9-]+)'?: '/gm)].map((m) => m[1]))
+check(ids.length > 30 && ids.every((id) => spoken.has(id)), 'every scene has its words in the voice-over')
+check(!/\b(track|tracking|monitor|watch(ed|ing)? you|follow(ed|ing)? you|integrity|alert)\b/i.test(voice),
+  'the voice-over never says how staff are monitored')
+let hasSound = false
+try {
+  hasSound = /audio/.test(execFileSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type', '-of', 'csv=p=0', join(root, 'public', STAFF_VIDEO.src)]).toString())
+} catch {
+  hasSound = true // no ffprobe on this machine: the other checks still run
+}
+check(hasSound, 'the video has its voice-over sound track')
 check(/Allow all the time/.test(scenes) && /Unrestricted/.test(scenes) && /Clock in with selfie/.test(scenes),
   'the video uses the app’s own words for location, battery and clocking in')
 check(/process\.env\.NODE_ENV === 'production'\) notFound\(\)/.test(read('src/app/guide/video-scenes/page.tsx')),

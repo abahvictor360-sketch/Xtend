@@ -58,6 +58,18 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-18
 
+### The staff video now talks them through it
+- **What was done:** the staff video guide has a voice-over: a clear,
+  friendly voice reads each step in plain words while the screen shows
+  where to tap. Each step stays on screen until it has been said, so the
+  video is now 5 minutes 38 seconds (8 MB). The captions stay, so it still
+  works with the sound off. The voice is made on our own computer, not by
+  an outside service.
+- **The impact:** staff who find reading hard can just listen and follow.
+- **What you need to do:** redeploy the latest code. Send the new video to
+  anyone who got the silent one (same link:
+  www.withxtend.com/guide/xtend-staff-guide.mp4).
+
 ### A video guide for staff
 - **What was done:** a 3 minute 49 second video, **Xtend step by step**,
   made for phones (upright, no sound needed, large captions). It walks
