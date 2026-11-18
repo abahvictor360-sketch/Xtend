@@ -30,8 +30,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0089_quick_sign_in.sql`;
    - `supabase/migrations/0090_field_corrections.sql`;
    - `supabase/migrations/0091_visit_checkout_photo.sql`;
-   - `supabase/migrations/0092_photo_flags.sql`;
-   - `supabase/migrations/0093_reset_clock_out.sql`.
+   - `supabase/migrations/0092_photo_flags.sql`.
+   (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18.)
 4. **Clock-out reminder fix (0069)**, if never pasted:
    ```sql
    alter table public.clock_out_reminders drop constraint if exists clock_out_reminders_stage_check;
@@ -58,6 +58,13 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-18
 
+### Migration 0093 run
+- **What was done:** you ran `0093_reset_clock_out.sql` in Supabase; it is
+  ticked off the "Waiting on you" list.
+- **The impact:** **Undo … clock-out (back on shift)** works once the latest
+  code is deployed.
+- **What you need to do:** redeploy in Dokploy if you have not since PR #88.
+
 ### Undo a clock-out made by mistake
 - **What was done:** when someone taps Clock out by mistake (or too early)
   and is still working, an admin, HR or their supervisor can now put them
@@ -72,9 +79,8 @@ the live database, so it cannot tell which of these are already done.)
   yourself, or ask them to clock in or out again.
 - **The impact:** a mistaken clock-out no longer ends someone's day: they
   show as on shift, and are reminded to clock out at the end.
-- **What you need to do:** run `supabase/migrations/0093_reset_clock_out.sql`
-  in the Supabase SQL editor, then redeploy. Until it is run, the button
-  says the update is needed.
+- **What you need to do:** redeploy the latest code. (Migration 0093 is
+  done: you ran it on 2026-11-18.)
 
 ### Attendance: who clocked in comes first
 - **What was done:** in the Attendance day-by-day list, each day now shows
