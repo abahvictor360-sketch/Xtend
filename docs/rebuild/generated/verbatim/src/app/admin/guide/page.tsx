@@ -878,7 +878,7 @@ export default async function AdminGuidePage() {
                 a: <>Reset it on the Staff page. They choose a new one when they sign in.</>,
               },
               {
-                    q: 'Someone clocked out by mistake',
+                q: 'Someone clocked out by mistake',
                 a: (
                   <>
                     Open <Ui>Attendance</Ui>, tap their name and, under <Ui>Fix today&apos;s record</Ui>, press{' '}
