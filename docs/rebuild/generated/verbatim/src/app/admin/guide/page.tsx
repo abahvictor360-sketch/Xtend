@@ -878,6 +878,21 @@ export default async function AdminGuidePage() {
                 a: <>Reset it on the Staff page. They choose a new one when they sign in.</>,
               },
               {
+                q: 'Someone clocked out by mistake',
+                a: (
+                  <>
+                    Open <Ui>Attendance</Ui>, tap their name and, under <Ui>Fix today&apos;s record</Ui>, press{' '}
+                    <Ui>Undo … clock-out (back on shift)</Ui> with a reason (today only). Their clock-out is taken off and
+                    kept under <Ui>Corrections today</Ui>; they are on shift again, so their location is followed again,
+                    they show under on shift, an early clock-out flag it raised goes, and the clock-out reminders start
+                    again. They get a notification asking them to clock out again at the end of the shift, and clock out
+                    as usual. Ask Xtend can do it too (“Ada clocked out by mistake, put her back on shift”). Audited as{' '}
+                    <Ui>field.reset_clock_out</Ui>. To have them redo a clock-out that went wrong instead, use{' '}
+                    <Ui>Ask them to clock out again</Ui>.
+                  </>
+                ),
+              },
+              {
                 q: 'The app would not clock someone in or out',
                 a: (
                   <>

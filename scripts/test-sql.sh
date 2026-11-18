@@ -111,5 +111,6 @@ run supabase/migrations/0089_quick_sign_in.sql
 run supabase/migrations/0090_field_corrections.sql
 run supabase/migrations/0091_visit_checkout_photo.sql
 run supabase/migrations/0092_photo_flags.sql
+run supabase/migrations/0093_reset_clock_out.sql
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rules.sql 2>&1 | grep -E 'NOTICE|ERROR' | sed 's/^psql:[^ ]*: //'
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_counts.sql 2>&1 | grep -E 'NOTICE|ERROR|PASSED' | sed 's/^psql:[^ ]*: //'

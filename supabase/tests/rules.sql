@@ -5859,6 +5859,97 @@ begin
   end;
   perform set_config('request.jwt.claims', '{"aal":"aal2"}', false);
 
+  -- The office undoes a clock-out made by mistake (0093).
+  declare
+    sup uuid := gen_random_uuid();
+    zee uuid := gen_random_uuid();
+    kai uuid := gen_random_uuid();
+    opening_id uuid;
+    closing_id uuid;
+    second_out uuid;
+    ping uuid;
+    fix uuid;
+  begin
+    perform act_as(boss);
+    insert into auth.users (id, email) values
+      (sup, 'sup.rc@xpel.ng'), (zee, 'zee.rc@xpel.ng'), (kai, 'kai.rc@xpel.ng');
+    insert into public.profiles (id, full_name, email, role, outlet_id) values
+      (sup, 'Sade Ola', 'sup.rc@xpel.ng', 'supervisor', null);
+    insert into public.profiles (id, full_name, email, role, outlet_id, supervisor_id) values
+      (zee, 'Zee Musa', 'zee.rc@xpel.ng', 'merchandiser', mall_id, sup),
+      (kai, 'Kai Udo',  'kai.rc@xpel.ng', 'merchandiser', mall_id, null);
+    insert into public.work_patterns (user_id, days) values (zee, '{0,1,2,3,4,5,6}'), (kai, '{0,1,2,3,4,5,6}');
+
+    perform act_as(sup);
+    begin
+      perform public.office_reset_clock_out(zee, 'Tapped clock out by mistake');
+      perform assert(false, 'reset clock-out 0093: nothing to undo before a clock-out');
+    exception when others then
+      perform assert(sqlerrm like 'They have not clocked out%', 'reset clock-out 0093: only a clock-out that happened can be undone');
+    end;
+    opening_id := public.office_record_clock(zee, 'opening', mall_id, null, 'Phone would not open');
+    closing_id := public.office_record_clock(zee, 'closing', mall_id, null, 'Clocked out for them');
+    insert into public.location_pings (user_id, attendance_id, lat, lng, accuracy_m)
+      values (zee, closing_id, 6.6019, 3.3516, 10) returning id into ping;
+    insert into public.integrity_flags (user_id, kind, severity, summary, detail, flag_date)
+      values (zee, 'early_clock_out', 'high', 'Clocked out early', jsonb_build_object('attendance_id', closing_id), public.business_date());
+    insert into public.clock_out_reminders (user_id, reminder_date, stage, shift_end)
+      values (zee, public.business_date(), 1, '18:00');
+
+    -- Not for staff, and not for someone off the supervisor's team.
+    perform act_as(zee);
+    begin
+      perform public.office_reset_clock_out(zee, 'Undo my clock-out');
+      perform assert(false, 'reset clock-out 0093: staff cannot undo their own clock-out');
+    exception when others then
+      perform assert(sqlerrm like 'You can only fix%', 'reset clock-out 0093: staff cannot use it');
+    end;
+    perform act_as(sup);
+    begin
+      perform public.office_reset_clock_out(kai, 'Undo it');
+      perform assert(false, 'reset clock-out 0093: a supervisor cannot reach someone off their team');
+    exception when others then
+      perform assert(sqlerrm like 'You can only fix%', 'reset clock-out 0093: their own team only');
+    end;
+    begin
+      perform public.office_reset_clock_out(zee, 'no');
+      perform assert(false, 'reset clock-out 0093: a reason is needed');
+    exception when others then
+      perform assert(sqlerrm like 'Say why%', 'reset clock-out 0093: a reason is needed');
+    end;
+
+    fix := public.office_reset_clock_out(zee, 'Tapped clock out by mistake, still at the store');
+    perform assert(not exists (select 1 from public.attendance where id = closing_id)
+                   and exists (select 1 from public.attendance where id = opening_id),
+      'reset clock-out 0093: the clock-out is gone, the clock-in stays');
+    perform assert(
+      (select action from public.field_corrections where id = fix) = 'reset_clock_out'
+      and (select status from public.field_corrections where id = fix) = 'done'
+      and (select old_record->>'id' from public.field_corrections where id = fix) = closing_id::text
+      and (select requested_by from public.field_corrections where id = fix) = sup,
+      'reset clock-out 0093: the old clock-out is kept, word for word, with who and why');
+    perform assert((select lp.attendance_id from public.location_pings lp where lp.id = ping) = opening_id,
+      'reset clock-out 0093: its movement moves to the clock-in');
+    perform assert(not exists (select 1 from public.integrity_flags where user_id = zee and kind = 'early_clock_out'),
+      'reset clock-out 0093: the early clock-out flag it raised goes');
+    perform assert(not exists (select 1 from public.clock_out_reminders where user_id = zee),
+      'reset clock-out 0093: clock-out reminders start again');
+    perform act_as(zee);
+    perform assert(public.my_day()->'closing' = 'null'::jsonb and public.my_day()->'opening' is not null
+                   and public.my_day()->'opening' <> 'null'::jsonb,
+      'reset clock-out 0093: Home shows them on shift again');
+    -- They clock out again later, normally.
+    perform act_as(sup);
+    second_out := public.office_record_clock(zee, 'closing', mall_id, null, 'Clocked out at the end of the shift');
+    perform assert((select count(*) from public.attendance where user_id = zee and type = 'closing') = 1,
+      'reset clock-out 0093: they can clock out again, once');
+
+    raise exception 'reset-0093-done';
+  exception when others then
+    if sqlerrm <> 'reset-0093-done' then raise; end if;
+  end;
+  perform set_config('request.jwt.claims', '{"aal":"aal2"}', false);
+
   -- Test mode and resetting the test run (066). Every case runs in its
   -- own block that is rolled back, so the data stays for the RLS tests.
   -- ---------------------------------------------------------------

@@ -341,6 +341,16 @@ export default async function SupervisorGuidePage() {
                 a: <>Reset it on Staff. They choose a new one when they sign in.</>,
               },
               {
+                q: 'Someone on my team clocked out by mistake',
+                a: (
+                  <>
+                    On <Ui>Attendance</Ui>, tap their name and, under <Ui>Fix today&apos;s record</Ui>, press{' '}
+                    <Ui>Undo … clock-out (back on shift)</Ui> with a reason. They are on shift again and get a notification
+                    asking them to clock out at the end of the shift. The old clock-out is kept. Today only.
+                  </>
+                ),
+              },
+              {
                 q: 'The app would not clock someone in or out',
                 a: (
                   <>

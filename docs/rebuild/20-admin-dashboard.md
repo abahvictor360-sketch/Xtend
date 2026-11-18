@@ -2236,7 +2236,10 @@ Office document rows wrap full filenames and staff details on small screens. Doc
   marketer): a card **Fix today's record** (wrench icon) with buttons by
   state: **Clock <first name> in** (or "in again (replace)"), **Ask them to
   clock in again**, **Clock <first name> out** (or "out again (replace)"),
-  **Ask them to clock out again**, for marketers **Check <name> in at a
+  **Undo <first name>'s clock-out (back on shift)** (0093; with a tinted
+  note that the clock-out comes off, they are on shift and reminded to clock
+  out, and the old one is kept; placeholder "e.g. Clocked out by mistake;
+  still at the store until 6 pm"), **Ask them to clock out again**, for marketers **Check <name> in at a
   store** / **Check <name> out of <store>**, and per visit **Ask them to
   check in again (<store>)** / **Ask them to check out again (<store>)**.
   Each opens a form: **Store** (their stores with a position; home store

@@ -19,7 +19,8 @@ const schema = z.object({
 
 /**
  * The office fixes someone's day (0090): records a clock-in, clock-out,
- * store check-in or check-out for them, or asks them to do one again.
+ * store check-in or check-out for them, asks them to do one again, or
+ * undoes a clock-out made by mistake (0093).
  * Postgres decides who may (an admin, HR, or their supervisor, for active
  * field staff) and keeps every correction; this audits it and tells them.
  */
@@ -54,6 +55,9 @@ export async function POST(request: Request) {
         p_outlet: input.outlet_id ?? null,
         p_reason: input.reason,
       })
+    } else if (action === 'reset_clock_out') {
+      // A clock-out made by mistake (0093): back on shift.
+      result = await supabase.rpc('office_reset_clock_out', { p_user: input.user_id, p_reason: input.reason })
     } else {
       if ((action === 'redo_check_in' || action === 'redo_check_out') && !input.visit_id) {
         return Response.json({ error: 'Pick the store visit.' }, { status: 400 })
@@ -68,7 +72,11 @@ export async function POST(request: Request) {
     if (result.error) {
       const missing = result.error.code === 'PGRST202' || result.error.code === '42883'
       return Response.json(
-        { error: missing ? 'This needs migration 0090. Ask an admin to run it.' : dbErrorMessage(result.error) },
+        {
+          error: missing
+            ? `This needs migration ${action === 'reset_clock_out' ? '0093' : '0090'}. Ask an admin to run it.`
+            : dbErrorMessage(result.error),
+        },
         { status: missing ? 503 : 400 },
       )
     }

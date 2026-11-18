@@ -4910,6 +4910,59 @@ $$;
 
 
 --
+-- Name: office_reset_clock_out(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.office_reset_clock_out(p_user uuid, p_reason text) RETURNS uuid
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  actor uuid := auth.uid();
+  closing public.attendance;
+  opening_id uuid;
+  pings uuid[];
+  new_id uuid;
+begin
+  if actor is null or not public.may_correct_field(p_user) then
+    raise exception 'You can only fix the day of active field staff you look after';
+  end if;
+  if length(btrim(coalesce(p_reason, ''))) < 3 then
+    raise exception 'Say why, so they know what happened';
+  end if;
+
+  select * into closing from public.attendance a
+  where a.user_id = p_user and a.attendance_date = public.business_date() and a.type = 'closing';
+  if not found then
+    raise exception 'They have not clocked out today, so there is nothing to undo';
+  end if;
+  select a.id into opening_id from public.attendance a
+  where a.user_id = p_user and a.attendance_date = public.business_date() and a.type = 'opening';
+
+  select coalesce(array_agg(p.id), '{}') into pings from public.location_pings p where p.attendance_id = closing.id;
+  update public.location_pings set attendance_id = opening_id where attendance_id = closing.id;
+
+  delete from public.integrity_flags f
+  where f.user_id = p_user and f.kind = 'early_clock_out' and f.reviewed_at is null
+    and f.detail->>'attendance_id' = closing.id::text;
+  delete from public.clock_out_reminders r
+  where r.user_id = p_user and r.reminder_date = public.business_date();
+  update public.field_corrections set status = 'done', done_at = now()
+  where user_id = p_user and status = 'open' and correction_date = public.business_date()
+    and action in ('redo_clock_out', 'office_clock_out');
+
+  insert into public.field_corrections
+    (user_id, action, reason, requested_by, status, record_id, old_record, ping_ids, done_at)
+  values (p_user, 'reset_clock_out', btrim(p_reason), actor, 'done', closing.id, to_jsonb(closing), pings, now())
+  returning id into new_id;
+
+  delete from public.attendance where id = closing.id;
+  return new_id;
+end;
+$$;
+
+
+--
 -- Name: open_support_thread(text, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10380,7 +10433,7 @@ CREATE TABLE public.field_corrections (
     new_record_id uuid,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     done_at timestamp with time zone,
-    CONSTRAINT field_corrections_action_check CHECK ((action = ANY (ARRAY['office_clock_in'::text, 'office_clock_out'::text, 'office_check_in'::text, 'office_check_out'::text, 'redo_clock_in'::text, 'redo_clock_out'::text, 'redo_check_in'::text, 'redo_check_out'::text]))),
+    CONSTRAINT field_corrections_action_check CHECK ((action = ANY (ARRAY['office_clock_in'::text, 'office_clock_out'::text, 'office_check_in'::text, 'office_check_out'::text, 'redo_clock_in'::text, 'redo_clock_out'::text, 'redo_check_in'::text, 'redo_check_out'::text, 'reset_clock_out'::text]))),
     CONSTRAINT field_corrections_reason_check CHECK (((length(btrim(reason)) >= 3) AND (length(btrim(reason)) <= 500))),
     CONSTRAINT field_corrections_status_check CHECK ((status = ANY (ARRAY['open'::text, 'done'::text])))
 );
@@ -17157,6 +17210,15 @@ GRANT ALL ON FUNCTION public.office_record_visit(p_user uuid, p_action text, p_o
 REVOKE ALL ON FUNCTION public.office_request_redo(p_user uuid, p_action text, p_reason text, p_visit uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.office_request_redo(p_user uuid, p_action text, p_reason text, p_visit uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.office_request_redo(p_user uuid, p_action text, p_reason text, p_visit uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION office_reset_clock_out(p_user uuid, p_reason text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.office_reset_clock_out(p_user uuid, p_reason text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.office_reset_clock_out(p_user uuid, p_reason text) TO authenticated;
+GRANT ALL ON FUNCTION public.office_reset_clock_out(p_user uuid, p_reason text) TO service_role;
 
 
 --
