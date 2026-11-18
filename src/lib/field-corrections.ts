@@ -13,6 +13,7 @@ export const CORRECTION_ACTIONS = [
   'redo_clock_out',
   'redo_check_in',
   'redo_check_out',
+  'reset_clock_out',
 ] as const
 
 export type CorrectionAction = (typeof CORRECTION_ACTIONS)[number]
@@ -27,6 +28,7 @@ export const CORRECTION_LABELS: Record<CorrectionAction, string> = {
   redo_clock_out: 'Asked to clock out again',
   redo_check_in: 'Asked to check in again',
   redo_check_out: 'Asked to check out again',
+  reset_clock_out: 'Clock-out undone: back on shift',
 }
 
 /** What the person is told: plain words, with the office's reason. */
@@ -53,6 +55,11 @@ export function correctionNotice(
       return { title: 'Please check in again', body: `${d.by} asked you to check in at the store again: ${why}` }
     case 'redo_check_out':
       return { title: 'Please check out again', body: `${d.by} asked you to check out of the store again: ${why}` }
+    case 'reset_clock_out':
+      return {
+        title: 'You are back on shift',
+        body: `${d.by} undid your clock-out: ${why} Clock out again at the end of your shift.`,
+      }
   }
 }
 
@@ -127,6 +134,7 @@ export function planCorrection(
   if (a === 'redo_clock_in' && !day.clockedIn) throw new Error(`${first} has not clocked in today, so there is nothing to redo. Clock them in instead.`)
   if (a === 'redo_clock_in' && day.clockedOut) throw new Error(`${first} has already clocked out. Clock them in again yourself instead.`)
   if (a === 'redo_clock_out' && !day.clockedOut) throw new Error(`${first} has not clocked out today, so there is nothing to redo.`)
+  if (a === 'reset_clock_out' && !day.clockedOut) throw new Error(`${first} has not clocked out today, so there is nothing to undo.`)
   if (a === 'office_check_in' || a === 'office_check_out' || a === 'redo_check_in' || a === 'redo_check_out') {
     if (day.role !== 'marketer') throw new Error('Store check-ins are for marketers.')
   }
@@ -185,6 +193,7 @@ export function planCorrection(
     redo_clock_out: `Ask ${day.name} to clock out again`,
     redo_check_in: `Ask ${day.name} to check in at ${where} again`,
     redo_check_out: `Ask ${day.name} to check out of ${where} again`,
+    reset_clock_out: `Undo ${day.name}'s clock-out (back on shift)`,
   }
   const office = a.startsWith('office_')
   const replaces = (a === 'office_clock_in' && day.clockedIn) || (a === 'office_clock_out' && day.clockedOut)
@@ -194,9 +203,11 @@ export function planCorrection(
       ...(where ? [`Store: ${where}`] : []),
       ...(isClock ? [`Time: ${ask.time ?? 'now'}, today`] : []),
       `Why: ${reason}`,
-      office
-        ? 'Recorded for them, marked By the office, with no selfie.'
-        : 'Their Home shows the request; what they capture next replaces the old record.',
+      a === 'reset_clock_out'
+        ? 'Their clock-out is taken off: they are on shift again, their location is followed again, and they clock out again at the end of the shift.'
+        : office
+          ? 'Recorded for them, marked By the office, with no selfie.'
+          : 'Their Home shows the request; what they capture next replaces the old record.',
       'They get a notification with your reason. The old record is kept.',
     ],
     warning: replaces ? `This replaces the ${a === 'office_clock_in' ? 'clock-in' : 'clock-out'} they already have today.` : null,

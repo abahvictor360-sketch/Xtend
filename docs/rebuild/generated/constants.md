@@ -161,8 +161,8 @@ Every exported UPPER_CASE constant in `src/lib`, with the comment above it. Thes
 
 ## `src/lib/field-corrections.ts`
 
-- `CORRECTION_ACTIONS` = `[ 'office_clock_in', 'office_clock_out', 'office_check_in', 'office_check_out', 'redo_clock_in', 'redo_clock_out', 'redo_check_in', 'redo_check_out', ]` — The office fixing someone's day (0090): the actions, what each is called, and what the person is told. Pure, so scripts/check-field-corrections.ts can test it. /
-- `CORRECTION_LABELS` = `{ office_clock_in: 'Clocked in by the office', office_clock_out: 'Clocked out by the office', office_check_in: 'Checked in by the office', office_check_out: 'Checked out by the office', redo_clock_in: 'Asked to clock in again', redo_clock_out: 'Asked to clock out again', redo_check_in: 'Asked to check in again', redo_check_out: 'Asked to check out again', }` — How each shows on the office's screen and in the history.
+- `CORRECTION_ACTIONS` = `[ 'office_clock_in', 'office_clock_out', 'office_check_in', 'office_check_out', 'redo_clock_in', 'redo_clock_out', 'redo_check_in', 'redo_check_out', 'reset_clock_out', ]` — The office fixing someone's day (0090): the actions, what each is called, and what the person is told. Pure, so scripts/check-field-corrections.ts can test it. /
+- `CORRECTION_LABELS` = `{ office_clock_in: 'Clocked in by the office', office_clock_out: 'Clocked out by the office', office_check_in: 'Checked in by the office', office_check_out: 'Checked out by the office', redo_clock_in: 'Asked to clock in again', redo_clock_out: 'Asked to clock out again', redo_check_in: 'Asked to check in again', redo_check_out: 'Asked to check out again', reset_clock_out: 'Clock-out undone: back on shift', }` — How each shows on the office's screen and in the history.
 
 ## `src/lib/flag-labels.ts`
 

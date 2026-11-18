@@ -17,13 +17,14 @@ function check(condition: boolean, label: string) {
   console.log(`ok: ${label}`)
 }
 
-const sql = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '0090_field_corrections.sql'), 'utf8')
-const dbActions = (sql.match(/action\s+text not null check \(action in \(([\s\S]*?)\)\)/)?.[1] ?? '')
+// The latest list of actions the database allows (0093 added reset_clock_out).
+const sql = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '0093_reset_clock_out.sql'), 'utf8')
+const dbActions = (sql.match(/field_corrections_action_check check \(action in \(([\s\S]*?)\)\)/)?.[1] ?? '')
   .match(/'([a-z_]+)'/g)
   ?.map((s) => s.replace(/'/g, ''))
 check(
   JSON.stringify([...(dbActions ?? [])].sort()) === JSON.stringify([...CORRECTION_ACTIONS].sort()),
-  'the app and the database know the same eight actions',
+  'the app and the database know the same nine actions',
 )
 
 for (const action of CORRECTION_ACTIONS) {
@@ -88,6 +89,20 @@ check(refuses(() => plan(visiting, 'office_check_in'), /still checked in at Just
 check(plan(visiting, 'office_check_out').title === 'Check Ada Obi out of Justrite Bariga', 'Ask Xtend: checking out of the open visit')
 check(refuses(() => plan(visiting, 'redo_check_in'), /Say which store visit/), 'Ask Xtend: two visits and no store: it asks which')
 check(plan(visiting, 'redo_check_in', { storeId: MALL }).payload.visit_id === V1, 'Ask Xtend: the visit at the named store')
+
+// Undoing a clock-out made by mistake (0093).
+check(refuses(() => plan(inDay, 'reset_clock_out'), /nothing to undo/), 'Ask Xtend: nothing to undo before a clock-out')
+const undo = plan({ ...inDay, clockedOut: true }, 'reset_clock_out', { reason: 'Clocked out by mistake' })
+check(undo.title === "Undo Ada Obi's clock-out (back on shift)" && undo.payload.outlet_id === null && undo.payload.at === null,
+  'Ask Xtend: undoing a clock-out needs no store or time')
+check(actionSchema.safeParse({ kind: 'field_correction', payload: undo.payload }).success, 'Ask Xtend: Apply accepts the undo')
+const back = correctionNotice('reset_clock_out', { by: 'Sola', store: null, time: '', reason: 'Clocked out by mistake.' })
+check(back.title === 'You are back on shift' && /clock out again/i.test(back.body), 'the person is told they are back on shift and to clock out again later')
+check(!/locat|track|follow/i.test(back.body), 'the person is not told how they are monitored')
+const route = readFileSync(join(__dirname, '..', 'src', 'app', 'api', 'admin', 'field-corrections', 'route.ts'), 'utf8')
+check(/action === 'reset_clock_out'[\s\S]{0,200}office_reset_clock_out/.test(route), 'the route undoes it through office_reset_clock_out')
+const panel = readFileSync(join(__dirname, '..', 'src', 'components', 'admin', 'day-corrections.tsx'), 'utf8')
+check(/clockedOut \? \[\{ action: 'reset_clock_out'/.test(panel), 'Fix today\'s record offers Undo the clock-out once they have clocked out')
 check(plan(visiting, 'redo_check_out').payload.visit_id === V1, 'Ask Xtend: only a closed visit can be checked out again')
 
 console.log(`\nALL ${passed} FIELD CORRECTION CHECKS PASSED`)

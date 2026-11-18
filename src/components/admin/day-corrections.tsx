@@ -60,6 +60,7 @@ export function DayCorrections({
     { action: 'office_clock_in', label: clockedIn ? `Clock ${first} in again (replace)` : `Clock ${first} in` },
     ...(clockedIn ? [{ action: 'redo_clock_in' as const, label: 'Ask them to clock in again' }] : []),
     ...(clockedIn ? [{ action: 'office_clock_out' as const, label: clockedOut ? `Clock ${first} out again (replace)` : `Clock ${first} out` }] : []),
+    ...(clockedOut ? [{ action: 'reset_clock_out' as const, label: `Undo ${first}'s clock-out (back on shift)` }] : []),
     ...(clockedOut ? [{ action: 'redo_clock_out' as const, label: 'Ask them to clock out again' }] : []),
     ...(marketer && clockedIn && !clockedOut && !openVisit ? [{ action: 'office_check_in' as const, label: `Check ${first} in at a store` }] : []),
     ...(marketer && openVisit ? [{ action: 'office_check_out' as const, label: `Check ${first} out of ${openVisit.name}` }] : []),
@@ -128,7 +129,7 @@ export function DayCorrections({
           <h2 className="font-bold">Fix today&apos;s record</h2>
           <p className="text-sm text-muted-foreground">
             When the app did not work for {first}, record it for them once you are sure they are at the store,
-            or ask them to do it again. They are told, and the old record is kept.
+            ask them to do it again, or undo a clock-out made by mistake. They are told, and the old record is kept.
           </p>
         </div>
       </div>
@@ -147,6 +148,13 @@ export function DayCorrections({
       ) : (
         <form onSubmit={submit} className="space-y-3">
           <p className="text-sm font-semibold">{choices.find((c) => c.action === action && (c.visit ?? null) === visitId)?.label}</p>
+          {action === 'reset_clock_out' && (
+            <p className="rounded-xl bg-tint px-3 py-2 text-xs text-tint-foreground">
+              Their clock-out is taken off and they are on shift again: their location is followed again and they are
+              reminded to clock out. They get a notification asking them to clock out at the end of the shift. The old
+              clock-out is kept in the record.
+            </p>
+          )}
           {needsStore && (
             <div className="space-y-1">
               <Label htmlFor="fix-store">Store</Label>
@@ -178,7 +186,13 @@ export function DayCorrections({
               maxLength={500}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder={action.startsWith('redo') ? 'What they should do, e.g. clock in with your selfie at the store' : 'e.g. Phone would not open; I called them at the store'}
+              placeholder={
+                action === 'reset_clock_out'
+                  ? 'e.g. Clocked out by mistake; still at the store until 6 pm'
+                  : action.startsWith('redo')
+                    ? 'What they should do, e.g. clock in with your selfie at the store'
+                    : 'e.g. Phone would not open; I called them at the store'
+              }
             />
           </div>
           <div className="flex gap-2">

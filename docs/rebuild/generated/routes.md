@@ -331,7 +331,7 @@ const schema = z.object({
 })
 ```
 
-- Database functions: `office_record_clock`, `office_record_visit`, `office_request_redo`
+- Database functions: `office_record_clock`, `office_record_visit`, `office_reset_clock_out`, `office_request_redo`
 - Tables and views: `outlets`
 
 ## `POST /api/admin/follow/[id]`

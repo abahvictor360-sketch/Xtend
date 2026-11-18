@@ -30,7 +30,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0089_quick_sign_in.sql`;
    - `supabase/migrations/0090_field_corrections.sql`;
    - `supabase/migrations/0091_visit_checkout_photo.sql`;
-   - `supabase/migrations/0092_photo_flags.sql`.
+   - `supabase/migrations/0092_photo_flags.sql`;
+   - `supabase/migrations/0093_reset_clock_out.sql`.
 4. **Clock-out reminder fix (0069)**, if never pasted:
    ```sql
    alter table public.clock_out_reminders drop constraint if exists clock_out_reminders_stage_check;
@@ -56,6 +57,24 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-18
+
+### Undo a clock-out made by mistake
+- **What was done:** when someone taps Clock out by mistake (or too early)
+  and is still working, an admin, HR or their supervisor can now put them
+  back on shift. On **Attendance**, tap their name, and under **Fix today's
+  record** press **Undo <name>'s clock-out (back on shift)** with a reason.
+  Their clock-out comes off, they are on shift again (the app shows Clock
+  out again and their day carries on as normal), and they get a
+  notification: "You are back on shift … Clock out again at the end of
+  your shift." The old clock-out is kept in the record and the audit log.
+  Ask Xtend can do it too ("Ada clocked out by mistake, put her back on
+  shift"). The other choices are still there: clock them in or out
+  yourself, or ask them to clock in or out again.
+- **The impact:** a mistaken clock-out no longer ends someone's day: they
+  show as on shift, and are reminded to clock out at the end.
+- **What you need to do:** run `supabase/migrations/0093_reset_clock_out.sql`
+  in the Supabase SQL editor, then redeploy. Until it is run, the button
+  says the update is needed.
 
 ### Attendance: who clocked in comes first
 - **What was done:** in the Attendance day-by-day list, each day now shows

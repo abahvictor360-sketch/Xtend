@@ -496,6 +496,19 @@ Stored in `attendance.time_verdict` and `time_detail` (`offset_s`,
   the old row (pings re-pointed), and the request is done.
   `redo_check_in` sets the visit `abandoned`; `redo_check_out` reopens a
   closed visit (none other open).
+- `office_reset_clock_out(user, reason)` (0093): today's clock-out made by
+  mistake comes off. Needs today's clock-out ("They have not clocked out
+  today, so there is nothing to undo") and a reason ("Say why, so they know
+  what happened"). It re-points pings on the clock-out to the clock-in,
+  deletes an unreviewed `early_clock_out` flag whose `detail.attendance_id`
+  is that clock-out, clears today's `clock_out_reminders`, closes an open
+  `redo_clock_out` / `office_clock_out` request, inserts a `done`
+  `field_corrections` row (action `reset_clock_out`, `old_record` the whole
+  clock-out, `ping_ids`) and deletes the clock-out. The person is then on
+  shift again everywhere (Home, tracking token, `live_locations`, pings
+  accepted) and clocks out normally. Notice: "You are back on shift" /
+  "<by> undid your clock-out: <reason> Clock out again at the end of your
+  shift." (nothing about location).
 - Office entries skip only the phone-evidence triggers; punctuality and
   location alerts still run.
 

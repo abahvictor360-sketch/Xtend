@@ -1545,6 +1545,7 @@ Policies:
 - `office_record_clock(p_user uuid, p_type attendance_type, p_outlet uuid, p_at timestamp with time zone, p_reason text)` → uuid · definer · 0090_field_corrections.sql
 - `office_record_visit(p_user uuid, p_action text, p_outlet uuid, p_reason text)` → uuid · definer · 0090_field_corrections.sql
 - `office_request_redo(p_user uuid, p_action text, p_reason text, p_visit uuid)` → uuid · definer · 0090_field_corrections.sql
+- `office_reset_clock_out(p_user uuid, p_reason text)` → uuid · definer · 0093_reset_clock_out.sql
 - `open_support_thread(p_subject text, p_body text)` → uuid · definer · 0031_support_messages.sql
 - `outlet_containing(p_lat double precision, p_lng double precision)` → uuid · definer · 0016_visits_without_allocation.sql
 - `outlets_for_user(target uuid)` → TABLE(outlet_id uuid) · definer · 0079_security_fixes.sql
