@@ -221,3 +221,81 @@ export function planCorrection(
     },
   }
 }
+
+/**
+ * Reads a command typed into Fix today's record ("clock her out at 5pm,
+ * phone died", "undo the clock-out, tapped by mistake", "check in at Spar
+ * Lekki", "ask him to check out again") into what planCorrection needs.
+ * Plain rules, no AI: the office sees the result and confirms it, and the
+ * database checks it all again. Throws plain words when it cannot tell.
+ */
+export function parseCorrectionCommand(
+  text: string,
+  stores: { id: string; name: string }[],
+): CorrectionAsk {
+  const raw = text.trim().replace(/\s+/g, ' ')
+  if (raw.length < 3) throw new Error('Type what to do, for example: clock in at 8:05, phone would not open.')
+  const t = ` ${raw.toLowerCase().replace(/[‐-―]/g, '-')} `
+
+  // "clock in", "clock-in", and "clock Ada in" / "check him out" (one word
+  // between, never "in" or "out" itself: "clocked out in the morning").
+  const verb = (v: string, dir: 'in' | 'out') =>
+    new RegExp(`\\b${v}(?:ed|ing)?(?:[\\s-]+|\\s+(?!(?:in|out)\\b)[a-z']+\\s+)${dir}\\b|\\b${v}${dir}\\b`).test(t)
+  const clockIn = verb('clock', 'in')
+  const clockOut = verb('clock', 'out')
+  const checkIn = verb('check', 'in')
+  const checkOut = verb('check', 'out')
+  const undo = /\b(undo|reset|reverse|remove|cancel|take off|delete)\b|\bback on shift\b|\bby mistake\b|\bmistaken(ly)?\b/.test(t)
+  const ask = /\b(ask|tell|request|redo|let (him|her|them)|make (him|her|them)|get (him|her|them))\b/.test(t)
+
+  const kinds = [clockIn, clockOut, checkIn, checkOut].filter(Boolean).length
+  let action: CorrectionAction
+  if (clockOut && (undo || /\bback on shift\b/.test(t)) && !ask) action = 'reset_clock_out'
+  else if (/\bback on shift\b/.test(t) && !kinds) action = 'reset_clock_out'
+  else if (kinds === 0) throw new Error('Say clock in, clock out, check in or check out (or undo the clock-out).')
+  else if (kinds > 1) throw new Error('One thing at a time: clock in, clock out, check in or check out.')
+  else if (undo && !clockOut) throw new Error('Only a clock-out can be undone. To redo a clock-in, ask them to clock in again.')
+  else if (clockIn) action = ask ? 'redo_clock_in' : 'office_clock_in'
+  else if (clockOut) action = ask ? 'redo_clock_out' : 'office_clock_out'
+  else if (checkIn) action = ask ? 'redo_check_in' : 'office_check_in'
+  else action = ask ? 'redo_check_out' : 'office_check_out'
+
+  // A time: "at 8", "8:05", "8.05am", "5pm", "17:30". Without am/pm, 1 to 6
+  // is read as the afternoon (no shift starts at 3 in the morning).
+  let time: string | null = null
+  const m =
+    t.match(/\b(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)\b/) ??
+    t.match(/\b(\d{1,2})[:.](\d{2})\b/) ??
+    t.match(/\bat (\d{1,2})\b(?![:.\d])/)
+  if (m && (action === 'office_clock_in' || action === 'office_clock_out')) {
+    let h = Number(m[1])
+    const min = m[2] ? Number(m[2]) : 0
+    const half = m[3]
+    if (half === 'pm' && h < 12) h += 12
+    if (half === 'am' && h === 12) h = 0
+    if (!half && h >= 1 && h <= 6) h += 12
+    if (h > 23 || min > 59) throw new Error('That time does not look right. Write it like 8:05 or 5pm.')
+    time = `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`
+  }
+
+  // A store: the longest store name, or its first word, found in the text.
+  const fold = (s: string) => s.toLowerCase().normalize('NFKD').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim()
+  const ft = ` ${fold(raw)} `
+  let storeId: string | null = null
+  let best = 0
+  for (const s of stores) {
+    const name = fold(s.name)
+    const words = name.split(' ').filter((w) => w.length >= 4 && !['store', 'shop', 'mall', 'supermarket', 'mart'].includes(w))
+    const hit = ft.includes(` ${name} `) ? name.length + 100 : words.some((w) => ft.includes(` ${w} `)) ? Math.max(...words.map((w) => (ft.includes(` ${w} `) ? w.length : 0))) : 0
+    if (hit > best) {
+      best = hit
+      storeId = s.id
+    }
+  }
+
+  // The reason: what follows "because", "as", "since", a comma or a dash;
+  // otherwise the whole command. They see it.
+  const why = raw.match(/(?:\bbecause\b|\bsince\b|\breason:?|\bas\b(?= (?:her|his|their|the|she|he|they|phone|network|gps)\b)|[,;–—]| - )\s*(.{3,})$/i)?.[1]
+  const reason = (why ?? raw).trim().replace(/^[,;:\s-]+/, '')
+  return { action, storeId, time, reason: reason.charAt(0).toUpperCase() + reason.slice(1) }
+}
