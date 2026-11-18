@@ -4,7 +4,7 @@ import { useRef } from 'react'
 import { Download, PlayCircle } from 'lucide-react'
 import { STAFF_VIDEO } from '@/lib/staff-video'
 
-const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+const clock = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`
 
 /**
  * The staff video guide at the top of the guide (/guide and in the app):
@@ -29,7 +29,7 @@ export function StaffVideo() {
         <div className="min-w-0">
           <h2 className="text-lg font-bold leading-tight">Watch: Xtend step by step</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            {clock(STAFF_VIDEO.seconds)} minutes, no sound needed. Getting the app, switching on location and battery,
+            {clock(STAFF_VIDEO.seconds)} minutes, spoken and written, so it works with the sound on or off. Getting the app, switching on location and battery,
             clocking in, store visits and clocking out. Tap a step to jump to it.
           </p>
         </div>

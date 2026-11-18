@@ -4,47 +4,47 @@
 export const STAFF_VIDEO = {
   src: '/guide/xtend-staff-guide.mp4',
   poster: '/guide/xtend-staff-guide.jpg',
-  seconds: 229,
+  seconds: 338,
   chapters: [
     {
       "title": "Get the app",
-      "at": 5
+      "at": 9.6
     },
     {
       "title": "Sign in",
-      "at": 26
+      "at": 42
     },
     {
       "title": "Allow location, camera and notifications",
-      "at": 41
+      "at": 62.1
     },
     {
       "title": "Finish setting up: location and battery",
-      "at": 65
+      "at": 98.2
     },
     {
       "title": "Your photo",
-      "at": 108
+      "at": 160.4
     },
     {
       "title": "Clock in",
-      "at": 117
+      "at": 170.9
     },
     {
       "title": "Store visits (marketers)",
-      "at": 143
+      "at": 204.3
     },
     {
       "title": "Daily report",
-      "at": 160
+      "at": 228.2
     },
     {
       "title": "Clock out",
-      "at": 171
+      "at": 246.7
     },
     {
       "title": "When something goes wrong",
-      "at": 187
+      "at": 269.1
     }
   ],
 } as const

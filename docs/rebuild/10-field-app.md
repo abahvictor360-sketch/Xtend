@@ -1882,7 +1882,10 @@ fades between scenes) has a brand title card per chapter, then scenes with
 the chapter, a big caption and a line under it above a phone showing the
 screen (app parts and words; plain drawings of the phone's own dialogs and
 settings lists) with a brand circle on the button to tap. It never says why
-location or battery settings are needed. Made by `scripts/make-staff-video.ts`
+location or battery settings are needed. A voice-over (`VOICE` in the
+scenes file, spoken locally by `scripts/staff-video-voice.py` with Kokoro
+`af_heart`) reads each scene in plain sentences; scenes last until their
+words are said (about 5½ minutes in all), captions stay on screen. Made by `scripts/make-staff-video.ts`
 from `src/components/video/staff-video-scenes.tsx` on the dev-only page
 `/guide/video-scenes`.
 Sections: Get started; Before your first clock-in; Your profile photo; Clock

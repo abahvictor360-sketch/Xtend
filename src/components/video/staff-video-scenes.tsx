@@ -459,6 +459,58 @@ export const SCENES: Scene[] = [
   { id: 'end', chapter: '', title: 'You are ready', sub: 'Open Xtend at your store, clock in with a selfie, and clock out at the end of your shift.', seconds: 6, screen: null, card: true },
 ]
 
+
+/**
+ * What the voice says on each scene (the video's voice-over). Short, plain
+ * sentences; the scene stays on screen until it has been said. Like the
+ * captions, it says what to switch on, never why.
+ */
+export const VOICE: Record<string, string> = {
+  intro: 'Welcome to Xtend. This video shows you, step by step, how to set up your phone, clock in, visit your stores, and clock out.',
+  c1: 'Step one. Get the app.',
+  download: 'Your supervisor will send you a link to the download page. Open it on your phone, and tap Download for Android.',
+  install: 'When the download finishes, open the file, and tap Install. If your phone asks, allow installing from this source.',
+  invalid: 'If your phone says, App not installed, you have an old Xtend on the phone. Press and hold the old Xtend icon, tap Uninstall, then open the new file again.',
+  c2: 'Step two. Sign in.',
+  login: 'Open Xtend. Type the email or phone number your admin registered, and the password you were given. Then tap Sign in.',
+  password: 'The first time you sign in, Xtend asks you to choose your own password. Pick one that only you know.',
+  c3: 'Step three. Allow location, camera and notifications. You only do this once on each phone.',
+  'perm-location': 'When your phone asks to use your location, tap, While using the app. Xtend will ask for all the time in a moment.',
+  'perm-camera': 'When it asks to use the camera, tap, While using the app. You take a selfie inside Xtend when you clock in and out.',
+  'notif-gate': 'On the home screen, tap, Turn on notifications. You cannot clock in until notifications are on.',
+  'perm-notif': 'Your phone asks once. Tap Allow.',
+  c4: 'Step four. Finish setting up. Xtend shows this before your first clock in.',
+  'gate-both': 'Xtend shows a card that says, Finish setting up Xtend. There are two settings to change. Start with location. Tap, Open location settings.',
+  'set-location': 'In your phone settings, open Location, and choose, Allow all the time. Keep, Use precise location, switched on. Then go back to Xtend.',
+  'gate-battery': 'Location now shows a tick. Next, battery. Tap, Open battery settings.',
+  'set-battery': 'Find Xtend, and choose Unrestricted. On some phones it is called, Don’t optimise. Then go back to Xtend.',
+  // Spelt as said: the voice reads capitals letter by letter.
+  tecno: 'If you use a Tecno, Infinix or Shaomi phone, there is one more setting. Switch on Auto start for Xtend, and set its battery use to, No restrictions.',
+  'gate-done': 'That is it. The setup card goes away by itself, and the Clock in button appears.',
+  c5: 'Step five. Your photo.',
+  photo: 'Go to You, and tap, Take your photo. Face the camera in good light. You only need to do this once.',
+  c6: 'Step six. Clock in. Do this every working day, when you get to your store.',
+  home: 'Open Xtend when you are inside your store. The home screen shows your shift, your week, and your next step.',
+  'clock-in': 'Tap, Clock in with selfie. You do not need to choose a store.',
+  selfie: 'Take a clear selfie of your face, in good light. Hold the phone still, and tap the round button.',
+  'clocked-in': 'Wait while Xtend checks your location and your photo. When it says, Clocked in, you are on shift.',
+  c7: 'Step seven. Store visits. This is for marketers only.',
+  'check-in': 'At each store, tap, Check in here. If Xtend does not find the store, tap, Pick the store myself. You must clock in first.',
+  'check-out': 'When you leave the store, tap Check out, and take a selfie, before you go to the next store. You can only be checked in at one store at a time.',
+  c8: 'Step eight. Your daily report. Do this if you have a Report tab at the bottom of the screen.',
+  report: 'Tap Report. Choose the whole day, or one of your stores. Write how it went, attach any documents, and tap, Submit report. You can edit it until midnight.',
+  c9: 'Step nine. Clock out, at the end of your shift.',
+  'clock-out': 'Marketers, check out of your last store first. Then tap, Clock out with selfie, and take the photo. Xtend reminds you when your shift is ending.',
+  progress: 'Your day is done. One clock in and one clock out each day. Each ring closes when that step is done.',
+  c10: 'Step ten. When something goes wrong.',
+  'p-location': 'If Xtend says your location is blocked, or not accurate, open your phone settings, then Apps, then Xtend, then Location, and choose, Allow all the time. Turn location on with high accuracy. Then step outside, or near a window, and tap Try again.',
+  'p-offsite': 'If it says you are off site, but you are in your store, try again near the entrance or a window. If it keeps happening, send a message to support, and say which store.',
+  'p-network': 'No network? Your clock in waits on your phone, and sends itself when you have signal. Do not sign out until it has gone.',
+  'p-call': 'If the app will not clock you in, call your supervisor. They can clock you in or out for you, and you will get a notification.',
+  'p-help': 'For anything else, go to You, then Message support. Say what happened, where, and when. The reply comes as a notification.',
+  end: 'You are ready. Open Xtend at your store, clock in with a selfie, and clock out at the end of your shift. Thank you.',
+}
+
 /* ---------------------------------------------------------------- */
 /* One frame                                                         */
 /* ---------------------------------------------------------------- */
@@ -557,7 +609,11 @@ function PhoneScene({ scene, chapterNo }: { scene: Scene; chapterNo: number }) {
 /** The scene page's body: one scene, or the list of scenes for the script. */
 export function SceneView({ id, list }: { id: string | null; list: boolean }) {
   if (list) {
-    return <pre id="list">{JSON.stringify(SCENES.map((x) => ({ id: x.id, seconds: x.seconds, chapter: x.card ? x.chapter : '' })))}</pre>
+    return (
+      <pre id="list">
+        {JSON.stringify(SCENES.map((x) => ({ id: x.id, seconds: x.seconds, chapter: x.card ? x.chapter : '', say: VOICE[x.id] ?? '' })))}
+      </pre>
+    )
   }
   const scene = SCENES.find((x) => x.id === id) ?? SCENES[0]
   return (
