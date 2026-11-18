@@ -1227,6 +1227,12 @@ profiles.role (the base); the name is what people see.
 
 Exports: `StaffRole`, `CountingRole`, `BuiltInCounts`, `takesStoreCounts`, `BUILT_IN_ROLES`, `BASE_LABEL`, `roleValue`, `parseRoleValue`, `roleLabel`, `roleName`
 
+## `src/lib/staff-video.ts`
+
+The staff video guide, its length and where each chapter starts (seconds).
+
+Exports: `STAFF_VIDEO`
+
 ## `src/lib/stockists-july.ts`
 
 The July customer list, as supplied. Names and regions only — there are
@@ -2309,6 +2315,14 @@ same guide inside the app (/field/guide). Worded like the staff app.
 
 Exports: `STAFF_TOPICS`, `StaffGuide`
 
+## `src/components/staff-video.tsx`
+
+The staff video guide at the top of the guide (/guide and in the app):
+the video, a button per chapter that jumps to it, and a download to
+share it (on WhatsApp, for example).
+
+Exports: `StaffVideo`
+
 ## `src/components/ui/alert.tsx`
 
 Exports: `Alert`
@@ -2367,6 +2381,16 @@ opens or comes back to the screen, and after this long at the latest, so
 nobody stays on an old version without being told.
 
 Exports: `UpdateManager`
+
+## `src/components/video/staff-video-scenes.tsx`
+
+The staff video guide (public/guide/xtend-staff-guide.mp4), scene by
+scene. scripts/make-staff-video.ts photographs each scene at 1080×1920
+and joins them. Screens use the app's own parts and words; phone system
+screens are plain drawings (every phone looks a little different).
+Like the written guide, it says what to switch on, never why.
+
+Exports: `Scene`, `CHAPTERS`, `SCENES`, `SceneFrame`, `SceneView`
 
 ## `src/middleware.ts`
 

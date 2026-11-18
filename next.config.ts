@@ -64,6 +64,14 @@ const nextConfig: NextConfig = {
           { key: 'X-Robots-Tag', value: 'noindex, nofollow, noarchive' },
         ],
       },
+      // The staff video guide: "Download the video to share" asks for
+      // ?download=1, which saves it (also in the phone app, whose download
+      // handler takes files sent as attachments) instead of playing it.
+      {
+        source: '/guide/xtend-staff-guide.mp4',
+        has: [{ type: 'query', key: 'download' }],
+        headers: [{ key: 'Content-Disposition', value: 'attachment; filename="Xtend staff guide.mp4"' }],
+      },
       {
         source: '/sw.js',
         headers: [

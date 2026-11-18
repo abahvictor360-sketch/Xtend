@@ -53,7 +53,9 @@ export default async function SupervisorGuidePage() {
           <Link href="/guide" className="font-semibold text-brand hover:underline">
             /guide
           </Link>
-          , which you can share with them. Times are Lagos time.
+          , which you can share with them. It starts with a short step-by-step video (installing the app,
+          location and battery settings, clocking in and out): send new staff the video from there before their
+          first day. Times are Lagos time.
         </p>
         {isAdmin && (
           <p className="mt-2 rounded-lg bg-tint p-2 text-xs text-tint-foreground">

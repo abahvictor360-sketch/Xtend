@@ -68,7 +68,12 @@ export default async function AdminGuidePage() {
             <Link href="/guide" className="font-semibold text-brand hover:underline">
               /guide
             </Link>
-            , which you can share with them. Times everywhere are Lagos time.
+            , which you can share with them. It opens with a short video, step by step, from installing the app to
+            clocking out; send new staff the link{' '}
+            <Link href="/guide/xtend-staff-guide.mp4" className="font-semibold text-brand hover:underline">
+              /guide/xtend-staff-guide.mp4
+            </Link>{' '}
+            or the downloaded file. Times everywhere are Lagos time.
           </>
         }
         chips={<Chip icon={BookOpen}>{Object.keys(T).length} sections</Chip>}

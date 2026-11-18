@@ -1870,6 +1870,21 @@ role name or the base label). Sections:
 
 `StaffGuide` (`src/components/staff-guide.tsx`) inside a sheet "How to use
 Xtend" (back to `/field/account`); the same component on public `/guide`.
+It opens with **Watch: Xtend step by step** (`StaffVideo`, 2026-11-18): an
+upright video (`/guide/xtend-staff-guide.mp4`, poster `.jpg`, max 320 px wide,
+controls, plays inline), beside it (under it on phones) a numbered button
+per chapter with its start time that seeks and plays, and **Download the
+video to share**. Chapters: Get the app; Sign in; Allow location, camera and
+notifications; Finish setting up: location and battery; Your photo; Clock
+in; Store visits (marketers); Daily report; Clock out; When something goes
+wrong (times in `src/lib/staff-video.ts`). The video (1080×1920, white
+fades between scenes) has a brand title card per chapter, then scenes with
+the chapter, a big caption and a line under it above a phone showing the
+screen (app parts and words; plain drawings of the phone's own dialogs and
+settings lists) with a brand circle on the button to tap. It never says why
+location or battery settings are needed. Made by `scripts/make-staff-video.ts`
+from `src/components/video/staff-video-scenes.tsx` on the dev-only page
+`/guide/video-scenes`.
 Sections: Get started; Before your first clock-in; Your profile photo; Clock
 in; Store visits (marketers); Adding a place; Daily report; Stock count;
 Clock out; History and your account; Report a problem; Common problems
