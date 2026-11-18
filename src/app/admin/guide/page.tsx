@@ -299,7 +299,8 @@ export default async function AdminGuidePage() {
         <GuideSection topic={T.attendance} intro="Who came in, when, and where.">
           <p>
             <Ui>Attendance</Ui> shows each person&apos;s day: clock-in and clock-out, on time or late, at
-            their store or not, and whether they clocked out. Pick a quick range or dates, then narrow by
+            their store or not, and whether they clocked out. In the day-by-day list, everyone who clocked in comes
+            first (latest clock-in at the top), then those who did not; tap a column heading to sort another way. Pick a quick range or dates, then narrow by
             person, store, team, role or kind of day. The four cards and the strip under them add it up (tap{' '}
             <Ui>How attendance is counted</Ui> under the filters for the rules); <Ui>Worth a look</Ui> names
             repeat absences, lateness, off-site clock-ins and missing clock-outs. The calendar has one
