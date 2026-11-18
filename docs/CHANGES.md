@@ -58,6 +58,25 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-18
 
+### A video guide for staff
+- **What was done:** a 3 minute 49 second video, **Xtend step by step**,
+  made for phones (upright, no sound needed, large captions). It walks
+  through 10 steps with the app's own screens and a circle on each button
+  to tap: get the app (and "App not installed"), sign in, allow location,
+  camera and notifications, **finish setting up: location "Allow all the
+  time" and battery "Unrestricted"** (and Auto-start on TECNO, Infinix and
+  Xiaomi phones), the profile photo, clock in with a selfie, store check-in
+  and check-out (marketers), the daily report, clock out, and what to do
+  when something goes wrong. It opens the staff guide, on the website
+  (`/guide`) and in the app (You → How to use Xtend), with a button per
+  step that jumps to it and **Download the video to share**, for example on
+  WhatsApp. Like the written guide, it says what to switch on, never why.
+- **The impact:** staff can watch exactly where to tap instead of reading,
+  and supervisors can send the video to new staff before their first day.
+- **What you need to do:** redeploy the latest code. The video is at
+  www.withxtend.com/guide/xtend-staff-guide.mp4 once deployed; share that
+  link, or download it from the guide and send the file.
+
 ### Fix today's record: type what to do, and clearer choices
 - **What was done:** on a person's day (Attendance → tap their name),
   **Fix today's record** now starts with a box, **Tell Xtend what to do**.

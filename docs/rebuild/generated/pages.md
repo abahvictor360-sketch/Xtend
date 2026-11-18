@@ -2,7 +2,7 @@
 
 # Pages
 
-65 pages. "Who" is what `requireSession` admits (field pages are also guarded by their layout).
+66 pages. "Who" is what `requireSession` admits (field pages are also guarded by their layout).
 
 ## `/admin/activity` — Activity log — Xtend
 
@@ -484,6 +484,16 @@ On screen: Write one for a store you checked in at, or one for your whole day. Y
 - Components: `brand/logo`, `staff-guide`
 
 The staff guide: public, so it can be shared before anyone signs in.
+
+## `/guide/video-scenes` — Video scenes — Xtend
+
+- File: `src/app/guide/video-scenes/page.tsx`
+- Who: public / own check
+- Components: `video/staff-video-scenes`
+
+One scene of the staff video guide, for scripts/make-staff-video.ts to
+photograph (?s=<scene id>), or the list of scenes (?list=1). Only in
+development: the live site answers 404.
 
 ## `/login` — Sign in — Xtend
 

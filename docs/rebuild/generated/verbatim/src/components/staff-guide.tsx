@@ -24,6 +24,7 @@ import {
   GuideShot,
   type GuideTopic,
 } from '@/components/guide'
+import { StaffVideo } from '@/components/staff-video'
 
 export const STAFF_TOPICS = {
   start: { id: 'get-started', title: 'Get started', icon: Smartphone },
@@ -50,7 +51,8 @@ const T = STAFF_TOPICS
 export function StaffGuide() {
   return (
     <div className="space-y-5">
-          <GuideContents topics={Object.values(T)} />
+      <StaffVideo />
+      <GuideContents topics={Object.values(T)} />
 
       <GuideSection topic={T.start} intro="Your admin or supervisor creates your account and gives you a password.">
         <Steps
