@@ -55,6 +55,18 @@ the live database, so it cannot tell which of these are already done.)
 
 ---
 
+## 2026-11-18
+
+### Attendance: who clocked in comes first
+- **What was done:** in the Attendance day-by-day list, each day now shows
+  everyone who clocked in first, with the latest clock-in at the top, then
+  the people who did not clock in, then days off and leave. Days are still
+  newest first. Tapping a column heading (Name, In, Late…) still sorts the
+  list another way.
+- **The impact:** no more hunting through the list to see who has and has
+  not clocked in today.
+- **What you need to do:** redeploy the latest code. No migration.
+
 ## 2026-11-17
 
 ### Nine more pages in the new look

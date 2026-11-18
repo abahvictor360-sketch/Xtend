@@ -140,7 +140,8 @@ export default async function SupervisorGuidePage() {
         <GuideSection topic={T.attendance} intro="Who came in, when, and where.">
           <p>
             <Ui>Attendance</Ui> shows each person&apos;s day: clock-in and clock-out, on time or late, at
-            their store or not. Pick dates or a quick range and narrow by person, store or kind of day. The
+            their store or not. Everyone who clocked in comes first (latest clock-in at the top), then
+            those who did not. Pick dates or a quick range and narrow by person, store or kind of day. The
             calendar shows a square per person per day; open one to see the photo, the map and how far from
             the store they were. A marketer&apos;s row also opens to every store check-in and check-out, with
             the times, how far from the store and both photos. Tap a name for their whole day: every photo

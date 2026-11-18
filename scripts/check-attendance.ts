@@ -195,6 +195,18 @@ check(byLate[0].key === 'ada|2026-10-06', 'latest arrival first when sorted by l
 check(byLate[byLate.length - 1].status === 'absent', 'absences (no time) sort last', byLate[byLate.length - 1].status)
 const byName = sortDays(real, names, 'name', 'asc')
 check(byName[0].userId === 'ada' && byName[0].date === today, 'by name, then newest day', byName[0].key)
+// The default order: newest day first; within a day, everyone who clocked
+// in (latest clock-in first) above everyone who did not.
+const byDate = sortDays(real, names, 'date', 'desc')
+check(byDate.every((r, i) => i === 0 || byDate[i - 1].date >= r.date), 'default order: newest day first')
+for (const day of new Set(byDate.map((r) => r.date))) {
+  const rows = byDate.filter((r) => r.date === day)
+  const firstAbsent = rows.findIndex((r) => !r.present)
+  check(firstAbsent === -1 || rows.slice(firstAbsent).every((r) => !r.present), `${day}: everyone who clocked in comes before those who did not`)
+  const ins = rows.filter((r) => r.present).map((r) => r.inMinutes ?? -1)
+  check(ins.every((m, i) => i === 0 || ins[i - 1] >= m), `${day}: latest clock-in first`)
+}
+check(new Set(byDate.map((r) => r.date)).size > 0 && byDate.some((r) => !r.present) && byDate.some((r) => r.present), 'the sample has both clocked-in and not-clocked-in days')
 
 // Worth a look.
 const worry = concerns(records, people)

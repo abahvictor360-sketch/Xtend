@@ -404,7 +404,10 @@ export const SORTS = ['date', 'name', 'store', 'in', 'out', 'late', 'distance', 
 export type SortKey = (typeof SORTS)[number]
 export const isSortKey = (v: unknown): v is SortKey => SORTS.includes(v as SortKey)
 
-/** Newest day first by default; blanks always last whichever way. */
+/**
+ * Newest day first by default, and within a day everyone who clocked in
+ * (latest first) above those who did not; blanks always last whichever way.
+ */
 export function sortDays<E extends ClockEvent>(
   records: DayRecord<E>[],
   names: Map<string, string>,
@@ -439,8 +442,18 @@ export function sortDays<E extends ClockEvent>(
     } else if (x !== y) {
       return (typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y))) * sign
     }
-    // Ties: newest day, then name.
-    return b.date.localeCompare(a.date) || (names.get(a.userId) ?? '').localeCompare(names.get(b.userId) ?? '')
+    // Same day (the default order): everyone who clocked in first, the
+    // latest clock-in at the top; then nobody-clocked-in (absent), then days
+    // off, leave and the rest. Otherwise: newest day.
+    if (key === 'date') {
+      const rank = (r: DayRecord<E>) => (r.present ? 0 : r.status === 'absent' ? 1 : 2)
+      const byRank = rank(a) - rank(b)
+      if (byRank) return byRank
+      if (a.present && b.present && a.inMinutes !== b.inMinutes) return (b.inMinutes ?? -1) - (a.inMinutes ?? -1)
+    } else if (a.date !== b.date) {
+      return b.date.localeCompare(a.date)
+    }
+    return (names.get(a.userId) ?? '').localeCompare(names.get(b.userId) ?? '')
   })
 }
 
