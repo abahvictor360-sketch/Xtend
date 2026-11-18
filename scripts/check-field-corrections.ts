@@ -5,7 +5,8 @@
  *   npx tsx --tsconfig tsconfig.scripts.json scripts/check-field-corrections.ts
  */
 import assert from 'node:assert/strict'
-import { CORRECTION_ACTIONS, CORRECTION_LABELS, correctionNotice, planCorrection, redoBanner, type CorrectionDay } from '../src/lib/field-corrections'
+import {
+  parseCorrectionCommand, CORRECTION_ACTIONS, CORRECTION_LABELS, correctionNotice, planCorrection, redoBanner, type CorrectionDay } from '../src/lib/field-corrections'
 import { actionSchema } from '../src/lib/assistant-action-types'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -102,7 +103,33 @@ check(!/locat|track|follow/i.test(back.body), 'the person is not told how they a
 const route = readFileSync(join(__dirname, '..', 'src', 'app', 'api', 'admin', 'field-corrections', 'route.ts'), 'utf8')
 check(/action === 'reset_clock_out'[\s\S]{0,200}office_reset_clock_out/.test(route), 'the route undoes it through office_reset_clock_out')
 const panel = readFileSync(join(__dirname, '..', 'src', 'components', 'admin', 'day-corrections.tsx'), 'utf8')
-check(/clockedOut \? \[\{ action: 'reset_clock_out'/.test(panel), 'Fix today\'s record offers Undo the clock-out once they have clocked out')
+check(/action: 'reset_clock_out', label: 'Undo the clock-out \(back on shift\)', off: !clockedOut \?/.test(panel), 'Fix today\'s record offers Undo the clock-out once they have clocked out')
 check(plan(visiting, 'redo_check_out').payload.visit_id === V1, 'Ask Xtend: only a closed visit can be checked out again')
+
+
+// Typed commands in Fix today's record.
+const STORES = [{ id: MALL, name: 'Shoprite Ikeja City Mall' }, { id: SHOP, name: 'Spar Lekki' }]
+const read = (c: string) => parseCorrectionCommand(c, STORES)
+const c1 = read('Clock Ada in at 8:05 because her phone would not open')
+check(c1.action === 'office_clock_in' && c1.time === '08:05' && c1.reason === 'Her phone would not open', 'command: clock in at a time, with the reason after "because"')
+const c2 = read('clock her out at 5pm, phone died')
+check(c2.action === 'office_clock_out' && c2.time === '17:00' && c2.reason === 'Phone died', 'command: clock out at 5pm, reason after a comma')
+check(read('undo the clock-out, she tapped it by mistake').action === 'reset_clock_out', 'command: undo the clock-out')
+check(read('She clocked out by mistake, put her back on shift').action === 'reset_clock_out', 'command: clocked out by mistake puts them back on shift')
+check(read('ask him to clock in again with a clear selfie').action === 'redo_clock_in', 'command: ask them to clock in again')
+check(read('ask her to clock out again').action === 'redo_clock_out', 'command: ask them to clock out again')
+const c3 = read('check her in at Spar Lekki - GPS would not lock')
+check(c3.action === 'office_check_in' && c3.storeId === SHOP && c3.reason === 'GPS would not lock', 'command: check in at a named store')
+check(read('check him out of shoprite, he left').action === 'office_check_out' && read('check him out of shoprite, he left').storeId === MALL, 'command: one word of the store name is enough')
+check(read('ask her to check out again at Ikeja').action === 'redo_check_out', 'command: ask them to check out again')
+check(read('clocked out in the morning').action === 'office_clock_out', 'command: "out in" is a clock-out, not both')
+check(read('clock in at 8').time === '08:00' && read('clock in at 3').time === '15:00', 'command: 1 to 6 without am/pm is the afternoon')
+check(refuses(() => read('clock in and clock out'), /One thing at a time/), 'command: one thing at a time')
+check(refuses(() => read('hello'), /Say clock in/), 'command: says what it understands')
+check(refuses(() => read('undo the clock-in'), /Only a clock-out can be undone/), 'command: only a clock-out can be undone')
+check(refuses(() => read('clock in at 25:00'), /does not look right/), 'command: an impossible time is refused')
+const panelNow = readFileSync(join(__dirname, '..', 'src', 'components', 'admin', 'day-corrections.tsx'), 'utf8')
+check(/parseCorrectionCommand\([\s\S]{0,200}planCorrection\(/.test(panelNow) && /Do it/.test(panelNow), 'Fix today\'s record reads the command, shows what it will do, and does it on Do it')
+check(['Clock-in', 'Clock-out', 'Store check-in', 'Store check-out'].every((g) => panelNow.includes(`title: '${g}'`)), 'the options come in four groups')
 
 console.log(`\nALL ${passed} FIELD CORRECTION CHECKS PASSED`)

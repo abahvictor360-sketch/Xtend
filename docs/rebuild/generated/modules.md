@@ -536,7 +536,7 @@ The office fixing someone's day (0090): the actions, what each is
 called, and what the person is told. Pure, so
 scripts/check-field-corrections.ts can test it.
 
-Exports: `CORRECTION_ACTIONS`, `CorrectionAction`, `CORRECTION_LABELS`, `correctionNotice`, `redoBanner`, `CorrectionDay`, `CorrectionAsk`, `CorrectionPlan`, `planCorrection`
+Exports: `CORRECTION_ACTIONS`, `CorrectionAction`, `CORRECTION_LABELS`, `correctionNotice`, `redoBanner`, `CorrectionDay`, `CorrectionAsk`, `CorrectionPlan`, `planCorrection`, `parseCorrectionCommand`
 
 ## `src/lib/fields.ts`
 
@@ -1557,9 +1557,7 @@ Exports: `CsvImporter`
 
 ## `src/components/admin/day-corrections.tsx`
 
-"Fix today's record" on a person's day (0090): the office records a
-clock-in, clock-out, check-in or check-out for them, or asks them to do
-one again. Every one needs a reason; the database keeps them all.
+Why it cannot be done now; the button is shown greyed with this.
 
 Exports: `FixVisit`, `DayCorrections`
 

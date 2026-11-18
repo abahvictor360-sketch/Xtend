@@ -395,7 +395,7 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
           clockedOut={Boolean(closing)}
           stores={fixStores}
           homeStoreId={person.outlet_id}
-          visits={visitList.map((v) => ({ id: v.id, name: v.store, status: v.status }))}
+          visits={visitRows.map((v, i) => ({ id: v.id, name: visitList[i].store, status: v.status, storeId: v.outlet_id ?? null }))}
         />
       )}
 

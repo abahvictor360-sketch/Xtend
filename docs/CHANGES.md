@@ -58,6 +58,24 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-18
 
+### Fix today's record: type what to do, and clearer choices
+- **What was done:** on a person's day (Attendance → tap their name),
+  **Fix today's record** now starts with a box, **Tell Xtend what to do**.
+  Type it in your own words, for example "Clock Ada in at 8:05, phone would
+  not open", "Clock out at 5pm, phone died", "Undo the clock-out, tapped by
+  mistake", "Check in at Spar Lekki, GPS would not lock" or "Ask them to
+  clock in again with a clear selfie", and press **Read it**. Xtend shows
+  exactly what it will do (who, store, time, the reason they will see);
+  press **Do it** and it is done. Tap an example to fill the box. Under it,
+  the choices are now four clear groups: **Clock-in**, **Clock-out**,
+  **Store check-in** and **Store check-out** (the last two for marketers).
+  Every choice is always listed; one that cannot be used yet is greyed with
+  the reason ("Not clocked in yet", "Not checked in at a store now").
+  "Ask them to check in or out again" now lets you pick the store visit.
+- **The impact:** fixing someone's day is quicker, and you can see every
+  option, not only the ones that fit right now.
+- **What you need to do:** redeploy the latest code. No migration.
+
 ### Migration 0093 run
 - **What was done:** you ran `0093_reset_clock_out.sql` in Supabase; it is
   ticked off the "Waiting on you" list.
