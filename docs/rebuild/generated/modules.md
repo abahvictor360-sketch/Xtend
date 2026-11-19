@@ -225,6 +225,15 @@ supervisor's people. Nothing here writes.
 
 Exports: `ChatTurn`, `AssistantReply`, `Asker`, `assistantConfigured`, `askAssistant`
 
+## `src/lib/attendance-report-model.ts`
+
+What the designed attendance report (lib/export/attendance-report-pdf.ts)
+shows: the figures, the charts' numbers, the written account and the
+rows, worked out once from the day records. Pure, so
+scripts/check-attendance.ts can test it.
+
+Exports: `Kpi`, `Slice`, `Bar`, `StoreBar`, `ReportRow`, `ReportModel`, `TONE_HEX`, `attendanceReportModel`
+
 ## `src/lib/attendance-report.ts`
 
 Attendance, worked out day by day: who came, who was late, who clocked in
@@ -244,15 +253,17 @@ Exports: `MAX_RANGE_DAYS`, `GRID_MAX_DAYS`, `ReportFilter`, `parseReportFilter`,
 
 ## `src/lib/attendance-writeup.ts`
 
-The written account at the top of the attendance report: how the day (or
-the days) went, then who did not clock in, who was late, who clocked in
-away from their store, who had network trouble, who the office clocked
-in, and who did not clock out. Plain English, names first. Pure, so
+The written account of the attendance report: how the day (or the days)
+went, then who did not clock in, who was late, who clocked in away from
+their store, who had network trouble, who the office clocked in, and who
+did not clock out. Plain English, names first. Pure, so
 scripts/check-attendance.ts can test it.
 
-Lines starting "## " are headings and "• " points (lib/export/render.ts).
+`writeUpParts` gives the pieces (the designed PDF lays them out as
+cards); `attendanceWriteUp` gives them as text lines for Word and Excel,
+"## " a heading and "• " a point (lib/export/render.ts).
 
-Exports: `NETWORK_MIN`, `attendanceWriteUp`
+Exports: `NETWORK_MIN`, `MAX_NAMES`, `Tone`, `WriteUpItem`, `WriteUpSection`, `WriteUpParts`, `shortDay`, `writeUpParts`, `attendanceWriteUp`
 
 ## `src/lib/audit-context.ts`
 
@@ -463,9 +474,21 @@ Exports: `fetchAlerts`, `ALERT_COLUMNS`, `alertSheet`
 
 ## `src/lib/export/attendance-days.ts`
 
-The Attendance page's day-by-day table, every row, with a summary on top.
+The designed PDF of the attendance report: figures, charts, the written
+account, who needs attention, then the table (lib/export/attendance-report-pdf.ts).
 
-Exports: `attendanceDaysSheet`, `analyticsSheet`
+Exports: `attendanceReportPdfResponse`, `attendanceDaysSheet`, `analyticsSheet`
+
+## `src/lib/export/attendance-report-pdf.ts`
+
+The attendance report as a designed A4 PDF (pdf-lib): the Xpel logo and
+the period, eight figure tiles, a ring of how the day went, a bar chart
+(clock-in times for one day, turnout per day for several), attendance by
+store, the written account, cards of who needs attention, then the day
+by day table, with page numbers on every page. Excel, Word and CSV keep
+the plain table layout (lib/export/render.ts).
+
+Exports: `attendanceReportPdf`
 
 ## `src/lib/export/brand-logo.ts`
 
@@ -525,7 +548,7 @@ Exports: `MARKETER_REPORT_FORMATS`, `MarketerReportFormat`, `isMarketerReportFor
 
 Rendered as a hyperlink in the link column when present.
 
-Exports: `ExportRow`, `Sheet`, `renderExport`, `exportFileName`
+Exports: `ExportRow`, `Sheet`, `renderExport`, `exportFileName`, `download`
 
 ## `src/lib/export/visits.ts`
 

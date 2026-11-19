@@ -3,7 +3,7 @@ import { ApiError, apiError, requireApiSession } from '@/lib/auth'
 import { isExportFormat } from '@/lib/export/formats'
 import { audit } from '@/lib/audit'
 import { loadAttendance, parseReportFilter } from '@/lib/attendance-server'
-import { attendanceDaysSheet } from '@/lib/export/attendance-days'
+import { attendanceDaysSheet, attendanceReportPdfResponse } from '@/lib/export/attendance-days'
 import { renderExport } from '@/lib/export/render'
 
 export const maxDuration = 60
@@ -18,7 +18,11 @@ export async function GET(request: Request, ctx: { params: Promise<{ format: str
     // Through RLS: a supervisor's file holds their own team only.
     const supabase = await createServerSupabase()
     const { report, shown } = await loadAttendance(supabase, filter)
-    const response = await renderExport(format, attendanceDaysSheet(shown, report.records, report.people, filter))
+    // PDF: the designed report with charts; the others: the plain table.
+    const response =
+      format === 'pdf'
+        ? await attendanceReportPdfResponse(shown, report.records, report.people, filter)
+        : await renderExport(format, attendanceDaysSheet(shown, report.records, report.people, filter))
     await audit(supabase, `export.attendance_days.${format}`, 'attendance', null, {
       from: filter.from,
       to: filter.to,

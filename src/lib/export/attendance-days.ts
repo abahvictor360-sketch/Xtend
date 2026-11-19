@@ -1,5 +1,4 @@
 import 'server-only'
-import type { ExportRow, Sheet } from '@/lib/export/render'
 import type { AttendanceDetail } from '@/lib/types'
 import {
   clock,
@@ -17,8 +16,11 @@ import {
   type Summary,
 } from '@/lib/attendance-report'
 import type { ReportFilter } from '@/lib/attendance-server'
-import { metres } from '@/lib/utils'
+import { formatLagos, metres } from '@/lib/utils'
 import { attendanceWriteUp } from '@/lib/attendance-writeup'
+import { attendanceReportModel } from '@/lib/attendance-report-model'
+import { attendanceReportPdf } from '@/lib/export/attendance-report-pdf'
+import { download, exportFileName, type ExportRow, type Sheet } from '@/lib/export/render'
 
 const STATUS: Record<DayRecord['status'], string> = {
   on_time: 'On time',
@@ -51,6 +53,21 @@ function filterLine(f: ReportFilter, people: Person[]) {
   ]
     .filter(Boolean)
     .join(' · ')
+}
+
+/**
+ * The designed PDF of the attendance report: figures, charts, the written
+ * account, who needs attention, then the table (lib/export/attendance-report-pdf.ts).
+ */
+export async function attendanceReportPdfResponse(
+  rows: DayRecord<AttendanceDetail>[],
+  all: DayRecord<AttendanceDetail>[],
+  people: Person[],
+  filter: ReportFilter,
+) {
+  const model = attendanceReportModel(rows, all, people, { from: filter.from, to: filter.to }, filterLine(filter, people))
+  const bytes = await attendanceReportPdf(model, formatLagos(new Date().toISOString()))
+  return download(bytes as unknown as ArrayBuffer, 'application/pdf', exportFileName('xtend-attendance-report', 'pdf'))
 }
 
 /** The Attendance page's day-by-day table, every row, with a summary on top. */
