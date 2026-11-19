@@ -301,16 +301,27 @@ export function buildDays<E extends ClockEvent>(
 export const counted = (r: DayRecord) => r.present || r.status === 'absent'
 
 export const STATUS_FILTERS = {
+  present: 'Clocked in (everyone who came)',
+  clocked_out: 'Clocked out',
+  on_shift: 'Still on shift (not clocked out yet)',
+  absent: 'Absent / not in',
   on_time: 'On time',
   late: 'Late',
   off_site: 'Off site or flagged',
   flagged: 'Flagged',
-  missing_out: 'No clock-out',
-  absent: 'Absent / not in',
-  present: 'Came in (any)',
+  missing_out: 'No clock-out (day over)',
   leave: 'On leave',
   off: 'Day off',
 } as const
+
+/** The quick "who" buttons on Attendance, above the downloads. */
+export const WHO_FILTERS: { status: StatusFilter | null; label: string }[] = [
+  { status: null, label: 'Everyone' },
+  { status: 'present', label: 'Clocked in' },
+  { status: 'clocked_out', label: 'Clocked out' },
+  { status: 'on_shift', label: 'Still on shift' },
+  { status: 'absent', label: 'Absent' },
+]
 export type StatusFilter = keyof typeof STATUS_FILTERS
 export const isStatusFilter = (v: unknown): v is StatusFilter => typeof v === 'string' && v in STATUS_FILTERS
 
@@ -334,6 +345,10 @@ export function matchesStatus(r: DayRecord, status: StatusFilter | null) {
       return r.status === 'absent'
     case 'present':
       return r.present
+    case 'clocked_out':
+      return r.present && Boolean(r.clockOut)
+    case 'on_shift':
+      return r.onShift
   }
 }
 

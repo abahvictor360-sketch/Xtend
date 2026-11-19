@@ -184,6 +184,14 @@ check(summarise([]).punctuality === null, 'nothing to judge: no percentage', sum
 // Status filter.
 check(records.filter((r) => matchesStatus(r, 'absent')).length === 4, 'absent filter', records.filter((r) => matchesStatus(r, 'absent')).length)
 check(records.filter((r) => matchesStatus(r, 'missing_out')).length === 1, 'no clock-out filter')
+// "Who" filters (2026-11-19): clocked in, clocked out, still on shift.
+const came = records.filter((r) => matchesStatus(r, 'present'))
+const out = records.filter((r) => matchesStatus(r, 'clocked_out'))
+const onShiftNow = records.filter((r) => matchesStatus(r, 'on_shift'))
+check(came.length > 0 && came.every((r) => r.present), 'clocked in: only those who came')
+check(out.every((r) => r.present && r.clockOut) && out.length === came.filter((r) => r.clockOut).length, 'clocked out: those who came and clocked out')
+check(onShiftNow.every((r) => r.onShift) && onShiftNow.length === records.filter((r) => r.onShift).length, 'still on shift: clocked in today, not out yet')
+check(out.length + onShiftNow.length + came.filter((r) => r.missingOut).length === came.length, 'everyone who came is clocked out, on shift, or missing a clock-out')
 check(records.filter((r) => matchesStatus(r, 'on_time')).length === 3, 'on time filter leaves out off site days')
 check(records.filter((r) => matchesStatus(r, null)).length === 10, 'no filter: every day that counts')
 
@@ -206,6 +214,8 @@ for (const day of new Set(byDate.map((r) => r.date))) {
   const ins = rows.filter((r) => r.present).map((r) => r.inMinutes ?? -1)
   check(ins.every((m, i) => i === 0 || ins[i - 1] >= m), `${day}: latest clock-in first`)
 }
+check(/sortDays\(rows, names, 'date', 'desc'\)/.test(require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'lib', 'export', 'attendance-days.ts'), 'utf8')),
+  'the day-by-day download uses the same order: clocked in first, absent after')
 check(new Set(byDate.map((r) => r.date)).size > 0 && byDate.some((r) => !r.present) && byDate.some((r) => r.present), 'the sample has both clocked-in and not-clocked-in days')
 
 // Worth a look.
