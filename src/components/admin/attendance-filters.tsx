@@ -29,6 +29,7 @@ export function AttendanceFilters({
   presets,
   presetHref,
   statusHref,
+  roleHref,
   downloads,
   today,
 }: {
@@ -39,6 +40,8 @@ export function AttendanceFilters({
   presetHref: (p: Preset) => string
   /** Attendance: the same view for one "who" (clocked in, absent…), for the quick buttons. */
   statusHref?: (status: StatusFilter | null) => string
+  /** The same view for merchandisers only, marketers only, or both. */
+  roleHref?: (role: string | null) => string
   downloads: Download[]
   today: string
 }) {
@@ -105,7 +108,7 @@ export function AttendanceFilters({
             </Select>
           </div>
         )}
-        {choices.roles.length > 1 && (
+        {choices.roles.length > 0 && (
           <div className="w-full space-y-1.5 sm:w-44">
             <Label htmlFor="role">Role</Label>
             <Select id="role" name="role" defaultValue={filter.role ?? 'all'} className="h-10 text-sm">
@@ -168,7 +171,7 @@ export function AttendanceFilters({
 
       {mode === 'attendance' && statusHref && (
         <div className="flex flex-wrap items-center gap-1.5 text-xs">
-          <span className="mr-1 font-semibold text-muted-foreground">Who:</span>
+          <span className="mr-1 font-semibold text-muted-foreground">Show:</span>
           {WHO_FILTERS.map((w) => (
             <Link
               key={w.label}
@@ -183,7 +186,36 @@ export function AttendanceFilters({
               {w.label}
             </Link>
           ))}
-          <span className="text-muted-foreground">· the export downloads exactly this</span>
+        </div>
+      )}
+
+      {roleHref && (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="mr-1 font-semibold text-muted-foreground">Role:</span>
+          {[
+            { role: null, label: 'All' },
+            { role: 'merchandiser', label: 'Merchandisers' },
+            { role: 'marketer', label: 'Marketers' },
+          ].map((r) => (
+            <Link
+              key={r.label}
+              href={roleHref(r.role)}
+              aria-current={(filter.role ?? null) === r.role ? 'true' : undefined}
+              className={
+                (filter.role ?? null) === r.role
+                  ? 'rounded-full border border-brand bg-brand px-3 py-1 font-semibold text-primary-foreground'
+                  : CHIP
+              }
+            >
+              {r.label}
+            </Link>
+          ))}
+          {filter.role?.startsWith('custom:') && (
+            <span className="rounded-full border border-brand bg-brand px-3 py-1 font-semibold text-primary-foreground">
+              {choices.roles.find((r) => r.value === filter.role)?.label ?? 'Added role'}
+            </span>
+          )}
+          <span className="basis-full pt-0.5 text-muted-foreground">Export downloads exactly what is shown.</span>
         </div>
       )}
 

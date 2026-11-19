@@ -146,6 +146,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
           presets={presets(today, ['today', 'yesterday', 'week', '7d', '30d', 'month'])}
           presetHref={(p) => `?${reportQuery({ ...filter, from: p.from, to: p.to })}`}
           statusHref={(status) => `?${reportQuery({ ...filter, status })}#days`}
+          roleHref={(role) => `?${reportQuery({ ...filter, role })}#days`}
           downloads={[
             { label: 'Download day by day', base: '/api/admin/export/attendance', query },
             { label: 'Every clock-in and out', base: '/api/admin/export', query: rawQuery },

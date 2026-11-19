@@ -58,9 +58,21 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-19
 
+### Attendance reports: merchandisers or marketers
+- **What was done:** on **Attendance**, a **Role:** row of buttons, All ·
+  Merchandisers · Marketers, under the **Show:** buttons. The **Role** list in
+  the filters now always shows (it used to hide when only one role was in
+  use) and always offers Merchandiser and Marketer, plus any roles you
+  added. Combine them: for example **Marketers** + **Clocked in**, then
+  **Export**, gives a report of only the marketers who clocked in. The same
+  Role list is on **Analytics**.
+- **The impact:** separate reports for merchandisers and marketers in two
+  taps.
+- **What you need to do:** redeploy the latest code. No migration.
+
 ### Attendance reports: pick who, and clocked-in staff first
 - **What was done:** on **Attendance**, under the filters, a new row of
-  buttons, **Who:** Everyone · Clocked in · Clocked out · Still on shift ·
+  buttons, **Show:** Everyone · Clocked in · Clocked out · Still on shift ·
   Absent. Tap one, then **Export** (Excel, PDF, Word or CSV): the report has
   exactly those people, with their status. The same choices are in the
   **Show days** list, now worded plainly ("Clocked in (everyone who came)",
