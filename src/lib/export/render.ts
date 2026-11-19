@@ -79,7 +79,7 @@ export function exportFileName(base: string, ext: string) {
   return `${base}-${new Date().toISOString().slice(0, 10)}.${ext}`
 }
 
-function download(body: BodyInit, type: string, filename: string) {
+export function download(body: BodyInit, type: string, filename: string) {
   return new Response(body, {
     headers: {
       'Content-Type': type,

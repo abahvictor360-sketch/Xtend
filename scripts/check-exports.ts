@@ -7,6 +7,9 @@
  */
 import { renderExport, type Sheet } from '@/lib/export/render'
 import { attendanceSheet, EXPORT_COLUMNS, toExportRows } from '@/lib/export/data'
+import { attendanceReportPdf } from '@/lib/export/attendance-report-pdf'
+import { buildDays, type Person } from '@/lib/attendance-report'
+import { attendanceReportModel } from '@/lib/attendance-report-model'
 import { coverageSheet, visitSheet, COVERAGE_COLUMNS, VISIT_COLUMNS, type VisitExportRow } from '@/lib/export/visits'
 import { alertSheet, ALERT_COLUMNS } from '@/lib/export/alerts'
 import { parseAlertFilter } from '@/lib/alert-review'
@@ -155,6 +158,25 @@ async function run(name: string, sheet: Sheet, columns: readonly string[]) {
 async function main() {
   await run('store visits', visitSheet(visits, visitRows), VISIT_COLUMNS)
   await run('attendance', attendanceSheet(attendanceRows), EXPORT_COLUMNS)
+
+  // The designed attendance report: a real PDF, several pages when needed.
+  {
+    const people: Person[] = Array.from({ length: 30 }, (_, i) => ({
+      id: `u${i}`, name: `Person ${i}`, phone: null, role: 'merchandiser', roleLabel: 'Merchandiser', roleValue: 'merchandiser',
+      outletId: `s${i % 3}`, outletName: `Store ${i % 3}`, teamId: null, teamName: null, active: true, since: '2026-01-01',
+    }))
+    const day = '2026-11-18'
+    const events = people.slice(0, 22).map((p, i) => ({
+      id: `e${i}`, user_id: p.id, attendance_date: day, type: 'opening' as const, created_at: `${day}T08:0${i % 10}:00+01:00`,
+      local_time: `${day} 08:0${i % 10}`, outlet_id: p.outletId, outlet_name: p.outletName, shift_start: '08:00:00',
+      status: (i % 7 === 0 ? 'off_site' : 'on_site') as 'on_site' | 'off_site', distance_m: i % 7 === 0 ? 500 : 10, is_late: i % 10 > 0,
+      client_captured_at: `${day}T08:0${i % 10}:00+01:00`,
+    }))
+    const recs = buildDays(people, events, [day], { today: '2026-11-19' })
+    const bytes = await attendanceReportPdf(attendanceReportModel(recs, recs, people, { from: day, to: day }, day), '19 Nov 2026, 09:00')
+    check(Buffer.from(bytes.slice(0, 5)).toString() === '%PDF-', 'attendance report: a real PDF')
+    check(bytes.length > 4000, `attendance report: drawn (${bytes.length} bytes)`)
+  }
 
   // One row per person per day: the clock-in and clock-out side by side,
   // never one row each (2026-11-19: everyone appeared twice).

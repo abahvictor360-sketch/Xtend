@@ -58,6 +58,33 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-19
 
+### The attendance report, redesigned with charts
+- **What was done:** the PDF of the attendance report (**Export → Download
+  day by day → PDF**) is now a designed report:
+  - **Top:** the Xpel Beauty logo, the date (or dates) and what the report
+    covers.
+  - **Eight figure tiles:** came in, on time, late, absent, clocked in and
+    out, still on shift, away from store, usual clock-in time, each with a
+    small bar.
+  - **Charts:** a ring of how the day went (on time, late, away from
+    store, absent, leave or day off); a bar chart of when people clocked
+    in, in half-hour slots, with the late ones in a lighter orange (over
+    several days: each day's turnout); and a **By store** chart of who came
+    in at each store.
+  - **The summary** of the day in a shaded box, then **Who needs
+    attention**: a card per list (did not clock in, late, away from their
+    store, network trouble, clocked in by the office, did not clock out,
+    still on shift) with a coloured count. Over several days each person is
+    listed once, with their days ("Ada Obi · 2 days: Fri 13 Nov (24 min
+    late), Wed 18 Nov (24 min late)").
+  - **The table:** everyone, clocked in first, with a coloured label (On
+    time, Late, Away from store, Absent, Day off, On leave), times, hours,
+    distance, notes and a **Map** link. Page numbers on every page.
+  - Excel, Word and CSV keep the table layout, with the same written
+    account at the top.
+- **The impact:** a report you can send to management as it is.
+- **What you need to do:** redeploy the latest code. No migration.
+
 ### Attendance report: the Xpel logo, a written account of the day, and no doubled rows
 - **What was done:**
   - The attendance report (**Export → Download day by day**) now carries

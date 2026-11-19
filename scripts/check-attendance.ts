@@ -1,4 +1,5 @@
 import { attendanceWriteUp } from '../src/lib/attendance-writeup'
+import { attendanceReportModel } from '../src/lib/attendance-report-model'
 /**
  * Checks how clock events become attendance days (src/lib/attendance-report.ts):
  * on time, late, off site, absent, days off and leave, no clock-out, the summary
@@ -234,16 +235,37 @@ check(/sortDays\(rows, names, 'date', 'desc'\)/.test(require('node:fs').readFile
   const story = attendanceWriteUp(records, people, { from: days[0], to: days[days.length - 1] })
   const absentRows = records.filter((r) => r.status === 'absent')
   check(story[0].startsWith('## How ') && story.some((l) => /clocked in \(/.test(l)), 'the write-up opens with how the days went')
-  check(!absentRows.length || story.includes(`## Did not clock in (${absentRows.length})`), 'it names everyone who did not clock in')
+  const people_ = (rows: { userId: string }[]) => (days.length > 1 ? new Set(rows.map((r) => r.userId)).size : rows.length)
+  check(!absentRows.length || story.includes(`## Did not clock in (${people_(absentRows)})`), 'it names everyone who did not clock in')
   const lateRows = records.filter((r) => r.present && r.late)
-  check(!lateRows.length || story.includes(`## Late (${lateRows.length})`), 'it names who was late')
+  check(!lateRows.length || story.includes(`## Late (${people_(lateRows)})`), 'it names who was late')
   const away = records.filter((r) => r.present && r.offSite)
-  check(!away.length || story.includes(`## Clocked in away from their store (${away.length})`), 'it names who clocked in away from their store')
+  check(!away.length || story.includes(`## Clocked in away from their store (${people_(away)})`), 'it names who clocked in away from their store')
   const noOut = records.filter((r) => r.missingOut)
-  check(!noOut.length || story.includes(`## Did not clock out (${noOut.length})`), 'it names who did not clock out')
+  check(!noOut.length || story.includes(`## Did not clock out (${people_(noOut)})`), 'it names who did not clock out')
   check(story.filter((l) => l.startsWith('• ')).every((l) => people.some((p) => l.includes(p.name)) || /more: see the table/.test(l) || !/—/.test(l)),
     'every point names a person')
   check(!story.join(' ').match(/\b(track|monitor)\w*/i), 'plain words, nothing about how staff are followed')
+}
+// The designed report's figures and charts (2026-11-19).
+{
+  const model = attendanceReportModel(real, records, people, { from: days[0], to: days[days.length - 1] }, 'test')
+  const sum = summarise(records)
+  check(model.kpis.length === 8 && model.kpis[0].value === String(sum.present), 'eight figures, "came in" first')
+  const mixTotal = model.mix.reduce((t, x) => t + x.value, 0)
+  check(mixTotal === sum.present + sum.absent + records.filter((r) => !r.present && (r.status === 'leave' || r.status === 'off')).length,
+    'the ring adds up to everyone in the report')
+  check(model.bars.every((b) => b.value >= 0 && b.value <= 100) && model.bars.length === new Set(records.map((r) => r.date)).size,
+    'several days: one turnout bar per day, as a share')
+  check(model.rows.length === real.length && model.rows.every((r) => r.name), 'the table has every row, each with a name')
+  const grouped = model.story.sections.find((x) => x.key === 'late')
+  check(!grouped || new Set(grouped.items.map((i) => i.name)).size === grouped.items.length, 'over several days, each person once per list')
+  check(!grouped || grouped.items.every((i) => /\d+ days?/.test(i.day ?? '')), 'with how many days')
+  const one = days[days.length - 1]
+  const dayRecs = records.filter((r) => r.date === one)
+  const dayModel = attendanceReportModel(dayRecs, dayRecs, people, { from: one, to: one }, 'test')
+  const inCount = dayRecs.filter((r) => r.present).length
+  check(dayModel.bars.reduce((t, b) => t + b.value, 0) === inCount, 'one day: the clock-in time slots hold everyone who clocked in')
 }
 check(new Set(byDate.map((r) => r.date)).size > 0 && byDate.some((r) => !r.present) && byDate.some((r) => r.present), 'the sample has both clocked-in and not-clocked-in days')
 
