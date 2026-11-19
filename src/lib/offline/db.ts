@@ -39,6 +39,11 @@ export interface ReportJob {
    */
   scope?: 'day' | 'store'
   store_visit_id?: string | null
+  /**
+   * The day the report is for, 'YYYY-MM-DD' (0094): today, yesterday or
+   * another recent day. Missing on jobs queued before it: today.
+   */
+  report_date?: string | null
   body: string
   sales_summary: string
   stock_status: string

@@ -4,7 +4,7 @@
 export const STAFF_VIDEO = {
   src: '/guide/xtend-staff-guide.mp4',
   poster: '/guide/xtend-staff-guide.jpg',
-  seconds: 338,
+  seconds: 347,
   chapters: [
     {
       "title": "Get the app",
@@ -40,11 +40,11 @@ export const STAFF_VIDEO = {
     },
     {
       "title": "Clock out",
-      "at": 246.7
+      "at": 255.4
     },
     {
       "title": "When something goes wrong",
-      "at": 269.1
+      "at": 277.8
     }
   ],
 } as const

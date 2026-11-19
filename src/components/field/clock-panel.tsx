@@ -437,7 +437,8 @@ export function ClockPanel({
         <Alert variant="info" className="animate-fade-up">
           <p className="font-bold">You are signed out for today</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Clocking out ends your login. Log in again next time you start work.
+            Clocking out ends your login. Log in again next time you start work. Marketers: log in again any time
+            to write your reports for the stores you visited.
           </p>
           <Button
             className="mt-3 w-full"

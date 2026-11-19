@@ -1955,14 +1955,22 @@ Office downloads are audited.
 - Who: REPORTING_ROLES
 
 One whole-day report per person per day, and one report per store visit
-(0088). Sending the same one again updates it; the database refuses an
-update on any day but the day it was filed.
+(0088), for today or a recent day they pick (0094). Sending the same one
+again updates it; the database refuses a day ahead, a day more than 7
+days back, and a past day they did not work.
 
 ```ts
 const schema = z.object({
   // A report for the whole day, or for one store visit of today (0088).
   scope: z.enum(['day', 'store']).default('day'),
   store_visit_id: z.string().guid().nullable().optional(),
+  // The day it is for (0094): today, yesterday or up to 7 days back. Left
+  // out (an older phone): today. The database checks the day.
+  report_date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick the day this report is for.')
+    .nullable()
+    .optional(),
   // What the day, sales and stock were like must be said; competitors and
   // issues may be left empty. All of it in words, without links.
   body: writtenText(4000, 10, '"The day"'),
@@ -1980,7 +1988,7 @@ const schema = z.object({
 })
 ```
 
-- Database functions: `business_date`, `add_report_photo`, `add_report_file`
+- Database functions: `business_date`, `report_days_back`, `add_report_photo`, `add_report_file`
 - Tables and views: `reports`
 
 ## `POST /api/signed-url`

@@ -228,9 +228,12 @@ export function StaffGuide() {
         <Steps
           items={[
             <>
-              Tap <Ui>Report</Ui>. Xtend asks what the report is for: <Ui>The whole day</Ui>, or one
-              of the stores you checked in at today. You can write one for each store and one for the
-              whole day; each shows <Ui>Filed · edit</Ui> once sent.
+              Tap <Ui>Report</Ui>. First pick <Ui>which day</Ui> it is for: <Ui>Today</Ui>,{' '}
+              <Ui>Yesterday</Ui>, another day of the last week, or <Ui>Another day</Ui> to choose a date
+              (up to 7 days back). You can write your reports after you clock out: log in again in the
+              evening, or the next morning before you clock in. Then pick what it is for:{' '}
+              <Ui>The whole day</Ui>, or one of the stores you checked in at that day. You can write one
+              for each store and one for the whole day; each shows <Ui>Filed · edit</Ui> once sent.
             </>,
             <>
               Fill in how it went, and add a photo if asked.
@@ -243,20 +246,20 @@ export function StaffGuide() {
             </>,
             <>
               Tap <Ui>Submit report</Ui>. Your documents go with it. You can edit the report, and
-              add or remove documents, until midnight. Wait for “Updating documents…” to finish before changing another document.
+              add or remove documents, for 7 days. Wait for “Updating documents…” to finish before changing another document.
             </>,
           ]}
         />
         <p>
-          Marketers: the top of the report shows the store visits it covers: all of today&apos;s for
+          Marketers: the top of the report shows the store visits it covers: all of that day&apos;s for
           the whole day, or just that one for a store report, with the time in and out and how long
           you were there. They are added to your report when you save it; there is nothing to type
           for them.
         </p>
         <Tip>
           No data? Your report and its documents wait on your phone and send themselves when you
-          get signal. A document you remove with no data shows <Ui>Removing…</Ui> until then. If it
-          only gets through after midnight, the report has closed and the document stays on it.
+          get signal. A document you remove with no data shows <Ui>Removing…</Ui> until then. A report
+          closes 7 days after the day it is for; after that it cannot be changed.
         </Tip>
       </GuideSection>
 

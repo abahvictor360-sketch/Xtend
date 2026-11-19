@@ -696,7 +696,7 @@ Policies:
 | id | uuid(uuid) |  | gen_random_uuid() |
 | user_id | uuid(uuid) |  | auth.uid() |
 | outlet_id | uuid(uuid) | yes |  |
-| report_date | date(date) |  | ((now() AT TIME ZONE 'Africa/Lagos'::text))::date |
+| report_date | date(date) |  |  |
 | body | text(text) | yes |  |
 | sales_summary | text(text) | yes |  |
 | stock_status | text(text) | yes |  |
@@ -714,7 +714,7 @@ Policies:
 - `reports_insert_own` INSERT to public; check `((auth.uid() IS NOT NULL) AND can_file_report())`
 - `reports_own` SELECT to public: using `((user_id = auth.uid()) OR is_admin())`
 - `reports_supervisor_select` SELECT to public: using `supervises_user(user_id)`
-- `reports_update_own_sameday` UPDATE to public: using `((user_id = auth.uid()) AND can_file_report() AND (report_date = ((now() AT TIME ZONE 'Africa/Lagos'::text))::date))`
+- `reports_update_own_recent` UPDATE to public: using `((user_id = auth.uid()) AND can_file_report() AND report_day_open(report_date))`
 
 ### `role_store_counts`
 
@@ -1382,10 +1382,10 @@ Policies:
 - `absentees_today()` → TABLE(user_id uuid, full_name text, phone text, outlet_name text) · definer · 0059_schedules_leave.sql
 - `activity_feed(p_from date, p_to date, p_user uuid, p_kinds text[], p_limit integer)` → TABLE(at timestamp with time zone, user_id uuid, full_name text, role text, kind text, label text, detail jsonb, ip text, platform text, device text, user_agent text) · definer · 0062_user_activity.sql
 - `activity_platform(p_ua text)` → text · 0062_user_activity.sql
-- `add_report_file(p_path text, p_name text)` → uuid · definer · 0088_report_per_store_or_day.sql
-- `add_report_file(p_path text, p_name text, p_report uuid)` → uuid · definer · 0088_report_per_store_or_day.sql
-- `add_report_photo(p_path text)` → uuid · definer · 0088_report_per_store_or_day.sql
-- `add_report_photo(p_path text, p_report uuid)` → uuid · definer · 0088_report_per_store_or_day.sql
+- `add_report_file(p_path text, p_name text)` → uuid · definer · 0094_reports_for_recent_days.sql
+- `add_report_file(p_path text, p_name text, p_report uuid)` → uuid · definer · 0094_reports_for_recent_days.sql
+- `add_report_photo(p_path text)` → uuid · definer · 0094_reports_for_recent_days.sql
+- `add_report_photo(p_path text, p_report uuid)` → uuid · definer · 0094_reports_for_recent_days.sql
 - `address_at(p_lat double precision, p_lng double precision)` → text · definer · 0068_place_lookups.sql
 - `admin_overview()` → jsonb · definer · 0059_schedules_leave.sql
 - `alert_watchers(p_user uuid)` → TABLE(user_id uuid, full_name text, role user_role) · definer · 0036_supervisor_alerts.sql
@@ -1531,6 +1531,7 @@ Policies:
 - `my_supervisor()` → TABLE(id uuid, full_name text, avatar_path text) · definer · 0076_my_supervisor.sql
 - `my_supervisor_name()` → text · definer · 0073_messages.sql
 - `my_visit_stores()` → TABLE(id uuid, name text, address text, lat double precision, lng double precision, geofence_radius_m integer) · definer · 0060_marketer_visits_reports.sql
+- `my_visits_on(p_day date)` → SETOF store_visit_detail · 0094_reports_for_recent_days.sql
 - `name_place(p_due uuid, p_name text, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_storefront_path text, p_selfie_path text, p_evidence jsonb)` → uuid · definer · 0045_mandatory_place_naming.sql
 - `names_overlap(a text, b text)` → boolean · 0025_place_safeguards.sql
 - `nearest_outlet_for_user(target uuid, p_lat double precision, p_lng double precision)` → uuid · definer · 0034_stores_pinned_from_clock_in.sql
@@ -1608,12 +1609,14 @@ Policies:
 - `release_reports_on_demotion()` → trigger · definer · 0018_reporting_line_upkeep.sql
 - `remember_address(p_lat double precision, p_lng double precision, p_address text)` → uuid · definer · 0068_place_lookups.sql
 - `remove_my_sign_in_key(p_id uuid)` → boolean · definer · 0089_quick_sign_in.sql
-- `remove_report_file(p_id uuid)` → text · definer · 0065_report_files_offline.sql
+- `remove_report_file(p_id uuid)` → text · definer · 0094_reports_for_recent_days.sql
 - `remove_schedule_override(p_id uuid)` → void · definer · 0059_schedules_leave.sql
 - `reopen_support_thread(p_thread uuid)` → void · definer · 0053_support_notifications.sql
 - `report_app_install(p_platform text, p_app_version text, p_app_build integer, p_web_build text)` → void · definer · 0057_app_updates.sql
 - `report_capture_visits()` → trigger · definer · 0088_report_per_store_or_day.sql
-- `report_enforce()` → trigger · definer · 0088_report_per_store_or_day.sql
+- `report_day_open(p_day date)` → boolean · 0094_reports_for_recent_days.sql
+- `report_days_back()` → integer · 0094_reports_for_recent_days.sql
+- `report_enforce()` → trigger · definer · 0094_reports_for_recent_days.sql
 - `report_file_attached(p_name text)` → boolean · definer · 0064_count_sheets_any_time_report_files.sql
 - `report_file_limit()` → trigger · definer · 0064_count_sheets_any_time_report_files.sql
 - `report_file_mime_ok(p_mime text)` → boolean · 0064_count_sheets_any_time_report_files.sql

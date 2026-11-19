@@ -310,7 +310,7 @@ export default async function SupervisorGuidePage() {
             <Ui>A month</Ui> and download each person&apos;s report as PDF, Word or Excel: clock-in and
             clock-out, every store visit with the time spent there, their reports, stock counts and
             sales. A marketer can write a report for each store they checked in at, one for the whole
-            day, or both; each report says which it is for. From <Ui>Store visits</Ui> → <Ui>By person</Ui>, <Ui>Day report</Ui> or{' '}
+            day, or both; each report says which it is for. Marketers can write their reports after clocking out (in the evening, or the next morning) and pick the day each one is for: today, yesterday or up to 7 days back; the report is filed on that day. From <Ui>Store visits</Ui> → <Ui>By person</Ui>, <Ui>Day report</Ui> or{' '}
             <Ui>Month report</Ui> opens the same thing.
           </p>
           <p>

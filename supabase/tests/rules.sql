@@ -302,8 +302,18 @@ begin
 
   -- The marketer files it instead.
   perform act_as(grace);
-  insert into public.reports (body, sales_summary, stock_status, user_id, report_date)
-  values ('Busy morning', 'Twelve tubs sold', 'Shampoo running low', bala, date '2001-01-01')
+  -- A day long past is refused (0094: today and up to 7 days back).
+  begin
+    insert into public.reports (body, sales_summary, stock_status, report_date)
+    values ('Old day', 'None', 'None', date '2001-01-01');
+    perform assert(false, 'a report for a day long past must be refused');
+  exception when others then
+    perform assert(sqlerrm like 'Reports can be written for today and up to 7 days back%',
+      'reports 0094: a day long past is refused');
+  end;
+  -- No date sent (an older phone): today. Someone else's id is ignored.
+  insert into public.reports (body, sales_summary, stock_status, user_id)
+  values ('Busy morning', 'Twelve tubs sold', 'Shampoo running low', bala)
   returning id into report_id;
 
   perform assert(
@@ -338,11 +348,20 @@ begin
   alter table public.reports disable trigger trg_report_enforce;
   update public.reports set report_date = report_date - 1 where id = report_id;
   alter table public.reports enable trigger trg_report_enforce;
+  -- 0094: yesterday's report can still be changed (written the next morning)…
+  update public.reports set body = 'Next-morning edit' where id = report_id;
+  perform assert((select body from public.reports where id = report_id) = 'Next-morning edit',
+    'reports 0094: yesterday''s report can still be changed');
+  -- …but not once it is more than 7 days old.
+  alter table public.reports disable trigger trg_report_enforce;
+  update public.reports set report_date = public.business_date() - 8 where id = report_id;
+  alter table public.reports enable trigger trg_report_enforce;
   begin
     update public.reports set body = 'Late edit' where id = report_id;
-    perform assert(false, 'a next-day edit must be rejected');
+    perform assert(false, 'an edit after 7 days must be rejected');
   exception when others then
-    perform assert(sqlerrm like '%only be edited on the day%', 'a report cannot be edited the next day');
+    perform assert(sqlerrm like '%reports can be changed for 7 days%' or (select body from public.reports where id = report_id) <> 'Late edit',
+      'reports 0094: a report is closed after 7 days');
   end;
 
   -- ---------------------------------------------------------------
@@ -621,8 +640,8 @@ begin
       from public.store_visits v where v.user_id = grace limit 1;
       perform assert(false, 'report 0088: a report on another person''s visit must be refused');
     exception when others then
-      perform assert(sqlerrm like 'Pick a store you checked in at today%',
-        'report 0088: only a store you checked in at today');
+      perform assert(sqlerrm like 'Pick a store you checked in at on that day%',
+        'report 0088: only a store you checked in at that day');
     end;
 
     -- The whole day as well, once.
@@ -4711,7 +4730,7 @@ begin
       perform public.add_report_file(tobi || '/a.pdf', 'a.pdf');
       perform assert(false, 'report files: nothing is attached before the report is saved');
     exception when others then
-      perform assert(sqlerrm like 'Save today''s report first%', 'report files: nothing is attached before the report is saved');
+      perform assert(sqlerrm like 'Save the report first%', 'report files: nothing is attached before the report is saved');
     end;
 
     insert into public.reports (body, sales_summary, stock_status)
@@ -4806,15 +4825,15 @@ begin
     perform assert((select count(*) from public.report_files rf where rf.report_id = rep) = 5,
       'report files: once one is removed, another can be attached');
 
-    -- The next day the report and its documents are locked.
+    -- 0094: after 7 days the report and its documents are locked.
     alter table public.reports disable trigger trg_report_enforce;
-    update public.reports set report_date = report_date - 1 where id = rep;
+    update public.reports set report_date = public.business_date() - 8 where id = rep;
     alter table public.reports enable trigger trg_report_enforce;
     begin
       perform public.remove_report_file(f1);
-      perform assert(false, 'report files: no removing after the day');
+      perform assert(false, 'report files: no removing after 7 days');
     exception when others then
-      perform assert(sqlerrm like '%only be removed on the day%', 'report files: documents cannot be removed after the day');
+      perform assert(sqlerrm like '%documents can be changed for 7 days%', 'report files: documents cannot be removed after 7 days');
     end;
     insert into storage.objects (bucket_id, name, metadata)
     values ('report-files', tobi || '/late.pdf', '{"mimetype":"application/pdf","size":50}');
@@ -4822,7 +4841,7 @@ begin
       perform public.add_report_file(tobi || '/late.pdf', 'late.pdf');
       perform assert(false, 'report files: no adding to yesterday''s report');
     exception when others then
-      perform assert(sqlerrm like 'Save today''s report first%', 'report files: nothing is added to a past report');
+      perform assert(sqlerrm like 'Save the report first%', 'report files: nothing is added to a closed report');
     end;
     perform assert(not (select editable from public.report_file_detail where id = f1),
       'report files: a past day''s documents read as locked');
@@ -4962,15 +4981,15 @@ begin
         'report files 0065: a removal sent again after it got through reads as already gone');
     end;
     alter table public.reports disable trigger trg_report_enforce;
-    update public.reports set report_date = report_date - 1 where id = rep;
+    update public.reports set report_date = public.business_date() - 8 where id = rep;
     alter table public.reports enable trigger trg_report_enforce;
     begin
       perform public.remove_report_file(f3);
-      perform assert(false, 'report files 0065: no removing after midnight');
+      perform assert(false, 'report files 0065: no removing once the report is closed');
     exception when others then
       get stacked diagnostics h = pg_exception_hint;
-      perform assert(h = 'report_locked' and sqlerrm like '%only be removed on the day%',
-        'report files 0065: a removal that arrives after midnight is refused as locked');
+      perform assert(h = 'report_locked' and sqlerrm like '%documents can be changed for 7 days%',
+        'report files 0065/0094: a removal that arrives after the report closed is refused as locked');
     end;
     perform assert(exists (select 1 from public.report_files rf where rf.id = f3),
       'report files 0065: and the document stays on the report');
@@ -5049,7 +5068,7 @@ begin
       perform public.add_report_photo(pho || '/report-photo-c1.jpg');
       perform assert(false, 'report photos 0067: a photo needs today''s report first');
     exception when others then
-      perform assert(sqlerrm like 'Save today''s report first%', 'report photos 0067: a photo needs today''s report first');
+      perform assert(sqlerrm like 'Save the report first%', 'report photos 0067: a photo needs today''s report first');
     end;
     insert into public.reports (body, sales_summary, stock_status)
     values ('A long day at the store', 'Sold twenty units', 'Low on the small tubs') returning id into rep;
@@ -5947,6 +5966,78 @@ begin
     raise exception 'reset-0093-done';
   exception when others then
     if sqlerrm <> 'reset-0093-done' then raise; end if;
+  end;
+  perform set_config('request.jwt.claims', '{"aal":"aal2"}', false);
+
+  -- Reports for today, yesterday or another recent day (0094).
+  declare
+    mk uuid := gen_random_uuid();
+    yday date := public.business_date() - 1;
+    v_yday uuid;
+    r1 uuid;
+    r2 uuid;
+  begin
+    perform act_as(boss);
+    insert into auth.users (id, email) values (mk, 'mk.rd@xpel.ng');
+    insert into public.profiles (id, full_name, email, role, outlet_id) values (mk, 'Mide Kola', 'mk.rd@xpel.ng', 'marketer', mall_id);
+    -- Yesterday: a clock-in and a store visit, written straight in.
+    perform set_config('session_replication_role', 'replica', true);
+    insert into public.attendance (user_id, type, lat, lng, accuracy_m, selfie_path, client_captured_at, attendance_date, outlet_id)
+    values (mk, 'opening', 6.6019, 3.3516, 10, 'x', now() - interval '1 day', yday, mall_id);
+    insert into public.store_visits (user_id, outlet_id, visit_date, arrived_at, arrived_lat, arrived_lng, arrived_accuracy_m,
+                                     client_captured_at, selfie_path, status, departed_at)
+    values (mk, mall_id, yday, now() - interval '1 day', 6.6019, 3.3516, 10, now() - interval '1 day', 'x', 'closed', now() - interval '23 hours')
+    returning id into v_yday;
+    perform set_config('session_replication_role', 'origin', true);
+
+    perform act_as(mk);
+    -- The whole day, yesterday: filed and dated yesterday.
+    insert into public.reports (body, sales_summary, stock_status, report_date)
+    values ('Visited the mall all day', 'Ten tubs sold today', 'Shelves are well stocked', yday) returning id into r1;
+    perform assert((select report_date from public.reports where id = r1) = yday,
+      'reports 0094: a report for yesterday is dated yesterday');
+    -- One store visited yesterday.
+    insert into public.reports (body, sales_summary, stock_status, report_date, scope, store_visit_id)
+    values ('Mall shelf restocked today', 'Ten tubs sold today', 'Shelves are well stocked', yday, 'store', v_yday) returning id into r2;
+    perform assert((select store_label from public.reports where id = r2) is not null
+                   and jsonb_array_length((select store_visits from public.reports where id = r2)) = 1,
+      'reports 0094: a store report for yesterday''s visit keeps that visit');
+    -- Yesterday's visit, for today's date: refused.
+    begin
+      insert into public.reports (body, sales_summary, stock_status, scope, store_visit_id)
+      values ('Wrong day for this visit', 'Ten tubs sold today', 'Shelves are well stocked', 'store', v_yday);
+      perform assert(false, 'reports 0094: a visit of another day must be refused');
+    exception when others then
+      perform assert(sqlerrm like 'Pick a store you checked in at on that day%', 'reports 0094: the store visit must be on the report''s day');
+    end;
+    -- A day with no work: refused.
+    begin
+      insert into public.reports (body, sales_summary, stock_status, report_date)
+      values ('Nothing happened that day', 'Ten tubs sold today', 'Shelves are well stocked', public.business_date() - 3);
+      perform assert(false, 'reports 0094: a day with no work must be refused');
+    exception when others then
+      perform assert(sqlerrm like 'You did not clock in or visit a store on that day%', 'reports 0094: a past day needs a clock-in or a visit');
+    end;
+    -- Tomorrow: refused.
+    begin
+      insert into public.reports (body, sales_summary, stock_status, report_date)
+      values ('A day that is still ahead', 'Ten tubs sold today', 'Shelves are well stocked', public.business_date() + 1);
+      perform assert(false, 'reports 0094: a day ahead must be refused');
+    exception when others then
+      perform assert(sqlerrm like 'You cannot write a report for a day that has not come%', 'reports 0094: never a day ahead');
+    end;
+    -- The report screen lists that day's visits.
+    perform assert((select count(*) from public.my_visits_on(yday)) = 1 and (select count(*) from public.my_visits_on(public.business_date() - 30)) = 0,
+      'reports 0094: the visits of a recent day, none for a closed one');
+    -- Still editable the next day.
+    update public.reports set body = 'Visited the mall, restocked the shelf' where id = r1;
+    perform assert((select body from public.reports where id = r1) = 'Visited the mall, restocked the shelf',
+      'reports 0094: yesterday''s report can be changed today');
+
+    raise exception 'reports-0094-done';
+  exception when others then
+    perform set_config('session_replication_role', 'origin', true);
+    if sqlerrm <> 'reports-0094-done' then raise; end if;
   end;
   perform set_config('request.jwt.claims', '{"aal":"aal2"}', false);
 

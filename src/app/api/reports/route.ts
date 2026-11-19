@@ -9,6 +9,13 @@ const schema = z.object({
   // A report for the whole day, or for one store visit of today (0088).
   scope: z.enum(['day', 'store']).default('day'),
   store_visit_id: z.string().guid().nullable().optional(),
+  // The day it is for (0094): today, yesterday or up to 7 days back. Left
+  // out (an older phone): today. The database checks the day.
+  report_date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick the day this report is for.')
+    .nullable()
+    .optional(),
   // What the day, sales and stock were like must be said; competitors and
   // issues may be left empty. All of it in words, without links.
   body: writtenText(4000, 10, '"The day"'),
@@ -27,8 +34,9 @@ const schema = z.object({
 
 /**
  * One whole-day report per person per day, and one report per store visit
- * (0088). Sending the same one again updates it; the database refuses an
- * update on any day but the day it was filed.
+ * (0088), for today or a recent day they pick (0094). Sending the same one
+ * again updates it; the database refuses a day ahead, a day more than 7
+ * days back, and a past day they did not work.
  */
 export async function POST(request: Request) {
   try {
@@ -63,7 +71,19 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Pick the store this report is for.' }, { status: 400 })
     }
 
-    const { data: today } = await supabase.rpc('business_date')
+    const { data: businessDay } = await supabase.rpc('business_date')
+    const today = (input.report_date ?? (businessDay as string)) as string
+    // Before 0094 the database would quietly date a report for another day
+    // today: say what is missing instead.
+    if (input.report_date && input.report_date !== businessDay) {
+      const { error: missing } = await supabase.rpc('report_days_back')
+      if (missing) {
+        return Response.json(
+          { error: 'Writing a report for another day needs update 0094. Ask an admin to run it; for now, write it for today.' },
+          { status: 503 },
+        )
+      }
+    }
     let lookup = supabase
       .from('reports')
       .select('id')
@@ -99,6 +119,7 @@ export async function POST(request: Request) {
             ...fields,
             scope: input.scope,
             store_visit_id: input.scope === 'store' ? input.store_visit_id : null,
+            ...(input.report_date ? { report_date: input.report_date } : {}),
           }
       const { data, error } = await supabase
         .from('reports')
@@ -112,16 +133,20 @@ export async function POST(request: Request) {
               error:
                 input.scope === 'store'
                   ? 'The report for this store is already filed. Open it to edit.'
-                  : 'Today’s whole-day report is already filed. Open it to edit.',
+                  : 'The whole-day report for that day is already filed. Open it to edit.',
             },
             { status: 409 },
           )
         }
         if (error.message.includes('Pick a store')) {
           return Response.json(
-            { error: 'Pick a store you checked in at today.', code: 'store_visit' },
+            { error: 'Pick a store you checked in at on that day.', code: 'store_visit' },
             { status: 400 },
           )
+        }
+        // The day rules (0094), in the database's own words.
+        if (/day that has not come|up to \d+ days back|did not clock in or visit a store|report is closed/.test(error.message)) {
+          return Response.json({ error: dbErrorMessage(error), code: 'report_day' }, { status: 400 })
         }
         return dbErrorResponse(error)
       }
