@@ -18,6 +18,7 @@ import {
 } from '@/lib/attendance-report'
 import type { ReportFilter } from '@/lib/attendance-server'
 import { metres } from '@/lib/utils'
+import { attendanceWriteUp } from '@/lib/attendance-writeup'
 
 const STATUS: Record<DayRecord['status'], string> = {
   on_time: 'On time',
@@ -40,7 +41,7 @@ function summaryLines(s: Summary) {
 function filterLine(f: ReportFilter, people: Person[]) {
   const who = f.user_id ? people.find((p) => p.id === f.user_id)?.name : null
   return [
-    `${f.from} to ${f.to}`,
+    f.from === f.to ? f.from : `${f.from} to ${f.to}`,
     who ? `person: ${who}` : null,
     f.outlet_id ? 'one store' : null,
     f.team ? 'one team' : null,
@@ -60,8 +61,6 @@ export function attendanceDaysSheet(
   filter: ReportFilter,
 ): Sheet {
   const person = new Map(people.map((p) => [p.id, p]))
-  const s = summarise(all)
-  const worry = concerns(all, people, 20)
   // As on the page: newest day first; within a day everyone who clocked in
   // (latest first), then those absent, then days off and leave.
   const names = new Map(people.map((p) => [p.id, p.name]))
@@ -112,13 +111,18 @@ export function attendanceDaysSheet(
     'Where they clocked in',
     'Map',
   ] as const
+  // The written account covers everyone in the view, whichever rows the
+  // table keeps (only those clocked in, say).
+  const story = attendanceWriteUp(all, people, { from: filter.from, to: filter.to })
+  const kept =
+    rows.length === all.filter((r) => r.status !== 'none').length
+      ? []
+      : ['', `## In the table`, `${rows.length} ${rows.length === 1 ? 'row' : 'rows'}: ${filterLine(filter, people)}.`]
   return {
-    title: 'Xtend attendance, day by day',
+    title: 'Xpel Beauty · Attendance report',
     subtitle: `${filterLine(filter, people)}. Times are Lagos time.`,
-    notes: [
-      ...summaryLines(s),
-      ...(worry.length ? ['', 'Worth a look:', ...worry.map((c) => `• ${c.text}`)] : []),
-    ].join('\n'),
+    notes: [...story, ...kept].join('\n'),
+    logo: true,
     wrap: true,
     sheetName: 'Days',
     columns,

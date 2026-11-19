@@ -242,6 +242,18 @@ The longest range the Attendance and Analytics pages read at once.
 
 Exports: `MAX_RANGE_DAYS`, `GRID_MAX_DAYS`, `ReportFilter`, `parseReportFilter`, `reportQuery`, `Choices`, `loadChoices`, `peopleInScope`, `fetchEvents`, `Report`, `assemble`, `loadAttendance`, `loadAnalytics`
 
+## `src/lib/attendance-writeup.ts`
+
+The written account at the top of the attendance report: how the day (or
+the days) went, then who did not clock in, who was late, who clocked in
+away from their store, who had network trouble, who the office clocked
+in, and who did not clock out. Plain English, names first. Pure, so
+scripts/check-attendance.ts can test it.
+
+Lines starting "## " are headings and "• " points (lib/export/render.ts).
+
+Exports: `NETWORK_MIN`, `attendanceWriteUp`
+
 ## `src/lib/audit-context.ts`
 
 Where and on what an admin action was done, read from the request:

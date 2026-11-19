@@ -149,7 +149,7 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
           roleHref={(role) => `?${reportQuery({ ...filter, role })}#days`}
           downloads={[
             { label: 'Download day by day', base: '/api/admin/export/attendance', query },
-            { label: 'Every clock-in and out', base: '/api/admin/export', query: rawQuery },
+            { label: 'Clock-ins and outs with photos (one row a day)', base: '/api/admin/export', query: rawQuery },
           ]}
         />
         <details className="mt-3 text-xs text-muted-foreground">

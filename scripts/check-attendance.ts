@@ -1,3 +1,4 @@
+import { attendanceWriteUp } from '../src/lib/attendance-writeup'
 /**
  * Checks how clock events become attendance days (src/lib/attendance-report.ts):
  * on time, late, off site, absent, days off and leave, no clock-out, the summary
@@ -227,6 +228,22 @@ check(/sortDays\(rows, names, 'date', 'desc'\)/.test(require('node:fs').readFile
     'Attendance shows the Role picker and the Role: All · Merchandisers · Marketers buttons')
   check(/roleHref=\{\(role\) => `\?\$\{reportQuery\(\{ \.\.\.filter, role \}\)\}#days`\}/.test(src('src/app/admin/attendance/page.tsx')),
     'the role buttons keep the rest of the view, so the export follows them')
+}
+// The written account at the top of the report (2026-11-19).
+{
+  const story = attendanceWriteUp(records, people, { from: days[0], to: days[days.length - 1] })
+  const absentRows = records.filter((r) => r.status === 'absent')
+  check(story[0].startsWith('## How ') && story.some((l) => /clocked in \(/.test(l)), 'the write-up opens with how the days went')
+  check(!absentRows.length || story.includes(`## Did not clock in (${absentRows.length})`), 'it names everyone who did not clock in')
+  const lateRows = records.filter((r) => r.present && r.late)
+  check(!lateRows.length || story.includes(`## Late (${lateRows.length})`), 'it names who was late')
+  const away = records.filter((r) => r.present && r.offSite)
+  check(!away.length || story.includes(`## Clocked in away from their store (${away.length})`), 'it names who clocked in away from their store')
+  const noOut = records.filter((r) => r.missingOut)
+  check(!noOut.length || story.includes(`## Did not clock out (${noOut.length})`), 'it names who did not clock out')
+  check(story.filter((l) => l.startsWith('• ')).every((l) => people.some((p) => l.includes(p.name)) || /more: see the table/.test(l) || !/—/.test(l)),
+    'every point names a person')
+  check(!story.join(' ').match(/\b(track|monitor)\w*/i), 'plain words, nothing about how staff are followed')
 }
 check(new Set(byDate.map((r) => r.date)).size > 0 && byDate.some((r) => !r.present) && byDate.some((r) => r.present), 'the sample has both clocked-in and not-clocked-in days')
 

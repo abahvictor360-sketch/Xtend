@@ -54,18 +54,24 @@ export async function fetchAttendance(
   return (data ?? []) as AttendanceDetail[]
 }
 
+/** One row per person per day: the clock-in and the clock-out side by side. */
 export const EXPORT_COLUMNS = [
   'Staff name',
   'Date',
-  'Type',
-  'Time (Africa/Lagos)',
-  'Outlet',
-  'Location (premises and street)',
-  'Distance from outlet',
-  'Accuracy',
-  'Status',
-  'Selfie link',
+  'Store',
+  'Clock in',
+  'In: where',
+  'In: from store',
+  'In: status',
+  'In: photo',
+  'Clock out',
+  'Out: where',
+  'Out: from store',
+  'Out: status',
+  'Out: photo',
 ] as const
+
+const STATUS_WORDS: Record<string, string> = { on_site: 'At the store', off_site: 'Away from the store', flagged: 'Location too rough' }
 
 /**
  * Signed selfie links expire in an hour: long enough to open the export and
@@ -88,27 +94,56 @@ export async function signSelfies(
   return signed
 }
 
+/**
+ * A person's day as one row (2026-11-19: before, the clock-in and the
+ * clock-out were two rows, so everyone appeared twice). The first clock-in
+ * and the last clock-out after it, as on the Attendance page; newest day
+ * first, then the latest clock-in.
+ */
 export async function toExportRows(
   supabase: SupabaseClient,
   rows: AttendanceDetail[],
 ): Promise<ExportRow[]> {
-  const signed = await signSelfies(supabase, rows.map((r) => r.selfie_path))
+  const days = new Map<string, { ins: AttendanceDetail[]; outs: AttendanceDetail[] }>()
+  for (const r of rows) {
+    const key = `${r.user_id}|${r.attendance_date}`
+    const day = days.get(key) ?? { ins: [], outs: [] }
+    ;(r.type === 'opening' ? day.ins : day.outs).push(r)
+    days.set(key, day)
+  }
+  const pairs = [...days.values()].map(({ ins, outs }) => {
+    const clockIn = ins.reduce<AttendanceDetail | null>((a, e) => (!a || e.created_at < a.created_at ? e : a), null)
+    const after = outs.filter((o) => !clockIn || o.created_at >= clockIn.created_at)
+    const clockOut = after.reduce<AttendanceDetail | null>((a, e) => (!a || e.created_at > a.created_at ? e : a), null)
+    return { clockIn, clockOut: clockOut ?? (clockIn ? null : (outs[0] ?? null)) }
+  })
+  pairs.sort((a, b) => {
+    const [x, y] = [a.clockIn ?? a.clockOut!, b.clockIn ?? b.clockOut!]
+    return y.attendance_date.localeCompare(x.attendance_date) || (b.clockIn?.created_at ?? '').localeCompare(a.clockIn?.created_at ?? '')
+  })
 
-  return rows.map((r) => {
-    const url = r.selfie_path ? (signed.get(r.selfie_path) ?? null) : null
+  const signed = await signSelfies(supabase, pairs.flatMap((p) => [p.clockIn?.selfie_path, p.clockOut?.selfie_path]))
+  const photo = (e: AttendanceDetail | null) => (e?.selfie_path ? (signed.get(e.selfie_path) ?? null) : null)
+  const side = (e: AttendanceDetail | null) =>
+    e
+      ? [formatLagos(e.created_at, false), e.location_label ?? '', metres(e.distance_m), e.status ? (STATUS_WORDS[e.status] ?? e.status) : '—']
+      : ['—', '', '', '']
+  return pairs.map(({ clockIn, clockOut }) => {
+    const any = (clockIn ?? clockOut)!
+    const inPhoto = photo(clockIn)
+    const outPhoto = photo(clockOut)
+    const photoText = (e: AttendanceDetail | null, url: string | null) => (url ? 'link' : e ? 'deleted after 14 days' : '')
     return {
-      link: url,
+      link: inPhoto,
+      links: [outPhoto],
       values: [
-        r.staff_name,
-        r.attendance_date,
-        r.type,
-        formatLagos(r.created_at, false),
-        r.outlet_name ?? '—',
-        r.location_label,
-        metres(r.distance_m),
-        `${Math.round(r.accuracy_m)} m`,
-        r.status ?? '—',
-        url ?? 'deleted after 14 days',
+        any.staff_name,
+        any.attendance_date,
+        clockIn?.outlet_name ?? clockOut?.outlet_name ?? '—',
+        ...side(clockIn),
+        photoText(clockIn, inPhoto),
+        ...side(clockOut),
+        photoText(clockOut, outPhoto),
       ],
     }
   })
@@ -116,19 +151,23 @@ export async function toExportRows(
 
 export function attendanceSheet(rows: ExportRow[]): Sheet {
   return {
-    title: 'Xtend attendance export',
+    title: 'Xpel Beauty · Clock-ins and clock-outs',
     subtitle:
-      `${rows.length} record(s). Times are Africa/Lagos. Clock photos are deleted 14 days ` +
+      `${rows.length} ${rows.length === 1 ? 'day' : 'days'}, one row per person per day. Times are Africa/Lagos. Clock photos are deleted 14 days ` +
       'after capture; links to the ones still held expire an hour after this file was made.',
-    sheetName: 'Attendance',
+    notes: 'One row per person per day: the clock-in and the clock-out side by side, with where each was taken, how far from the store, and the photo.',
+    logo: true,
+    sheetName: 'Clock-ins and outs',
     columns: EXPORT_COLUMNS,
     rows,
     widths: {
-      xlsx: [24, 12, 10, 18, 22, 42, 18, 12, 12, 16],
-      pdf: [98, 58, 48, 66, 96, 190, 60, 48, 54, 58],
+      xlsx: [24, 12, 22, 10, 36, 12, 18, 12, 10, 36, 12, 18, 12],
+      pdf: [80, 46, 70, 34, 120, 40, 58, 34, 34, 120, 40, 58, 34],
     },
-    linkColumn: EXPORT_COLUMNS.length - 1,
-    statusColumn: 8,
-    fileBase: 'xtend-attendance',
+    linkColumn: 7,
+    linkColumns: [12],
+    linkText: 'Open photo',
+    noLinkText: '—',
+    fileBase: 'xtend-clock-ins-and-outs',
   }
 }

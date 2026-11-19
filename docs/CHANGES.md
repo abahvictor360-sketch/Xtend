@@ -58,6 +58,31 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-19
 
+### Attendance report: the Xpel logo, a written account of the day, and no doubled rows
+- **What was done:**
+  - The attendance report (**Export → Download day by day**) now carries
+    the **Xpel Beauty logo** and opens with a **written account of the
+    day**: how many came, were on time, late or absent, who clocked in and
+    out and who is still on shift, then named lists: **Did not clock in**,
+    **Late** (and by how much), **Clocked in away from their store** (how
+    far, and where), **Network trouble** (their clock-in reached Xtend late
+    because the phone had no signal), **Clocked in by the office** (with the
+    reason), **Did not clock out** and **Still on shift**. For several
+    days, a "Worth a look" list follows. The table follows, people who
+    clocked in first.
+  - **Rows appearing twice: fixed.** The other download, "Every clock-in
+    and out", listed each person twice a day (one row for the clock-in, one
+    for the clock-out). It is now **Clock-ins and outs with photos (one row
+    a day)**: one row per person per day, clock-in and clock-out side by
+    side, each with where, how far from the store, at the store or not, and
+    its photo. It carries the logo too.
+  - **Clocked in and out**: the **Show:** button and the list choice for
+    the people who clocked in and also clocked out that day are now called
+    "Clocked in and out", for a report of only full days.
+- **The impact:** a report you can send as it is: branded, with the story
+  of the day on top, and each person once.
+- **What you need to do:** redeploy the latest code. No migration.
+
 ### Attendance reports: merchandisers or marketers
 - **What was done:** on **Attendance**, a **Role:** row of buttons, All ·
   Merchandisers · Marketers, under the **Show:** buttons. The **Role** list in
