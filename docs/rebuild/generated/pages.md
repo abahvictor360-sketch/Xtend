@@ -464,12 +464,11 @@ Metrics. Both work offline and are sent when there is signal.
 
 - File: `src/app/field/report/page.tsx`
 - Who: public / own check
-- Components: `field/report-form`, `field/report-visits`, `field/report-files`, `field/screen`, `ui/badge`
+- Components: `field/report-form`, `field/report-visits`, `field/report-files`, `field/screen`, `ui/badge`, `ui/input`, `ui/button`
 
-The daily report. A marketer first says what it is for (0088): the whole
-day, or one store they checked in at today. Each has its own report.
+How far back a report can be written (0094, report_days_back()).
 
-On screen: Write one for a store you checked in at, or one for your whole day. You can do both.
+On screen: Write it the same evening, or the next morning before you clock in. Pick the day you visited the stores.
 
 ## `/field/support` — Message support — Xtend
 

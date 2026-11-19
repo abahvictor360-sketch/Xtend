@@ -412,8 +412,8 @@ export const SCENES: Scene[] = [
   // 8 Report
   { id: 'c8', chapter: C[7], title: C[7], sub: 'Step 8 · if you have a Report tab', seconds: 3, screen: null, card: true },
   {
-    id: 'report', chapter: C[7], title: 'Tap Report, fill it in, Submit', sub: 'Choose the whole day or one store. Attach documents if you have them. You can edit until midnight.', seconds: 8,
-    screen: <Big icon={FileText}>Report → <b>The whole day</b> or a store → write how it went → <b>Submit report</b></Big>,
+    id: 'report', chapter: C[7], title: 'Tap Report, pick the day, fill it in', sub: 'Today, yesterday or another day. Then the whole day or one store. You can write it after clocking out, and edit it for 7 days.', seconds: 8,
+    screen: <Big icon={FileText}>Report → <b>which day</b> (today, yesterday, another) → <b>the whole day</b> or a store → write how it went → <b>Submit report</b></Big>,
   },
 
   // 9 Clock out
@@ -498,7 +498,7 @@ export const VOICE: Record<string, string> = {
   'check-in': 'At each store, tap, Check in here. If Xtend does not find the store, tap, Pick the store myself. You must clock in first.',
   'check-out': 'When you leave the store, tap Check out, and take a selfie, before you go to the next store. You can only be checked in at one store at a time.',
   c8: 'Step eight. Your daily report. Do this if you have a Report tab at the bottom of the screen.',
-  report: 'Tap Report. Choose the whole day, or one of your stores. Write how it went, attach any documents, and tap, Submit report. You can edit it until midnight.',
+  report: 'Tap Report. First pick the day the report is for: today, yesterday, or another day. You can do this after you clock out, in the evening or the next morning. Then choose the whole day, or one of the stores you visited. Write how it went, and tap, Submit report. You can edit it for seven days.',
   c9: 'Step nine. Clock out, at the end of your shift.',
   'clock-out': 'Marketers, check out of your last store first. Then tap, Clock out with selfie, and take the photo. Xtend reminds you when your shift is ending.',
   progress: 'Your day is done. One clock in and one clock out each day. Each ring closes when that step is done.',

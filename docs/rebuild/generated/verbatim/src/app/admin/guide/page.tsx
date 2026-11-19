@@ -805,7 +805,8 @@ export default async function AdminGuidePage() {
             chooses what each report is for: the whole day (one a day) or one store they checked in at (one
             per store visit); they may file both. Each report in the download says what it is for, and the
             Attendance day overview lists them all (migration 0088).
-          </p>
+           Marketers can write their reports after clocking out (in the evening, or the next morning) and pick the day each one is for: today, yesterday or up to 7 days back; the report is filed on that day.
+            </p>
           <p>
             <Ui>Report documents</Ui>: whoever files the daily report can attach up to five documents
             (PDF, Word, Excel, CSV or pictures, 10 MB each) and remove them until midnight, when the

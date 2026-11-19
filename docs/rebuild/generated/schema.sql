@@ -414,16 +414,16 @@ begin
 
   select r.id, r.report_date into rep
   from public.reports r
-  where r.user_id = auth.uid() and r.report_date = public.business_date()
-    and (p_report is null or r.id = p_report)
+  where r.user_id = auth.uid()
+    and ((p_report is null and r.report_date = public.business_date())
+         or (r.id = p_report and public.report_day_open(r.report_date)))
   order by (r.scope = 'day') desc, r.updated_at desc
   limit 1
   for update;
   if not found then
-    raise exception 'Save today''s report first, then attach documents';
+    raise exception 'Save the report first, then attach documents';
   end if;
 
-  -- Sent again after the first try got through: the same answer.
   select f.id into new_id
   from public.report_files f
   where f.path = p_path and f.user_id = auth.uid() and f.report_id = rep.id;
@@ -493,20 +493,18 @@ begin
     raise exception 'Only marketers file the daily report';
   end if;
 
-  -- The report, locked so two tries at once cannot both add the photo.
-  -- No report named: today's whole-day report first, else the latest.
   select r.id into rep
   from public.reports r
-  where r.user_id = auth.uid() and r.report_date = public.business_date()
-    and (p_report is null or r.id = p_report)
+  where r.user_id = auth.uid()
+    and ((p_report is null and r.report_date = public.business_date())
+         or (r.id = p_report and public.report_day_open(r.report_date)))
   order by (r.scope = 'day') desc, r.updated_at desc
   limit 1
   for update;
   if not found then
-    raise exception 'Save today''s report first, then add photos';
+    raise exception 'Save the report first, then add photos';
   end if;
 
-  -- Sent again after the first try got through: the same answer.
   select p.id into new_id
   from public.report_photos p
   where p.report_id = rep.id and p.storage_path = p_path;
@@ -534,7 +532,6 @@ begin
     raise exception 'That photo is already on a report';
   end if;
 
-  -- The five-photo limit is the trigger's (report_photo_limit).
   insert into public.report_photos (report_id, storage_path)
   values (rep.id, p_path)
   returning id into new_id;
@@ -4399,6 +4396,23 @@ $$;
 
 
 --
+-- Name: my_visits_on(date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_visits_on(p_day date) RETURNS SETOF public.store_visit_detail
+    LANGUAGE sql STABLE
+    SET search_path TO 'public'
+    AS $$
+  select d.*
+  from public.store_visit_detail d
+  where d.user_id = auth.uid()
+    and d.visit_date = p_day
+    and public.report_day_open(p_day)
+  order by d.arrived_at;
+$$;
+
+
+--
 -- Name: name_place(uuid, text, double precision, double precision, double precision, text, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -6191,8 +6205,8 @@ begin
   if not found or f.user_id is distinct from auth.uid() then
     raise exception 'That document is not on your report' using hint = 'report_file_gone';
   end if;
-  if f.report_date <> public.business_date() then
-    raise exception 'Documents can only be removed on the day the report was filed'
+  if not public.report_day_open(f.report_date) then
+    raise exception 'This report is closed: documents can be changed for % days', public.report_days_back()
       using hint = 'report_locked';
   end if;
   delete from public.report_files where id = p_id;
@@ -6300,6 +6314,28 @@ $$;
 
 
 --
+-- Name: report_day_open(date); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.report_day_open(p_day date) RETURNS boolean
+    LANGUAGE sql STABLE
+    AS $$
+  select p_day is not null
+     and p_day <= public.business_date()
+     and p_day >= public.business_date() - public.report_days_back();
+$$;
+
+
+--
+-- Name: report_days_back(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.report_days_back() RETURNS integer
+    LANGUAGE sql IMMUTABLE
+    AS $$ select 7 $$;
+
+
+--
 -- Name: report_enforce(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -6315,8 +6351,15 @@ begin
       raise exception 'Only marketers file the daily report';
     end if;
     new.user_id     := auth.uid();
-    new.report_date := public.business_date();
+    new.report_date := coalesce(new.report_date, public.business_date());
     new.scope       := coalesce(new.scope, 'day');
+
+    if new.report_date > public.business_date() then
+      raise exception 'You cannot write a report for a day that has not come yet';
+    end if;
+    if not public.report_day_open(new.report_date) then
+      raise exception 'Reports can be written for today and up to % days back', public.report_days_back();
+    end if;
 
     if new.scope = 'store' then
       select d.outlet_id, d.store_label into vis
@@ -6325,7 +6368,7 @@ begin
         and d.user_id = new.user_id
         and d.visit_date = new.report_date;
       if not found then
-        raise exception 'Pick a store you checked in at today';
+        raise exception 'Pick a store you checked in at on that day';
       end if;
       new.outlet_id   := vis.outlet_id;
       new.store_label := vis.store_label;
@@ -6333,6 +6376,14 @@ begin
       new.scope          := 'day';
       new.store_visit_id := null;
       new.store_label    := null;
+      -- A past day needs something to report on.
+      if new.report_date < public.business_date()
+         and not exists (select 1 from public.attendance a
+                         where a.user_id = new.user_id and a.attendance_date = new.report_date)
+         and not exists (select 1 from public.store_visits v
+                         where v.user_id = new.user_id and v.visit_date = new.report_date) then
+        raise exception 'You did not clock in or visit a store on that day';
+      end if;
       select p.outlet_id into new.outlet_id
       from public.profiles p where p.id = new.user_id;
     end if;
@@ -6343,8 +6394,8 @@ begin
     new.scope          := old.scope;
     new.store_visit_id := old.store_visit_id;
     new.store_label    := old.store_label;
-    if old.report_date <> public.business_date() then
-      raise exception 'Reports can only be edited on the day they were filed';
+    if not public.report_day_open(old.report_date) then
+      raise exception 'This report is closed: reports can be changed for % days', public.report_days_back();
     end if;
   end if;
   return new;
@@ -10981,7 +11032,7 @@ CREATE TABLE public.reports (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid DEFAULT auth.uid() NOT NULL,
     outlet_id uuid,
-    report_date date DEFAULT ((now() AT TIME ZONE 'Africa/Lagos'::text))::date NOT NULL,
+    report_date date NOT NULL,
     body text,
     sales_summary text,
     stock_status text,
@@ -11040,7 +11091,7 @@ CREATE VIEW public.report_file_detail WITH (security_invoker='true') AS
     f.mime,
     f.size_bytes,
     f.created_at,
-    (r.report_date = public.business_date()) AS editable
+    public.report_day_open(r.report_date) AS editable
    FROM ((public.report_files f
      JOIN public.reports r ON ((r.id = f.report_id)))
      JOIN public.profiles p ON ((p.id = f.user_id)));
@@ -15542,10 +15593,10 @@ CREATE POLICY reports_supervisor_select ON public.reports FOR SELECT USING (publ
 
 
 --
--- Name: reports reports_update_own_sameday; Type: POLICY; Schema: public; Owner: -
+-- Name: reports reports_update_own_recent; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY reports_update_own_sameday ON public.reports FOR UPDATE USING (((user_id = auth.uid()) AND public.can_file_report() AND (report_date = ((now() AT TIME ZONE 'Africa/Lagos'::text))::date)));
+CREATE POLICY reports_update_own_recent ON public.reports FOR UPDATE USING (((user_id = auth.uid()) AND public.can_file_report() AND public.report_day_open(report_date)));
 
 
 --
@@ -17111,6 +17162,15 @@ GRANT ALL ON FUNCTION public.my_visit_stores() TO service_role;
 
 
 --
+-- Name: FUNCTION my_visits_on(p_day date); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.my_visits_on(p_day date) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.my_visits_on(p_day date) TO authenticated;
+GRANT ALL ON FUNCTION public.my_visits_on(p_day date) TO service_role;
+
+
+--
 -- Name: FUNCTION name_place(p_due uuid, p_name text, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_storefront_path text, p_selfie_path text, p_evidence jsonb); Type: ACL; Schema: public; Owner: -
 --
 
@@ -17542,6 +17602,22 @@ GRANT ALL ON FUNCTION public.report_app_install(p_platform text, p_app_version t
 --
 
 REVOKE ALL ON FUNCTION public.report_capture_visits() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION report_day_open(p_day date); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.report_day_open(p_day date) TO authenticated;
+GRANT ALL ON FUNCTION public.report_day_open(p_day date) TO service_role;
+
+
+--
+-- Name: FUNCTION report_days_back(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.report_days_back() TO authenticated;
+GRANT ALL ON FUNCTION public.report_days_back() TO service_role;
 
 
 --

@@ -1339,6 +1339,25 @@ abandoned → clock (warning), on site → green check, otherwise red clock.
 Page `/field/report` (`src/app/field/report/page.tsx`); other roles are
 redirected to `/field`.
 
+- **Which day (0094).** With no `?day=` (or one outside the window): a sheet
+  "Daily report" with "Which day is this report for?" and "Write it the same
+  evening, or the next morning before you clock in. Pick the day you visited
+  the stores."; choice rows (calendar icon) for Today and Yesterday always,
+  then the other days of the last 7 that have store visits, each "Today, <long
+  date>" / "Yesterday, <long date>" / "<long date>", detail "N stores visited ·
+  M reports written" (or "No store visits"), badge **Write** or **Open**; then
+  a card **Another day** with a date input (min today − 7, max today, default
+  yesterday) and **Open** (GET `?day=`), "Up to 7 days back.". A day outside
+  the window shows a red note first. Every later link carries `day=`; the
+  header shows **Day**; a tinted bar "Report for <day>" with **Change day**;
+  that day's visits come from `my_visits_on(day)` (today's from
+  `my_store_visits()` before 0094); with none on a past day: "No store visits
+  that day. You can still write one for the whole day." The form sends
+  `report_date` (also in the offline `ReportJob`); saved: "Report saved. You
+  can keep editing it for 7 days." (or "…for that day…"). After clock-out the
+  signed-out note adds "Marketers: log in again any time to write your
+  reports for the stores you visited."
+
 - Sheet screen (orange header with back arrow to `/field`). Title "New
   daily report" or "Edit today's report". Header fields: Filed by, Outlet
   (or "No outlet assigned"), Date (long form of the business date).

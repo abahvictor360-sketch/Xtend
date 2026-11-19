@@ -520,17 +520,27 @@ Stored in `attendance.time_verdict` and `time_detail` (`offset_s`,
   report per person per Lagos day (`reports_one_day_report`, partial
   unique on `(user_id, report_date) where scope = 'day'`) and one report
   per store visit (`reports_one_per_visit`). `user_id`, `report_date`,
-  `outlet_id` server-set (`report_enforce`); for a store report the visit
-  must be the caller's and today's ("Pick a store you checked in at
-  today"), and `outlet_id`/`store_label` come from it. Scope, visit and
+  `outlet_id` server-set (`report_enforce`); `report_date` is the day the
+  marketer picks (0094; none sent: today), never ahead ("You cannot write a
+  report for a day that has not come yet") nor more than
+  `report_days_back()` = 7 days back ("Reports can be written for today and
+  up to 7 days back"); a past whole-day report needs a clock-in or a store
+  visit that day ("You did not clock in or visit a store on that day"); for
+  a store report the visit must be the caller's and on that day ("Pick a
+  store you checked in at on that day"), and `outlet_id`/`store_label` come
+  from it. Scope, visit and
   label never change on an edit. A store report's `store_visits` snapshot
   holds that one visit (`report_visit_snapshot(visit)`); a whole-day
   report's holds the day. Any report counts as "report filed" for the day.
   `add_report_photo(path, report)` / `add_report_file(path, name, report)`
   put a photo or document on that report; the old forms pick today's
   whole-day report first.
-- Editable only on the day filed ("Reports can only be edited on the day
-  they were filed"); owner and date can never change.
+- Editable while its day is open, i.e. for 7 days (`report_day_open`;
+  "This report is closed: reports can be changed for 7 days"; update policy
+  `reports_update_own_recent`); photos and documents likewise
+  (`add_report_photo`/`add_report_file` with a named report,
+  `remove_report_file`, `report_file_detail.editable`); owner and date can
+  never change. `my_visits_on(day)` lists the caller's visits of an open day.
 - At most **5** photos per report (`report_photo_limit`).
 - `body`, `sales_summary` and `stock_status` must each "say something":
   `text_has_words(text, 10)` = at least 10 characters, at least 2 letters,

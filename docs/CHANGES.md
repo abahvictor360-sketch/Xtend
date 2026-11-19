@@ -30,7 +30,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0089_quick_sign_in.sql`;
    - `supabase/migrations/0090_field_corrections.sql`;
    - `supabase/migrations/0091_visit_checkout_photo.sql`;
-   - `supabase/migrations/0092_photo_flags.sql`.
+   - `supabase/migrations/0092_photo_flags.sql`;
+   - `supabase/migrations/0094_reports_for_recent_days.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18.)
 4. **Clock-out reminder fix (0069)**, if never pasted:
    ```sql
@@ -57,6 +58,27 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-19
+
+### Marketers write their reports later, for the right day
+- **What was done:** a marketer can now write their reports after clocking
+  out: in the evening, or the next morning before clocking in. They log in
+  again (clocking out signs them out, but logging back in is allowed, and
+  the message after clocking out now says so). **Report** first asks
+  **Which day is this report for?**: **Today**, **Yesterday**, the other
+  days of the past week when they visited stores (each showing how many
+  stores and how many reports already written), or **Another day** with a
+  date picker, up to 7 days back. Then, as before, **the whole day** or one
+  of the stores they checked in at **that day**, so 15 stores visited
+  yesterday can each get their own report this morning. The report is filed
+  on that day: on their record, in Marketer reports and on their day page.
+  Reports, photos and documents can be changed for 7 days. A future date,
+  a date more than 7 days back, or a past day they did not work is refused
+  in plain words. The staff guide and the staff video were updated.
+- **The impact:** no more rushed reports, and no reports landing on the
+  wrong day.
+- **What you need to do:** run `supabase/migrations/0094_reports_for_recent_days.sql`
+  in the Supabase SQL editor, then redeploy. Until it is run, reports for
+  today still work, and a report for another day says the update is needed.
 
 ### The attendance report, redesigned with charts
 - **What was done:** the PDF of the attendance report (**Export → Download

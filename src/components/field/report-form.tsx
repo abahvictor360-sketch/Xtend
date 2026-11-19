@@ -99,6 +99,8 @@ export function ReportForm({
   files = [],
   scope = 'day',
   storeVisitId = null,
+  reportDate = null,
+  isToday = true,
 }: {
   existing: ReportFields | null
   photosAlready: number
@@ -107,6 +109,10 @@ export function ReportForm({
   /** The whole day, or one store visit of today (0088). */
   scope?: 'day' | 'store'
   storeVisitId?: string | null
+  /** The day the report is for (0094); null: today. */
+  reportDate?: string | null
+  /** Whether that day is today, for the words after saving. */
+  isToday?: boolean
 }) {
   const router = useRouter()
   const [fields, setFields] = useState<ReportFields>(existing ?? EMPTY)
@@ -183,6 +189,7 @@ export function ReportForm({
         kind: 'report',
         scope,
         store_visit_id: scope === 'store' ? storeVisitId : null,
+        report_date: reportDate,
         ...fields,
         photos: photos.map((p) => ({ blob: p.blob, client_id: p.id })),
         files: docs.map((d) => ({ blob: d.blob, name: d.name, mime: d.mime, client_id: d.key })),
@@ -194,7 +201,9 @@ export function ReportForm({
           ? 'Your report is saved on this phone. It is sent as soon as you add the place at the top of the screen.'
           : result.queued
           ? 'No data right now. Your report is saved on this phone and will send itself when you get signal.'
-          : 'Report saved. You can keep editing it until midnight.',
+          : isToday
+            ? 'Report saved. You can keep editing it for 7 days.'
+            : 'Report saved for that day. You can keep editing it for 7 days.',
       )
       setPhotos([])
       setDocs([])
