@@ -6,7 +6,7 @@
  *   npx tsx --tsconfig tsconfig.scripts.json scripts/check-exports.ts
  */
 import { renderExport, type Sheet } from '@/lib/export/render'
-import { attendanceSheet, EXPORT_COLUMNS } from '@/lib/export/data'
+import { attendanceSheet, EXPORT_COLUMNS, toExportRows } from '@/lib/export/data'
 import { coverageSheet, visitSheet, COVERAGE_COLUMNS, VISIT_COLUMNS, type VisitExportRow } from '@/lib/export/visits'
 import { alertSheet, ALERT_COLUMNS } from '@/lib/export/alerts'
 import { parseAlertFilter } from '@/lib/alert-review'
@@ -61,17 +61,21 @@ const visitRows = visits.map((v, i) => ({
 
 const attendanceRows = visits.map((v, i) => ({
   link: i % 3 === 0 ? null : `https://example.test/a/${i}`,
+  links: [i % 2 ? `https://example.test/b/${i}` : null],
   values: [
     v.staff_name,
     v.visit_date,
-    i % 2 ? 'opening' : 'closing',
-    '09:00',
     v.outlet_name ?? '—',
+    '09:00',
     LABEL,
     '16 m',
-    '12 m',
-    v.arrived_status ?? '—',
+    'At the store',
     'link',
+    '17:05',
+    LABEL,
+    '20 m',
+    'At the store',
+    i % 2 ? 'link' : '',
   ],
 }))
 
@@ -151,6 +155,24 @@ async function run(name: string, sheet: Sheet, columns: readonly string[]) {
 async function main() {
   await run('store visits', visitSheet(visits, visitRows), VISIT_COLUMNS)
   await run('attendance', attendanceSheet(attendanceRows), EXPORT_COLUMNS)
+
+  // One row per person per day: the clock-in and clock-out side by side,
+  // never one row each (2026-11-19: everyone appeared twice).
+  {
+    const fake = { storage: { from: () => ({ createSignedUrls: async () => ({ data: [] }) }) } } as never
+    const ev = (user: string, type: 'opening' | 'closing', at: string) =>
+      ({
+        id: `${user}-${type}-${at}`, user_id: user, staff_name: user === 'u1' ? 'Ada Obi' : 'Bala Musa', attendance_date: '2026-11-18',
+        type, created_at: `2026-11-18T${at}:00+01:00`, outlet_name: 'Spar Lekki', location_label: 'Spar Lekki', distance_m: 10,
+        status: 'on_site', selfie_path: null,
+      }) as never
+    const paired = await toExportRows(fake, [ev('u1', 'closing', '17:00'), ev('u1', 'opening', '08:00'), ev('u2', 'opening', '08:30')])
+    check(paired.length === 2, 'clock-ins and outs: one row per person per day')
+    const ada = paired.find((r) => r.values[0] === 'Ada Obi')!
+    check(ada.values[3] === '08:00' && ada.values[8] === '17:00', 'the clock-in and the clock-out sit side by side')
+    check(paired[0].values[0] === 'Bala Musa', 'the latest clock-in first')
+    check(paired.find((r) => r.values[0] === 'Bala Musa')!.values[8] === '—', 'no clock-out yet shows a dash')
+  }
   await run('alerts', alertSheet(alerts, parseAlertFilter({ state: 'all' })), ALERT_COLUMNS)
   await run('store coverage', coverageSheet(stores, '2026-09-10'), COVERAGE_COLUMNS)
 

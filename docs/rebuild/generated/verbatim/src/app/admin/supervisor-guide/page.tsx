@@ -143,7 +143,7 @@ export default async function SupervisorGuidePage() {
           <p>
             <Ui>Attendance</Ui> shows each person&apos;s day: clock-in and clock-out, on time or late, at
             their store or not. Everyone who clocked in comes first (latest clock-in at the top), then
-            those who did not. For a report of only some people, tap a <Ui>Show</Ui> button (Everyone, Clocked in, Clocked out, Still on shift, Absent), then <Ui>Export</Ui>: the file has exactly those, in the same order. Add a <Ui>Role</Ui> button (Merchandisers or Marketers) for one kind of staff only. Pick dates or a quick range and narrow by person, store or kind of day. The
+            those who did not. For a report of only some people, tap a <Ui>Show</Ui> button (Everyone, Clocked in, Clocked out, Still on shift, Absent), then <Ui>Export</Ui>: the file has exactly those, in the same order. Add a <Ui>Role</Ui> button (Merchandisers or Marketers) for one kind of staff only. The report carries the Xpel Beauty logo and opens with a written account of the day (who did not clock in, who was late, who clocked in away from their store, who had network trouble, who did not clock out). <Ui>Clock-ins and outs with photos</Ui> gives one row per person per day with both photos. Pick dates or a quick range and narrow by person, store or kind of day. The
             calendar shows a square per person per day; open one to see the photo, the map and how far from
             the store they were. A marketer&apos;s row also opens to every store check-in and check-out, with
             the times, how far from the store and both photos. Tap a name for their whole day: every photo

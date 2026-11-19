@@ -302,7 +302,7 @@ export const counted = (r: DayRecord) => r.present || r.status === 'absent'
 
 export const STATUS_FILTERS = {
   present: 'Clocked in (everyone who came)',
-  clocked_out: 'Clocked out',
+  clocked_out: 'Clocked in and out (full day)',
   on_shift: 'Still on shift (not clocked out yet)',
   absent: 'Absent / not in',
   on_time: 'On time',
@@ -318,7 +318,7 @@ export const STATUS_FILTERS = {
 export const WHO_FILTERS: { status: StatusFilter | null; label: string }[] = [
   { status: null, label: 'Everyone' },
   { status: 'present', label: 'Clocked in' },
-  { status: 'clocked_out', label: 'Clocked out' },
+  { status: 'clocked_out', label: 'Clocked in and out' },
   { status: 'on_shift', label: 'Still on shift' },
   { status: 'absent', label: 'Absent' },
 ]
