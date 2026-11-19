@@ -216,6 +216,18 @@ for (const day of new Set(byDate.map((r) => r.date))) {
 }
 check(/sortDays\(rows, names, 'date', 'desc'\)/.test(require('node:fs').readFileSync(require('node:path').join(__dirname, '..', 'src', 'lib', 'export', 'attendance-days.ts'), 'utf8')),
   'the day-by-day download uses the same order: clocked in first, absent after')
+{
+  const fs = require('node:fs') as typeof import('node:fs')
+  const path = require('node:path') as typeof import('node:path')
+  const src = (p: string) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8')
+  check(/\['merchandiser', BASE_LABEL\.merchandiser\],\s*\['marketer', BASE_LABEL\.marketer\]/.test(src('src/lib/attendance-server.ts')),
+    'the Role filter always offers merchandisers and marketers')
+  const filters = src('src/components/admin/attendance-filters.tsx')
+  check(/choices\.roles\.length > 0/.test(filters) && /label: 'Merchandisers'/.test(filters) && /label: 'Marketers'/.test(filters),
+    'Attendance shows the Role picker and the Role: All · Merchandisers · Marketers buttons')
+  check(/roleHref=\{\(role\) => `\?\$\{reportQuery\(\{ \.\.\.filter, role \}\)\}#days`\}/.test(src('src/app/admin/attendance/page.tsx')),
+    'the role buttons keep the rest of the view, so the export follows them')
+}
 check(new Set(byDate.map((r) => r.date)).size > 0 && byDate.some((r) => !r.present) && byDate.some((r) => r.present), 'the sample has both clocked-in and not-clocked-in days')
 
 // Worth a look.

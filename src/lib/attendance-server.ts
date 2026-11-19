@@ -167,7 +167,11 @@ export async function loadChoices(supabase: SupabaseClient): Promise<Choices> {
   const teams = [...new Map(people.filter((p) => p.teamId).map((p) => [p.teamId!, p.teamName!])).entries()]
     .map(([id, name]) => ({ id, name: `${name}’s team` }))
     .sort((a, b) => a.name.localeCompare(b.name))
-  const usedRoles = new Map<string, string>()
+  // Merchandisers and marketers are always a choice; added roles when in use.
+  const usedRoles = new Map<string, string>([
+    ['merchandiser', BASE_LABEL.merchandiser],
+    ['marketer', BASE_LABEL.marketer],
+  ])
   for (const p of people) {
     usedRoles.set(p.role, BASE_LABEL[p.role as UserRole])
     if (p.roleValue !== p.role) usedRoles.set(p.roleValue, p.roleLabel)

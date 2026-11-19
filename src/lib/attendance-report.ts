@@ -314,7 +314,7 @@ export const STATUS_FILTERS = {
   off: 'Day off',
 } as const
 
-/** The quick "who" buttons on Attendance, above the downloads. */
+/** The quick "Show:" buttons on Attendance, above the downloads. */
 export const WHO_FILTERS: { status: StatusFilter | null; label: string }[] = [
   { status: null, label: 'Everyone' },
   { status: 'present', label: 'Clocked in' },
