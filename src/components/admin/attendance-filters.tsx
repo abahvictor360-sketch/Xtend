@@ -4,7 +4,7 @@ import { buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
-import { STATUS_FILTERS, type Preset } from '@/lib/attendance-report'
+import { STATUS_FILTERS, WHO_FILTERS, type Preset, type StatusFilter } from '@/lib/attendance-report'
 import type { Choices, ReportFilter } from '@/lib/attendance-server'
 
 const FORMATS = { xlsx: 'Excel', pdf: 'PDF', docx: 'Word', csv: 'CSV' } as const
@@ -28,6 +28,7 @@ export function AttendanceFilters({
   choices,
   presets,
   presetHref,
+  statusHref,
   downloads,
   today,
 }: {
@@ -36,6 +37,8 @@ export function AttendanceFilters({
   choices: Choices
   presets: Preset[]
   presetHref: (p: Preset) => string
+  /** Attendance: the same view for one "who" (clocked in, absent…), for the quick buttons. */
+  statusHref?: (status: StatusFilter | null) => string
   downloads: Download[]
   today: string
 }) {
@@ -162,6 +165,27 @@ export function AttendanceFilters({
           </Link>
         )}
       </div>
+
+      {mode === 'attendance' && statusHref && (
+        <div className="flex flex-wrap items-center gap-1.5 text-xs">
+          <span className="mr-1 font-semibold text-muted-foreground">Who:</span>
+          {WHO_FILTERS.map((w) => (
+            <Link
+              key={w.label}
+              href={statusHref(w.status)}
+              aria-current={(filter.status ?? null) === w.status ? 'true' : undefined}
+              className={
+                (filter.status ?? null) === w.status
+                  ? 'rounded-full border border-brand bg-brand px-3 py-1 font-semibold text-primary-foreground'
+                  : CHIP
+              }
+            >
+              {w.label}
+            </Link>
+          ))}
+          <span className="text-muted-foreground">· the export downloads exactly this</span>
+        </div>
+      )}
 
       {downloads.length > 0 && (
         <details className="group relative inline-block text-xs">

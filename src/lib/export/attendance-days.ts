@@ -9,6 +9,7 @@ import {
   lateness,
   minutesOf,
   percent,
+  sortDays,
   summarise,
   type DayRecord,
   type GroupRow,
@@ -61,8 +62,10 @@ export function attendanceDaysSheet(
   const person = new Map(people.map((p) => [p.id, p]))
   const s = summarise(all)
   const worry = concerns(all, people, 20)
-  const body: ExportRow[] = [...rows]
-    .sort((a, b) => b.date.localeCompare(a.date) || (person.get(a.userId)?.name ?? '').localeCompare(person.get(b.userId)?.name ?? ''))
+  // As on the page: newest day first; within a day everyone who clocked in
+  // (latest first), then those absent, then days off and leave.
+  const names = new Map(people.map((p) => [p.id, p.name]))
+  const body: ExportRow[] = sortDays(rows, names, 'date', 'desc')
     .map((r) => {
       const p = person.get(r.userId)
       // The CSV keeps the address itself; the other formats show "Map" as a link.

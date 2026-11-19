@@ -234,7 +234,7 @@ The Attendance and Analytics pages and their downloads all read from here.
 Pure on purpose (no Supabase, no server-only), so
 scripts/check-attendance.ts can run it on made-up days.
 
-Exports: `ClockEvent`, `Person`, `DayStatus`, `DayRecord`, `ReportOptions`, `isDate`, `weekday`, `dayList`, `dayCount`, `previousPeriod`, `Preset`, `presets`, `cleanRange`, `minutesOf`, `clock`, `lateness`, `hoursText`, `deviceText`, `buildDays`, `counted`, `STATUS_FILTERS`, `StatusFilter`, `isStatusFilter`, `matchesStatus`, `inDayTable`, `Summary`, `summarise`, `percent`, `SORTS`, `SortKey`, `isSortKey`, `sortDays`, `Concern`, `CONCERN_AT`, `SENT_LATE_MIN`, `concerns`, `GroupBy`, `isGroupBy`, `GroupRow`, `group`, `leaders`, `TrendPoint`, `dayMonth`, `trend`, `WeekdayRow`, `byWeekday`, `HourRow`, `byHour`, `StoreCover`, `storeCoverage`, `Delta`, `delta`, `STATUS_LABEL`, `cellTitle`
+Exports: `ClockEvent`, `Person`, `DayStatus`, `DayRecord`, `ReportOptions`, `isDate`, `weekday`, `dayList`, `dayCount`, `previousPeriod`, `Preset`, `presets`, `cleanRange`, `minutesOf`, `clock`, `lateness`, `hoursText`, `deviceText`, `buildDays`, `counted`, `STATUS_FILTERS`, `WHO_FILTERS`, `StatusFilter`, `isStatusFilter`, `matchesStatus`, `inDayTable`, `Summary`, `summarise`, `percent`, `SORTS`, `SortKey`, `isSortKey`, `sortDays`, `Concern`, `CONCERN_AT`, `SENT_LATE_MIN`, `concerns`, `GroupBy`, `isGroupBy`, `GroupRow`, `group`, `leaders`, `TrendPoint`, `dayMonth`, `trend`, `WeekdayRow`, `byWeekday`, `HourRow`, `byHour`, `StoreCover`, `storeCoverage`, `Delta`, `delta`, `STATUS_LABEL`, `cellTitle`
 
 ## `src/lib/attendance-server.ts`
 

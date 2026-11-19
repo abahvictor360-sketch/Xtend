@@ -305,7 +305,7 @@ export default async function AdminGuidePage() {
           <p>
             <Ui>Attendance</Ui> shows each person&apos;s day: clock-in and clock-out, on time or late, at
             their store or not, and whether they clocked out. In the day-by-day list, everyone who clocked in comes
-            first (latest clock-in at the top), then those who did not; tap a column heading to sort another way. Pick a quick range or dates, then narrow by
+            first (latest clock-in at the top), then those who did not; tap a column heading to sort another way. For a report of only some people, tap a <Ui>Who</Ui> button (Everyone, Clocked in, Clocked out, Still on shift, Absent), then <Ui>Export</Ui>: the file has exactly those, in the same order. Pick a quick range or dates, then narrow by
             person, store, team, role or kind of day. The four cards and the strip under them add it up (tap{' '}
             <Ui>How attendance is counted</Ui> under the filters for the rules); <Ui>Worth a look</Ui> names
             repeat absences, lateness, off-site clock-ins and missing clock-outs. The calendar has one

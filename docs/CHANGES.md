@@ -56,6 +56,22 @@ the live database, so it cannot tell which of these are already done.)
 
 ---
 
+## 2026-11-19
+
+### Attendance reports: pick who, and clocked-in staff first
+- **What was done:** on **Attendance**, under the filters, a new row of
+  buttons, **Who:** Everyone · Clocked in · Clocked out · Still on shift ·
+  Absent. Tap one, then **Export** (Excel, PDF, Word or CSV): the report has
+  exactly those people, with their status. The same choices are in the
+  **Show days** list, now worded plainly ("Clocked in (everyone who came)",
+  "Clocked out", "Still on shift (not clocked out yet)"). The downloaded
+  report now lists each day like the page: everyone who clocked in first
+  (latest clock-in at the top), then those absent, then days off and leave.
+- **The impact:** a report of only the people who clocked in (or only the
+  absent) in two taps, and in the full report the people who worked are at
+  the top.
+- **What you need to do:** redeploy the latest code. No migration.
+
 ## 2026-11-18
 
 ### The staff video now talks them through it
