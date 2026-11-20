@@ -62,6 +62,10 @@ check(confirmedNoLocation.blocked && confirmedNoLocation.always && !confirmedNoL
   const mig = read('supabase/migrations/0095_offline_movement_always_kept.sql')
   check(/not public\.ping_in_shift\(t\.user_id, taken\)/.test(mig) && !/taken < now\(\) - interval '24 hours'\s*\n\s*or taken < t\.created_at/.test(mig),
     'the server keeps positions taken during a shift, at any age, from any of their tokens')
+  const m96 = read('supabase/migrations/0096_every_synced_position_kept.sql')
+  check(!/ping_in_shift\(/.test(m96) && !/interval '24 hours'/.test(m96) && /late := true;/.test(m96)
+        && /trg_attendance_claim_pings/.test(m96),
+    'every synced position is kept, at any time, and a late clock-in takes in its day (0096)')
 }
 
 if (failed) {

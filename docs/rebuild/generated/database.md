@@ -1395,6 +1395,7 @@ Policies:
 - `assign_support_thread(p_thread uuid, p_assignee uuid)` → void · definer · 0053_support_notifications.sql
 - `assistant_conversation_touch()` → trigger · 0054_integrity_ask.sql
 - `attendance_alert()` → trigger · definer · 0001_init.sql
+- `attendance_claim_pings()` → trigger · definer · 0096_every_synced_position_kept.sql
 - `attendance_correction_done()` → trigger · definer · 0090_field_corrections.sql
 - `attendance_enforce()` → trigger · definer · 0034_stores_pinned_from_clock_in.sql
 - `attendance_integrity()` → trigger · definer · 0022_integrity_checks.sql
@@ -1504,6 +1505,7 @@ Policies:
 - `lagos_hm(t timestamp with time zone)` → text · 0026_phone_evidence.sql
 - `learn_place(p_lat double precision, p_lng double precision, p_name text, p_address text, p_source text, p_photo_path text)` → uuid · definer · 0026_phone_evidence.sql
 - `learn_place_for(p_user uuid, p_lat double precision, p_lng double precision, p_name text, p_address text, p_source text)` → uuid · definer · 0068_place_lookups.sql
+- `link_day_pings(p_opening uuid)` → integer · definer · 0096_every_synced_position_kept.sql
 - `live_locations()` → TABLE(user_id uuid, full_name text, phone text, outlet_name text, outlet_lat double precision, outlet_lng double precision, outlet_radius_m integer, clocked_in_at timestamp with time zone, clock_in_label text, clock_in_status attendance_status, last_ping_at timestamp with time zone, minutes_since_ping integer, last_lat double precision, last_lng double precision, last_place_name text, distance_from_outlet_m double precision, inside_geofence boolean) · definer · 0009_live_locations.sql
 - `locked_accounts()` → TABLE(user_id uuid, locked_until timestamp with time zone, whole_account boolean) · definer · 0077_sign_in_lockout.sql
 - `log_location_block(p_reason text, p_accuracy_m double precision)` → uuid · definer · 0002_logic.sql
@@ -1601,10 +1603,10 @@ Policies:
 - `realtime_notify_support_message()` → trigger · definer · 0058_realtime_broadcast.sql
 - `recent_auth_ok(p_user uuid, p_minutes integer)` → boolean · definer · 0080_zero_trust.sql
 - `record_activity(p_user uuid, p_kind text, p_ip text, p_platform text, p_app_build integer, p_user_agent text, p_device jsonb, p_detail jsonb, p_at timestamp with time zone)` → boolean · definer · 0062_user_activity.sql
-- `record_background_pings(p_token text, p_points jsonb, p_sent_at timestamp with time zone)` → jsonb · definer · 0095_offline_movement_always_kept.sql
+- `record_background_pings(p_token text, p_points jsonb, p_sent_at timestamp with time zone)` → jsonb · definer · 0096_every_synced_position_kept.sql
 - `record_beacon(p jsonb)` → jsonb · definer · 0026_phone_evidence.sql
 - `record_excuse_check(p_user uuid, p_claim text, p_from timestamp with time zone, p_to timestamp with time zone, p_verdict text, p_headline text, p_note text)` → uuid · definer · 0048_excuse_check_advanced.sql
-- `record_offline_pings(p_points jsonb, p_sent_at timestamp with time zone)` → integer · definer · 0095_offline_movement_always_kept.sql
+- `record_offline_pings(p_points jsonb, p_sent_at timestamp with time zone)` → integer · definer · 0096_every_synced_position_kept.sql
 - `record_retention_purge(p_result jsonb)` → void · definer · 0067_report_photos_offline.sql
 - `record_selfie_sweep(p_result jsonb)` → void · definer · 0012_selfie_retention_24h.sql
 - `release_reports_on_demotion()` → trigger · definer · 0018_reporting_line_upkeep.sql
@@ -1736,6 +1738,7 @@ Policies:
 - `assistant_conversations`: `trg_assistant_conversation_touch` — BEFORE UPDATE ON public.assistant_conversations FOR EACH ROW EXECUTE FUNCTION assistant_conversation_touch()
 - `attendance`: `realtime_broadcast` — AFTER INSERT OR DELETE OR UPDATE ON public.attendance FOR EACH ROW EXECUTE FUNCTION realtime_notify_field_owner()
 - `attendance`: `trg_attendance_alert` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_alert()
+- `attendance`: `trg_attendance_claim_pings` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_claim_pings()
 - `attendance`: `trg_attendance_enforce` — BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_enforce()
 - `attendance`: `trg_attendance_integrity` — AFTER INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_integrity()
 - `attendance`: `trg_attendance_learn_waiting_store` — AFTER INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_learn_waiting_store()

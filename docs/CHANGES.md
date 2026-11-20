@@ -32,7 +32,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0091_visit_checkout_photo.sql`;
    - `supabase/migrations/0092_photo_flags.sql`;
    - `supabase/migrations/0094_reports_for_recent_days.sql`;
-   - `supabase/migrations/0095_offline_movement_always_kept.sql`.
+   - `supabase/migrations/0095_offline_movement_always_kept.sql`;
+   - `supabase/migrations/0096_every_synced_position_kept.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18.)
 4. **Clock-out reminder fix (0069)**, if never pasted:
    ```sql
@@ -59,6 +60,21 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-20
+
+### Every synced position is kept
+- **What was done:** whenever a phone syncs its saved movement, the server
+  now stores every position it sends, at any age and at any time of day.
+  The previous change still threw some away: positions from before the
+  clock-in, after the clock-out, or from a day whose clock-in had not
+  reached Xtend yet. Those are now kept too. When a clock-in reaches Xtend
+  after that day's positions, they are joined to it automatically, with
+  their distance from the clock-in. Only a position dated in the future, a
+  broken one, or a copy already stored is skipped.
+- **The impact:** **Movement** shows everything the phone recorded, however
+  late it is synced. Positions that arrive late never raise "left the
+  store" alerts after the event.
+- **What you need to do:** run `supabase/migrations/0096_every_synced_position_kept.sql`
+  in the Supabase SQL editor, after 0095, then redeploy. No new app build.
 
 ### Movement saved with no signal is always kept
 - **What was done:** when a phone has no signal, the Xtend app saves the

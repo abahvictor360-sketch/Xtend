@@ -777,6 +777,23 @@ $$;
 
 
 --
+-- Name: attendance_claim_pings(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.attendance_claim_pings() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.type = 'opening' then
+    perform public.link_day_pings(new.id);
+  end if;
+  return null;
+end;
+$$;
+
+
+--
 -- Name: attendance_correction_done(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -3635,6 +3652,33 @@ $$;
 
 
 --
+-- Name: link_day_pings(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.link_day_pings(p_opening uuid) RETURNS integer
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  o record;
+  n integer;
+begin
+  select a.id, a.user_id, a.lat, a.lng, a.attendance_date into o
+  from public.attendance a where a.id = p_opening and a.type = 'opening';
+  if o.id is null then return 0; end if;
+  update public.location_pings p
+     set attendance_id = o.id,
+         distance_m = public.distance_metres(p.lat, p.lng, o.lat, o.lng)
+   where p.user_id = o.user_id
+     and p.attendance_id is null
+     and (p.created_at at time zone 'Africa/Lagos')::date = o.attendance_date;
+  get diagnostics n = row_count;
+  return n;
+end;
+$$;
+
+
+--
 -- Name: live_locations(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5778,9 +5822,6 @@ declare
   alert record;
   open_shift boolean;
   late boolean := false;
-  shift_day date;
-  opened_at timestamptz;
-  closed_at timestamptz;
 begin
   select * into t from public.tracking_tokens
   where token_hash = encode(sha256(convert_to(coalesce(p_token, ''), 'utf8')), 'hex');
@@ -5791,24 +5832,10 @@ begin
     return jsonb_build_object('ok', false, 'reason', 'token');
   end if;
 
-  -- When the shift this token was issued for began and ended (Lagos day).
-  shift_day := (t.created_at at time zone 'Africa/Lagos')::date;
-  select min(coalesce(a.client_captured_at, a.created_at)) filter (where a.type = 'opening'),
-         max(coalesce(a.client_captured_at, a.created_at)) filter (where a.type = 'closing')
-    into opened_at, closed_at
-  from public.attendance a
-  where a.user_id = t.user_id and a.attendance_date = shift_day;
-
   if t.revoked_at is not null or t.expires_at < now() then
-    -- An ended token still delivers what was taken during its shift, however
-    -- long the phone was without signal (0095: no 24-hour limit, and a shift
-    -- that was never clocked out counts too). A token made after the
-    -- clock-out, or on a day with no clock-in, is refused as before.
-    if opened_at is not null and (closed_at is null or t.created_at < closed_at) then
-      late := true;
-    else
-      return jsonb_build_object('ok', false, 'reason', 'token');
-    end if;
+    -- 0096: an ended token always delivers what the phone saved, whenever
+    -- it arrives. It is still the person's own phone.
+    late := true;
   else
     open_shift := exists (
       select 1 from public.attendance
@@ -5818,13 +5845,9 @@ begin
       where user_id = t.user_id and attendance_date = public.business_date() and type = 'closing'
     );
     if not open_shift then
-      -- Its shift is over (or was never clocked out): still deliver it.
-      if opened_at is not null and (closed_at is null or t.created_at < closed_at) then
-        late := true;
-      else
-        update public.tracking_tokens set revoked_at = now() where id = t.id;
-        return jsonb_build_object('ok', false, 'stop', true, 'shift_open', false);
-      end if;
+      -- No shift open now: what it brings is still stored (0096), then the
+      -- phone is told to stop.
+      late := true;
     end if;
   end if;
 
@@ -5840,12 +5863,10 @@ begin
 
   for point in select * from jsonb_array_elements(p_points) order by (value->>'captured_at') loop
     taken := public.safe_ts(point->>'captured_at') - make_interval(secs => offset_s);
-    -- 0095: any age, as long as it was taken during one of their shifts
-    -- (between a clock-in and that day's clock-out, or after a clock-in not
-    -- yet clocked out). A phone that was offline for days sends its saved
-    -- positions with the next shift's token, and they are kept.
+    -- 0096: every position is kept whenever it arrives, at any age and
+    -- whichever of their tokens brings it. Only a time from the future or a
+    -- broken position is skipped.
     if taken is null or taken > now() + interval '2 minutes'
-       or not public.ping_in_shift(t.user_id, taken)
        or jsonb_typeof(point->'lat') <> 'number' or jsonb_typeof(point->'lng') <> 'number'
        or jsonb_typeof(point->'accuracy_m') <> 'number' then
       continue;
@@ -6036,10 +6057,8 @@ begin
   perform set_config('xtend.offline_ping', 'on', true);
   for point in select * from jsonb_array_elements(p_points) loop
     taken := public.safe_ts(point->>'captured_at') - make_interval(secs => offset_s);
-    -- 0095: older than a day is kept too when it was taken during one of
-    -- their shifts (the app page's own queue, signed in).
+    -- 0096: kept at any age.
     if taken is null or taken > now() + interval '2 minutes'
-       or (taken < now() - interval '24 hours' and not public.ping_in_shift(me, taken))
        or jsonb_typeof(point->'lat') <> 'number' or jsonb_typeof(point->'lng') <> 'number'
        or jsonb_typeof(point->'accuracy_m') <> 'number' then
       continue;
@@ -13551,6 +13570,13 @@ CREATE TRIGGER trg_attendance_alert AFTER INSERT ON public.attendance FOR EACH R
 
 
 --
+-- Name: attendance trg_attendance_claim_pings; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_attendance_claim_pings AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION public.attendance_claim_pings();
+
+
+--
 -- Name: attendance trg_attendance_enforce; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -16248,6 +16274,13 @@ REVOKE ALL ON FUNCTION public.attendance_alert() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION attendance_claim_pings(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.attendance_claim_pings() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION attendance_correction_done(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -16969,6 +17002,14 @@ GRANT ALL ON FUNCTION public.learn_place(p_lat double precision, p_lng double pr
 
 REVOKE ALL ON FUNCTION public.learn_place_for(p_user uuid, p_lat double precision, p_lng double precision, p_name text, p_address text, p_source text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.learn_place_for(p_user uuid, p_lat double precision, p_lng double precision, p_name text, p_address text, p_source text) TO service_role;
+
+
+--
+-- Name: FUNCTION link_day_pings(p_opening uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.link_day_pings(p_opening uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.link_day_pings(p_opening uuid) TO service_role;
 
 
 --
