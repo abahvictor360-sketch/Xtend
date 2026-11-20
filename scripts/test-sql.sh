@@ -114,5 +114,6 @@ run supabase/migrations/0092_photo_flags.sql
 run supabase/migrations/0093_reset_clock_out.sql
 run supabase/migrations/0094_reports_for_recent_days.sql
 run supabase/migrations/0095_offline_movement_always_kept.sql
+run supabase/migrations/0096_every_synced_position_kept.sql
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rules.sql 2>&1 | grep -E 'NOTICE|ERROR' | sed 's/^psql:[^ ]*: //'
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_counts.sql 2>&1 | grep -E 'NOTICE|ERROR|PASSED' | sed 's/^psql:[^ ]*: //'

@@ -2127,11 +2127,6 @@ begin
       and exists (select 1 from public.location_pings where user_id = femi and offline
                   and created_at between now() - interval '16 minutes' and now() - interval '14 minutes'),
       'a phone clock two hours behind is corrected');
-    perform assert(
-      public.record_offline_pings(jsonb_build_array(
-        jsonb_build_object('lat', 6.7, 'lng', 3.4, 'accuracy_m', 12, 'captured_at', now() - interval '25 hours')),
-        now()) = 0,
-      'nothing older than a day');
     -- (Each call is its own statement: a check in the same statement would
     -- not yet see what the call wrote.)
     counted := public.record_offline_pings(jsonb_build_array(
@@ -3295,9 +3290,9 @@ begin
       perform assert((res->>'kept')::int = 0, 'tracking: a resend is not stored twice');
       perform assert(not (public.record_background_pings('not-a-token', '[]'::jsonb, now())->>'ok')::boolean,
         'tracking: an unknown token is refused');
-      perform assert(not (public.record_background_pings(tok->>'token', jsonb_build_array(
-        jsonb_build_object('lat', 6.7, 'lng', 3.4, 'accuracy_m', 9, 'captured_at', now() - interval '3 hours')), now())->>'kept')::int > 0,
-        'tracking: nothing from before the token was issued');
+      perform assert((public.record_background_pings(tok->>'token', jsonb_build_array(
+        jsonb_build_object('lat', 6.7, 'lng', 3.4, 'accuracy_m', 9, 'captured_at', now() - interval '3 hours')), now())->>'kept')::int = 1,
+        'tracking: a position from before the token was issued is kept too (0096)');
       perform assert((res->>'shift_open')::boolean, 'tracking: the phone is told the shift is still open');
       perform act_as(femi);
       tok2 := public.issue_tracking_token('android');
@@ -3313,11 +3308,15 @@ begin
       insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
       values ('closing', 6.6019, 3.3516, 12, fresh_photo('selfies', 'kayode-out.jpg'), now());
       tok2 := public.issue_tracking_token('android');
-      res := public.record_background_pings(tok2->>'token', '[]'::jsonb, now());
-      -- 055: after clock-out nothing is stored; the phone is told to stop at once.
-      perform assert(not (res->>'ok')::boolean and (res->>'stop')::boolean and not (res->>'shift_open')::boolean
-                     and not (public.record_background_pings(tok2->>'token', '[]'::jsonb, now())->>'ok')::boolean,
-        'tracking: after clock-out the phone is told to stop, and its token ends');
+      res := public.record_background_pings(tok2->>'token', jsonb_build_array(
+        jsonb_build_object('lat', 6.7110, 'lng', 3.4110, 'accuracy_m', 9, 'captured_at', now() - interval '1 minute')), now());
+      -- 0096: after clock-out what it brings is still stored; the shift is
+      -- not open, so the phone is told to stop, and the token ends.
+      perform assert((res->>'ok')::boolean and (res->>'kept')::int = 1 and not (res->>'shift_open')::boolean
+                     and (res->>'late')::boolean
+                     and exists (select 1 from public.tracking_tokens where token_hash = encode(sha256(convert_to(tok2->>'token', 'utf8')), 'hex')
+                                   and revoked_at is not null),
+        'tracking: after clock-out what the phone sends is kept, it is told to stop, and its token ends');
       perform act_as(boss);
     end;
 
@@ -3345,13 +3344,13 @@ begin
         jsonb_build_object('lat', 6.7100, 'lng', 3.4100, 'accuracy_m', 9, 'captured_at', now() - interval '5 minutes'),
         jsonb_build_object('lat', 6.7102, 'lng', 3.4102, 'accuracy_m', 9, 'captured_at', now() + interval '1 minute')),
         now());
-      perform assert((resl->>'ok')::boolean and (resl->>'kept')::int = 1 and not (resl->>'shift_open')::boolean
+      perform assert((resl->>'ok')::boolean and (resl->>'kept')::int = 2 and not (resl->>'shift_open')::boolean
                      and (resl->>'late')::boolean,
-        'late tracking: positions taken during the shift are kept when they arrive after the clock-out');
+        'late tracking: positions are kept when they arrive after the clock-out (0096: all of them)');
       perform assert(exists (select 1 from public.location_pings where user_id = lu and offline and lat = 6.7100
                              and created_at between now() - interval '6 minutes' and now() - interval '4 minutes')
-                     and not exists (select 1 from public.location_pings where user_id = lu and lat = 6.7102),
-        'late tracking: they are stored at the time they were taken, and nothing taken after the clock-out is kept');
+                     and exists (select 1 from public.location_pings where user_id = lu and offline and lat = 6.7102),
+        'late tracking: they are stored, offline, at the time they were taken');
       perform assert((public.record_background_pings(tokl->>'token', jsonb_build_array(
         jsonb_build_object('lat', 6.7100, 'lng', 3.4100, 'accuracy_m', 9, 'captured_at', now() - interval '5 minutes')),
         now())->>'kept')::int = 0,
@@ -3389,8 +3388,8 @@ begin
       res := public.record_background_pings(tok_old->>'token', jsonb_build_array(
         jsonb_build_object('lat', 6.7200, 'lng', 3.4200, 'accuracy_m', 9, 'captured_at', old_in + interval '1 hour'),
         jsonb_build_object('lat', 6.7201, 'lng', 3.4201, 'accuracy_m', 9, 'captured_at', old_out + interval '2 hours')), now());
-      perform assert((res->>'ok')::boolean and (res->>'kept')::int = 1,
-        'offline movement 0095: kept days later with the shift''s own ended token; nothing after the clock-out');
+      perform assert((res->>'ok')::boolean and (res->>'kept')::int = 2,
+        'offline movement 0095/0096: kept days later with the shift''s own ended token, after the clock-out too');
       -- Today: a new shift and a new token bring more of that old day.
       perform act_as(ou);
       insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
@@ -3401,13 +3400,37 @@ begin
         jsonb_build_object('lat', 6.7300, 'lng', 3.4300, 'accuracy_m', 9, 'captured_at', old_in + interval '3 hours'),
         jsonb_build_object('lat', 6.7301, 'lng', 3.4301, 'accuracy_m', 9, 'captured_at', old_in - interval '3 hours'),
         jsonb_build_object('lat', 6.7302, 'lng', 3.4302, 'accuracy_m', 9, 'captured_at', now() + interval '1 hour')), now());
-      perform assert((res->>'ok')::boolean and (res->>'kept')::int = 1,
-        'offline movement 0095: a later shift''s token delivers an old shift''s positions; before the clock-in and the future are not kept');
+      perform assert((res->>'ok')::boolean and (res->>'kept')::int = 2,
+        'offline movement 0095/0096: a later shift''s token delivers old positions, before the clock-in too; the future is not kept');
       perform assert(
         (select count(*) from public.location_pings lp where lp.user_id = ou and lp.offline
            and (lp.created_at at time zone 'Africa/Lagos')::date = old_day
-           and lp.attendance_id = (select a.id from public.attendance a where a.user_id = ou and a.attendance_date = old_day and a.type = 'opening')) = 2,
+           and lp.attendance_id = (select a.id from public.attendance a where a.user_id = ou and a.attendance_date = old_day and a.type = 'opening')) = 4,
         'offline movement 0095: stored at the time taken, offline, on the day they belong to');
+      -- 0096: positions from a day whose clock-in had not arrived yet are
+      -- kept, and joined to the clock-in when it comes.
+      res := public.record_background_pings(tok_new->>'token', jsonb_build_array(
+        jsonb_build_object('lat', 6.7400, 'lng', 3.4400, 'accuracy_m', 9, 'captured_at', old_in - interval '1 day' + interval '2 hours')), now());
+      perform assert((res->>'kept')::int = 1
+                     and exists (select 1 from public.location_pings lp where lp.user_id = ou and lp.lat = 6.7400 and lp.attendance_id is null),
+        'offline movement 0096: a position from a day with no clock-in yet is kept');
+      perform set_config('session_replication_role', 'replica', true);
+      insert into public.attendance (user_id, type, lat, lng, accuracy_m, selfie_path, client_captured_at, created_at, attendance_date)
+      values (ou, 'opening', 6.6019, 3.3516, 10, 'x', old_in - interval '1 day', old_in - interval '1 day', old_day - 1);
+      perform set_config('session_replication_role', 'origin', true);
+      perform assert(public.link_day_pings((select a.id from public.attendance a where a.user_id = ou
+                                              and a.attendance_date = old_day - 1 and a.type = 'opening')) = 1
+                     and exists (select 1 from pg_trigger where tgname = 'trg_attendance_claim_pings' and not tgisinternal),
+        'offline movement 0096: a clock-in that arrives later links that day''s positions (the trigger does it)');
+      perform act_as(ou);
+      perform assert(public.record_offline_pings(jsonb_build_array(
+        jsonb_build_object('lat', 6.7500, 'lng', 3.4500, 'accuracy_m', 12, 'captured_at', now() - interval '50 hours')), now()) = 1,
+        'offline movement 0096: the app page''s saved positions are kept at any age');
+      perform assert(exists (select 1 from public.location_pings lp
+                             join public.attendance a on a.id = lp.attendance_id
+                             where lp.user_id = ou and lp.lat = 6.7400 and a.attendance_date = old_day - 1
+                               and lp.distance_m > 0),
+        'offline movement 0096: the clock-in, arriving later, takes in that day''s positions');
       perform act_as(boss);
     end;
 

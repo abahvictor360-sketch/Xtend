@@ -900,8 +900,8 @@ minutes**, so retry loops do not flood the queue.
   - unknown, revoked or expired token, or inactive person → `ok: false`;
     route answers 401 `{stop: true}`;
   - **0055: the shift is checked first.** If there is no opening today, or
-    there is a closing today, the token is revoked and the answer is
-    `{ok: false, stop: true, shift_open: false}`; nothing is stored;
+    there is a closing today, the token is revoked and the phone told to
+    stop (since **0096** what the call brought is still stored, below);
   - **0085: except late positions.** For a token issued *before* that
     shift's closing (`created_at < closed_at`; a token made after the
     clock-out never qualifies), positions taken **during the shift** are
@@ -920,15 +920,28 @@ minutes**, so retry loops do not flood the queue.
     it was taken had a clock-in, it is no more than 5 min before it, and not
     after that day's clock-out (if any), whichever of the person's tokens
     brings it (a phone sends an old queue with the next shift's token);
-  - points are time-corrected by the phone's offset; skipped if more than
-    2 min in the future or outside every shift (above); resends within ±1 s
-    skipped;
+  - **0096: every synced position is kept.** The shift rule above is gone:
+    any known token of an active person (live, ended, or made after the
+    clock-out) is accepted, and every point is stored whatever its age or
+    time of day. A token that is ended, or whose shift is not open now,
+    answers `{ok: true, shift_open: false, late: true, kept}` and is
+    retired; the route tells the phone to stop unless the batch was full.
+    `ping_in_shift` stays but is no longer used here;
+  - points are time-corrected by the phone's offset; skipped only if more
+    than 2 min in the future or broken; resends within ±1 s skipped;
   - a point taken within the last **2 minutes** is stored live (can raise
     `left_geofence`); older ones are stored as offline at their time;
   - any `is_mock: true` point → one `mock_location_confirmed` flag (high,
     `detail.source = 'background'`) per person per day;
   - returns `kept`, `shift_open`, and any new `left_geofence` alert, which
     the route pushes to watchers.
+- `record_offline_pings` (the app page's own queue) keeps positions at
+  any age (0096); only the "made up after the phone said nothing was
+  waiting" rule (0029) still refuses one.
+- **0096:** `link_day_pings(opening_id)`, run by the `after insert` trigger
+  `trg_attendance_claim_pings` on an opening: that day's positions with no
+  `attendance_id` (they arrived before the clock-in) are joined to it and
+  given `distance_m`.
 - `revoke_tracking_tokens()` (`POST /api/track/stop`) revokes all the
   caller's tokens at clock-out. The phone must stop when told `stop: true`.
 
