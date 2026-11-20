@@ -905,16 +905,24 @@ minutes**, so retry loops do not flood the queue.
   - **0085: except late positions.** For a token issued *before* that
     shift's closing (`created_at < closed_at`; a token made after the
     clock-out never qualifies), positions taken **during the shift** are
-    still kept when they arrive after the clock-out, for 24 h after the
-    token was revoked or expired: stored as offline positions at their own
+    still kept when they arrive after the clock-out (no time limit since
+    0095): stored as offline positions at their own
     time (so no `left_geofence` alert), anything taken after the closing (or
     more than 5 min before the opening) ignored, the token retired, answer
     `{ok: true, shift_open: false, late: true, kept}`. The route says
     `stop: true` for it unless the batch was a full 500 (more may be
     waiting; the phone clears its whole queue when told to stop);
+  - **0095: no time limit.** The 24 h windows are gone. A revoked or
+    expired token is still accepted (as late) when its day had a clock-in
+    and the token was made before that day's clock-out or the day was never
+    clocked out; so is a live token whose shift is over or was never closed.
+    Each point is kept only if `ping_in_shift(user, taken)`: the Lagos day
+    it was taken had a clock-in, it is no more than 5 min before it, and not
+    after that day's clock-out (if any), whichever of the person's tokens
+    brings it (a phone sends an old queue with the next shift's token);
   - points are time-corrected by the phone's offset; skipped if more than
-    24 h old, more than 2 min in the future, or taken more than **5
-    minutes before the token was issued**; resends within ±1 s skipped;
+    2 min in the future or outside every shift (above); resends within ±1 s
+    skipped;
   - a point taken within the last **2 minutes** is stored live (can raise
     `left_geofence`); older ones are stored as offline at their time;
   - any `is_mock: true` point → one `mock_location_confirmed` flag (high,

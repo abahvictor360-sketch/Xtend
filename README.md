@@ -116,6 +116,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0092_photo_flags.sql                    # the office flags a clock or visit photo that is not right
    supabase/migrations/0093_reset_clock_out.sql                # the office undoes a clock-out made by mistake
    supabase/migrations/0094_reports_for_recent_days.sql        # a report for today, yesterday or up to 7 days back
+   supabase/migrations/0095_offline_movement_always_kept.sql   # movement saved with no signal is kept, however late it arrives
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

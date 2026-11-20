@@ -5253,6 +5253,29 @@ $$;
 
 
 --
+-- Name: ping_in_shift(uuid, timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.ping_in_shift(p_user uuid, p_at timestamp with time zone) RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  with day as (
+    select min(coalesce(a.client_captured_at, a.created_at)) filter (where a.type = 'opening') as opened,
+           max(coalesce(a.client_captured_at, a.created_at)) filter (where a.type = 'closing') as closed
+    from public.attendance a
+    where a.user_id = p_user and a.attendance_date = (p_at at time zone 'Africa/Lagos')::date
+  )
+  select coalesce(
+    (select opened is not null
+            and p_at >= opened - interval '5 minutes'
+            and (closed is null or p_at <= closed)
+     from day),
+    false);
+$$;
+
+
+--
 -- Name: ping_integrity(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5777,11 +5800,11 @@ begin
   where a.user_id = t.user_id and a.attendance_date = shift_day;
 
   if t.revoked_at is not null or t.expires_at < now() then
-    -- An ended token. It still delivers what was taken during a shift that
-    -- has since finished, for 24 hours; a token made after the clock-out,
-    -- or for a shift that never ended, is refused as before.
-    if opened_at is not null and closed_at is not null and t.created_at < closed_at
-       and coalesce(t.revoked_at, t.expires_at) > now() - interval '24 hours' then
+    -- An ended token still delivers what was taken during its shift, however
+    -- long the phone was without signal (0095: no 24-hour limit, and a shift
+    -- that was never clocked out counts too). A token made after the
+    -- clock-out, or on a day with no clock-in, is refused as before.
+    if opened_at is not null and (closed_at is null or t.created_at < closed_at) then
       late := true;
     else
       return jsonb_build_object('ok', false, 'reason', 'token');
@@ -5795,7 +5818,8 @@ begin
       where user_id = t.user_id and attendance_date = public.business_date() and type = 'closing'
     );
     if not open_shift then
-      if opened_at is not null and closed_at is not null and t.created_at < closed_at then
+      -- Its shift is over (or was never clocked out): still deliver it.
+      if opened_at is not null and (closed_at is null or t.created_at < closed_at) then
         late := true;
       else
         update public.tracking_tokens set revoked_at = now() where id = t.id;
@@ -5816,9 +5840,12 @@ begin
 
   for point in select * from jsonb_array_elements(p_points) order by (value->>'captured_at') loop
     taken := public.safe_ts(point->>'captured_at') - make_interval(secs => offset_s);
-    if taken is null or taken > now() + interval '2 minutes' or taken < now() - interval '24 hours'
-       or taken < t.created_at - interval '5 minutes'
-       or (late and (taken > closed_at or taken < opened_at - interval '5 minutes'))
+    -- 0095: any age, as long as it was taken during one of their shifts
+    -- (between a clock-in and that day's clock-out, or after a clock-in not
+    -- yet clocked out). A phone that was offline for days sends its saved
+    -- positions with the next shift's token, and they are kept.
+    if taken is null or taken > now() + interval '2 minutes'
+       or not public.ping_in_shift(t.user_id, taken)
        or jsonb_typeof(point->'lat') <> 'number' or jsonb_typeof(point->'lng') <> 'number'
        or jsonb_typeof(point->'accuracy_m') <> 'number' then
       continue;
@@ -6009,7 +6036,10 @@ begin
   perform set_config('xtend.offline_ping', 'on', true);
   for point in select * from jsonb_array_elements(p_points) loop
     taken := public.safe_ts(point->>'captured_at') - make_interval(secs => offset_s);
-    if taken is null or taken > now() + interval '2 minutes' or taken < now() - interval '24 hours'
+    -- 0095: older than a day is kept too when it was taken during one of
+    -- their shifts (the app page's own queue, signed in).
+    if taken is null or taken > now() + interval '2 minutes'
+       or (taken < now() - interval '24 hours' and not public.ping_in_shift(me, taken))
        or jsonb_typeof(point->'lat') <> 'number' or jsonb_typeof(point->'lng') <> 'number'
        or jsonb_typeof(point->'accuracy_m') <> 'number' then
       continue;
@@ -17368,6 +17398,14 @@ REVOKE ALL ON FUNCTION public.ping_alert() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public.ping_enforce() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION ping_in_shift(p_user uuid, p_at timestamp with time zone); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.ping_in_shift(p_user uuid, p_at timestamp with time zone) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.ping_in_shift(p_user uuid, p_at timestamp with time zone) TO service_role;
 
 
 --

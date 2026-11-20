@@ -31,7 +31,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0090_field_corrections.sql`;
    - `supabase/migrations/0091_visit_checkout_photo.sql`;
    - `supabase/migrations/0092_photo_flags.sql`;
-   - `supabase/migrations/0094_reports_for_recent_days.sql`.
+   - `supabase/migrations/0094_reports_for_recent_days.sql`;
+   - `supabase/migrations/0095_offline_movement_always_kept.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18.)
 4. **Clock-out reminder fix (0069)**, if never pasted:
    ```sql
@@ -56,6 +57,24 @@ the live database, so it cannot tell which of these are already done.)
    then tap **Sign in with fingerprint**.
 
 ---
+
+## 2026-11-20
+
+### Movement saved with no signal is always kept
+- **What was done:** when a phone has no signal, the Xtend app saves the
+  person's positions and sends them when the signal returns. Until now
+  Xtend threw away positions more than 24 hours old, and a phone that was
+  offline long enough to need a fresh tracking code lost what it had saved
+  at the next clock-in. Now every saved position is kept, however late it
+  arrives, as long as it was taken during one of that person's shifts
+  (between their clock-in and clock-out). The phone also keeps them until
+  they are sent. They show on **Movement** at the time they were taken,
+  marked as sent late, and do not raise "left the store" alerts after the
+  event. Positions outside a shift are still ignored.
+- **The impact:** a full route for days with poor network, even when the
+  phone only reconnects days later.
+- **What you need to do:** run `supabase/migrations/0095_offline_movement_always_kept.sql`
+  in the Supabase SQL editor, then redeploy. No new app build is needed.
 
 ## 2026-11-19
 

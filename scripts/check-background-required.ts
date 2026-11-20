@@ -50,6 +50,20 @@ check(!confirmed.blocked && !confirmed.battery, 'battery confirmed by the person
 const confirmedNoLocation = backgroundNeeds({ platform: 'android', always: false, batteryUnrestricted: false }, { batteryConfirmed: true })
 check(confirmedNoLocation.blocked && confirmedNoLocation.always && !confirmedNoLocation.battery, 'confirming the battery never waives location', confirmedNoLocation)
 
+// Movement saved with no signal is always kept (0095): never dropped on the
+// phone for its age, and the server keeps any position taken during a shift.
+{
+  const fs = require('node:fs') as typeof import('node:fs')
+  const path = require('node:path') as typeof import('node:path')
+  const read = (p: string) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8')
+  const sync = read('src/lib/offline/sync.ts')
+  check(/if \(kind === 'ping'\) return Number\.POSITIVE_INFINITY/.test(sync) && /> maxAge\('ping'\)/.test(sync),
+    'saved positions are kept on the phone until they are sent')
+  const mig = read('supabase/migrations/0095_offline_movement_always_kept.sql')
+  check(/not public\.ping_in_shift\(t\.user_id, taken\)/.test(mig) && !/taken < now\(\) - interval '24 hours'\s*\n\s*or taken < t\.created_at/.test(mig),
+    'the server keeps positions taken during a shift, at any age, from any of their tokens')
+}
+
 if (failed) {
   console.log(`\n${failed} check(s) FAILED`)
   process.exit(1)
