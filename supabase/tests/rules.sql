@@ -3301,10 +3301,14 @@ begin
       perform assert((res->>'shift_open')::boolean, 'tracking: the phone is told the shift is still open');
       perform act_as(femi);
       tok2 := public.issue_tracking_token('android');
-      perform assert(not (public.record_background_pings(tok->>'token', '[]'::jsonb, now())->>'ok')::boolean,
+      -- 0095: the retired token only delivers positions saved during the
+      -- shift (stored offline, no alerts); it is no longer the live one.
+      perform assert(coalesce((public.record_background_pings(tok->>'token', '[]'::jsonb, now())->>'late')::boolean, true)
+                     and not coalesce((public.record_background_pings(tok->>'token', '[]'::jsonb, now())->>'shift_open')::boolean, false),
         'tracking: a new token on the phone retires the old one');
       perform public.revoke_tracking_tokens();
-      perform assert(not (public.record_background_pings(tok2->>'token', '[]'::jsonb, now())->>'ok')::boolean,
+      -- 0095: a stopped token is no longer live; it only delivers saved positions.
+      perform assert(not coalesce((public.record_background_pings(tok2->>'token', '[]'::jsonb, now())->>'shift_open')::boolean, false),
         'tracking: clocking out stops the token');
       insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
       values ('closing', 6.6019, 3.3516, 12, fresh_photo('selfies', 'kayode-out.jpg'), now());
@@ -3352,6 +3356,58 @@ begin
         jsonb_build_object('lat', 6.7100, 'lng', 3.4100, 'accuracy_m', 9, 'captured_at', now() - interval '5 minutes')),
         now())->>'kept')::int = 0,
         'late tracking: a position sent again is not stored twice');
+      perform act_as(boss);
+    end;
+
+    -- Movement saved with no signal is always kept, at any age (0095).
+    declare
+      ou uuid := gen_random_uuid();
+      old_day date := public.business_date() - 3;
+      old_in timestamptz := ((public.business_date() - 3)::timestamp + interval '8 hours') at time zone 'Africa/Lagos';
+      old_out timestamptz := ((public.business_date() - 3)::timestamp + interval '17 hours') at time zone 'Africa/Lagos';
+      tok_old jsonb;
+      tok_new jsonb;
+      res jsonb;
+    begin
+      insert into auth.users (id, email) values (ou, 'old.track@xpel.ng');
+      insert into public.profiles (id, full_name, email, role, outlet_id, supervisor_id)
+      values (ou, 'Old Tracker', 'old.track@xpel.ng', 'merchandiser',
+              (select id from public.outlets where name = 'Ikeja City Mall'), tunde);
+      perform notifications_on(ou);
+      -- A shift three days ago, written straight in.
+      perform set_config('session_replication_role', 'replica', true);
+      insert into public.attendance (user_id, type, lat, lng, accuracy_m, selfie_path, client_captured_at, created_at, attendance_date)
+      values (ou, 'opening', 6.6019, 3.3516, 10, 'x', old_in, old_in, old_day),
+             (ou, 'closing', 6.6019, 3.3516, 10, 'x', old_out, old_out, old_day);
+      perform set_config('session_replication_role', 'origin', true);
+      perform act_as(ou);
+      tok_old := public.issue_tracking_token('android');
+      update public.tracking_tokens set created_at = old_in, expires_at = old_in + interval '18 hours', revoked_at = old_out
+       where token_hash = encode(sha256(convert_to(tok_old->>'token', 'utf8')), 'hex');
+      perform set_config('request.jwt.claim.sub', '', false);
+      -- Sent three days later with the shift's own (long ended) token.
+      res := public.record_background_pings(tok_old->>'token', jsonb_build_array(
+        jsonb_build_object('lat', 6.7200, 'lng', 3.4200, 'accuracy_m', 9, 'captured_at', old_in + interval '1 hour'),
+        jsonb_build_object('lat', 6.7201, 'lng', 3.4201, 'accuracy_m', 9, 'captured_at', old_out + interval '2 hours')), now());
+      perform assert((res->>'ok')::boolean and (res->>'kept')::int = 1,
+        'offline movement 0095: kept days later with the shift''s own ended token; nothing after the clock-out');
+      -- Today: a new shift and a new token bring more of that old day.
+      perform act_as(ou);
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+      values ('opening', 6.6019, 3.3516, 12, fresh_photo('selfies', 'old-today-in.jpg'), now());
+      tok_new := public.issue_tracking_token('android');
+      perform set_config('request.jwt.claim.sub', '', false);
+      res := public.record_background_pings(tok_new->>'token', jsonb_build_array(
+        jsonb_build_object('lat', 6.7300, 'lng', 3.4300, 'accuracy_m', 9, 'captured_at', old_in + interval '3 hours'),
+        jsonb_build_object('lat', 6.7301, 'lng', 3.4301, 'accuracy_m', 9, 'captured_at', old_in - interval '3 hours'),
+        jsonb_build_object('lat', 6.7302, 'lng', 3.4302, 'accuracy_m', 9, 'captured_at', now() + interval '1 hour')), now());
+      perform assert((res->>'ok')::boolean and (res->>'kept')::int = 1,
+        'offline movement 0095: a later shift''s token delivers an old shift''s positions; before the clock-in and the future are not kept');
+      perform assert(
+        (select count(*) from public.location_pings lp where lp.user_id = ou and lp.offline
+           and (lp.created_at at time zone 'Africa/Lagos')::date = old_day
+           and lp.attendance_id = (select a.id from public.attendance a where a.user_id = ou and a.attendance_date = old_day and a.type = 'opening')) = 2,
+        'offline movement 0095: stored at the time taken, offline, on the day they belong to');
       perform act_as(boss);
     end;
 

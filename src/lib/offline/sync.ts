@@ -37,6 +37,9 @@ const MAX_AGE_MS = 24 * 60 * 60 * 1000
 const XM_MAX_AGE_MS = 72 * 60 * 60 * 1000
 
 function maxAge(kind: OutboxRecord['kind']) {
+  // Positions saved with no signal are kept until they are sent, however
+  // long that takes: the server keeps every one taken during a shift (0095).
+  if (kind === 'ping') return Number.POSITIVE_INFINITY
   return kind === 'xm_count' || kind === 'xm_sales' ? XM_MAX_AGE_MS : MAX_AGE_MS
 }
 const MAX_ATTEMPTS = 8
@@ -401,7 +404,7 @@ export async function flushOutbox(): Promise<FlushResult> {
         const run: OutboxRecord[] = []
         while (i < records.length && records[i].job.kind === 'ping' && run.length < 400) {
           const r = records[i]
-          const old = Date.now() - new Date(r.job.client_captured_at).getTime() > MAX_AGE_MS
+          const old = Date.now() - new Date(r.job.client_captured_at).getTime() > maxAge('ping')
           if (old || r.attempts >= MAX_ATTEMPTS) {
             await dropOutbox(r.id!)
             result.dropped += 1

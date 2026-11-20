@@ -164,7 +164,7 @@ export async function stopShiftTracker() {
   if (!hasShiftTracker()) return
   // Positions saved with no signal are still on the phone. Stopping now would
   // strand them, so the tracker is left running: the server accepts positions
-  // taken during the shift for 24 hours after it ends (0085), and tells the
+  // taken during the shift whenever they arrive (0085, 0095: no time limit), and tells the
   // tracker to stop by itself once they are in.
   const state = await shiftTrackerState()
   if (!(state && state.queued > 0)) await callNative('ShiftTracker', 'stop').catch(() => {})
