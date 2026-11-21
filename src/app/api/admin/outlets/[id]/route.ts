@@ -49,8 +49,9 @@ export async function DELETE(_request: Request, ctx: { params: Promise<{ id: str
       if (error.code === '23503') {
         return Response.json(
           {
-            error:
-              'This outlet has visit, stock-count or metrics history, so it cannot be deleted. Deactivate it instead.',
+            error: 'This outlet has visit, stock-count or metrics history.',
+            // The page offers to delete it for good with its records (0098).
+            history: true,
           },
           { status: 409 },
         )

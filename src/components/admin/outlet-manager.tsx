@@ -15,6 +15,7 @@ import { address, thingName } from '@/lib/fields'
 import { problemWith } from '@/lib/field-check'
 import { mapsLink, readMapLink } from '@/lib/map-link'
 import { StoreStaff, type StoreStaffPerson } from '@/components/admin/store-staff'
+import { DeleteForGoodDialog } from '@/components/admin/delete-for-good'
 
 interface FoundPlace {
   name: string | null
@@ -75,6 +76,9 @@ export function OutletManager({
   const [readingLink, setReadingLink] = useState(false)
   const [pinNote, setPinNote] = useState<string | null>(null)
   const [allocating, setAllocating] = useState<string | null>(null)
+  // A store with records: delete it for good after a typed confirmation (0098).
+  const [forGood, setForGood] = useState<Outlet | null>(null)
+  const [done, setDone] = useState<string | null>(null)
 
   const q = query.trim().toLowerCase()
   const shown = q
@@ -290,13 +294,19 @@ export function OutletManager({
   async function remove(outlet: Outlet) {
     setBusy(true)
     setError(null)
+    setDone(null)
     try {
       const res = await fetch(`/api/admin/outlets/${outlet.id}`, { method: 'DELETE' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
+        if (data.history) {
+          setForGood(outlet)
+          return
+        }
         setError(data.error ?? 'That outlet could not be deleted.')
         return
       }
+      setDone(`${outlet.name} was deleted.`)
       router.refresh()
     } finally {
       setBusy(false)
@@ -322,6 +332,29 @@ export function OutletManager({
   return (
     <div className="space-y-4">
       {error && <Alert variant="destructive">{error}</Alert>}
+      {done && <Alert variant="success">{done}</Alert>}
+      {forGood && (
+        <DeleteForGoodDialog
+          kind="outlet"
+          id={forGood.id}
+          name={forGood.name}
+          onClose={() => setForGood(null)}
+          onDeleted={(message) => {
+            setForGood(null)
+            setDone(message)
+            router.refresh()
+          }}
+          onDeactivate={
+            forGood.is_active
+              ? () => {
+                  const o = forGood
+                  setForGood(null)
+                  void toggleActive(o)
+                }
+              : undefined
+          }
+        />
+      )}
 
       <div className="flex flex-wrap items-center gap-2">
       {outlets.length > 4 && (
@@ -587,7 +620,7 @@ export function OutletManager({
 
               {!readOnly && confirmDelete === outlet.id && (
                 <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-2 text-xs">
-                  <span className="flex-1 text-foreground">Delete this outlet for good?</span>
+                  <span className="flex-1 text-foreground">Are you sure you want to delete this outlet?</span>
                   <Button size="sm" variant="destructive" disabled={busy} onClick={() => void remove(outlet)}>
                     {busy ? 'Deleting…' : 'Delete'}
                   </Button>

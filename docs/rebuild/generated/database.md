@@ -1453,6 +1453,9 @@ Policies:
 - `decrypt(bytea, bytea, text)` → bytea
 - `decrypt_iv(bytea, bytea, bytea, text)` → bytea
 - `default_work_days()` → smallint[] · 0059_schedules_leave.sql
+- `delete_for_good(p_kind text, p_id uuid, p_confirm text)` → jsonb · definer · 0098_delete_for_good.sql
+- `delete_for_good_preview(p_kind text, p_id uuid)` → jsonb · definer · 0098_delete_for_good.sql
+- `delete_for_good_target(p_kind text, p_id uuid)` → text · definer · 0098_delete_for_good.sql
 - `digest(bytea, text)` → bytea
 - `digest(text, text)` → bytea
 - `dismiss_place_due(p_due uuid, p_reason text)` → void · definer · 0045_mandatory_place_naming.sql
@@ -1596,6 +1599,7 @@ Policies:
 - `profiles_supervisor_check()` → trigger · definer · 0017_supervisor_manages_staff.sql
 - `punctuality_grace_minutes()` → integer · 0036_supervisor_alerts.sql
 - `purge_user_activity(p_days integer)` → integer · definer · 0062_user_activity.sql
+- `purge_walk(p_table regclass, p_ids uuid[], p_dry boolean, p_depth integer, p_counts jsonb)` → jsonb · definer · 0098_delete_for_good.sql
 - `raise_place_due(p_user uuid, p_lat double precision, p_lng double precision, p_accuracy double precision, p_kind text, p_source uuid, p_position jsonb)` → void · definer · 0045_mandatory_place_naming.sql
 - `read_messages(p_staff uuid)` → void · definer · 0073_messages.sql
 - `realtime_notify_field_owner()` → trigger · definer · 0058_realtime_broadcast.sql

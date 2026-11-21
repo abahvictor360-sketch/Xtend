@@ -322,8 +322,9 @@ export async function DELETE(_request: Request, ctx: { params: Promise<{ id: str
     if ((count ?? 0) > 0) {
       return Response.json(
         {
-          error:
-            'This person has attendance history, so their account cannot be deleted. Deactivate it instead.',
+          error: 'This person has attendance history.',
+          // The page offers to delete them for good with their records (0098).
+          history: true,
         },
         { status: 409 },
       )
@@ -336,8 +337,8 @@ export async function DELETE(_request: Request, ctx: { params: Promise<{ id: str
       console.error('deleteUser failed', error)
       return Response.json(
         {
-          error:
-            'This account has records that cannot be removed, so it cannot be deleted. Deactivate it instead.',
+          error: 'This account has records.',
+          history: true,
         },
         { status: 409 },
       )

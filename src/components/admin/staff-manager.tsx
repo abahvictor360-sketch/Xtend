@@ -19,6 +19,7 @@ import { BUILT_IN_ROLES, parseRoleValue, roleLabel, roleValue, type StaffRole } 
 import { emailAddress, personName, phoneNumber } from '@/lib/fields'
 import { problemWith } from '@/lib/field-check'
 import { confirmedFetch } from '@/components/reconfirm'
+import { DeleteForGoodDialog } from '@/components/admin/delete-for-good'
 
 interface Draft {
   full_name: string
@@ -121,6 +122,8 @@ export function StaffManager({
     phone: string
   } | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
+  // Someone with records: delete them for good after a typed confirmation (0098).
+  const [forGood, setForGood] = useState<Profile | null>(null)
 
   const roleById = useMemo(() => new Map(roles.map((r) => [r.id, r])), [roles])
   // The base role a picked value works like.
@@ -245,7 +248,7 @@ export function StaffManager({
   async function remove(person: Profile) {
     if (
       !confirm(
-        `Delete ${person.full_name}'s account for good? This cannot be undone. It only works if they have no attendance history; otherwise deactivate them instead.`,
+        `Are you sure you want to delete ${person.full_name}'s account? This cannot be undone.`,
       )
     ) {
       return
@@ -257,6 +260,10 @@ export function StaffManager({
       const res = await confirmedFetch(`/api/admin/users/${person.id}`, { method: 'DELETE' })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
+        if (data.history) {
+          setForGood(person)
+          return
+        }
         setError(data.error ?? 'That account could not be deleted.')
         return
       }
@@ -316,6 +323,28 @@ export function StaffManager({
       {error && <Alert variant="destructive">{error}</Alert>}
 
       {saved && <Alert variant="success">{saved}</Alert>}
+      {forGood && (
+        <DeleteForGoodDialog
+          kind="staff"
+          id={forGood.id}
+          name={forGood.full_name}
+          onClose={() => setForGood(null)}
+          onDeleted={(message) => {
+            setForGood(null)
+            setSaved(message)
+            router.refresh()
+          }}
+          onDeactivate={
+            forGood.is_active
+              ? () => {
+                  const p = forGood
+                  setForGood(null)
+                  void patch(p.id, { is_active: false }).then((ok) => ok && setSaved(`${p.full_name} was deactivated.`))
+                }
+              : undefined
+          }
+        />
+      )}
 
       {details && (
         <Card>

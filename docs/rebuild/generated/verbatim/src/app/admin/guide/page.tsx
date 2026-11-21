@@ -965,6 +965,19 @@ export default async function AdminGuidePage() {
                 a: <>Deactivate them on the Staff page. Their history stays.</>,
               },
               {
+                q: 'I added a test account or a store by mistake, and Delete is refused',
+                a: (
+                  <>
+                    Click <Ui>Delete</Ui> (on Staff, or the bin under the store on Outlets) and say yes. When it has
+                    records, Xtend shows what they are (clock-ins, visits, reports…) and asks you to type the name.
+                    Type it exactly and click <Ui>Yes, delete for good</Ui>: the account or store goes with all its
+                    records and photos, and cannot be brought back. Only do this for test or mistaken entries: for a
+                    real person or store, choose <Ui>Deactivate instead</Ui> so the history stays. Your own account
+                    and the last admin cannot be deleted; the audit log keeps a note of what was removed.
+                  </>
+                ),
+              },
+              {
                 q: 'A store’s location is wrong',
                 a: <>Correct it on Outlets, or confirm the right spot on Places from where staff clock in.</>,
               },
