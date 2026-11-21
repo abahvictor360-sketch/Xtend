@@ -33,7 +33,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0092_photo_flags.sql`;
    - `supabase/migrations/0094_reports_for_recent_days.sql`;
    - `supabase/migrations/0095_offline_movement_always_kept.sql`;
-   - `supabase/migrations/0096_every_synced_position_kept.sql`.
+   - `supabase/migrations/0096_every_synced_position_kept.sql`;
+   - `supabase/migrations/0097_allocate_from_store.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18.)
 4. **Clock-out reminder fix (0069)**, if never pasted:
    ```sql
@@ -60,6 +61,23 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-21
+
+### Allocate staff from a store on Outlets
+- **What was done:** every store on **Outlets** now has an **Allocate
+  staff** button under it. Click it to see who works at that store, then
+  search for a marketer or merchandiser by name (or tap **Merchandisers** or
+  **Marketers**) and click **Allocate**. **Remove** takes someone off that
+  store. Only that store changes: the person keeps their other stores. It is
+  the same allocation as on **Store allocation**, just started from the
+  store. Supervisors can do it for their own team. Each store's **Staff**
+  figure now also counts people allocated there, not only those whose home
+  store it is.
+- **The impact:** you can staff a new store straight after adding it,
+  without going to another page.
+- **What you need to do:** run `supabase/migrations/0097_allocate_from_store.sql`
+  in the Supabase SQL editor, then redeploy. (It works before you run it
+  too, using the existing allocation; the migration makes it safe when two
+  people allocate at once.)
 
 ### Find a store on the map from its address or a Google Maps link
 - **What was done:** when you add or edit a store on **Outlets**, type the

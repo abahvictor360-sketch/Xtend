@@ -656,6 +656,13 @@ export default async function AdminGuidePage() {
                 Set the <Ui>Geofence radius</Ui>, <Ui>Shift start</Ui> and <Ui>Shift end</Ui>, click{' '}
                 <Ui>Create outlet</Ui>, then allocate staff to it.
               </>,
+              <>
+                To put people at a store, click <Ui>Allocate staff</Ui> under it on <Ui>Outlets</Ui>. The
+                panel lists who works there now (their <Ui>Home store</Ui> is changed on their account). Search
+                a name, or pick <Ui>Merchandisers</Ui> or <Ui>Marketers</Ui>, and click <Ui>Allocate</Ui>; click{' '}
+                <Ui>Remove</Ui> to take someone off. Only that store changes: their other stores stay. It is
+                the same as <Ui>Store allocation</Ui>, seen from the store.
+              </>,
             ]}
           />
           <Tip>

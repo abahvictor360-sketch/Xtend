@@ -275,7 +275,9 @@ export default async function SupervisorGuidePage() {
             <Ui>Store allocation</Ui>: choose which stores each person works (after <Ui>Allocate stores</Ui>,
             type part of a shop&apos;s name or address in <Ui>Search shops</Ui> to find it). A merchandiser&apos;s clock-in
             is measured against their store, so keep it right. Once someone has stores allocated, they
-            can only check in at those (and their home store), and the app lists only those.
+            can only check in at those (and their home store), and the app lists only those. You can also
+            do it from the store: on <Ui>Outlets</Ui>, click <Ui>Allocate staff</Ui> under a store, search
+            your team and click <Ui>Allocate</Ui> (or <Ui>Remove</Ui>). Only that store changes for the person.
           </p>
           <p>
             <Ui>Notifications</Ui>: write a message to your team or named people, check <Ui>See who</Ui>,

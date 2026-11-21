@@ -1705,7 +1705,7 @@ Exports: `Allocation`, `AllocationTeam`, `AllocatableOutlet`, `OutletAllocator`
 
 ## `src/components/admin/outlet-manager.tsx`
 
-Supervisors see the stores but cannot add or change them.
+Field staff the reader may allocate (staff_allocation, through RLS).
 
 Exports: `OutletManager`
 
@@ -1819,6 +1819,12 @@ Exports: `countNotice`, `StoreCountSwitches`
 The server geocodes a few at a time; this keeps each request short.
 
 Exports: `StoreImporter`
+
+## `src/components/admin/store-staff.tsx`
+
+One field person as Store allocation sees them (staff_allocation).
+
+Exports: `StoreStaffPerson`, `StoreStaff`
 
 ## `src/components/admin/support-inbox.tsx`
 

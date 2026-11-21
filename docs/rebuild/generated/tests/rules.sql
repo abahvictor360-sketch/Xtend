@@ -975,6 +975,37 @@ begin
       'a refused allocation changes nothing');
   end;
 
+  -- From a store on Outlets: one person at one store (0097).
+  -- (Each call is its own statement so the check sees what it wrote.)
+  perform assert(public.set_store_staff(depot_id, grace, true), 'from a store: adding says it changed');
+  perform assert((select count(*) from public.staff_outlets where user_id = grace) = 2
+                 and exists (select 1 from public.staff_outlets where user_id = grace and outlet_id = kiosk_id),
+    'from a store: a person is added there and keeps their other stores');
+  perform assert(not public.set_store_staff(depot_id, grace, true),
+    'from a store: adding someone already there changes nothing');
+  perform assert(public.set_store_staff(depot_id, grace, false), 'from a store: removing says it changed');
+  perform assert((select count(*) from public.staff_outlets where user_id = grace) = 1
+                 and exists (select 1 from public.staff_outlets where user_id = grace and outlet_id = kiosk_id),
+    'from a store: removing them there leaves their other stores');
+  perform assert(
+    (select count(*) from public.audit_log where target_id = grace
+       and action in ('staff.allocate_store', 'staff.unallocate_store')) = 2,
+    'from a store: each change is audited, a change that did nothing is not');
+  begin
+    perform public.set_store_staff(gen_random_uuid(), grace, true);
+    perform assert(false, 'from a store: an unknown store is refused');
+  exception when others then
+    perform assert(sqlerrm like '%no longer active%', 'from a store: an unknown store is refused');
+  end;
+  perform act_as(grace);
+  begin
+    perform public.set_store_staff(depot_id, grace, true);
+    perform assert(false, 'from a store: field staff cannot allocate themselves');
+  exception when others then
+    perform assert(sqlerrm like '%cannot change%', 'from a store: field staff cannot allocate themselves');
+  end;
+  perform act_as(boss);
+
   -- ---------------------------------------------------------------
   -- The daily clock measures against the nearest allocated store.
   -- ---------------------------------------------------------------

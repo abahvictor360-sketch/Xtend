@@ -7815,6 +7815,46 @@ $$;
 
 
 --
+-- Name: set_store_staff(uuid, uuid, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_store_staff(p_outlet uuid, p_user uuid, p_on boolean) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  changed integer := 0;
+begin
+  if not public.can_allocate_outlets(p_user) then
+    raise exception 'You cannot change that person''s stores';
+  end if;
+
+  if coalesce(p_on, false) then
+    if not exists (select 1 from public.outlets o where o.id = p_outlet and o.is_active) then
+      raise exception 'That store does not exist or is no longer active';
+    end if;
+    insert into public.staff_outlets (user_id, outlet_id, assigned_by)
+    values (p_user, p_outlet, auth.uid())
+    on conflict (user_id, outlet_id) do nothing;
+    get diagnostics changed = row_count;
+  else
+    delete from public.staff_outlets where user_id = p_user and outlet_id = p_outlet;
+    get diagnostics changed = row_count;
+  end if;
+
+  if changed > 0 then
+    insert into public.audit_log (actor_id, action, target_table, target_id, meta)
+    values (auth.uid(),
+            case when p_on then 'staff.allocate_store' else 'staff.unallocate_store' end,
+            'staff_outlets', p_user,
+            jsonb_build_object('outlet_id', p_outlet, 'from', 'outlets'));
+  end if;
+  return changed > 0;
+end;
+$$;
+
+
+--
 -- Name: set_work_pattern(uuid[], smallint[]); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -18026,6 +18066,15 @@ GRANT ALL ON FUNCTION public.set_schedule_override(p_user uuid, p_day date, p_wo
 REVOKE ALL ON FUNCTION public.set_staff_outlets(p_user_id uuid, p_outlet_ids uuid[]) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.set_staff_outlets(p_user_id uuid, p_outlet_ids uuid[]) TO authenticated;
 GRANT ALL ON FUNCTION public.set_staff_outlets(p_user_id uuid, p_outlet_ids uuid[]) TO service_role;
+
+
+--
+-- Name: FUNCTION set_store_staff(p_outlet uuid, p_user uuid, p_on boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.set_store_staff(p_outlet uuid, p_user uuid, p_on boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.set_store_staff(p_outlet uuid, p_user uuid, p_on boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.set_store_staff(p_outlet uuid, p_user uuid, p_on boolean) TO service_role;
 
 
 --

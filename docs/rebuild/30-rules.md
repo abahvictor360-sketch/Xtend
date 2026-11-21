@@ -1334,6 +1334,13 @@ label and the store's own point.
   unknown or inactive store refuses the whole call and changes nothing.
   Every call writes an `audit_log` row `staff.allocate_outlets` directly
   (supervisors may call it).
+- **0097:** `set_store_staff(outlet, user, on)` adds or removes **one**
+  person at **one** store (Outlets, "Allocate staff"), leaving their other
+  stores alone. Same permission (`can_allocate_outlets`); adding needs an
+  active store ("That store does not exist or is no longer active");
+  returns whether anything changed; a change writes `staff.allocate_store`
+  or `staff.unallocate_store` (meta `outlet_id`, `from: 'outlets'`), a
+  no-op writes nothing.
 - The daily clock measures against the nearest allocated store (section
   2.2), and the event is attributed to that store.
 - Store visits are limited to these stores as soon as one is allocated

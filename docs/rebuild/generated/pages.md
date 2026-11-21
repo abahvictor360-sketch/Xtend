@@ -230,7 +230,7 @@ On screen: Load the July customer list, or paste your own — names and addresse
 
 - File: `src/app/admin/outlets/page.tsx`
 - Who: ['admin', 'supervisor']
-- Components: `ui/button`, `admin/outlet-manager`, `admin/page-kit`
+- Components: `ui/button`, `admin/outlet-manager`, `admin/page-kit`, `admin/store-staff`
 
 ## `/admin` — Overview — Xtend
 
