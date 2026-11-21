@@ -3,6 +3,7 @@ import { unstable_cache } from 'next/cache'
 import { after } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { MAP_HOSTS } from '@/lib/map-link'
 import {
   join,
   parseLimit,
@@ -590,4 +591,88 @@ export async function locateAddress(
   const query = [name, address].filter(Boolean).join(', ').trim()
   if (!query) return null
   return (await locateWithGoogle(query)) ?? (await locateWithOsm(query))
+}
+
+/**
+ * Up to `limit` places for what an admin typed into a new store's address
+ * (outlet form, "Find on map"). Google first (one Places search, counted
+ * and limited as above), then the free OpenStreetMap search, so a choice
+ * is offered even with no key or once the month's limit is reached.
+ */
+export async function searchPlaces(query: string, limit = 5): Promise<LocatedPlace[]> {
+  const q = query.trim().slice(0, 300)
+  if (!q) return []
+  const found: LocatedPlace[] = []
+  const key = process.env.GOOGLE_MAPS_API_KEY
+  if (key && (await googleAllowed())) {
+    try {
+      const search = await getJson<GoogleTextSearch>('https://places.googleapis.com/v1/places:searchText', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': key,
+          'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location',
+        },
+        body: JSON.stringify({ textQuery: q, maxResultCount: limit, regionCode: 'NG' }),
+      })
+      for (const place of search?.places ?? []) {
+        const lat = place.location?.latitude
+        const lng = place.location?.longitude
+        if (typeof lat === 'number' && typeof lng === 'number') {
+          found.push({ name: place.displayName?.text ?? null, address: place.formattedAddress ?? null, lat, lng, source: 'google_places' })
+        }
+      }
+    } finally {
+      countLookups(['call_text_search'])
+    }
+  }
+  if (found.length < limit) {
+    const results = await getJson<NominatimSearchResult[]>(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=${limit}&countrycodes=ng&q=${encodeURIComponent(q)}`,
+      { headers: { 'User-Agent': 'Xtend/1.0 (field attendance)' } },
+    )
+    for (const r of results ?? []) {
+      if (!r.lat || !r.lon) continue
+      const lat = Number(r.lat)
+      const lng = Number(r.lon)
+      // Skip a spot Google already gave (within about 30 m).
+      if (found.some((f) => Math.abs(f.lat - lat) < 0.0003 && Math.abs(f.lng - lng) < 0.0003)) continue
+      found.push({ name: r.name || null, address: r.display_name ?? null, lat, lng, source: 'osm' })
+    }
+  }
+  return found.slice(0, limit)
+}
+
+/**
+ * Opens a shared Google Maps short link (maps.app.goo.gl/…) to see the full
+ * link it stands for. Only map hosts are ever contacted, each redirect is
+ * checked before it is followed, and nothing from the page is used but its
+ * address.
+ */
+export async function openShortMapLink(link: string): Promise<string | null> {
+  let current: URL
+  try {
+    current = new URL(link)
+  } catch {
+    return null
+  }
+  for (let hop = 0; hop < 6; hop++) {
+    if (current.protocol !== 'https:' || !MAP_HOSTS.test(current.hostname)) return null
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS)
+    try {
+      const res = await fetch(current.href, { redirect: 'manual', signal: controller.signal, cache: 'no-store' })
+      const next = res.headers.get('location')
+      if (res.status >= 300 && res.status < 400 && next) {
+        current = new URL(next, current)
+        continue
+      }
+      return current.href
+    } catch {
+      return null
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+  return current.href
 }

@@ -1902,6 +1902,32 @@ Loads `outlets` (id, name, address, lat, lng, geofence_radius_m, shift_start, sh
 - **Name** (required, ≤ 160, "Justrite Ogba"), **Address** (≤ 400, "124 Oba Akran Ave, Ogba, Lagos").
 - **Latitude**, **Longitude** (required, decimal).
 - **Geofence radius (m)** (required, 25–2000, default **150**).
+- **Find on map** (beside Address; Enter in the address does the same;
+  "Searching…"): posts `{query: "name, address"}` to
+  `POST /api/admin/outlets/locate` (admins only, `GEOCODE_LOOKUPS_PER_HOUR`
+  per hour), which runs `searchPlaces`: one Google Places text search
+  (`maxResultCount` 5, `regionCode` NG, counted as `call_text_search`, skipped
+  without `GOOGLE_MAPS_API_KEY` or past the monthly limit), then Nominatim
+  (`countrycodes=ng`, limit 5) to fill up to 5, skipping spots within ~30 m of
+  a Google one. Nothing for name + address → retried with the address alone.
+  One result fills lat/lng (6 decimals) at once; several are listed ("Pick the
+  right place:", name, address, coordinates, Google Maps/OpenStreetMap; "None
+  of these" closes). Picking fills an empty name and address too. None:
+  "No place found for that address. Add the area and city, or paste a Google
+  Maps link."
+- **Or paste a Google Maps link** (input, "Use link"; pasting runs it at
+  once): `readMapLink` (`src/lib/map-link.ts`) reads plain "lat, lng", a
+  place pin `!3d…!4d…` (wins), `q`/`query`/`ll`/`center`/`destination`/
+  `daddr`/`sll`, OSM `#map=z/lat/lng` and `mlat`/`mlon`, `/maps/search|place|
+  dir/lat,lng`, then the map centre `@lat,lng`; only Google, goo.gl, g.co,
+  OpenStreetMap and Apple hosts; 0,0 and impossible values refused. A shared
+  short link (maps.app.goo.gl, goo.gl/maps) goes to the same route as
+  `{link}`: `openShortMapLink` follows redirects manually (`redirect:
+  'manual'`, at most 6, https and map hosts only), then reads the final link;
+  a link with only a place name is searched. Failure messages explain how to
+  copy the link or the numbers.
+- After a pin is placed: a note ("Position taken from the link…" / "Pinned at
+  …") and **Check on Google Maps** (`mapsLink`, new tab).
 - **I am standing here** (crosshair; "Reading…" while busy): reads the browser position (`enableHighAccuracy`, timeout **15 s**, `maximumAge: 0`), fills lat/lng to 6 decimals, warns "Your location is only accurate to N m. Step outside and try again, or the fence will be in the wrong place." when accuracy > **100 m**, then asks `/api/geocode?lat&lng` and fills an empty name and address from the answer. Failure: "Could not read your location. Type the coordinates instead."
 - **Clock-in time** (default 08:00) and **Clock-out time** (default 18:00) — the store's `shift_start` and `shift_end`, against which lateness and early clock-outs are judged.
 - **Create outlet** / **Save changes** ("Saving…") → POST `/api/admin/outlets` or PATCH `/api/admin/outlets/<id>`. Errors from the field rules or "That outlet did not save."

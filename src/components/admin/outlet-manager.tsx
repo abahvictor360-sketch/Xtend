@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Clock3, Crosshair, MapPin, Plus, Radius, Search, Store, Trash2, Users, type LucideIcon } from 'lucide-react'
+import { Clock3, Crosshair, ExternalLink, Link2, Loader2, MapPin, MapPinned, Plus, Radius, Search, Store, Trash2, Users, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,6 +13,15 @@ import { cn } from '@/lib/utils'
 import type { Outlet } from '@/lib/types'
 import { address, thingName } from '@/lib/fields'
 import { problemWith } from '@/lib/field-check'
+import { mapsLink, readMapLink } from '@/lib/map-link'
+
+interface FoundPlace {
+  name: string | null
+  address: string | null
+  lat: number
+  lng: number
+  source: 'google_places' | 'google_geocode' | 'osm'
+}
 
 interface Draft {
   name: string
@@ -53,6 +62,11 @@ export function OutletManager({
   const [locating, setLocating] = useState(false)
   const [query, setQuery] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+  const [finding, setFinding] = useState(false)
+  const [found, setFound] = useState<FoundPlace[] | null>(null)
+  const [mapLink, setMapLink] = useState('')
+  const [readingLink, setReadingLink] = useState(false)
+  const [pinNote, setPinNote] = useState<string | null>(null)
 
   const q = query.trim().toLowerCase()
   const shown = q
@@ -106,6 +120,109 @@ export function OutletManager({
     )
   }
 
+  function clearMapHelp() {
+    setFound(null)
+    setMapLink('')
+    setPinNote(null)
+  }
+
+  function placePin(lat: number, lng: number, note: string) {
+    setDraft((d) => ({ ...d, lat: lat.toFixed(6), lng: lng.toFixed(6) }))
+    setPinNote(note)
+  }
+
+  /** Searches Google Maps (then OpenStreetMap) for the address typed. */
+  async function findOnMap() {
+    const query = [draft.name, draft.address].map((x) => x.trim()).filter(Boolean).join(', ')
+    if (query.length < 3) {
+      setError('Type the store\'s address first, then press Find on map.')
+      return
+    }
+    setFinding(true)
+    setError(null)
+    setFound(null)
+    try {
+      let res = await fetch('/api/admin/outlets/locate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+      })
+      let body = (await res.json().catch(() => ({}))) as { places?: FoundPlace[]; error?: string }
+      // Nothing for name + address together: try the address alone.
+      if (res.ok && !body.places?.length && draft.name.trim() && draft.address.trim()) {
+        res = await fetch('/api/admin/outlets/locate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: draft.address.trim() }),
+        })
+        body = (await res.json().catch(() => ({}))) as { places?: FoundPlace[]; error?: string }
+      }
+      if (!res.ok || !body.places?.length) {
+        setError(body.error ?? 'No place found for that address. Add the area and city, or paste a Google Maps link.')
+        return
+      }
+      if (body.places.length === 1) {
+        pick(body.places[0])
+      } else {
+        setFound(body.places)
+      }
+    } catch {
+      setError('Could not reach the map. Check your connection and try again.')
+    } finally {
+      setFinding(false)
+    }
+  }
+
+  function pick(place: FoundPlace) {
+    placePin(place.lat, place.lng, `Pinned at ${place.name ?? place.address ?? 'the place found'}. Check it on Google Maps before saving.`)
+    setDraft((d) => ({
+      ...d,
+      address: d.address.trim() ? d.address : (place.address ?? ''),
+      name: d.name.trim() ? d.name : (place.name ?? ''),
+    }))
+    setFound(null)
+  }
+
+  /** Reads the position out of a pasted Google Maps link or "lat, lng". */
+  async function applyMapLink(text = mapLink) {
+    const value = text.trim()
+    if (!value) return
+    setError(null)
+    setFound(null)
+    // Most links carry the position: no need to ask the server.
+    const local = readMapLink(value)
+    if (local.point) {
+      placePin(local.point.lat, local.point.lng, 'Position taken from the link. Check it on Google Maps before saving.')
+      return
+    }
+    setReadingLink(true)
+    try {
+      const res = await fetch('/api/admin/outlets/locate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ link: value }),
+      })
+      const body = (await res.json().catch(() => ({}))) as {
+        point?: { lat: number; lng: number } | null
+        places?: FoundPlace[]
+        error?: string
+      }
+      if (body.point) {
+        placePin(body.point.lat, body.point.lng, 'Position taken from the link. Check it on Google Maps before saving.')
+      } else if (body.places?.length === 1) {
+        pick(body.places[0])
+      } else if (body.places?.length) {
+        setFound(body.places)
+      } else {
+        setError(body.error ?? 'No position in that link.')
+      }
+    } catch {
+      setError('Could not read that link. Check your connection and try again.')
+    } finally {
+      setReadingLink(false)
+    }
+  }
+
   async function save(event: React.FormEvent) {
     event.preventDefault()
     setError(null)
@@ -140,6 +257,7 @@ export function OutletManager({
       }
       setDraft(EMPTY)
       setAdding(false)
+      clearMapHelp()
       setEditing(null)
       router.refresh()
     } finally {
@@ -179,6 +297,7 @@ export function OutletManager({
   }
 
   function edit(outlet: Outlet) {
+    clearMapHelp()
     setEditing(outlet.id)
     setAdding(true)
     setDraft({
@@ -216,6 +335,7 @@ export function OutletManager({
             setAdding((a) => !a)
             setEditing(null)
             setDraft(EMPTY)
+            clearMapHelp()
           }}
           variant={adding ? 'outline' : 'default'}
         >
@@ -241,12 +361,83 @@ export function OutletManager({
               </div>
               <div className="space-y-1 lg:col-span-2">
                 <Label>Address</Label>
-                <Input
-                  maxLength={400}
-                  placeholder="124 Oba Akran Ave, Ogba, Lagos"
-                  value={draft.address}
-                  onChange={(e) => setDraft({ ...draft, address: e.target.value })}
-                />
+                <div className="flex gap-2">
+                  <Input
+                    maxLength={400}
+                    placeholder="124 Oba Akran Ave, Ogba, Lagos"
+                    value={draft.address}
+                    onChange={(e) => setDraft({ ...draft, address: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        void findOnMap()
+                      }
+                    }}
+                  />
+                  <Button type="button" variant="outline" disabled={finding} onClick={() => void findOnMap()} className="shrink-0">
+                    {finding ? <Loader2 className="h-4 w-4 animate-spin" /> : <MapPinned className="h-4 w-4" />}
+                    {finding ? 'Searching…' : 'Find on map'}
+                  </Button>
+                </div>
+              </div>
+              {found && found.length > 0 && (
+                <div className="space-y-1 sm:col-span-2 lg:col-span-4">
+                  <p className="text-xs font-medium text-muted-foreground">Pick the right place:</p>
+                  <ul className="divide-y rounded-lg border">
+                    {found.map((p, i) => (
+                      <li key={`${p.lat},${p.lng},${i}`}>
+                        <button
+                          type="button"
+                          onClick={() => pick(p)}
+                          className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-orange-50 dark:hover:bg-orange-950/30"
+                        >
+                          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-orange-600" />
+                          <span className="min-w-0">
+                            <span className="block font-medium">{p.name ?? p.address ?? 'Unnamed place'}</span>
+                            {p.name && p.address && <span className="block truncate text-xs text-muted-foreground">{p.address}</span>}
+                            <span className="block text-[11px] text-muted-foreground">
+                              {p.lat.toFixed(5)}, {p.lng.toFixed(5)} · {p.source === 'osm' ? 'OpenStreetMap' : 'Google Maps'}
+                            </span>
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  <button type="button" className="text-xs text-muted-foreground underline" onClick={() => setFound(null)}>
+                    None of these
+                  </button>
+                </div>
+              )}
+              <div className="space-y-1 sm:col-span-2 lg:col-span-4">
+                <Label>Or paste a Google Maps link</Label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="https://maps.app.goo.gl/… or 6.6019, 3.3516"
+                    value={mapLink}
+                    onChange={(e) => setMapLink(e.target.value)}
+                    onPaste={(e) => {
+                      const text = e.clipboardData.getData('text')
+                      if (text) {
+                        e.preventDefault()
+                        setMapLink(text)
+                        void applyMapLink(text)
+                      }
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        void applyMapLink()
+                      }
+                    }}
+                  />
+                  <Button type="button" variant="outline" disabled={readingLink || !mapLink.trim()} onClick={() => void applyMapLink()} className="shrink-0">
+                    {readingLink ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+                    {readingLink ? 'Reading…' : 'Use link'}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  In Google Maps, open the store (or press and hold on it to drop a pin), tap Share and copy the link.
+                </p>
               </div>
               <div className="space-y-1">
                 <Label>Latitude</Label>
@@ -266,6 +457,19 @@ export function OutletManager({
                   onChange={(e) => setDraft({ ...draft, lng: e.target.value })}
                 />
               </div>
+              {pinNote && draft.lat && draft.lng && Number.isFinite(Number(draft.lat)) && Number.isFinite(Number(draft.lng)) && (
+                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground sm:col-span-2 lg:col-span-4">
+                  <span>{pinNote}</span>
+                  <a
+                    href={mapsLink(Number(draft.lat), Number(draft.lng))}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 font-medium text-orange-700 underline dark:text-orange-400"
+                  >
+                    Check on Google Maps <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              )}
               <div className="space-y-1">
                 <Label>Geofence radius (m)</Label>
                 <Input

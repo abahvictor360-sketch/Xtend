@@ -641,9 +641,16 @@ export default async function AdminGuidePage() {
                 Click <Ui>Add outlet</Ui> and fill in the <Ui>Name</Ui> and <Ui>Address</Ui>.
               </>,
               <>
-                Standing inside the store, click <Ui>I am standing here</Ui> to fill in the position.
-                Otherwise press and hold on the entrance in Google Maps and copy the two numbers into{' '}
-                <Ui>Latitude</Ui> and <Ui>Longitude</Ui>.
+                Fill in the position in one of three ways. Click <Ui>Find on map</Ui> next to the address:
+                Xtend searches Google Maps (then OpenStreetMap) and fills in the position, or shows a few
+                places to pick from. Or paste a Google Maps link of the store into{' '}
+                <Ui>Or paste a Google Maps link</Ui> (open the store in Google Maps, or press and hold to
+                drop a pin, tap <Ui>Share</Ui> and copy the link; the two numbers like 6.6019, 3.3516 work
+                too). Or, standing inside the store, click <Ui>I am standing here</Ui>.
+              </>,
+              <>
+                Click <Ui>Check on Google Maps</Ui> to make sure the pin is on the store, not the middle of
+                the road: a store pinned in the wrong place marks everyone there as away from their store.
               </>,
               <>
                 Set the <Ui>Geofence radius</Ui>, <Ui>Shift start</Ui> and <Ui>Shift end</Ui>, click{' '}

@@ -59,6 +59,24 @@ the live database, so it cannot tell which of these are already done.)
 
 ---
 
+## 2026-11-21
+
+### Find a store on the map from its address or a Google Maps link
+- **What was done:** when you add or edit a store on **Outlets**, type the
+  address and click **Find on map** (or press Enter). Xtend searches Google
+  Maps, then OpenStreetMap, and fills in the latitude and longitude. When a
+  few places match, it lists them and you pick the right one. There is also a
+  new box, **Or paste a Google Maps link**: paste the store's link from
+  Google Maps (the share link, the link in the address bar, or just the two
+  numbers like 6.6019, 3.3516) and the position fills in at once. A **Check
+  on Google Maps** link then shows where the pin landed.
+- **The impact:** no more copying numbers by hand, and fewer stores pinned
+  in the wrong place.
+- **What you need to do:** redeploy. Google search works with the
+  `GOOGLE_MAPS_API_KEY` you already have ("Places API (New)" enabled) and
+  counts towards the monthly lookup limit; without it, OpenStreetMap is
+  used.
+
 ## 2026-11-20
 
 ### Every synced position is kept
