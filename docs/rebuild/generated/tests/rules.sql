@@ -6902,5 +6902,94 @@ begin
   end;
   perform set_config('request.jwt.claim.sub', '', false);
 
+  -- Delete a store or a person for good (0098). Rolled back at the end.
+  begin
+    declare
+      victim uuid;
+      victim_name text;
+      store uuid;
+      store_name text;
+      prev jsonb;
+      res jsonb;
+      others bigint;
+      before_people bigint;
+    begin
+      select a.user_id, p.full_name into victim, victim_name
+      from public.attendance a join public.profiles p on p.id = a.user_id
+      where p.role in ('merchandiser', 'marketer')
+      group by a.user_id, p.full_name order by count(*) desc limit 1;
+      select v.outlet_id, o.name into store, store_name
+      from public.store_visits v join public.outlets o on o.id = v.outlet_id
+      group by v.outlet_id, o.name order by count(*) desc limit 1;
+      perform assert(victim is not null and store is not null, 'delete for good 0098: (someone and a store with history)');
+
+      perform act_as(victim);
+      begin
+        perform public.delete_for_good_preview('outlet', store);
+        perform assert(false, 'delete for good 0098: only an admin');
+      exception when others then
+        perform assert(sqlerrm like '%Only an admin%', 'delete for good 0098: only an admin may even look');
+      end;
+
+      perform act_as(boss);
+      begin
+        perform public.delete_for_good('staff', boss, (select full_name from public.profiles where id = boss));
+        perform assert(false, 'delete for good 0098: not yourself');
+      exception when others then
+        perform assert(sqlerrm like '%your own account%', 'delete for good 0098: an admin cannot delete themselves');
+      end;
+
+      prev := public.delete_for_good_preview('staff', victim);
+      perform assert(prev->>'name' = victim_name
+                     and (prev->'records'->>'attendance')::bigint = (select count(*) from public.attendance where user_id = victim),
+        'delete for good 0098: the preview names them and counts their clock-ins');
+      begin
+        perform public.delete_for_good('staff', victim, 'someone else');
+        perform assert(false, 'delete for good 0098: the name must match');
+      exception when others then
+        perform assert(sqlerrm like '%Type the name exactly%', 'delete for good 0098: nothing goes unless the name is typed exactly');
+      end;
+      perform assert(exists (select 1 from public.profiles where id = victim), 'delete for good 0098: a refused delete changes nothing');
+
+      others := (select count(*) from public.attendance where user_id <> victim);
+      before_people := (select count(*) from public.profiles);
+      res := public.delete_for_good('staff', victim, '  ' || victim_name || ' ');
+      perform assert((res->>'ok')::boolean, 'delete for good 0098: a person with history is removed when confirmed');
+      perform assert(not exists (select 1 from public.profiles where id = victim)
+                     and not exists (select 1 from auth.users where id = victim)
+                     and not exists (select 1 from public.attendance where user_id = victim)
+                     and not exists (select 1 from public.location_pings where user_id = victim),
+        'delete for good 0098: their account, sign-in, clock-ins and movement are gone');
+      perform assert((select count(*) from public.attendance where user_id <> victim) = others
+                     and (select count(*) from public.profiles) = before_people - 1,
+        'delete for good 0098: nobody else''s records are touched');
+      perform assert(exists (select 1 from public.audit_log where action = 'user.delete_for_good' and target_id = victim
+                             and meta->>'name' = victim_name and (meta->'removed'->>'attendance')::bigint > 0),
+        'delete for good 0098: one audit row with the name and what was removed');
+
+      prev := public.delete_for_good_preview('outlet', store);
+      perform assert((prev->'records'->>'store_visits')::bigint = (select count(*) from public.store_visits where outlet_id = store),
+        'delete for good 0098: the store preview counts its visits');
+      others := (select count(*) from public.store_visits where outlet_id is distinct from store);
+      res := public.delete_for_good('outlet', store, store_name);
+      perform assert(not exists (select 1 from public.outlets where id = store)
+                     and not exists (select 1 from public.store_visits where outlet_id = store)
+                     and not exists (select 1 from public.staff_outlets where outlet_id = store),
+        'delete for good 0098: a store with visits is removed with its visits and allocations');
+      perform assert((select count(*) from public.store_visits) = others
+                     and not exists (select 1 from public.profiles where outlet_id = store),
+        'delete for good 0098: other stores keep theirs; people based there just lose the store');
+      perform assert(exists (select 1 from public.audit_log where action = 'outlet.delete_for_good' and target_id = store),
+        'delete for good 0098: the store removal is audited');
+      perform assert(not has_function_privilege('anon', 'public.delete_for_good(text, uuid, text)', 'execute')
+                     and not has_function_privilege('authenticated', 'public.purge_walk(regclass, uuid[], boolean, integer, jsonb)', 'execute'),
+        'delete for good 0098: signed-out callers cannot, and the walker is private');
+      raise exception 'delete-for-good-0098-done';
+    end;
+  exception when others then
+    if sqlerrm <> 'delete-for-good-0098-done' then raise; end if;
+  end;
+  perform set_config('request.jwt.claim.sub', '', false);
+
   raise notice 'ALL RULES PASSED';
 end $$;

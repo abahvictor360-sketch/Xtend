@@ -443,6 +443,14 @@ constant time, hashed first so the lengths always match.
 
 Exports: `cronAuthorized`
 
+## `src/lib/delete-for-good.ts`
+
+Deleting a store or a person for good (0098): the plain words for what
+goes with them, from the counts delete_for_good_preview() gives per
+table. Pure, so scripts/check-delete-for-good.ts can test it.
+
+Exports: `DeleteKind`, `RECORD_WORDS`, `describeRecords`, `nameMatches`
+
 ## `src/lib/device.ts`
 
 A weak signal, deliberately. It catches a shared login across two handsets,
@@ -1616,6 +1624,14 @@ Exports: `FixVisit`, `DayCorrections`
 One photo of a person's day, with where and when it was taken.
 
 Exports: `PhotoEvent`, `DayPhoto`, `EVENT_TITLE`, `DayPhotoGallery`
+
+## `src/components/admin/delete-for-good.tsx`
+
+"Are you sure?" for removing a store or a person that has records (0098).
+Shows what goes with them, asks for the name to be typed, then deletes
+everything for good. Deactivating stays the way to keep the records.
+
+Exports: `DeleteForGoodDialog`
 
 ## `src/components/admin/excuse-timeline.tsx`
 

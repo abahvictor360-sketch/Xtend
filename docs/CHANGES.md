@@ -34,7 +34,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0094_reports_for_recent_days.sql`;
    - `supabase/migrations/0095_offline_movement_always_kept.sql`;
    - `supabase/migrations/0096_every_synced_position_kept.sql`;
-   - `supabase/migrations/0097_allocate_from_store.sql`.
+   - `supabase/migrations/0097_allocate_from_store.sql`;
+   - `supabase/migrations/0098_delete_for_good.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18.)
 4. **Clock-out reminder fix (0069)**, if never pasted:
    ```sql
@@ -61,6 +62,23 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-21
+
+### Delete test accounts and stores for good
+- **What was done:** a store or account with records (clock-ins, visits,
+  reports, counts) could not be deleted, only deactivated. Now, when you
+  click **Delete** on **Staff** or under a store on **Outlets** and it has
+  records, Xtend shows what they are (for example "12 clock-ins and
+  clock-outs, 3 reports"), asks **"Are you sure you want to delete it?"** and
+  asks you to type the name. When you type it and click **Yes, delete for
+  good** (and enter your password if asked), the account or store is removed
+  with all its records and photos. **Deactivate instead** is offered beside
+  it. You cannot delete your own account or the last admin, and the audit log
+  keeps a note of what was removed.
+- **The impact:** test users and stores added by mistake no longer clutter
+  Xtend. Use it only for those: a real person's history cannot be brought
+  back once deleted.
+- **What you need to do:** run `supabase/migrations/0098_delete_for_good.sql`
+  in the Supabase SQL editor, then redeploy.
 
 ### Allocate staff from a store on Outlets
 - **What was done:** every store on **Outlets** now has an **Allocate

@@ -1334,6 +1334,28 @@ label and the store's own point.
   unknown or inactive store refuses the whole call and changes nothing.
   Every call writes an `audit_log` row `staff.allocate_outlets` directly
   (supervisors may call it).
+- **0098, delete for good:** `delete_for_good_preview(kind, id)` and
+  `delete_for_good(kind, id, confirm)` (`kind` 'outlet' or 'staff'),
+  admins only (`delete_for_good_target`: "Only an admin can delete for
+  good", "You cannot delete your own account", "This is the last admin…",
+  "That store/person is already gone"). `confirm` must equal the name,
+  ends trimmed ("Type the name exactly as shown to confirm").
+  `purge_walk(table, ids, dry, depth, counts)` (private) follows every
+  single-column foreign key to the table's uuid `id` with ON DELETE
+  RESTRICT / NO ACTION / CASCADE (never `audit_log`; SET NULL links are left
+  to the database), recursing into rows that have their own `id` (depth
+  ≤ 6), deepest first; dry counts per table, otherwise deletes. Staff:
+  support messages in their threads first, then the walk, then
+  `auth.users` (falls back to the profile, `auth_fallback`); their files in
+  selfies/reports/report-files/avatars/message-files (own folder, except
+  learned-place photos and count templates) are queued in
+  `system_reset_files`. Outlet: photo paths of its visits, counts, count
+  sheets and X Metrics rows are queued, then the walk and the outlet. The
+  report guards are disabled for the transaction (as in the reset) so a
+  report that only loses its store keeps its words. One audit row
+  `outlet.delete_for_good` / `user.delete_for_good` with `name`, `removed`
+  (per table) and `files`. Returns `{ok, name, removed, files,
+  auth_fallback}`.
 - **0097:** `set_store_staff(outlet, user, on)` adds or removes **one**
   person at **one** store (Outlets, "Allocate staff"), leaving their other
   stores alone. Same permission (`can_allocate_outlets`); adding needs an

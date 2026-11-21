@@ -2,7 +2,7 @@
 
 # API routes
 
-138 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+139 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
 
 ## `POST /api/activity`
 
@@ -214,6 +214,23 @@ const schema = z.object({
 ```
 
 - Database functions: `set_count_sheet_template`
+
+## `GET, POST /api/admin/delete-for-good`
+
+- File: `src/app/api/admin/delete-for-good/route.ts`
+- Who: ['admin']
+
+Deleting a store or a person for good, with everything that belongs to
+them (0098). GET shows what would go; POST does it once the name is
+typed. The database decides who may and writes the audit row; this
+route then removes their stored photos and, if the database could not,
+their sign-in.
+
+```ts
+const schema = z.object({ kind, id: z.string().guid(), confirm: z.string().max(300) })
+```
+
+- Database functions: `delete_for_good_preview`, `delete_for_good`
 
 ## `POST /api/admin/excuses`
 
