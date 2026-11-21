@@ -6,6 +6,7 @@ import { OutletManager } from '@/components/admin/outlet-manager'
 import { MapPinOff, Store, Upload, UserX, Users } from 'lucide-react'
 import { PageHeader, StatCard, StatGrid } from '@/components/admin/page-kit'
 import type { Outlet } from '@/lib/types'
+import type { StoreStaffPerson } from '@/components/admin/store-staff'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Outlets — Xtend' }
@@ -15,23 +16,34 @@ export default async function OutletsPage() {
   const readOnly = session.profile.role === 'supervisor'
   const supabase = await createServerSupabase()
 
-  const [{ data: outlets }, { data: counts }] = await Promise.all([
+  const [{ data: outlets }, { data: counts }, { data: staff }] = await Promise.all([
     supabase
       .from('outlets')
       .select('id, name, address, lat, lng, geofence_radius_m, shift_start, shift_end, is_active, created_at')
       .order('name'),
     supabase.from('profiles').select('outlet_id').eq('is_active', true),
+    // Who can be allocated from a store: everyone for an admin, their own
+    // team for a supervisor (RLS on profiles narrows the view).
+    supabase.from('staff_allocation').select('*').order('staff_name'),
   ])
 
   const staffPerOutlet = new Map<string, number>()
   for (const row of (counts ?? []) as { outlet_id: string | null }[]) {
     if (row.outlet_id) staffPerOutlet.set(row.outlet_id, (staffPerOutlet.get(row.outlet_id) ?? 0) + 1)
   }
+  // Staff on each card also counts people allocated there besides their home store.
+  const people = (staff ?? []) as StoreStaffPerson[]
+  for (const p of people) {
+    if (!p.is_active) continue
+    for (const id of p.outlet_ids ?? []) {
+      if (id !== p.home_outlet_id) staffPerOutlet.set(id, (staffPerOutlet.get(id) ?? 0) + 1)
+    }
+  }
 
   const list = (outlets ?? []) as Outlet[]
   const active = list.filter((o) => o.is_active)
   const unpinned = active.filter((o) => o.lat === null)
-  const placed = [...staffPerOutlet.values()].reduce((a, b) => a + b, 0)
+  const placed = ((counts ?? []) as { outlet_id: string | null }[]).filter((r) => r.outlet_id).length
   const empty = active.filter((o) => !staffPerOutlet.get(o.id)).length
 
   return (
@@ -40,8 +52,8 @@ export default async function OutletsPage() {
         title="Outlets"
         note={
           readOnly
-            ? 'The stores field staff work in. Only an admin can add or change them.'
-            : 'Every store, its area and its shift. The area is per store: a mall kiosk is not a standalone store.'
+            ? 'The stores field staff work in. Only an admin can add or change a store; use Allocate staff to put your team at a store.'
+            : 'Every store, its area and its shift. The area is per store: a mall kiosk is not a standalone store. Allocate staff under a store to put people there.'
         }
         actions={
           !readOnly && (
@@ -73,7 +85,13 @@ export default async function OutletsPage() {
         />
       </StatGrid>
 
-      <OutletManager outlets={list} staffCounts={Object.fromEntries(staffPerOutlet)} readOnly={readOnly} />
+      <OutletManager
+        outlets={list}
+        staffCounts={Object.fromEntries(staffPerOutlet)}
+        readOnly={readOnly}
+        staff={people}
+        canAllocate
+      />
     </div>
   )
 }

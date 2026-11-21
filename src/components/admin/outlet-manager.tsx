@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Clock3, Crosshair, ExternalLink, Link2, Loader2, MapPin, MapPinned, Plus, Radius, Search, Store, Trash2, Users, type LucideIcon } from 'lucide-react'
+import { Clock3, Crosshair, ExternalLink, Link2, Loader2, MapPin, MapPinned, Plus, Radius, Search, Store, Trash2, UserPlus, Users, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -14,6 +14,7 @@ import type { Outlet } from '@/lib/types'
 import { address, thingName } from '@/lib/fields'
 import { problemWith } from '@/lib/field-check'
 import { mapsLink, readMapLink } from '@/lib/map-link'
+import { StoreStaff, type StoreStaffPerson } from '@/components/admin/store-staff'
 
 interface FoundPlace {
   name: string | null
@@ -47,7 +48,13 @@ export function OutletManager({
   outlets,
   staffCounts,
   readOnly = false,
+  staff = [],
+  canAllocate = false,
 }: {
+  /** Field staff the reader may allocate (staff_allocation, through RLS). */
+  staff?: StoreStaffPerson[]
+  /** Admins and supervisors allocate staff from a store (0097). */
+  canAllocate?: boolean
   outlets: Outlet[]
   staffCounts: Record<string, number>
   /** Supervisors see the stores but cannot add or change them. */
@@ -67,6 +74,7 @@ export function OutletManager({
   const [mapLink, setMapLink] = useState('')
   const [readingLink, setReadingLink] = useState(false)
   const [pinNote, setPinNote] = useState<string | null>(null)
+  const [allocating, setAllocating] = useState<string | null>(null)
 
   const q = query.trim().toLowerCase()
   const shown = q
@@ -561,6 +569,21 @@ export function OutletManager({
                 />
                 <Fact icon={Users} label="Staff" value={String(staffCounts[outlet.id] ?? 0)} />
               </dl>
+
+              {canAllocate && allocating === outlet.id && (
+                <StoreStaff outlet={outlet} staff={staff} onClose={() => setAllocating(null)} />
+              )}
+
+              {canAllocate && allocating !== outlet.id && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="w-full border-brand/40 text-brand hover:bg-tint"
+                  onClick={() => setAllocating(outlet.id)}
+                >
+                  <UserPlus className="h-4 w-4" /> Allocate staff
+                </Button>
+              )}
 
               {!readOnly && confirmDelete === outlet.id && (
                 <div className="flex items-center gap-2 rounded-lg bg-destructive/10 p-2 text-xs">

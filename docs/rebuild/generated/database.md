@@ -1665,6 +1665,7 @@ Policies:
 - `set_my_avatar(p_path text)` → void · definer · 0062_user_activity.sql
 - `set_schedule_override(p_user uuid, p_day date, p_working boolean, p_note text)` → uuid · definer · 0059_schedules_leave.sql
 - `set_staff_outlets(p_user_id uuid, p_outlet_ids uuid[])` → SETOF uuid · definer · 0011_store_allocation.sql
+- `set_store_staff(p_outlet uuid, p_user uuid, p_on boolean)` → boolean · definer · 0097_allocate_from_store.sql
 - `set_work_pattern(p_users uuid[], p_days smallint[])` → integer · definer · 0059_schedules_leave.sql
 - `shift_end_for(p_user uuid)` → time without time zone · definer · 0061_clock_out_reminders.sql
 - `shift_start_for(p_user uuid)` → time without time zone · definer · 0069_shift_soon_reminders.sql

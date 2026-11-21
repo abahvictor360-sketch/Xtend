@@ -1902,6 +1902,25 @@ Loads `outlets` (id, name, address, lat, lng, geofence_radius_m, shift_start, sh
 - **Name** (required, ≤ 160, "Justrite Ogba"), **Address** (≤ 400, "124 Oba Akran Ave, Ogba, Lagos").
 - **Latitude**, **Longitude** (required, decimal).
 - **Geofence radius (m)** (required, 25–2000, default **150**).
+- **Allocate staff** (outline, brand, full width, under each store's
+  facts; admins and supervisors): opens the store's panel in the card
+  (`src/components/admin/store-staff.tsx`), one store at a time. "Allocate
+  staff to <store>", "Adding a store keeps the person's other stores…", a
+  close button. "Working here (N)": people whose home store it is (house
+  icon, "Home store", not changeable here) first, then those allocated
+  there, each with **Remove**. Then (active store only; otherwise
+  "Reactivate this store to allocate staff to it.") a search "Search
+  marketers or merchandisers" (name, home store or other store names), chips
+  All / Merchandisers / Marketers, and up to 30 active people not already
+  there ("Role · home: X · also N stores", **Allocate**); "Showing 30 of N.
+  Type a name to find someone." Each button posts `{user_id, on}` to
+  `POST /api/admin/outlets/[id]/staff` → `set_store_staff` (0097; before it
+  is run, falls back to reading `staff_allocation.outlet_ids` and calling
+  `set_staff_outlets`). Success shows "<name> now works at <store>." / "<name>
+  is off <store>." at once and refreshes the page. The list comes from
+  `staff_allocation` through RLS, so a supervisor sees only their team.
+  The card's Staff figure counts home staff plus active people allocated
+  there.
 - **Find on map** (beside Address; Enter in the address does the same;
   "Searching…"): posts `{query: "name, address"}` to
   `POST /api/admin/outlets/locate` (admins only, `GEOCODE_LOOKUPS_PER_HOUR`
