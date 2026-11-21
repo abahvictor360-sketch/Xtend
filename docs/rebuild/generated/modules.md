@@ -647,7 +647,7 @@ src/lib/place-resolve.ts):
     business within 80 m. Free and needs no key, but Nigerian POI
     coverage is thin, so it often names the street rather than the shop.
 
-Exports: `resolvePlace`, `placeForEvent`, `LocatedPlace`, `locateAddress`
+Exports: `resolvePlace`, `placeForEvent`, `LocatedPlace`, `locateAddress`, `searchPlaces`, `openShortMapLink`
 
 ## `src/lib/health.ts`
 
@@ -725,6 +725,15 @@ Exports: `loadLeaflet`, `hasGoogleMapsKey`, `onGoogleAuthFailure`, `loadGoogleMu
 Accept only a local page after sign-in, never a protocol-relative or external URL.
 
 Exports: `loginDestination`
+
+## `src/lib/map-link.ts`
+
+Reading a store's position out of what an admin pastes: a Google Maps
+link (full or shared short link, once it has been followed), an
+OpenStreetMap or Apple Maps link, or plain "6.6019, 3.3516". Pure, so
+scripts/check-map-link.ts can test it.
+
+Exports: `LinkPoint`, `LinkReading`, `validPoint`, `SHORT_LINK_HOSTS`, `MAP_HOSTS`, `isShortMapLink`, `readMapLink`, `mapsLink`
 
 ## `src/lib/marketer-report-server.ts`
 

@@ -2,7 +2,7 @@
 
 # API routes
 
-136 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+137 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
 
 ## `POST /api/activity`
 
@@ -808,6 +808,20 @@ const bodySchema = z.object({
 })
 ```
 - Tables and views: `outlets`
+
+## `POST /api/admin/outlets/locate`
+
+- File: `src/app/api/admin/outlets/locate/route.ts`
+- Who: ['admin']
+
+The position read from a pasted link, when there is one.
+
+```ts
+const schema = z.union([
+  z.object({ query: z.string().trim().min(3, 'Type at least 3 letters of the address').max(400) }),
+  z.object({ link: z.string().trim().min(3).max(2000) }),
+])
+```
 
 ## `POST /api/admin/outlets`
 
