@@ -1334,6 +1334,20 @@ label and the store's own point.
   unknown or inactive store refuses the whole call and changes nothing.
   Every call writes an `audit_log` row `staff.allocate_outlets` directly
   (supervisors may call it).
+- **0100, working hours per person:** `profiles.shift_start` / `shift_end`
+  (`time not null`, default 08:00 / 18:00; check `profiles_shift_order`
+  end > start, not valid for old rows). When the columns are first added
+  each person gets their home store's times (only if end > start), so no
+  one's day changes. `shift_start_for` / `shift_end_for` read the person
+  (08:00 / 18:00 if none). Switched to the person's hours:
+  `attendance_punctuality` (late / early flags, worded "Clocked in N late
+  [at <store>] (their day starts HH:MM)"), `admin_overview` (late count),
+  `staff_analytics` (days late), `staff_no_show` (left join to the home
+  store: someone with no home store is included, `outlet_id` null),
+  `my_day` (new `shift: {start, end}`; `outlet.shift_start/end` also the
+  person's) and `attendance_detail` (`shift_start`, `shift_end`, `is_late`
+  from `profiles`). `profiles_self_guard` keeps staff from changing their own
+  hours. `outlets.shift_start/end` remain, unused.
 - **0099, store check-out reminders:** `visit_reminder_minutes()` = 25,
   `visit_reminder_max()` = 16. Table `visit_checkout_reminders` (`visit_id`
   pk → store_visits cascade, `user_id` → profiles cascade, `sent`,

@@ -870,8 +870,9 @@ const schema = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   geofence_radius_m: z.number().int().min(25).max(2000).default(150),
-  shift_start: z.string().regex(/^\d{2}:\d{2}$/),
-  shift_end: z.string().regex(/^\d{2}:\d{2}$/),
+  // Hours belong to people now (0100); a store keeps the old columns, unused.
+  shift_start: z.string().regex(/^\d{2}:\d{2}$/).default('08:00'),
+  shift_end: z.string().regex(/^\d{2}:\d{2}$/).default('18:00'),
 })
 ```
 - Tables and views: `outlets`
@@ -1274,6 +1275,9 @@ const patchSchema = z.object({
   unlock: z.boolean().optional(),
   /** Admin only: remove their authenticator app so they set it up again (0080). */
   reset_mfa: z.boolean().optional(),
+  /** Their working hours, wherever they clock in (0100); both together. */
+  shift_start: clockTime.optional(),
+  shift_end: clockTime.optional(),
 })
 ```
 
@@ -1321,6 +1325,9 @@ const createUserSchema = z.object({
   staff_role_id: z.string().guid().nullable().optional(),
   outlet_id: z.string().guid().nullable().optional(),
   supervisor_id: z.string().guid().nullable().optional(),
+  /** Their working hours, wherever they clock in (0100). */
+  shift_start: clockTime.default('08:00'),
+  shift_end: clockTime.default('18:00'),
 })
 ```
 

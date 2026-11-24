@@ -36,7 +36,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0096_every_synced_position_kept.sql`;
    - `supabase/migrations/0097_allocate_from_store.sql`;
    - `supabase/migrations/0098_delete_for_good.sql`;
-   - `supabase/migrations/0099_store_checkout_reminders.sql`.
+   - `supabase/migrations/0099_store_checkout_reminders.sql`;
+   - `supabase/migrations/0100_shift_times_per_person.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18.)
 4. **Clock-out reminder fix (0069)**, if never pasted:
    ```sql
@@ -63,6 +64,24 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-24
+
+### Working hours belong to the person, not the store
+- **What was done:** clock-in and clock-out times used to be set on each
+  store. They are now set on each person: on **Staff**, **Add staff** and
+  **Edit details** have **Clock in by** and **Clock out from**. A marketer due
+  at 09:00 is late after 09:00 wherever their first store is; every store
+  visit after that is recorded with its own check-in and check-out time, as
+  before. Stores no longer have times (the form, the store cards and the
+  bulk import). When you run the update, everyone keeps their home store's
+  current times, so nothing changes until you change it. Staff see their
+  hours on Home and on **Account**, and cannot change them. Ask Xtend can set
+  them too: "set all marketers to 09:00–17:00".
+- **The impact:** lateness, the 5-minute reminders, the clock-out reminders,
+  the no-show alerts and every attendance report now use each person's own
+  hours, including marketers with no home store.
+- **What you need to do:** run `supabase/migrations/0100_shift_times_per_person.sql`
+  in the Supabase SQL editor (after 0099), then redeploy. Then set each
+  marketer's hours on **Staff** (or ask Ask Xtend to set them for a group).
 
 ### No more blank "Application error" screen
 - **What was done:** when a screen crashed, staff saw a white page saying

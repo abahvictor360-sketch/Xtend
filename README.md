@@ -121,6 +121,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0097_allocate_from_store.sql            # allocate staff from a store on Outlets (set_store_staff)
    supabase/migrations/0098_delete_for_good.sql                # delete a test or mistaken store or person for good, with their records
    supabase/migrations/0099_store_checkout_reminders.sql       # remind marketers every 25 minutes to check out of a store
+   supabase/migrations/0100_shift_times_per_person.sql         # working hours belong to the person, not the store
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

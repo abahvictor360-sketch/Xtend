@@ -620,6 +620,8 @@ Policies:
 | onboarded_at | timestamp with time zone(timestamptz) | yes |  |
 | staff_role_id | uuid(uuid) | yes |  |
 | app_only | boolean(bool) |  | false |
+| shift_start | time without time zone(time) |  | '08:00:00'::time without time zone |
+| shift_end | time without time zone(time) |  | '18:00:00'::time without time zone |
 
 Policies:
 - `profiles_admin_all` ALL to public: using `is_admin()`; check `is_admin()`
@@ -1396,7 +1398,7 @@ Policies:
 - `add_report_photo(p_path text)` → uuid · definer · 0094_reports_for_recent_days.sql
 - `add_report_photo(p_path text, p_report uuid)` → uuid · definer · 0094_reports_for_recent_days.sql
 - `address_at(p_lat double precision, p_lng double precision)` → text · definer · 0068_place_lookups.sql
-- `admin_overview()` → jsonb · definer · 0059_schedules_leave.sql
+- `admin_overview()` → jsonb · definer · 0100_shift_times_per_person.sql
 - `alert_watchers(p_user uuid)` → TABLE(user_id uuid, full_name text, role user_role) · definer · 0036_supervisor_alerts.sql
 - `apply_leave(p_kind text, p_from date, p_to date, p_reason text)` → uuid · definer · 0059_schedules_leave.sql
 - `armor(bytea)` → text
@@ -1411,7 +1413,7 @@ Policies:
 - `attendance_learn_waiting_store()` → trigger · definer · 0034_stores_pinned_from_clock_in.sql
 - `attendance_office_time()` → trigger · definer · 0090_field_corrections.sql
 - `attendance_place_due()` → trigger · definer · 0045_mandatory_place_naming.sql
-- `attendance_punctuality()` → trigger · definer · 0036_supervisor_alerts.sql
+- `attendance_punctuality()` → trigger · definer · 0100_shift_times_per_person.sql
 - `attendance_push_check()` → trigger · definer · 0027_notifications_required.sql
 - `attendance_replace_for_correction()` → trigger · definer · 0090_field_corrections.sql
 - `attendance_store_check_in()` → trigger · definer · 0087_clock_in_checks_in.sql
@@ -1533,7 +1535,7 @@ Policies:
 - `movement_trail(p_user uuid, p_date date)` → jsonb · definer · 0029_offline_positions.sql
 - `my_calendar(p_from date, p_to date)` → TABLE(day date, kind text, clocked_in boolean, missed boolean) · definer · 0059_schedules_leave.sql
 - `my_coverage()` → jsonb · definer · 0004_tracking_coverage.sql
-- `my_day()` → jsonb · definer · 0090_field_corrections.sql
+- `my_day()` → jsonb · definer · 0100_shift_times_per_person.sql
 - `my_mfa_required()` → boolean · definer · 0080_zero_trust.sql
 - `my_notifications(p_limit integer)` → TABLE(id uuid, title text, body text, url text, sent_at timestamp with time zone, sender_name text, read_at timestamp with time zone) · definer · 0006_push_notifications.sql
 - `my_open_count_request()` → TABLE(id uuid, due_date date, note text, requested_by_name text) · definer · 0020_count_requests.sql
@@ -1604,7 +1606,7 @@ Policies:
 - `post_support_message(p_thread uuid, p_body text)` → uuid · definer · 0053_support_notifications.sql
 - `product_key(p_name text)` → text · 0021_counted_product_names.sql
 - `profiles_field_only_reporting()` → trigger · definer · 0079_security_fixes.sql
-- `profiles_self_guard()` → trigger · definer · 0084_app_only.sql
+- `profiles_self_guard()` → trigger · definer · 0100_shift_times_per_person.sql
 - `profiles_staff_role_sync()` → trigger · definer · 0042_staff_roles.sql
 - `profiles_supervisor_check()` → trigger · definer · 0017_supervisor_manages_staff.sql
 - `punctuality_grace_minutes()` → integer · 0036_supervisor_alerts.sql
@@ -1681,8 +1683,8 @@ Policies:
 - `set_staff_outlets(p_user_id uuid, p_outlet_ids uuid[])` → SETOF uuid · definer · 0011_store_allocation.sql
 - `set_store_staff(p_outlet uuid, p_user uuid, p_on boolean)` → boolean · definer · 0097_allocate_from_store.sql
 - `set_work_pattern(p_users uuid[], p_days smallint[])` → integer · definer · 0059_schedules_leave.sql
-- `shift_end_for(p_user uuid)` → time without time zone · definer · 0061_clock_out_reminders.sql
-- `shift_start_for(p_user uuid)` → time without time zone · definer · 0069_shift_soon_reminders.sql
+- `shift_end_for(p_user uuid)` → time without time zone · definer · 0100_shift_times_per_person.sql
+- `shift_start_for(p_user uuid)` → time without time zone · definer · 0100_shift_times_per_person.sql
 - `sign_in_bump(p_key text, p_account text, p_scope text, p_limit integer)` → void · definer · 0077_sign_in_lockout.sql
 - `sign_in_clear(p_account text)` → integer · definer · 0077_sign_in_lockout.sql
 - `sign_in_device_key(p_account text, p_address text, p_device text)` → text · definer · 0077_sign_in_lockout.sql
@@ -1692,9 +1694,9 @@ Policies:
 - `sign_in_known_device(p_account text, p_device text)` → boolean · definer · 0077_sign_in_lockout.sql
 - `sign_in_lock_status(p_account text, p_address text, p_device text)` → timestamp with time zone · definer · 0077_sign_in_lockout.sql
 - `sign_in_succeeded(p_account text, p_address text, p_device text, p_new_device text)` → void · definer · 0077_sign_in_lockout.sql
-- `staff_analytics(p_from date, p_to date)` → TABLE(user_id uuid, full_name text, outlet_name text, days_present integer, days_late integer, days_off_site integer, avg_distance_m double precision) · definer · 0072_hr_role.sql
+- `staff_analytics(p_from date, p_to date)` → TABLE(user_id uuid, full_name text, outlet_name text, days_present integer, days_late integer, days_off_site integer, avg_distance_m double precision) · definer · 0100_shift_times_per_person.sql
 - `staff_day(p_date date)` → TABLE(user_id uuid, staff_name text, role user_role, clocked_in_at timestamp with time zone, clocked_in_at_place text, clocked_out_at timestamp with time zone, clocked_out_at_place text, stores_visited integer, minutes_in_store integer, still_in_store text) · definer · 0016_visits_without_allocation.sql
-- `staff_no_show(p_grace_minutes integer)` → TABLE(user_id uuid, full_name text, phone text, outlet_id uuid, outlet_name text, shift_start time without time zone, minutes_late integer) · definer · 0059_schedules_leave.sql
+- `staff_no_show(p_grace_minutes integer)` → TABLE(user_id uuid, full_name text, phone text, outlet_id uuid, outlet_name text, shift_start time without time zone, minutes_late integer) · definer · 0100_shift_times_per_person.sql
 - `store_count_status()` → jsonb · definer · 0020_count_requests.sql
 - `store_visit_alert()` → trigger · definer · 0016_visits_without_allocation.sql
 - `store_visit_close_stale()` → trigger · definer · 0086_close_stale_visit_on_check_in.sql

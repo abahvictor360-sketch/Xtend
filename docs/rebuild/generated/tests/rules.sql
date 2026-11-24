@@ -460,11 +460,11 @@ begin
   end;
 
   -- ---------------------------------------------------------------
-  -- The no-show sweep, exercised through the real function by giving an
-  -- outlet a shift start that has already passed today.
+  -- The no-show sweep, exercised through the real function by giving
+  -- people a start time that has already passed today (their own, 0100).
   -- ---------------------------------------------------------------
   perform act_as(boss);
-  update public.outlets set shift_start = '00:01' where id = kiosk_id;
+  update public.profiles set shift_start = '00:01' where id in (bala, grace);
   -- Bala is at the kiosk and clocked in, so he is not a no-show; Grace is
   -- at the mall whose shift has not started.
   perform assert(
@@ -483,7 +483,7 @@ begin
 
   -- Put it back so later assertions see the original arrangement.
   update public.profiles set outlet_id = mall_id where id = grace;
-  update public.outlets set shift_start = '09:00' where id = kiosk_id;
+  update public.profiles set shift_start = '08:00' where id in (bala, grace);
 
   -- ---------------------------------------------------------------
   -- Store visits: a marketer's day is a sequence of them (migration 010).
@@ -2523,10 +2523,10 @@ begin
     -- Late: the shift started 40 minutes ago. (Skipped just after
     -- midnight, when "40 minutes ago" was yesterday.)
     if local_now > '01:30' and local_now < '22:00' then
-      update public.outlets
+      update public.profiles
       set shift_start = (local_now - interval '40 minutes')::time,
           shift_end = (local_now + interval '30 minutes')::time
-      where id = early;
+      where id = lola;
       perform act_as(lola);
       insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
       values ('opening', 6.3, 3.3, 10, fresh_photo('selfies', 'lola-1.jpg'), now());
@@ -2552,7 +2552,7 @@ begin
     -- On time is not flagged.
     perform act_as(boss);
     delete from public.attendance where user_id = lola;
-    update public.outlets set shift_start = '00:00', shift_end = '23:59' where id = early;
+    update public.profiles set shift_start = '00:00', shift_end = '23:59' where id = lola;
     delete from public.integrity_flags where user_id = lola;
     perform act_as(lola);
     insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
@@ -3857,6 +3857,9 @@ begin
         (cy4, 'Chukwudi Four',  'cy4@xpel.ng', 'merchandiser', shop),
         (cy5, 'Chidinma Five',  'cy5@xpel.ng', 'merchandiser', shop);
       mine := array[cy1, cy2, cy3, cy4, cy5];
+      -- Their own hours (0100): the shop's, as the migration copies them.
+      update public.profiles p set shift_start = o.shift_start, shift_end = o.shift_end
+      from public.outlets o where o.id = p.outlet_id and p.id = any(mine);
 
       -- Clock events written straight in (the clock-in rules are tested above).
       perform set_config('session_replication_role', 'replica', true);
@@ -3919,7 +3922,7 @@ begin
         'clock-out reminders: nothing after midnight Lagos');
 
       -- A job more than an hour late sends only the second, once.
-      update public.outlets set shift_end = '20:00' where id = shop;
+      update public.profiles set shift_end = '20:00' where id = cy3;
       perform set_config('session_replication_role', 'replica', true);
       delete from public.attendance where user_id = cy3;
       insert into public.attendance (user_id, type, lat, lng, accuracy_m, selfie_path, client_captured_at, attendance_date)
@@ -3933,7 +3936,7 @@ begin
       perform assert((select count(*) from public.claim_clock_out_reminders((today + time '21:15') at time zone 'Africa/Lagos') c
                       where c.user_id = cy3) = 0,
         'clock-out reminders: and the first is not sent after it');
-      update public.outlets set shift_end = '17:00' where id = shop;
+      update public.profiles set shift_end = '17:00' where id = cy3;
     end;
 
     -- Five-minute heads-ups before the shift starts and ends (069).
@@ -3974,6 +3977,9 @@ begin
         (sa8, 'Sam Eight',  'sa8@xpel.ng', 'merchandiser', shop,  false),
         (sa9, 'Sule Nine',  'sa9@xpel.ng', 'merchandiser', shop2, true);
       mine := array[sa1, sa2, sa3, sa4, sa5, sa6, sa7, sa8, sa9];
+      -- Their own hours (0100): their store's, as the migration copies them.
+      update public.profiles p set shift_start = o.shift_start, shift_end = o.shift_end
+      from public.outlets o where o.id = p.outlet_id and p.id = any(mine);
 
       -- Today is a working day for everyone but sa3 (whatever weekday the
       -- tests run on); sa4 is on approved leave. Written straight in.
@@ -3987,7 +3993,7 @@ begin
       perform set_config('session_replication_role', 'origin', true);
 
       perform assert(public.shift_start_for(sa1) = time '09:00' and public.shift_start_for(sa2) = time '08:00',
-        'shift heads-ups: the shift start is the home store''s, or 08:00 with no store');
+        'shift heads-ups: the start is the person''s own (08:00 unless set)');
 
       select count(*) into n from public.claim_shift_soon_reminders((today + time '08:54') at time zone 'Africa/Lagos') c
       where c.user_id = any(mine) and c.user_id <> sa2;
@@ -4107,6 +4113,7 @@ begin
         (kemi, 'Kemi Adeyemi', 'kemi.rota@xpel.ng', 'merchandiser', shop, sola),
         (obi,  'Obi Nwosu',    'obi.rota@xpel.ng',  'merchandiser', shop, null),
         (uche, 'Uche Okeke',   'uche.rota@xpel.ng', 'marketer',     shop, sola);
+      update public.profiles set shift_start = '00:00', shift_end = '23:59' where id in (kemi, obi, uche);
 
       -- Nobody given a pattern works Monday to Saturday.
       perform act_as(boss);
@@ -7039,6 +7046,65 @@ begin
     end;
   exception when others then
     if sqlerrm <> 'visit-reminders-0099-done' then raise; end if;
+  end;
+
+  -- Working hours belong to the person (0100). Rolled back.
+  begin
+    declare
+      mk uuid := gen_random_uuid();
+      early_store uuid;
+      d date := public.business_date() - 1;
+      t_in timestamptz := ((public.business_date() - 1)::timestamp + interval '8 hours 30 minutes') at time zone 'Africa/Lagos';
+      res jsonb;
+    begin
+      insert into auth.users (id, email) values (mk, 'hours.mk@xpel.ng');
+      insert into public.outlets (name, lat, lng, geofence_radius_m, shift_start, shift_end)
+      values ('Seven O''Clock Shop', 6.45, 3.40, 150, '07:00', '15:00') returning id into early_store;
+      insert into public.profiles (id, full_name, email, role, outlet_id, shift_start, shift_end)
+      values (mk, 'Hours Marketer', 'hours.mk@xpel.ng', 'marketer', null, '09:00', '17:00');
+      perform assert(public.shift_start_for(mk) = '09:00' and public.shift_end_for(mk) = '17:00',
+        'hours 0100: a person''s day is their own, with no home store');
+      perform assert((select shift_start from public.profiles where id = gen_random_uuid()) is null
+                     and public.shift_start_for(gen_random_uuid()) = '08:00', 'hours 0100: 08:00 when there is nobody to ask');
+
+      -- 08:30 at a store that opens at 07:00 is on time for someone due at 09:00.
+      perform set_config('session_replication_role', 'replica', true);
+      insert into public.attendance (user_id, type, outlet_id, lat, lng, accuracy_m, selfie_path, client_captured_at, created_at, attendance_date)
+      values (mk, 'opening', early_store, 6.45, 3.40, 10, 'x', t_in, t_in, d);
+      perform set_config('session_replication_role', 'origin', true);
+      perform assert((select ad.is_late from public.attendance_detail ad where ad.user_id = mk) = false
+                     and (select ad.shift_start from public.attendance_detail ad where ad.user_id = mk) = '09:00',
+        'hours 0100: lateness is measured by the person''s start, not the store''s');
+      update public.profiles set shift_start = '08:00' where id = mk;
+      perform assert((select ad.is_late from public.attendance_detail ad where ad.user_id = mk) = true,
+        'hours 0100: and changes when their start changes');
+
+      -- Staff cannot change their own hours.
+      perform act_as(mk);
+      update public.profiles set shift_start = '11:00', shift_end = '12:00' where id = mk;
+      perform assert((select shift_start from public.profiles where id = mk) = '08:00', 'hours 0100: staff cannot change their own hours');
+      res := public.my_day();
+      perform assert(res->'shift'->>'start' = '08:00:00' and res->'shift'->>'end' = '17:00:00',
+        'hours 0100: Home shows their own hours, with no home store');
+      perform act_as(boss);
+
+      begin
+        update public.profiles set shift_start = '18:00', shift_end = '09:00' where id = mk;
+        perform assert(false, 'hours 0100: the day must end after it starts');
+      exception when check_violation then
+        perform assert(true, 'hours 0100: a day that ends before it starts is refused');
+      end;
+
+      -- The no-show sweep covers a marketer with no home store.
+      update public.profiles set shift_start = '00:01' where id = mk;
+      perform assert(not exists (select 1 from public.attendance a where a.user_id = mk and a.attendance_date = public.business_date())
+                     and (public.day_kind(mk, public.business_date()) <> 'working'
+                          or exists (select 1 from public.staff_no_show(0) n where n.user_id = mk and n.outlet_id is null)),
+        'hours 0100: someone with no home store who has not clocked in is still a no-show');
+      raise exception 'hours-0100-done';
+    end;
+  exception when others then
+    if sqlerrm <> 'hours-0100-done' then raise; end if;
   end;
 
   raise notice 'ALL RULES PASSED';

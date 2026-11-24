@@ -7,7 +7,6 @@ import { POST as checkPhone } from '@/app/api/admin/phone-check/route'
 import { POST as reviewFlag } from '@/app/api/admin/integrity/[id]/review/route'
 import { POST as setTarget } from '@/app/api/admin/metrics/targets/route'
 import { POST as setXmStore } from '@/app/api/admin/metrics/stores/route'
-import { PATCH as updateOutlet } from '@/app/api/admin/outlets/[id]/route'
 import { PATCH as updateUser } from '@/app/api/admin/users/[id]/route'
 import { POST as setSchedule } from '@/app/api/admin/schedules/route'
 import { POST as officeCount } from '@/app/api/admin/metrics/count/route'
@@ -99,18 +98,23 @@ export async function POST(request: Request) {
         result = r.ok ? { ok: true, detail: action.payload.active ? 'Added to X Metrics.' : 'Removed from X Metrics.' } : { ok: false, detail: r.error }
         break
       }
-      case 'outlet_hours': {
-        const id = action.payload.outlet_id
-        const r = await call(
-          updateOutlet as Handler,
-          `/api/admin/outlets/${id}`,
-          { shift_start: action.payload.shift_start, shift_end: action.payload.shift_end },
-          { id },
-          'PATCH',
-        )
-        result = r.ok
-          ? { ok: true, detail: `Clock-in ${action.payload.shift_start}, clock-out ${action.payload.shift_end}.` }
-          : { ok: false, detail: r.error }
+      case 'staff_hours': {
+        let done = 0
+        let firstError: string | null = null
+        for (const id of action.payload.user_ids) {
+          const r = await call(
+            updateUser as Handler,
+            `/api/admin/users/${id}`,
+            { shift_start: action.payload.shift_start, shift_end: action.payload.shift_end },
+            { id },
+            'PATCH',
+          )
+          if (r.ok) done += 1
+          else firstError ??= r.error
+        }
+        result = done
+          ? { ok: true, detail: `Hours ${action.payload.shift_start}–${action.payload.shift_end} set for ${done} ${done === 1 ? 'person' : 'people'}.${firstError ? ` Not all: ${firstError}` : ''}` }
+          : { ok: false, detail: firstError ?? 'No hours were set.' }
         break
       }
       case 'work_pattern': {

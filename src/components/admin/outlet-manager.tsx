@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Clock3, Crosshair, ExternalLink, Link2, Loader2, MapPin, MapPinned, Plus, Radius, Search, Store, Trash2, UserPlus, Users, type LucideIcon } from 'lucide-react'
+import { Crosshair, ExternalLink, Link2, Loader2, MapPin, MapPinned, Plus, Radius, Search, Store, Trash2, UserPlus, Users, type LucideIcon } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -31,8 +31,6 @@ interface Draft {
   lat: string
   lng: string
   geofence_radius_m: string
-  shift_start: string
-  shift_end: string
 }
 
 const EMPTY: Draft = {
@@ -41,8 +39,6 @@ const EMPTY: Draft = {
   lat: '',
   lng: '',
   geofence_radius_m: '150',
-  shift_start: '08:00',
-  shift_end: '18:00',
 }
 
 export function OutletManager({
@@ -252,8 +248,6 @@ export function OutletManager({
       lat: Number(draft.lat),
       lng: Number(draft.lng),
       geofence_radius_m: Number(draft.geofence_radius_m),
-      shift_start: draft.shift_start,
-      shift_end: draft.shift_end,
     }
 
     try {
@@ -324,8 +318,6 @@ export function OutletManager({
       lat: outlet.lat?.toString() ?? '',
       lng: outlet.lng?.toString() ?? '',
       geofence_radius_m: String(outlet.geofence_radius_m),
-      shift_start: outlet.shift_start.slice(0, 5),
-      shift_end: outlet.shift_end.slice(0, 5),
     })
   }
 
@@ -534,24 +526,10 @@ export function OutletManager({
                   {locating ? 'Reading…' : 'I am standing here'}
                 </Button>
               </div>
-              <div className="space-y-1">
-                <Label>Clock-in time</Label>
-                <Input
-                  required
-                  type="time"
-                  value={draft.shift_start}
-                  onChange={(e) => setDraft({ ...draft, shift_start: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>Clock-out time</Label>
-                <Input
-                  required
-                  type="time"
-                  value={draft.shift_end}
-                  onChange={(e) => setDraft({ ...draft, shift_end: e.target.value })}
-                />
-              </div>
+              <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-4">
+                Clock-in and clock-out times belong to each person (Staff), not to the store, so a marketer due at
+                09:00 is due at 09:00 at any store.
+              </p>
               <div className="sm:col-span-2 lg:col-span-4">
                 <Button type="submit" disabled={busy}>
                   {busy ? 'Saving…' : editing ? 'Save changes' : 'Create outlet'}
@@ -590,7 +568,6 @@ export function OutletManager({
 
               <dl className="grid grid-cols-2 gap-2 text-xs">
                 <Fact icon={Radius} label="Area" value={`${outlet.geofence_radius_m} m`} />
-                <Fact icon={Clock3} label="Shift" value={`${outlet.shift_start.slice(0, 5)}–${outlet.shift_end.slice(0, 5)}`} />
                 <Fact
                   icon={MapPin}
                   label="Location"

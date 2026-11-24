@@ -153,7 +153,11 @@ export default async function SupervisorGuidePage() {
             lateness and missing clock-outs.
           </p>
           <ul className="list-disc space-y-1.5 pl-5">
-            <li>Late means after the store&apos;s shift start.</li>
+            <li>
+              Late means after the person&apos;s own clock-in time, wherever they clock in. You can change your
+              team&apos;s hours on <Ui>Staff</Ui>, <Ui>Edit details</Ui> (<Ui>Clock in by</Ui> and{' '}
+              <Ui>Clock out from</Ui>).
+            </li>
             <li>
               Xtend reminds your team 5 minutes before their shift starts (if they have not clocked in on
               a working day) and 5 minutes before it ends, then again at the end if they are still clocked

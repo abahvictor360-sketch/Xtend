@@ -29,6 +29,9 @@ interface Draft {
   role: string
   outlet_id: string
   supervisor_id: string
+  /** Their working hours, wherever they clock in (0100). */
+  shift_start: string
+  shift_end: string
 }
 
 /** 'all', a built-in role, or "custom:<id>". */
@@ -41,7 +44,12 @@ const EMPTY: Draft = {
   role: 'merchandiser',
   outlet_id: '',
   supervisor_id: '',
+  shift_start: '08:00',
+  shift_end: '18:00',
 }
+
+/** "08:00:00" → "08:00". */
+const hhmm = (t: string | null | undefined, fallback: string) => (t ?? fallback).slice(0, 5)
 
 export interface SupervisorOption {
   id: string
@@ -120,6 +128,8 @@ export function StaffManager({
     full_name: string
     email: string
     phone: string
+    shift_start: string
+    shift_end: string
   } | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
   // Someone with records: delete them for good after a typed confirmation (0098).
@@ -182,6 +192,10 @@ export function StaffManager({
       setError(problem)
       return
     }
+    if (draft.shift_end <= draft.shift_start) {
+      setError('The clock-out time must be after the clock-in time.')
+      return
+    }
     setBusy(true)
 
     try {
@@ -195,6 +209,8 @@ export function StaffManager({
           ...parseRoleValue(draft.role),
           outlet_id: draft.outlet_id || null,
           supervisor_id: draft.supervisor_id || null,
+          shift_start: draft.shift_start,
+          shift_end: draft.shift_end,
         }),
       })
       const data = await res.json()
@@ -220,6 +236,8 @@ export function StaffManager({
       full_name: person.full_name,
       email: person.email ?? '',
       phone: person.phone ?? '',
+      shift_start: hhmm(person.shift_start, '08:00'),
+      shift_end: hhmm(person.shift_end, '18:00'),
     })
   }
 
@@ -235,6 +253,15 @@ export function StaffManager({
       changes.email = details.email
     }
     if (details.phone.trim() !== (person.phone ?? '')) changes.phone = details.phone.trim() || null
+    if (details.shift_end <= details.shift_start) {
+      setError('The clock-out time must be after the clock-in time.')
+      return
+    }
+    if (details.shift_start !== hhmm(person.shift_start, '08:00') || details.shift_end !== hhmm(person.shift_end, '18:00')) {
+      // Both together, so the server can check the day ends after it starts.
+      changes.shift_start = details.shift_start
+      changes.shift_end = details.shift_end
+    }
     if (Object.keys(changes).length === 0) {
       setDetails(null)
       return
@@ -391,6 +418,30 @@ export function StaffManager({
                   onChange={(e) => setDetails({ ...details, phone: e.target.value })}
                 />
               </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-start">Clock in by</Label>
+                <Input
+                  id="edit-start"
+                  type="time"
+                  required
+                  value={details.shift_start}
+                  onChange={(e) => setDetails({ ...details, shift_start: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-end">Clock out from</Label>
+                <Input
+                  id="edit-end"
+                  type="time"
+                  required
+                  value={details.shift_end}
+                  onChange={(e) => setDetails({ ...details, shift_end: e.target.value })}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground sm:col-span-3">
+                Their working hours apply wherever they clock in: a marketer due at 09:00 is late after 09:00 at any
+                store.
+              </p>
               <div className="flex gap-2 sm:col-span-3">
                 <Button type="submit" disabled={busy}>
                   {busy ? 'Saving…' : 'Save details'}
@@ -539,6 +590,26 @@ export function StaffManager({
                     </option>
                   ))}
                 </Select>
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="new-start">Clock in by</Label>
+                <Input
+                  id="new-start"
+                  type="time"
+                  required
+                  value={draft.shift_start}
+                  onChange={(e) => setDraft({ ...draft, shift_start: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="new-end">Clock out from</Label>
+                <Input
+                  id="new-end"
+                  type="time"
+                  required
+                  value={draft.shift_end}
+                  onChange={(e) => setDraft({ ...draft, shift_end: e.target.value })}
+                />
               </div>
               <div className="sm:col-span-2 lg:col-span-5">
                 <Button type="submit" disabled={busy}>
