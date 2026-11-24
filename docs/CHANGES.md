@@ -35,12 +35,9 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0095_offline_movement_always_kept.sql`;
    - `supabase/migrations/0096_every_synced_position_kept.sql`;
    - `supabase/migrations/0097_allocate_from_store.sql`;
-   - `supabase/migrations/0098_delete_for_good.sql`;
-   - `supabase/migrations/0099_store_checkout_reminders.sql`;
-   - `supabase/migrations/0100_shift_times_per_person.sql`;
-   - `supabase/migrations/0101_start_day_at_a_store.sql`;
-   - `supabase/migrations/0102_ai_providers.sql`.
-   (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18.)
+   - `supabase/migrations/0098_delete_for_good.sql`.
+   (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18;
+   0099, 0100, 0101 and 0102 are done: you ran them on 2026-11-24.)
 4. **Clock-out reminder fix (0069)**, if never pasted:
    ```sql
    alter table public.clock_out_reminders drop constraint if exists clock_out_reminders_stage_check;
@@ -66,6 +63,16 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-24
+
+### Migrations 0099 to 0102 are in
+- **What was done:** you ran 0099 (store check-out reminders), 0100 (working
+  hours per person), 0101 (marketers start the day at a store) and 0102 (AI
+  keys) in seven short parts; they are off the "Waiting on you" list.
+- **The impact:** once the latest code is deployed, everything from today's
+  changes works.
+- **What you need to do:** redeploy if you have not since PR #109; make sure
+  every marketer has stores allocated and their hours set on Staff; add an AI
+  key on **AI keys** and press **Test**.
 
 ### Add AI keys yourself: OpenAI, Gemini, Anthropic, NVIDIA, OpenRouter
 - **What was done:** a new admin page, **AI keys** (Setup menu). Paste a key
