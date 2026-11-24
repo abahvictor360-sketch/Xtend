@@ -130,6 +130,18 @@ resolves `server-only` itself, the stub lets the same modules load in Node.
 Every server module begins with `import 'server-only'` (auth helpers excepted:
 `src/lib/auth.ts` imports `next/navigation` and is server-only by usage).
 
+**Secrets never reach a browser.** Only settings named `NEXT_PUBLIC_…` are
+built into browser code, so no secret ever gets such a name (the browser
+gets only the Supabase URL and publishable/anon key, the browser-restricted
+Google Maps key, the VAPID public key and the Turnstile site key). The
+secret-key (service-role) client lives in the server-only
+`src/lib/supabase/admin.ts`; no `'use client'` file reads a non-public
+setting or imports a server-only module; `/api/health` reports only whether
+each key is set; `productionBrowserSourceMaps` stays off; `.env*` is
+ignored by git. Guarded by `scripts/check-secrets-stay-server.ts` and proven
+by `scripts/check-browser-bundle-secrets.sh` (a build with marked fake keys,
+then a search of `.next/static` and pre-rendered pages).
+
 ### 1.5 `next.config.ts`
 
 ```ts
