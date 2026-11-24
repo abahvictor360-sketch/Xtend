@@ -1,5 +1,6 @@
 import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
+import { anthropicKey } from '@/lib/ai/config'
 
 /**
  * Looks at a photo the way a supervisor would: is this a live selfie of a
@@ -97,13 +98,16 @@ const ASK: Record<PhotoKind, string> = {
   product_selfie: 'Check this selfie with a product.',
 }
 
-export function photoCheckConfigured() {
-  return Boolean(process.env.ANTHROPIC_API_KEY)
+/** Photos are checked by Claude: the server's key, or the one saved on Settings → AI (0102). */
+export async function photoCheckConfigured() {
+  return Boolean(await anthropicKey())
 }
 
 /** Returns the verdict, or throws if the service could not give one. */
 export async function judgePhoto(image: ArrayBuffer, kind: PhotoKind): Promise<PhotoVerdict> {
-  const client = new Anthropic({ timeout: 45_000, maxRetries: 1 })
+  const apiKey = await anthropicKey()
+  if (!apiKey) throw new Error('No Anthropic key for photo checks')
+  const client = new Anthropic({ apiKey, timeout: 45_000, maxRetries: 1 })
   const response = await client.beta.messages.create({
     model: MODEL,
     max_tokens: 2000,

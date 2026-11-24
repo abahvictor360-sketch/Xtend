@@ -39,6 +39,18 @@ SET row_security = off;
 
 
 --
+-- Data for Name: ai_feature_settings; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
+-- Data for Name: ai_provider_keys; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
 -- Data for Name: app_installs; Type: TABLE DATA; Schema: public; Owner: -
 --
 

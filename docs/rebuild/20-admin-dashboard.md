@@ -103,6 +103,7 @@ Groups and items, exactly in this order (label, path, icon, flags):
 | | Audit log | `/admin/audit` | FileClock | adminOnly |
 | | Activity log | `/admin/activity` | Activity | adminOnly |
 | | Updates | `/admin/updates` | RefreshCw | adminOnly |
+| | AI keys | `/admin/ai` | Bot | adminOnly |
 | | System | `/admin/system` | Wrench | adminOnly |
 
 Filtering: an item shows when `(!adminOnly || !readOnly) && (!supervisorOnly || readOnly)`. A group with no items left is dropped. So an admin sees "Admin guide" and not "Guide"; a supervisor sees "Guide" (the supervisor guide) and none of Teams, Roles, Places, Audit log, Activity log, Updates, System.
@@ -2136,6 +2137,16 @@ Through the shared renderer (§29). Title "Activity log"; subtitle "`range` · `
 - Nothing in the staff app or the staff or supervisor guides mentions this page.
 
 ---
+
+## 27b. AI keys — `/admin/ai` (admins only, 0102)
+
+Files: `src/app/admin/ai/page.tsx`, `src/components/admin/ai-settings.tsx`, route `src/app/api/admin/ai/route.ts`, logic `src/lib/ai/providers.ts` (pure), `config.ts`, `secret-box.ts`, `compat.ts`. Title "AI keys — Xtend". Header "AI keys" / "Add a key for any of these AI services, then choose which one answers staff (the helper that explains what to do when something does not work) and which one answers Ask Xtend. Keys are stored encrypted and never shown again: only their last 4 characters." Before 0102: "Run migration 0102 in Supabase to save AI keys here."
+
+Panel **Which AI answers** ("Only services with a saved key can be chosen."): one card per feature (**Staff helper**, **Ask Xtend (office)**) with its note, "Now answering: <provider> · <model>" (from `aiFor`) or, in red, "No AI yet: staff messages go straight to the office, and Ask Xtend is off.", **Service** (providers with a saved key, plus Anthropic when `ANTHROPIC_API_KEY` is set), **Model** (free text; "Suggested: <default>. Any model name the service offers works."), **Save** (`set_feature`) and **Test**.
+
+Panel **Keys** ("Saving or removing a key asks for your password again. Photo checks and invoice reading use the Anthropic key."): a card per provider — Anthropic (Claude), OpenAI (ChatGPT), Google Gemini, NVIDIA, OpenRouter — with **Get a key** (the provider's key page), a badge "••••1234" (saved), "Set on the server" (Anthropic env key) or "Not added", "Saved <time>", a password input ("Paste the key" / "Paste a new key to replace it") with the shape check (`keyProblem`: no spaces, ≤ 400, `sk-ant-…`, `sk-…`, 30+ characters for Gemini, `nvapi-…`, `sk-or-…`), **Save** (`save_key`, through `confirmedFetch`), **Test** and **Remove** (confirm "Remove the <provider> key? Anything set to use it stops using it.").
+
+`POST /api/admin/ai` (admins): `save_key` (password again; AES-256-GCM with a key from `AI_KEYS_SECRET` or the service-role key, stored as `v1:<base64>`, hint = last 4; audit `ai.key_saved` {provider, ends_with}), `remove_key` (password again; audit `ai.key_removed`), `set_feature` (audit `ai.feature_set`), `test` (5-token request; "<provider> answered with <model>. It works." or "<provider> did not answer with <model>: <reason>", the key replaced by "[key]" in any error). Nothing returns a key. `aiFor(feature)` picks: the admin's choice if its key is saved; else `ANTHROPIC_API_KEY` (Ask Xtend: `ASSISTANT_MODEL`); else the first saved key in the order above with its default model (claude-opus-5, gpt-4.1-mini, gemini-2.5-flash, meta/llama-3.3-70b-instruct, openrouter/auto); cached 60 s, cleared on save. Anthropic uses its SDK; the others take the OpenAI chat format at their base address (tools as functions, tool results as `tool` messages; files other than images become a note).
 
 ## 28. Updates — `/admin/updates` (admins only)
 

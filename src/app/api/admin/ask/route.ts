@@ -35,7 +35,7 @@ export async function POST(request: Request) {
     if (!(await allowAttempt('ask-xtend:' + session.userId, ASK_XTEND_PER_HOUR, HOUR_MS))) {
       return Response.json({ error: ASK_XTEND_LIMIT_MESSAGE }, { status: 429 })
     }
-    if (!assistantConfigured()) {
+    if (!(await assistantConfigured())) {
       return Response.json(
         { error: 'The assistant is not set up. Add ANTHROPIC_API_KEY to the environment.' },
         { status: 503 },

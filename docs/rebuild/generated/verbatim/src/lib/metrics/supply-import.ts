@@ -1,5 +1,6 @@
 import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
+import { anthropicKey } from '@/lib/ai/config'
 import Papa from 'papaparse'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
@@ -212,8 +213,9 @@ export async function docxText(buf: ArrayBuffer): Promise<string> {
 /* Invoices, read by Claude                                            */
 /* ------------------------------------------------------------------ */
 
-export function invoiceReadingConfigured() {
-  return Boolean(process.env.ANTHROPIC_API_KEY)
+/** Invoices are read by Claude: the server's key, or the one saved on Settings → AI (0102). */
+export async function invoiceReadingConfigured() {
+  return Boolean(await anthropicKey())
 }
 
 // Optional fields as anyOf a value or null: the documented structured-output form.
@@ -283,13 +285,14 @@ interface ClaudeRead {
 }
 
 async function readWithClaude(content: Anthropic.Beta.BetaContentBlockParam[]): Promise<Omit<ReadFile, 'kind' | 'read_by'>> {
-  if (!invoiceReadingConfigured()) {
+  const apiKey = await anthropicKey()
+  if (!apiKey) {
     throw new ApiError(
-      'Reading PDF and Word invoices is not set up on this server (ANTHROPIC_API_KEY). Use a CSV or Excel file with column headings, or log the supply by hand.',
+      'Reading PDF and Word invoices needs an Anthropic key (Settings → AI). Use a CSV or Excel file with column headings, or log the supply by hand.',
       400,
     )
   }
-  const client = new Anthropic({ timeout: 120_000, maxRetries: 1 })
+  const client = new Anthropic({ apiKey, timeout: 120_000, maxRetries: 1 })
   let response: Anthropic.Beta.BetaMessage
   try {
     response = await client.beta.messages.create({

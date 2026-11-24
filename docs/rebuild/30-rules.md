@@ -1334,6 +1334,13 @@ label and the store's own point.
   unknown or inactive store refuses the whole call and changes nothing.
   Every call writes an `audit_log` row `staff.allocate_outlets` directly
   (supervisors may call it).
+- **0102, AI keys:** tables `ai_provider_keys` (provider pk in anthropic /
+  openai / gemini / nvidia / openrouter, `key_cipher` 20–4000, `key_hint` ≤ 8,
+  `updated_at`, `updated_by` → profiles set null) and `ai_feature_settings`
+  (feature pk in staff_helper / admin_assistant, provider, model 1–120
+  characters). RLS on, no policies, all grants revoked from anon and
+  authenticated: only the service role reads or writes them. The test-run
+  reset keeps both.
 - **0101, marketers start the day at a store:** `start_store_of(device_info)`
   reads `device_info.start_store_id` (null if missing or not a uuid). BEFORE
   INSERT trigger `trg_attendance_start_store` (after `attendance_enforce`,

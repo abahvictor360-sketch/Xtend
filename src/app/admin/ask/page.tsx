@@ -38,7 +38,7 @@ export default async function AskPage() {
           </div>
         ))}
       </div>
-      <AttendanceAssistant configured={assistantConfigured()} />
+      <AttendanceAssistant configured={await assistantConfigured()} />
     </div>
   )
 }

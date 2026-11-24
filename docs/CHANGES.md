@@ -38,7 +38,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0098_delete_for_good.sql`;
    - `supabase/migrations/0099_store_checkout_reminders.sql`;
    - `supabase/migrations/0100_shift_times_per_person.sql`;
-   - `supabase/migrations/0101_start_day_at_a_store.sql`.
+   - `supabase/migrations/0101_start_day_at_a_store.sql`;
+   - `supabase/migrations/0102_ai_providers.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18.)
 4. **Clock-out reminder fix (0069)**, if never pasted:
    ```sql
@@ -65,6 +66,29 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-24
+
+### Add AI keys yourself: OpenAI, Gemini, Anthropic, NVIDIA, OpenRouter
+- **What was done:** a new admin page, **AI keys** (Setup menu). Paste a key
+  for any of Anthropic (Claude), OpenAI (ChatGPT), Google Gemini, NVIDIA or
+  OpenRouter (each has a **Get a key** link), press **Test** to check it
+  works, then choose under **Which AI answers**:
+  - **Staff helper**: answers staff in Support. It now also explains why
+    something is not working and what to do (picking a store, no stores and
+    sending Google Maps links, notifications, selfies, location, the phone's
+    time), points them to the staff guide, and passes anything it cannot
+    handle to the office;
+  - **Ask Xtend**: answers you and supervisors.
+  Keys are stored encrypted and never shown again (only the last 4
+  characters); saving or removing one asks for your password, and each
+  change is in the audit log. Photo checks and reading PDF invoices use the
+  Anthropic key. The key set on the server before still works if you add
+  nothing.
+- **The impact:** you choose and pay for the AI you want, and staff get help
+  even when the office is busy.
+- **What you need to do:** run `supabase/migrations/0102_ai_providers.sql`
+  in the Supabase SQL editor, redeploy, then add a key on **AI keys**.
+  Optional: set `AI_KEYS_SECRET` (any long random text) on the server before
+  adding keys; without it the existing service key protects them.
 
 ### Marketers start the day at a store, and the app explains every refusal
 - **What was done:**

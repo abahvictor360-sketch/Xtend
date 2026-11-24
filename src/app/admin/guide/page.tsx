@@ -731,6 +731,14 @@ export default async function AdminGuidePage() {
             again.
           </p>
           <p>
+            <Ui>AI keys</Ui> (admins only): add a key for Anthropic (Claude), OpenAI (ChatGPT), Google Gemini, NVIDIA or
+            OpenRouter (<Ui>Get a key</Ui> opens the right page), press <Ui>Test</Ui>, then choose under{' '}
+            <Ui>Which AI answers</Ui> which service and model answers staff (the helper in Support, which also explains
+            why something is not working and what to do) and which answers Ask Xtend. Keys are stored encrypted; only
+            their last 4 characters are shown, and saving or removing one asks for your password. Photo checks and
+            reading PDF invoices use the Anthropic key. With no key at all, staff messages go straight to the office.
+          </p>
+          <p>
             <Ui>System</Ui> (admins only): <strong>test mode</strong>, for a test run before real work. While
             it is on, a dark orange strip across the top of the dashboard says <Ui>Test mode: records can be
             reset</Ui>. Supervisors and staff see nothing of it, and staff are not told it is a test.
