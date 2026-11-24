@@ -1605,6 +1605,8 @@ Files: `src/app/admin/users/page.tsx`, `src/app/admin/users/import/page.tsx`, `s
 
 ### Header
 
+**Working hours (0100):** Add staff and Edit details have **Clock in by** and **Clock out from** (time inputs, default 08:00 / 18:00; "The clock-out time must be after the clock-in time." checked in the page and by `hoursProblem` on the server). Edit sends both when either changed; the note reads "Their working hours apply wherever they clock in: a marketer due at 09:00 is late after 09:00 at any store." Supervisors and HR may set them for the people they edit. Ask Xtend: `propose_hours` (people or a group, HH:MM) → action `staff_hours`, carried out with PATCH `/api/admin/users/<id>` per person.
+
 Heading **"Staff"**. Admin intro: "Accounts are created here. Deactivation is a soft delete: attendance history is never destroyed." Supervisor intro: "Your team. People you add here report to you, and you can reset a password or deactivate an account."
 
 Admin-only buttons on the right: **Login details (Word)** (file icon; a button, `StaffLoginsButton`, that fetches `/api/admin/staff-logins` with `confirmedFetch` and saves the blob under the `Content-Disposition` name, "Making the sheet…" while busy, the error in small red text under it; admin only — a Word document "Xtend staff login details", built fresh each time: the Xtend title, "Staff login details and app installation", install steps for Android 7+ and iPhone iOS 15+, then each field worker's name, email, phone and temporary password, or a note when there is none to show, grouped by role including added roles), and **Bulk import CSV** (→ `/admin/users/import`).
@@ -1904,6 +1906,11 @@ Loads `outlets` (id, name, address, lat, lng, geofence_radius_m, shift_start, sh
 - **Name** (required, ≤ 160, "Justrite Ogba"), **Address** (≤ 400, "124 Oba Akran Ave, Ogba, Lagos").
 - **Latitude**, **Longitude** (required, decimal).
 - **Geofence radius (m)** (required, 25–2000, default **150**).
+- Stores have no clock-in or clock-out times (0100): the form says "Clock-in
+  and clock-out times belong to each person (Staff), not to the store, so a
+  marketer due at 09:00 is due at 09:00 at any store."; the card has no
+  Shift fact; the bulk import has no shift inputs (the route still accepts
+  them, unused).
 - **Allocate staff** (outline, brand, full width, under each store's
   facts; admins and supervisors): opens the store's panel in the card
   (`src/components/admin/store-staff.tsx`), one store at a time. "Allocate

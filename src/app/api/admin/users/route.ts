@@ -5,7 +5,7 @@ import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 import { auditContext } from '@/lib/audit-context'
 import { deliverCredentials, generateTempPassword } from '@/lib/credentials'
-import { emailAddress, optionalPhone, personName } from '@/lib/fields'
+import { clockTime, emailAddress, hoursProblem, optionalPhone, personName } from '@/lib/fields'
 import { rememberTempPassword } from '@/lib/staff-logins'
 import { authAdminError } from '@/lib/auth-admin-errors'
 
@@ -18,6 +18,9 @@ const createUserSchema = z.object({
   staff_role_id: z.string().guid().nullable().optional(),
   outlet_id: z.string().guid().nullable().optional(),
   supervisor_id: z.string().guid().nullable().optional(),
+  /** Their working hours, wherever they clock in (0100). */
+  shift_start: clockTime.default('08:00'),
+  shift_end: clockTime.default('18:00'),
 })
 
 export async function POST(request: Request) {
@@ -29,6 +32,10 @@ export async function POST(request: Request) {
         { error: parsed.error.issues[0]?.message ?? 'Invalid user' },
         { status: 400 },
       )
+    }
+    {
+      const hours = hoursProblem(parsed.data.shift_start, parsed.data.shift_end)
+      if (hours) return Response.json({ error: hours }, { status: 400 })
     }
     const input = parsed.data
 
@@ -122,7 +129,7 @@ export async function POST(request: Request) {
       return Response.json({ error: message }, { status })
     }
 
-    const { error: profileError } = await admin.from('profiles').insert({
+    const profileRow = {
       id: created.user.id,
       full_name: input.full_name,
       email,
@@ -131,8 +138,19 @@ export async function POST(request: Request) {
       staff_role_id: input.staff_role_id ?? null,
       outlet_id: outlet_id || null,
       supervisor_id,
+      shift_start: input.shift_start,
+      shift_end: input.shift_end,
       must_change_password: true,
-    })
+    }
+    let { error: profileError } = await admin.from('profiles').insert(profileRow)
+    // Before migration 0100 there are no working-hours columns: create the
+    // account without them rather than not at all.
+    if (profileError && (profileError.code === 'PGRST204' || profileError.code === '42703')) {
+      const { shift_start: _s, shift_end: _e, ...older } = profileRow
+      void _s
+      void _e
+      ;({ error: profileError } = await admin.from('profiles').insert(older))
+    }
 
     if (profileError) {
       // Never leave an auth user without a profile.

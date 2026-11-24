@@ -100,6 +100,10 @@ export function FieldHome({
   ]
   const progress = Math.round((steps.filter((s) => s.done).length / steps.length) * 100)
 
+  // Their own hours (0100), or their store's before that ran.
+  const shiftStart = day.shift?.start ?? day.outlet?.shift_start ?? null
+  const shiftEnd = day.shift?.end ?? day.outlet?.shift_end ?? null
+
   // Still checked in at a store: that comes first, then the clock-out.
   const openVisit = visits.find((v) => v.status === 'open') ?? null
   const visitsDone = visits.filter((v) => v.status !== 'open' && v.visit_date === day.date).length
@@ -139,7 +143,7 @@ export function FieldHome({
         </Alert>
       ))}
       <ClockOutPrompt
-        state={{ date: day.date, shiftEnd: day.outlet?.shift_end ?? null, clockedIn: Boolean(day.opening), clockedOut: Boolean(day.closing) }}
+        state={{ date: day.date, shiftEnd, clockedIn: Boolean(day.opening), clockedOut: Boolean(day.closing) }}
         openVisitLabel={openVisit ? (openVisit.store_label ?? openVisit.outlet_name) : null}
         onCheckOutFirst={() => {
           setTab('stores')
@@ -150,8 +154,8 @@ export function FieldHome({
       <ShiftSoonPrompt
         state={{
           date: day.date,
-          shiftStart: day.outlet?.shift_start ?? null,
-          shiftEnd: day.outlet?.shift_end ?? null,
+          shiftStart,
+          shiftEnd,
           clockedIn: Boolean(day.opening),
           clockedOut: Boolean(day.closing),
           workingDay: todayKind === 'working',
@@ -338,7 +342,10 @@ export function FieldHome({
                 </div>
 
                 <dl className="grid grid-cols-2 gap-3 text-sm">
-                  <Detail label="Shift" value={`${day.outlet.shift_start.slice(0, 5)} – ${day.outlet.shift_end.slice(0, 5)}`} />
+                  <Detail
+                    label="Your hours"
+                    value={`${(day.shift?.start ?? day.outlet.shift_start).slice(0, 5)} – ${(day.shift?.end ?? day.outlet.shift_end).slice(0, 5)}`}
+                  />
                   <Detail label="Geofence" value={`${day.outlet.radius_m} m`} />
                   <Detail
                     label="You are"
@@ -546,8 +553,13 @@ function DayCard({
           <p className="text-2xl font-bold italic">My day</p>
           <p className="mt-1 text-lg italic text-white/90">{progress}% done</p>
           <p className="mt-1 truncate text-xs text-white/90">
-            {day.outlet
-              ? `${day.outlet.name} · ${day.outlet.shift_start.slice(0, 5)}–${day.outlet.shift_end.slice(0, 5)}`
+            {day.shift || day.outlet
+              ? [
+                  day.outlet?.name,
+                  `${(day.shift?.start ?? day.outlet?.shift_start ?? '').slice(0, 5)}–${(day.shift?.end ?? day.outlet?.shift_end ?? '').slice(0, 5)}`,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')
               : 'Have a good day'}
           </p>
         </div>

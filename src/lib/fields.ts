@@ -157,3 +157,16 @@ export function mapText(max: number) {
       return clean && !hasLink(clean) ? clean : null
     })
 }
+
+/** A time of day, 24-hour "HH:MM" (a person's working hours, 0100). */
+export const clockTime = z
+  .string()
+  .trim()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Enter the time as HH:MM, for example 09:00')
+
+/** Working hours: both or neither, and the day ends after it starts. */
+export function hoursProblem(start: string | undefined, end: string | undefined): string | null {
+  if (start === undefined && end === undefined) return null
+  if (start === undefined || end === undefined) return 'Send both the clock-in and the clock-out time.'
+  return end > start ? null : 'The clock-out time must be after the clock-in time.'
+}

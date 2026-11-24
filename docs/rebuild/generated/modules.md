@@ -615,7 +615,7 @@ is a phone and a report says something. The server checks with these;
 the forms use the same messages. Postgres repeats the essentials for the
 tables staff can write to directly (migration 039).
 
-Exports: `cleanText`, `hasWords`, `hasLink`, `personName`, `normalisePhone`, `phoneNumber`, `optionalPhone`, `emailAddress`, `thingName`, `address`, `writtenText`, `note`, `fileName`, `mapText`
+Exports: `cleanText`, `hasWords`, `hasLink`, `personName`, `normalisePhone`, `phoneNumber`, `optionalPhone`, `emailAddress`, `thingName`, `address`, `writtenText`, `note`, `fileName`, `mapText`, `clockTime`, `hoursProblem`
 
 ## `src/lib/flag-alerts.ts`
 

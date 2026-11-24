@@ -37,6 +37,9 @@ export interface Profile {
   onboarded_at?: string | null
   /** A role an admin added (042), shown by its name; role is its base. */
   staff_role_id?: string | null
+  /** When their working day starts and ends, wherever they clock in (0100). */
+  shift_start?: string
+  shift_end?: string
   created_at: string
   updated_at: string
 }
@@ -112,6 +115,8 @@ export interface DayState {
     shift_start: string
     shift_end: string
   } | null
+  /** Their own working hours (0100); missing before it runs (then the store's). */
+  shift?: { start: string; end: string } | null
   opening: ClockSummary | null
   closing: ClockSummary | null
   report_filed: boolean

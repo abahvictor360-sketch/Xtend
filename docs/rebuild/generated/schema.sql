@@ -580,7 +580,7 @@ CREATE FUNCTION public.admin_overview() RETURNS jsonb
     AS $$
   with today as (select public.business_date() as d),
   staff as (
-    select p.id, p.full_name, o.shift_start,
+    select p.id, p.full_name, p.shift_start,
            public.day_kind(p.id, (select d from today)) = 'working' as expected
     from public.profiles p
     left join public.outlets o on o.id = p.outlet_id
@@ -1015,12 +1015,15 @@ begin
     return null;
   end if;
 
-  -- The store they clocked at, or their home store.
-  select o.id, o.name, o.shift_start, o.shift_end into shift
-  from public.outlets o
-  where o.id = coalesce(new.outlet_id,
-                        (select p.outlet_id from public.profiles p where p.id = new.user_id));
-  if shift.id is null or shift.shift_start is null or shift.shift_end is null then
+  -- 0100: the person's own hours, wherever they clock; the store they
+  -- clocked at (or their home store) only names where.
+  select p.shift_start, p.shift_end,
+         o.id, o.name
+    into shift
+  from public.profiles p
+  left join public.outlets o on o.id = coalesce(new.outlet_id, p.outlet_id)
+  where p.id = new.user_id;
+  if shift.shift_start is null or shift.shift_end is null then
     return null;
   end if;
 
@@ -1029,8 +1032,8 @@ begin
     if minutes > public.punctuality_grace_minutes() then
       insert into public.integrity_flags (user_id, kind, severity, summary, detail, outlet_id, flag_date)
       values (new.user_id, 'late_clock_in', case when minutes > 60 then 'high' else 'medium' end,
-              format('Clocked in %s late at %s (shift starts %s)',
-                     public.minutes_label(minutes), shift.name, to_char(shift.shift_start, 'HH24:MI')),
+              format('Clocked in %s late%s (their day starts %s)',
+                     public.minutes_label(minutes), coalesce(' at ' || shift.name, ''), to_char(shift.shift_start, 'HH24:MI')),
               jsonb_build_object('attendance_id', new.id, 'minutes', minutes),
               shift.id, new.attendance_date);
     end if;
@@ -1039,8 +1042,8 @@ begin
     if minutes > public.punctuality_grace_minutes() then
       insert into public.integrity_flags (user_id, kind, severity, summary, detail, outlet_id, flag_date)
       values (new.user_id, 'early_clock_out', case when minutes > 60 then 'high' else 'medium' end,
-              format('Clocked out %s early at %s (shift ends %s)',
-                     public.minutes_label(minutes), shift.name, to_char(shift.shift_end, 'HH24:MI')),
+              format('Clocked out %s early%s (their day ends %s)',
+                     public.minutes_label(minutes), coalesce(' at ' || shift.name, ''), to_char(shift.shift_end, 'HH24:MI')),
               jsonb_build_object('attendance_id', new.id, 'minutes', minutes),
               shift.id, new.attendance_date);
     end if;
@@ -4248,6 +4251,11 @@ CREATE FUNCTION public.my_day() RETURNS jsonb
   select jsonb_build_object(
     'date', public.business_date(),
     'can_file_report', public.can_file_report(),
+    -- 0100: the person's own working hours, store or none.
+    'shift', (
+      select jsonb_build_object('start', p.shift_start, 'end', p.shift_end)
+      from public.profiles p where p.id = auth.uid()
+    ),
     'profile', (
       select jsonb_build_object(
         'id', p.id, 'full_name', p.full_name, 'role', p.role,
@@ -4258,7 +4266,7 @@ CREATE FUNCTION public.my_day() RETURNS jsonb
       select jsonb_build_object(
         'id', o.id, 'name', o.name, 'address', o.address,
         'lat', o.lat, 'lng', o.lng, 'radius_m', o.geofence_radius_m,
-        'shift_start', o.shift_start, 'shift_end', o.shift_end
+        'shift_start', p.shift_start, 'shift_end', p.shift_end
       )
       from public.outlets o
       join public.profiles p on p.outlet_id = o.id
@@ -4389,8 +4397,24 @@ CREATE TABLE public.profiles (
     push_exempt boolean DEFAULT false NOT NULL,
     onboarded_at timestamp with time zone,
     staff_role_id uuid,
-    app_only boolean DEFAULT false NOT NULL
+    app_only boolean DEFAULT false NOT NULL,
+    shift_start time without time zone DEFAULT '08:00:00'::time without time zone NOT NULL,
+    shift_end time without time zone DEFAULT '18:00:00'::time without time zone NOT NULL
 );
+
+
+--
+-- Name: COLUMN profiles.shift_start; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.profiles.shift_start IS 'When this person''s working day starts (Lagos time), wherever they clock in (0100).';
+
+
+--
+-- Name: COLUMN profiles.shift_end; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.profiles.shift_end IS 'When this person''s working day ends (Lagos time) (0100).';
 
 
 --
@@ -5688,6 +5712,9 @@ begin
   new.is_active     := old.is_active;
   new.push_exempt   := old.push_exempt;
   new.app_only      := old.app_only;
+  -- 0100: their working hours are set by the office.
+  new.shift_start   := old.shift_start;
+  new.shift_end     := old.shift_end;
   if coalesce(current_setting('xtend.own_photo', true), '') <> 'on' then
     new.avatar_path := old.avatar_path;
   end if;
@@ -8178,11 +8205,7 @@ CREATE FUNCTION public.shift_end_for(p_user uuid) RETURNS time without time zone
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
-  select coalesce(
-    (select o.shift_end from public.profiles p
-     join public.outlets o on o.id = p.outlet_id
-     where p.id = p_user),
-    time '18:00');
+  select coalesce((select p.shift_end from public.profiles p where p.id = p_user), time '18:00');
 $$;
 
 
@@ -8194,11 +8217,7 @@ CREATE FUNCTION public.shift_start_for(p_user uuid) RETURNS time without time zo
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
-  select coalesce(
-    (select o.shift_start from public.profiles p
-     join public.outlets o on o.id = p.outlet_id
-     where p.id = p_user),
-    time '08:00');
+  select coalesce((select p.shift_start from public.profiles p where p.id = p_user), time '08:00');
 $$;
 
 
@@ -8400,8 +8419,8 @@ CREATE FUNCTION public.staff_analytics(p_from date, p_to date) RETURNS TABLE(use
     o.name,
     count(*) filter (where a.type = 'opening')::int,
     count(*) filter (
-      where a.type = 'opening' and o.shift_start is not null
-        and (a.created_at at time zone 'Africa/Lagos')::time > o.shift_start
+      where a.type = 'opening' and p.shift_start is not null
+        and (a.created_at at time zone 'Africa/Lagos')::time > p.shift_start
     )::int,
     count(*) filter (where a.type = 'opening' and a.status <> 'on_site')::int,
     round(avg(a.distance_m) filter (where a.type = 'opening')::numeric, 1)::double precision
@@ -8489,15 +8508,15 @@ CREATE FUNCTION public.staff_no_show(p_grace_minutes integer DEFAULT 30) RETURNS
     p.phone,
     o.id,
     o.name,
-    o.shift_start,
-    (extract(epoch from ((select ts from now_local) - ((select ts from now_local)::date + o.shift_start))) / 60)::int
+    p.shift_start,
+    (extract(epoch from ((select ts from now_local) - ((select ts from now_local)::date + p.shift_start))) / 60)::int
   from public.profiles p
-  join public.outlets o on o.id = p.outlet_id
+  left join public.outlets o on o.id = p.outlet_id
   where p.is_active
     and public.is_field_role(p.role)
-    and o.is_active
+    and (o.id is null or o.is_active)
     and (select ts from now_local)
-        >= ((select ts from now_local)::date + o.shift_start + make_interval(mins => greatest(0, p_grace_minutes)))
+        >= ((select ts from now_local)::date + p.shift_start + make_interval(mins => greatest(0, p_grace_minutes)))
     and public.day_kind(p.id, public.business_date()) = 'working'
     and not exists (
       select 1 from public.attendance a
@@ -8505,7 +8524,7 @@ CREATE FUNCTION public.staff_no_show(p_grace_minutes integer DEFAULT 30) RETURNS
         and a.attendance_date = public.business_date()
         and a.type = 'opening'
     )
-  order by o.name, p.full_name;
+  order by o.name nulls last, p.full_name;
 $$;
 
 
@@ -10523,8 +10542,8 @@ CREATE VIEW public.attendance_detail WITH (security_invoker='true') AS
     to_char((a.created_at AT TIME ZONE 'Africa/Lagos'::text), 'YYYY-MM-DD HH24:MI'::text) AS local_time,
     a.outlet_id,
     o.name AS outlet_name,
-    o.shift_start,
-    o.shift_end,
+    p.shift_start,
+    p.shift_end,
     a.address,
     a.place_name,
     a.place_source,
@@ -10542,7 +10561,7 @@ CREATE VIEW public.attendance_detail WITH (security_invoker='true') AS
     a.device_info,
     a.client_captured_at,
         CASE
-            WHEN ((a.type = 'opening'::public.attendance_type) AND (o.shift_start IS NOT NULL) AND (((a.created_at AT TIME ZONE 'Africa/Lagos'::text))::time without time zone > o.shift_start)) THEN true
+            WHEN ((a.type = 'opening'::public.attendance_type) AND (p.shift_start IS NOT NULL) AND (((a.created_at AT TIME ZONE 'Africa/Lagos'::text))::time without time zone > p.shift_start)) THEN true
             ELSE false
         END AS is_late
    FROM ((public.attendance a
@@ -12783,6 +12802,14 @@ ALTER TABLE public.profiles
 
 ALTER TABLE ONLY public.profiles
     ADD CONSTRAINT profiles_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: profiles profiles_shift_order; Type: CHECK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE public.profiles
+    ADD CONSTRAINT profiles_shift_order CHECK ((shift_end > shift_start)) NOT VALID;
 
 
 --

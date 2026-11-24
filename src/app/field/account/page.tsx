@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { Bell, BookOpen, CalendarCheck, CalendarDays, Clock, Headset, KeyRound, MapPin, MessagesSquare, Smartphone } from 'lucide-react'
+import { Bell, BookOpen, CalendarCheck, CalendarDays, Clock, Clock3, Headset, KeyRound, MapPin, MessagesSquare, Smartphone } from 'lucide-react'
 import { FIELD_ROLES, requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { BASE_LABEL } from '@/lib/staff-roles'
@@ -56,6 +56,10 @@ export default async function AccountPage() {
     supabase.rpc('unread_messages'),
   ])
   const unreadMessages = (unread as number | null) ?? 0
+  // Their own working hours (0100), or their store's before that ran.
+  const start = session.profile.shift_start ?? outlet?.shift_start ?? '08:00'
+  const end = session.profile.shift_end ?? outlet?.shift_end ?? '18:00'
+  const hours = `${start.slice(0, 5)}–${end.slice(0, 5)}`
   const businessDate = (today as string | null) ?? ''
 
   // The stock count sheet, any time (0064): their stores, this month's
@@ -131,10 +135,15 @@ export default async function AccountPage() {
             title={outlet?.name ?? 'No outlet assigned'}
             meta={
               outlet
-                ? `${outlet.address ?? 'No address'} · ${outlet.geofence_radius_m} m geofence · ${outlet.shift_start.slice(0, 5)}–${outlet.shift_end.slice(0, 5)}`
+                ? `${outlet.address ?? 'No address'} · ${outlet.geofence_radius_m} m geofence`
                 : 'Ask your admin to assign your outlet.'
             }
             muted={!outlet}
+          />
+          <TaskRow
+            icon={<Clock3 className="h-5 w-5" />}
+            title={`Your hours: ${hours}`}
+            meta="Clock in by the start, wherever your first store is. Only the office can change your hours."
           />
         </section>
 

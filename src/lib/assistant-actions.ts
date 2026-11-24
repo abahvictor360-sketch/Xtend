@@ -252,26 +252,39 @@ export class ActionBuilder {
     }
   }
 
-  async outletHours(input: Input): Promise<ProposedAction> {
-    this.adminOnly('set a store’s clock-in and clock-out times')
-    const store = await this.store(input.store)
+  /** Working hours belong to people, wherever they clock in (0100). */
+  async staffHours(input: Input): Promise<ProposedAction> {
+    await this.people.load()
     const start = normTime(input.shift_start)
     const end = normTime(input.shift_end)
     if (!start || !end) {
-      throw new Error('Give both a clock-in and a clock-out time, like 08:00 and 18:00.')
+      throw new Error('Give both a clock-in and a clock-out time, like 09:00 and 18:00.')
     }
+    if (end <= start) throw new Error('The clock-out time must be after the clock-in time.')
+    const group = input.group as string
+    let people
+    if (group === 'people' || (!group && list(input.people).length)) {
+      people = await Promise.all(list(input.people).map((r) => this.person(r)))
+    } else {
+      const role = group === 'all_merchandisers' ? 'merchandiser' : group === 'all_marketers' ? 'marketer' : null
+      people = this.people.people.filter((p) =>
+        role ? p.role === role : p.role === 'merchandiser' || p.role === 'marketer',
+      )
+    }
+    people = [...new Map(people.map((p) => [p.id, p])).values()]
+    if (!people.length) throw new Error('Name at least one person, or a group.')
     return {
       key: key('hours'),
-      kind: 'outlet_hours',
-      title: `Set ${store.name}’s clock-in and clock-out times`,
+      kind: 'staff_hours',
+      title: `Set the working hours for ${people.length} ${people.length === 1 ? 'person' : 'people'}`,
       lines: [
-        `Clock in from ${start}`,
-        `Clock out by ${end}`,
-        'Applies to everyone who clocks in at this store; it sets who counts as late.',
+        `Who: ${names(people.map((p) => p.name))}`,
+        `Clock in by ${start}, clock out from ${end}`,
+        'Applies wherever they clock in; it sets who counts as late.',
       ],
       warning: null,
-      verb: 'Set times',
-      payload: { outlet_id: store.id, shift_start: start, shift_end: end },
+      verb: 'Set hours',
+      payload: { user_ids: people.map((p) => p.id), shift_start: start, shift_end: end },
     }
   }
 

@@ -332,6 +332,11 @@ export function StaffGuide() {
           store, check out of it first, then clock out.
         </p>
         <p>Xtend also reminds you 5 minutes before your shift starts and 5 minutes before it ends.</p>
+        <p>
+          Your working hours are yours, not the store&apos;s: you see them on <Ui>Account</Ui> under{' '}
+          <Ui>Your hours</Ui>. Clock in by your start time wherever your first store is. Only the office can change
+          your hours.
+        </p>
         <GuideShot
           src="/guide/staff-progress.png"
           alt="The day's progress: clock in, daily report, clock out"

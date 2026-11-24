@@ -210,9 +210,10 @@ export default async function AdminGuidePage() {
           <Steps
             items={[
               <>
-                <Ui>Outlets</Ui>: add every store with its address, its map position, its shift start
-                and end, and its radius (50–100 m for a kiosk or small shop, 150–300 m for a
-                supermarket or mall). See <Ui>Outlets, places, audit and activity logs, updates</Ui> below.
+                <Ui>Outlets</Ui>: add every store with its address, its map position and its radius (50–100 m
+                for a kiosk or small shop, 150–300 m for a supermarket or mall). Working hours are set on each
+                person (<Ui>Staff</Ui>, <Ui>Clock in by</Ui> and <Ui>Clock out from</Ui>), not on the store. See{' '}
+                <Ui>Outlets, places, audit and activity logs, updates</Ui> below.
               </>,
               <>
                 <Ui>Staff</Ui>: add everyone, one by one or with <Ui>Bulk import CSV</Ui>, choosing
@@ -325,7 +326,8 @@ export default async function AdminGuidePage() {
           </p>
           <ul className="list-disc space-y-1.5 pl-5">
             <li>
-              Late means after the store&apos;s shift start. Off site means outside the store&apos;s
+              Late means after the person&apos;s own clock-in time (set on Staff), wherever they clock in. Off
+              site means outside the store&apos;s
               radius; flagged means the location was not clear enough to tell.
             </li>
             <li>
@@ -657,7 +659,7 @@ export default async function AdminGuidePage() {
                 the road: a store pinned in the wrong place marks everyone there as away from their store.
               </>,
               <>
-                Set the <Ui>Geofence radius</Ui>, <Ui>Shift start</Ui> and <Ui>Shift end</Ui>, click{' '}
+                Set the <Ui>Geofence radius</Ui> and click{' '}
                 <Ui>Create outlet</Ui>, then allocate staff to it.
               </>,
               <>
@@ -849,8 +851,15 @@ export default async function AdminGuidePage() {
             180 days.
           </p>
           <p>
-            <Ui>Clock-out reminders</Ui>: anyone still clocked in when their store&apos;s shift ends
-            (18:00 without a store) gets a push, and a second one an hour later if they still have not
+            <Ui>Working hours</Ui> belong to each person, not the store: on <Ui>Staff</Ui>, <Ui>Edit details</Ui>{' '}
+            sets <Ui>Clock in by</Ui> and <Ui>Clock out from</Ui> (08:00–18:00 unless changed; when this
+            changed, everyone kept their home store&apos;s times). A marketer due at 09:00 is late after 09:00
+            at any store; every store visit after that is recorded with its own check-in and check-out time.
+            Ask Xtend can set hours too (&quot;set all marketers to 09:00–17:00&quot;).
+          </p>
+          <p>
+            <Ui>Clock-out reminders</Ui>: anyone still clocked in when their own working day ends
+            gets a push, and a second one an hour later if they still have not
             clocked out; never more than two a day and none after midnight. They show in Notifications
             history.
           </p>

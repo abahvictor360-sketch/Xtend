@@ -5,7 +5,7 @@ import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 import { auditContext } from '@/lib/audit-context'
 import { generateTempPassword } from '@/lib/credentials'
-import { emailAddress, personName, phoneNumber } from '@/lib/fields'
+import { clockTime, emailAddress, hoursProblem, personName, phoneNumber } from '@/lib/fields'
 import { rememberTempPassword } from '@/lib/staff-logins'
 import { authAdminError } from '@/lib/auth-admin-errors'
 import { requireRecentAuth } from '@/lib/reconfirm'
@@ -33,6 +33,9 @@ const patchSchema = z.object({
   unlock: z.boolean().optional(),
   /** Admin only: remove their authenticator app so they set it up again (0080). */
   reset_mfa: z.boolean().optional(),
+  /** Their working hours, wherever they clock in (0100); both together. */
+  shift_start: clockTime.optional(),
+  shift_end: clockTime.optional(),
 })
 
 export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -47,6 +50,8 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       )
     }
     const input = parsed.data
+    const hours = hoursProblem(input.shift_start, input.shift_end)
+    if (hours) return Response.json({ error: hours }, { status: 400 })
 
     if (id === session.userId && input.is_active === false) {
       return Response.json({ error: 'You cannot deactivate your own account.' }, { status: 400 })
@@ -199,6 +204,8 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       'is_active',
       'push_exempt',
       'app_only',
+      'shift_start',
+      'shift_end',
     ] as const) {
       if (input[key] !== undefined) changes[key] = input[key]
     }

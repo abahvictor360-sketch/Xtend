@@ -52,8 +52,6 @@ export function StoreImporter() {
   const router = useRouter()
   const [text, setText] = useState('')
   const [radius, setRadius] = useState(150)
-  const [shiftStart, setShiftStart] = useState('08:00')
-  const [shiftEnd, setShiftEnd] = useState('18:00')
   const [drafts, setDrafts] = useState<Draft[] | null>(null)
   const [preview, setPreview] = useState<RowResult[] | null>(null)
   const [ready, setReady] = useState(0)
@@ -127,8 +125,6 @@ export function StoreImporter() {
           body: JSON.stringify({
             rows: chunk,
             geofence_radius_m: radius,
-            shift_start: shiftStart,
-            shift_end: shiftEnd,
             commit,
           }),
         })
@@ -256,14 +252,6 @@ export function StoreImporter() {
             value={radius}
             onChange={(event) => setRadius(Number(event.target.value) || 150)}
           />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Shift start</Label>
-          <Input type="time" value={shiftStart} onChange={(e) => setShiftStart(e.target.value)} />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs text-muted-foreground">Shift end</Label>
-          <Input type="time" value={shiftEnd} onChange={(e) => setShiftEnd(e.target.value)} />
         </div>
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Or upload a CSV</Label>

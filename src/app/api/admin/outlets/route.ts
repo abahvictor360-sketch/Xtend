@@ -10,8 +10,9 @@ const schema = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
   geofence_radius_m: z.number().int().min(25).max(2000).default(150),
-  shift_start: z.string().regex(/^\d{2}:\d{2}$/),
-  shift_end: z.string().regex(/^\d{2}:\d{2}$/),
+  // Hours belong to people now (0100); a store keeps the old columns, unused.
+  shift_start: z.string().regex(/^\d{2}:\d{2}$/).default('08:00'),
+  shift_end: z.string().regex(/^\d{2}:\d{2}$/).default('18:00'),
 })
 
 export async function POST(request: Request) {

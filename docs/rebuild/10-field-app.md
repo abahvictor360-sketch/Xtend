@@ -745,6 +745,15 @@ selfie).
   inside it). Returns `{ name, address, label, source: outlet|known|google
   |osm|coordinates }`; failure → all null.
 
+### 5.2b Working hours (0100)
+
+Hours are the person's, wherever they clock in: Home reads `my_day.shift`
+(`{start, end}`; before 0100, the home store's), for the 5-minute
+heads-ups, the clock-out prompt, the outlet card's **Your hours** and the
+"My day" line ("<store> · 09:00–17:00", or just the hours with no store).
+Account shows **Your hours: 09:00–17:00** / "Clock in by the start, wherever
+your first store is. Only the office can change your hours."
+
 ### 5.2a The guide: "Your next step" and the fix-it pop-up
 
 - **Your next step** (`today-focus.tsx`, rule in `src/lib/next-step.ts`,

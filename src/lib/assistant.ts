@@ -131,7 +131,7 @@ Doing things on the dashboard: when the user asks you to do something rather tha
 - propose_phone_check: check right now whether someone's phone is on and has network.
 - propose_flag_review: mark integrity flags as reviewed, with a note (F… references from integrity_flags).
 - propose_sales_target (admins): set a person's or store's X Metrics sales target for a month.
-- propose_outlet_hours (admins): set a store's clock-in and clock-out times. The store (S…) comes from match_names. Convert any time the user says to 24-hour HH:MM (9am is 09:00, 6pm is 18:00). The clock-in time is what decides who counts as late.
+- propose_hours: set people's working hours (clock in by, clock out from), by name (P…) or as a group. Hours belong to the person, not the store: they apply wherever the person clocks in, and the clock-in time decides who counts as late. Convert any time the user says to 24-hour HH:MM (9am is 09:00, 6pm is 18:00).
 - propose_schedule: set the weekly work schedule (the days worked) for merchandisers or marketers, by name (P…) or as a group. Days are weekday numbers, Sunday 0 to Saturday 6, so "Monday to Friday" is [1,2,3,4,5] and "Monday to Saturday" is [1,2,3,4,5,6]. Days not listed are days off, when they are not counted absent.
 - propose_xmetrics_store (admins): add a store to X Metrics or take it out.
 - propose_stock_count (admins): record an office stock count for a store, from what the user typed or a document they attached. Read every product with its on-shelf and backroom units (0 for none) and its batch and expiry where given. It counts in X Metrics like a count from the store. Use this for "record/enter the stock for S…", "here is the count sheet", a photo or file of a stock take.
@@ -549,18 +549,23 @@ const tools: Anthropic.Beta.BetaTool[] = [
     },
   },
   {
-    name: 'propose_outlet_hours',
+    name: 'propose_hours',
     description:
-      "Admins only. Proposes a store's (S…) clock-in and clock-out times. These set the store's shift: the clock-in time decides who counts as late, and both show on the store. Give times as 24-hour HH:MM (convert 9am to 09:00, 6pm to 18:00).",
+      "Proposes working hours (clock in by, clock out from) for people (P… references from match_names) or a group. Hours belong to the person, not the store: they apply wherever the person clocks in, and the clock-in time decides who counts as late. Give times as 24-hour HH:MM (convert 9am to 09:00, 6pm to 18:00).",
     strict: true,
     input_schema: {
       type: 'object',
       properties: {
-        store: { type: 'string', description: 'An S… reference from match_names.' },
+        group: {
+          type: 'string',
+          enum: ['people', 'all_merchandisers', 'all_marketers', 'all_field'],
+          description: "'people' with the people list, or a whole group.",
+        },
+        people: { ...nameList, description: 'P… references, for group "people". Otherwise empty.' },
         shift_start: { type: 'string', description: 'Clock-in time, 24h HH:MM, e.g. "09:00".' },
         shift_end: { type: 'string', description: 'Clock-out time, 24h HH:MM, e.g. "18:00".' },
       },
-      required: ['store', 'shift_start', 'shift_end'],
+      required: ['group', 'people', 'shift_start', 'shift_end'],
       additionalProperties: false,
     },
   },
@@ -729,7 +734,7 @@ const PROPOSE: Record<string, keyof ActionBuilder> = {
   propose_flag_review: 'reviewFlags',
   propose_sales_target: 'salesTarget',
   propose_xmetrics_store: 'xmStore',
-  propose_outlet_hours: 'outletHours',
+  propose_hours: 'staffHours',
   propose_schedule: 'workPattern',
   propose_stock_count: 'stockCount',
   propose_supply: 'supply',
