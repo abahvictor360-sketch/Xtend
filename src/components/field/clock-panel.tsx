@@ -13,7 +13,8 @@ import { LocationGate } from '@/components/field/location-gate'
 import { BackgroundGate, useBackgroundNeeds } from '@/components/field/background-gate'
 import { Alert } from '@/components/ui/alert'
 import { GuideSheet } from '@/components/field/guide-sheet'
-import { problemFromGeo, type GuideProblem } from '@/lib/field-guide'
+import { problemFromGeo, problemFromMessage, type GuideProblem } from '@/lib/field-guide'
+import { StartStoreSheet, type StartStore } from '@/components/field/start-store-sheet'
 import { processSelfie } from '@/lib/image'
 import { deviceInfo } from '@/lib/device'
 import { nativeDeviceSignals } from '@/lib/native'
@@ -122,13 +123,24 @@ async function confirmRecorded(id: string | undefined): Promise<boolean | null> 
   }
 }
 
+/** Home's guide asks the clock-in to open the start-of-day store picker. */
+export const PICK_START_STORE_EVENT = 'xt-pick-start-store'
+
 export function ClockPanel({
   day,
   notificationsRequired = true,
+  startStores = null,
+  currentFix = null,
 }: {
   day: DayState
   /** False only for someone an admin has excused (profiles.push_exempt). */
   notificationsRequired?: boolean
+  /**
+   * Marketers (0101): their stores. Clocking in starts with picking the
+   * store they are at, and checks them in there. Null for everyone else.
+   */
+  startStores?: StartStore[] | null
+  currentFix?: { lat: number; lng: number } | null
 }) {
   const router = useRouter()
   const push = usePush()
@@ -156,6 +168,10 @@ export function ClockPanel({
   // The step-by-step pop-up when a setting or the location is in the way.
   const [guide, setGuide] = useState<GuideProblem | null>(null)
   const [guideRetry, setGuideRetry] = useState<AttendanceType | null>(null)
+  // A marketer's start-of-day store (0101): picked before the camera opens.
+  const [picking, setPicking] = useState(false)
+  const startStore = useRef<StartStore | null>(null)
+  const [startStoreName, setStartStoreName] = useState<string | null>(null)
   const [outcome, setOutcome] = useState<Outcome | null>(null)
   // Clock-ins and clock-outs made with no signal that the server then
   // refused: told here, since the saved copy has been deleted by then.
@@ -231,6 +247,31 @@ export function ClockPanel({
     }
   }, [])
 
+  // A marketer opening Xtend before clocking in is asked straight away which
+  // store they are starting at (0101), once per day on this phone; then the
+  // camera opens. Not while a setting or the location is in the way.
+  const readyToAsk =
+    Boolean(startStores) && nextType === 'opening' && !busyStep && !opening && locationGate.status !== 'blocked'
+    && !background.needs.blocked && !needsNotifications
+  useEffect(() => {
+    if (!readyToAsk) return
+    const key = `xt-start-ask-${day.date}`
+    try {
+      if (window.sessionStorage.getItem(key)) return
+      window.sessionStorage.setItem(key, '1')
+    } catch {
+      // Private mode: ask anyway.
+    }
+    setPicking(true)
+  }, [readyToAsk, day.date])
+  // "Pick a store and clock in" on Your next step opens the picker.
+  useEffect(() => {
+    if (!startStores) return
+    const onAsk = () => setPicking(true)
+    window.addEventListener(PICK_START_STORE_EVENT, onAsk)
+    return () => window.removeEventListener(PICK_START_STORE_EVENT, onAsk)
+  }, [startStores])
+
   // The "Clock out now" prompt at the top of the home screen starts the
   // clock-out here, the same as tapping the button below.
   useEffect(() => {
@@ -284,6 +325,9 @@ export function ClockPanel({
           device_info: {
             ...deviceInfo(),
             selfie_source: 'in_app_camera',
+            // The store a marketer picked to start at (0101): the clock-in
+            // is measured against it and checks them in there.
+            ...(type === 'opening' && startStore.current ? { start_store_id: startStore.current.id } : {}),
             // Where the phone was first, and at the shutter: the server
             // checks they agree before asking anyone to add a place.
             position: positionCheck(fix, at),
@@ -412,8 +456,16 @@ export function ClockPanel({
           setError(err.message)
           setGuide(problemFromGeo(err.reason))
           setGuideRetry(type)
-        } else if (err instanceof PermanentJobError) setError(err.message)
-        else setError(err instanceof Error ? err.message : 'That did not go through. Try again.')
+        } else {
+          const message = err instanceof Error ? err.message : 'That did not go through. Try again.'
+          setError(message)
+          // The server's refusal, explained step by step (field-guide).
+          const why = problemFromMessage(message)
+          if (why) {
+            setGuide(why)
+            setGuideRetry(type)
+          }
+        }
       } finally {
         setBusyStep(null)
       }
@@ -442,8 +494,22 @@ export function ClockPanel({
         problem={guide}
         task={(guideRetry ?? nextType) === 'closing' ? 'clock out' : 'clock in'}
         onClose={() => setGuide(null)}
-        onRetry={guideRetry ? () => void start(guideRetry) : undefined}
+        onRetry={guideRetry ? () => (guideRetry === 'opening' && startStores ? setPicking(true) : void start(guideRetry)) : undefined}
+        onPickStore={startStores ? () => setPicking(true) : undefined}
       />
+      {picking && startStores && (
+        <StartStoreSheet
+          stores={startStores}
+          currentFix={currentFix}
+          onClose={() => setPicking(false)}
+          onPick={(store) => {
+            setPicking(false)
+            startStore.current = store
+            setStartStoreName(store.name)
+            void start('opening')
+          }}
+        />
+      )}
 
       {outcome && (
         <Alert
@@ -487,7 +553,7 @@ export function ClockPanel({
           input in this flow, so a gallery photo cannot be submitted. */}
       <CameraCapture
         open={opening !== null}
-        title={opening === 'closing' ? 'Clock out selfie' : 'Clock in selfie'}
+        title={opening === 'closing' ? 'Clock out selfie' : startStoreName ? `Clock in at ${startStoreName}` : 'Clock in selfie'}
         subtitle={pending ? (pending.place.label ?? null) : 'Getting your location…'}
         shutterHeld={pending === null}
         onCapture={(photo, at) => void onSelfie(photo, at)}
@@ -523,7 +589,7 @@ export function ClockPanel({
           id="clock-button"
           type="button"
           disabled={Boolean(busyStep)}
-          onClick={() => void start(nextType)}
+          onClick={() => (nextType === 'opening' && startStores ? setPicking(true) : void start(nextType))}
           className="relative flex h-16 w-full items-center rounded-full bg-brand p-2 text-primary-foreground transition-[filter] hover:brightness-105 active:scale-[0.99] disabled:opacity-80"
         >
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-brand">

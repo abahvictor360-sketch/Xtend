@@ -37,7 +37,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0097_allocate_from_store.sql`;
    - `supabase/migrations/0098_delete_for_good.sql`;
    - `supabase/migrations/0099_store_checkout_reminders.sql`;
-   - `supabase/migrations/0100_shift_times_per_person.sql`.
+   - `supabase/migrations/0100_shift_times_per_person.sql`;
+   - `supabase/migrations/0101_start_day_at_a_store.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18.)
 4. **Clock-out reminder fix (0069)**, if never pasted:
    ```sql
@@ -64,6 +65,34 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-24
+
+### Marketers start the day at a store, and the app explains every refusal
+- **What was done:**
+  - When a marketer opens Xtend before clocking in (or taps **Clock in**), a
+    box asks **Pick the store you are starting at**, from their own stores,
+    nearest first. Picking one opens the camera: the clock-in selfie also
+    checks them in at that store, so their day starts there. The box says
+    their day only counts once they clock in at a store.
+  - A marketer can no longer clock in without picking one of their stores,
+    so nobody starts the day from home.
+  - A marketer with no stores sees **No stores are allocated to you yet**:
+    message the office the stores they visit, with each store's Google Maps
+    link, and clock in once they are added. The picker also reminds them to
+    send the office the Google Maps link of any new store.
+  - Whenever a clock-in, clock-out or store check-in is refused, a box
+    explains why and what to do, step by step: no stores, no store picked,
+    a store not on their list, notifications off, the selfie not usable, a
+    place to name first, the phone's time wrong, or already recorded. Every
+    box has **Not sure? Read the staff guide**.
+  - The check-out reminder now comes 20 minutes after check-in (was 25).
+  - Merchandisers clock in as before.
+- **The impact:** each marketer's day starts with a store check-in, and
+  staff are told exactly what to do when something does not work.
+- **What you need to do:** run `supabase/migrations/0101_start_day_at_a_store.sql`
+  in the Supabase SQL editor (after 0099 and 0100), then redeploy.
+  **Before you run it, allocate every marketer their stores** (Outlets,
+  **Allocate staff**), or they will be asked to send you their stores and
+  cannot clock in until you do.
 
 ### Working hours belong to the person, not the store
 - **What was done:** clock-in and clock-out times used to be set on each

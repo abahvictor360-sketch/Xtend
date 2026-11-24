@@ -42,7 +42,7 @@ check(!/monitor|track|alert|integrity|supervisor will see/i.test(allText), 'the 
 // Your next step.
 const base: NextStepState = { clockedIn: false, clockedOut: false, offDay: false, reportRequired: true, reportFiled: false, visitsStores: true, openVisit: null, visitsDone: 0 }
 check(nextStep(base).key === 'clock_in' && nextStep(base).action === 'clock', 'first: clock in')
-check(/first store/.test(nextStep(base).description), 'a marketer is told the store comes next')
+check(/pick the store/i.test(nextStep(base).description) && nextStep(base).actionLabel === 'Pick a store and clock in', 'a marketer starts by picking a store and clocking in')
 check(nextStep({ ...base, clockedIn: true }).key === 'first_store' && nextStep({ ...base, clockedIn: true }).action === 'check_in', 'clocked in: check in at the first store')
 const inStore = nextStep({ ...base, clockedIn: true, openVisit: { store: 'Justrite Ogba', since: '10:05' } })
 check(inStore.key === 'in_store' && inStore.action === 'check_out' && /Check out of Justrite Ogba before you leave/.test(inStore.description) && /10:05/.test(inStore.description),
@@ -57,13 +57,13 @@ check(nextStep({ ...base, offDay: true }).key === 'off', 'a day off')
 const m = visitReminderMessage('Justrite Ogba', '10:05')
 check(m.title === 'Still at Justrite Ogba?' && m.body === 'Check out of Justrite Ogba before you leave. You checked in at 10:05.', 'the reminder says the store and when', m)
 check(visitReminderMessage(null, 'x').body === 'Check out of the store before you leave.', 'with no store or time it still reads')
-const mig = read('supabase/migrations/0099_store_checkout_reminders.sql')
-check(mig.includes(`select ${VISIT_REMINDER_MINUTES} $$`), 'the database reminds every 25 minutes, as the app says')
+const mig = read('supabase/migrations/0101_start_day_at_a_store.sql')
+check(mig.includes(`select ${VISIT_REMINDER_MINUTES} $$`), 'the database reminds every 20 minutes, as the app says')
 check(/flushVisitCheckoutReminders\(\)/.test(read('src/app/api/cron/alerts/route.ts')), 'the five-minute job sends them')
 
 // Wiring.
 const home = read('src/components/field/field-home.tsx')
-check(/xt-checkin-ask-/.test(home) && /You are clocked in\. Now check in at a store/.test(home), 'after clocking in a marketer is asked to check in at a store (once a day)')
+check(!/CheckInAsk/.test(home) && /startStores=\{startStores\}/.test(home), 'clocking in is the check-in: Home hands the marketer’s stores to the clock-in')
 check(/ask=\{visitAsk\}/.test(home) && /<TodayFocus/.test(home), 'Your next step starts the check-in or check-out')
 check(/setGuide\(problemFromGeo/.test(read('src/components/field/clock-panel.tsx')) && /setGuide\('phone_settings'\)/.test(read('src/components/field/clock-panel.tsx')),
   'clock-in shows the guide when location or settings are in the way')

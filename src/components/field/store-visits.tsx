@@ -12,7 +12,7 @@ import { SectionHeader } from '@/components/field/screen'
 import { TaskRow } from '@/components/field/task-row'
 import { deviceInfo } from '@/lib/device'
 import { GeoBlocked, haversineMetres, positionCheck, requireFix, type Fix, type SampledFix } from '@/lib/geo'
-import { problemFromGeo, type GuideProblem } from '@/lib/field-guide'
+import { problemFromGeo, problemFromMessage, type GuideProblem } from '@/lib/field-guide'
 import { GuideSheet } from '@/components/field/guide-sheet'
 import { processSelfie } from '@/lib/image'
 import { supabase } from '@/lib/supabase/client'
@@ -294,6 +294,8 @@ export function StoreVisits({
             router.refresh()
           }
           setError(data.error ?? 'That check-in did not go through.')
+          // The server's refusal, explained step by step (field-guide).
+          setGuide(problemFromMessage(data.error))
           return
         }
 

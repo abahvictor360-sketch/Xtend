@@ -281,7 +281,10 @@ export default async function SupervisorGuidePage() {
             is measured against their store, so keep it right. Once someone has stores allocated, they
             can only check in at those (and their home store), and the app lists only those. You can also
             do it from the store: on <Ui>Outlets</Ui>, click <Ui>Allocate staff</Ui> under a store, search
-            your team and click <Ui>Allocate</Ui> (or <Ui>Remove</Ui>). Only that store changes for the person.
+            your team and click <Ui>Allocate</Ui> (or <Ui>Remove</Ui>). Only that store changes for the person. A
+            marketer must have stores to clock in: they start the day by picking one of them, and that clock-in
+            also checks them in there. If they message you their stores and Google Maps links, ask an admin to add
+            any new store.
           </p>
           <p>
             <Ui>Notifications</Ui>: write a message to your team or named people, check <Ui>See who</Ui>,

@@ -1334,6 +1334,21 @@ label and the store's own point.
   unknown or inactive store refuses the whole call and changes nothing.
   Every call writes an `audit_log` row `staff.allocate_outlets` directly
   (supervisors may call it).
+- **0101, marketers start the day at a store:** `start_store_of(device_info)`
+  reads `device_info.start_store_id` (null if missing or not a uuid). BEFORE
+  INSERT trigger `trg_attendance_start_store` (after `attendance_enforce`,
+  skipped for office entries) on a marketer's own opening: no active store
+  in `outlets_for_user` → "No stores are allocated to you yet. Send the
+  office the stores you visit, with each store's Google Maps link, and clock
+  in once they are added" (hint `no_stores`); none named → "Pick the store
+  you are starting your day at, then clock in" (`pick_store`); not one of
+  theirs or inactive → "That store is not on your list. Pick one of your
+  stores, or ask the office to add it" (`store_not_yours`). The clock-in is
+  then measured against that store (outlet, distance, on/off site, flagged
+  over 100 m). `attendance_store_check_in` (AFTER) opens the store visit at
+  the picked store (no fence, age or accuracy limit; source `clock_in`), or,
+  with none named (older phones, merchandisers who visit stores), as 0087.
+  `visit_reminder_minutes()` = 20. Merchandisers are not affected.
 - **0100, working hours per person:** `profiles.shift_start` / `shift_end`
   (`time not null`, default 08:00 / 18:00; check `profiles_shift_order`
   end > start, not valid for old rows). When the columns are first added

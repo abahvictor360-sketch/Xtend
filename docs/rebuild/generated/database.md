@@ -1416,7 +1416,8 @@ Policies:
 - `attendance_punctuality()` → trigger · definer · 0100_shift_times_per_person.sql
 - `attendance_push_check()` → trigger · definer · 0027_notifications_required.sql
 - `attendance_replace_for_correction()` → trigger · definer · 0090_field_corrections.sql
-- `attendance_store_check_in()` → trigger · definer · 0087_clock_in_checks_in.sql
+- `attendance_start_store()` → trigger · definer · 0101_start_day_at_a_store.sql
+- `attendance_store_check_in()` → trigger · definer · 0101_start_day_at_a_store.sql
 - `attendance_timing()` → trigger · definer · 0026_phone_evidence.sql
 - `attendance_timing_flag()` → trigger · definer · 0026_phone_evidence.sql
 - `audit_context_columns(p jsonb)` → TABLE(ip text, user_agent text, device jsonb, lat double precision, lng double precision, accuracy_m double precision, location_source text, place text, country text, vpn boolean) · definer · 0049_audit_context.sql
@@ -1697,6 +1698,7 @@ Policies:
 - `staff_analytics(p_from date, p_to date)` → TABLE(user_id uuid, full_name text, outlet_name text, days_present integer, days_late integer, days_off_site integer, avg_distance_m double precision) · definer · 0100_shift_times_per_person.sql
 - `staff_day(p_date date)` → TABLE(user_id uuid, staff_name text, role user_role, clocked_in_at timestamp with time zone, clocked_in_at_place text, clocked_out_at timestamp with time zone, clocked_out_at_place text, stores_visited integer, minutes_in_store integer, still_in_store text) · definer · 0016_visits_without_allocation.sql
 - `staff_no_show(p_grace_minutes integer)` → TABLE(user_id uuid, full_name text, phone text, outlet_id uuid, outlet_name text, shift_start time without time zone, minutes_late integer) · definer · 0100_shift_times_per_person.sql
+- `start_store_of(p_device jsonb)` → uuid · 0101_start_day_at_a_store.sql
 - `store_count_status()` → jsonb · definer · 0020_count_requests.sql
 - `store_visit_alert()` → trigger · definer · 0016_visits_without_allocation.sql
 - `store_visit_close_stale()` → trigger · definer · 0086_close_stale_visit_on_check_in.sql
@@ -1719,7 +1721,7 @@ Policies:
 - `unread_messages()` → integer · definer · 0073_messages.sql
 - `visit_place_due()` → trigger · definer · 0045_mandatory_place_naming.sql
 - `visit_reminder_max()` → integer · 0099_store_checkout_reminders.sql
-- `visit_reminder_minutes()` → integer · 0099_store_checkout_reminders.sql
+- `visit_reminder_minutes()` → integer · 0101_start_day_at_a_store.sql
 - `write_audit(p_action text, p_target_table text, p_target_id uuid, p_meta jsonb, p_context jsonb)` → uuid · definer · 0072_hr_role.sql
 - `xm_acknowledge_expiry(p_alert uuid, p_note text)` → void · definer · 0043_x_metrics.sql
 - `xm_can_submit()` → boolean · definer · 0046_role_store_counts.sql
@@ -1764,6 +1766,7 @@ Policies:
 - `attendance`: `trg_attendance_punctuality` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_punctuality()
 - `attendance`: `trg_attendance_push_check` — BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_push_check()
 - `attendance`: `trg_attendance_selfie_check` — BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION selfie_check()
+- `attendance`: `trg_attendance_start_store` — BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_start_store()
 - `attendance`: `trg_attendance_timing` — BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_timing()
 - `attendance`: `trg_attendance_timing_flag` — AFTER INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_timing_flag()
 - `attendance`: `trg_attendance_zy_office_time` — BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_office_time()

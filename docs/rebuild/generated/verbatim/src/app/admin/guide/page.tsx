@@ -395,8 +395,13 @@ export default async function AdminGuidePage() {
             <Ui>By person</Ui> and <Ui>Store coverage</Ui> (stores nobody visited in 7, 14 or 30 days)
             add it up. The app guides marketers through the day: straight after clocking in it asks them to check
             in at a store, <Ui>Your next step</Ui> on their Home says what to do next, and while they are checked
-            in it reminds them every 25 minutes to check out before they leave (a notification on the phone, sent
-            by the five-minute alerts job, at most 16 per visit). When location or a phone setting stops them, a
+            in it reminds them every 20 minutes to check out before they leave (a notification on the phone, sent
+            by the five-minute alerts job, at most 16 per visit). A marketer starts the day at a store, never at
+            home: they pick the store they are at (one of theirs: home or allocated), and the clock-in selfie also
+            checks them in there; a clock-in with no store picked is refused. A marketer with no stores cannot
+            clock in and is told to message you their stores with each store&apos;s Google Maps link: allocate
+            them (<Ui>Allocate staff</Ui> under the store, or <Ui>Store allocation</Ui>) and pin new stores with
+            the link (<Ui>Or paste a Google Maps link</Ui>). When location or a phone setting stops them, a
             pop-up gives them the steps to fix it. A visit nobody checked out of by the end of the day shows as abandoned; it is
             closed overnight, or as soon as that person checks in at a store again. A marketer who clocks in
             inside one of their own stores is checked in there at the same time; that visit has no
