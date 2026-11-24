@@ -130,6 +130,24 @@ resolves `server-only` itself, the stub lets the same modules load in Node.
 Every server module begins with `import 'server-only'` (auth helpers excepted:
 `src/lib/auth.ts` imports `next/navigation` and is server-only by usage).
 
+**Crashes never show the bare browser message.** `src/app/global-error.tsx`
+(inline styles, its own `<html>`) and every `error.tsx` (through
+`RouteError`) show `diagnoseAppError(error, navigator.onLine)` from
+`src/lib/app-error.ts`: `offline` "No internet connection" (or "Xtend could
+not be reached" for a dropped fetch), `new_version` "Xtend has just been
+updated" (ChunkLoadError, "Loading chunk", "dynamically imported module",
+"Unexpected token '<'", MIME type), `server` "Xtend had a problem on its
+side" (an error with a digest), `unknown` "Something went wrong opening this
+screen"; each with numbered steps, a code (the digest, else an FNV hash
+`E…`), and **Try again** (`reset`) or **Load the new version**
+(`reloadFresh`: deletes Cache Storage only, then `location.replace` with
+`?_r=<time>`). Each reports once to `POST /api/client-error` (sendBeacon;
+no sign-in; 30 an hour per IP; logged as "app screen crashed" with code,
+kind, where, path, build, online, digest, message ≤ 300, user agent ≤ 160).
+The root layout's `<head>` runs `EARLY_RECOVERY_SCRIPT` before the app: a
+failed `/_next/static/` script or stylesheet, or a chunk error, clears Cache
+Storage and reloads once (sessionStorage `xt_early_reload`, 30 s).
+
 **Secrets never reach a browser.** Only settings named `NEXT_PUBLIC_…` are
 built into browser code, so no secret ever gets such a name (the browser
 gets only the Supabase URL and publishable/anon key, the browser-restricted

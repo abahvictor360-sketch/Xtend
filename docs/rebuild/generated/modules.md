@@ -57,6 +57,15 @@ can tell them from a browser. Not a security signal: anyone can send it.
 
 Exports: `APP_AGENT_MARK`, `isAppUserAgent`, `APP_COOKIE`, `APP_COOKIE_MAX_AGE`, `isAppRequest`
 
+## `src/lib/app-error.ts`
+
+What to tell someone when a screen crashes, instead of the browser's bare
+"Application error: a client-side exception has occurred". The cause is
+read from the error and the connection, and said in plain words with what
+to do. Pure, so scripts/check-app-error.ts can test it.
+
+Exports: `AppErrorKind`, `AppErrorInfo`, `errorCode`, `diagnoseAppError`, `EARLY_RECOVERY_SCRIPT`
+
 ## `src/lib/app-only.ts`
 
 "Use the app" (migration 0084): an admin can require a merchandiser or
@@ -71,6 +80,14 @@ xt_app cookie for the page loads Android's service worker makes without it
 the app; it is not a security control.
 
 Exports: `APP_ONLY_ROLES`, `APP_ONLY_MESSAGE`, `APP_ONLY_CODE`, `APP_ONLY_PATH`, `appOnlyBlocks`
+
+## `src/lib/app-recover.ts`
+
+What the error screens do (lib/app-error.ts says what they say). Only the
+stored copy of the app's pages and code (Cache Storage) is cleared, never
+the work saved without signal (IndexedDB), the sign-in or notifications.
+
+Exports: `reloadFresh`, `reportAppError`
 
 ## `src/lib/app-release.ts`
 
@@ -2403,6 +2420,10 @@ Only ever rendered for an admin (the server enforces that too).
 Exports: `RoleSwitch`
 
 ## `src/components/route-error.tsx`
+
+A screen that crashed: what happened in plain words (lib/app-error.ts),
+what to do, and the buttons to do it. Never the browser's bare
+"Application error".
 
 Exports: `RouteError`
 

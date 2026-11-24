@@ -64,6 +64,27 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-24
 
+### No more blank "Application error" screen
+- **What was done:** when a screen crashed, staff saw a white page saying
+  "Application error: a client-side exception has occurred". The most
+  common cause is a phone still holding the old version of Xtend after an
+  update. Now:
+  - before Xtend even opens, the phone checks for that and quietly reloads
+    onto the new version by itself;
+  - if a screen still fails, staff see what happened in plain words, with
+    numbered steps and the right button: **No internet connection** (turn
+    on data, then Try again), **Xtend has just been updated** (Load the new
+    version), **Xtend had a problem on its side** (try again in a minute),
+    or anything else (Load the new version, plus a short code like
+    EKDZP7F to tell support). Loading the new version keeps work saved
+    without signal, the sign-in and notifications;
+  - every crash is written to the server log as "app screen crashed" with
+    the same code, so the cause can be found from what the person reads out.
+- **The impact:** no dead white screen; staff know what to do, and crashes
+  can be traced and fixed.
+- **What you need to do:** redeploy. When someone reports a code, search the
+  server's logs in Dokploy for it (or send it to me).
+
 ### The app now guides staff through the day
 - **What was done:**
   - **Your next step** on Home always says what to do now, with a button:
