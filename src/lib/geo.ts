@@ -195,6 +195,7 @@ function browserReadings(o: Required<FixOptions>): Promise<Fix[]> {
       done = true
       navigator.geolocation.clearWatch(watch)
       clearInterval(timer)
+      stopFallback()
       resolve(readings)
     }
     const watch = navigator.geolocation.watchPosition(
@@ -211,6 +212,7 @@ function browserReadings(o: Required<FixOptions>): Promise<Fix[]> {
         done = true
         navigator.geolocation.clearWatch(watch)
         clearInterval(timer)
+        stopFallback()
         reject(
           err.code === err.PERMISSION_DENIED
             ? new GeoBlocked('permission_denied', 'Location permission is off. Xtend cannot record attendance without it.')
@@ -219,6 +221,29 @@ function browserReadings(o: Required<FixOptions>): Promise<Fix[]> {
       },
       { enableHighAccuracy: true, timeout: o.timeoutMs, maximumAge: 0 },
     )
+    // Entry-level phones (and anyone indoors) can take a long time to lock
+    // onto satellites. If nothing has come in after a few seconds, also
+    // listen to the phone's network location, which is quick. It still has
+    // to be inside the accuracy ceiling to count, and a satellite reading
+    // that arrives later is preferred by combineFixes.
+    let networkWatch: number | null = null
+    const fallback = setTimeout(() => {
+      if (done || readings.length) return
+      networkWatch = navigator.geolocation.watchPosition(
+        (pos) => {
+          if (done) return
+          if (pos.timestamp && pos.timestamp < started - 2000) return
+          readings.push(fromPosition(pos))
+          if (!firstAt) firstAt = Date.now()
+        },
+        () => undefined,
+        { enableHighAccuracy: false, timeout: o.timeoutMs, maximumAge: 0 },
+      )
+    }, 4000)
+    const stopFallback = () => {
+      clearTimeout(fallback)
+      if (networkWatch !== null) navigator.geolocation.clearWatch(networkWatch)
+    }
     const timer = setInterval(() => {
       const now = Date.now()
       const bestNow = readings.length ? Math.min(...readings.map((r) => r.accuracy_m)) : Infinity
@@ -227,6 +252,7 @@ function browserReadings(o: Required<FixOptions>): Promise<Fix[]> {
         done = true
         navigator.geolocation.clearWatch(watch)
         clearInterval(timer)
+        stopFallback()
         reject(new GeoBlocked('position_unavailable', 'Your phone could not get a location fix. Step outside or near a window and retry.'))
       }
     }, 250)
