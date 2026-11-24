@@ -1120,6 +1120,63 @@ $$;
 
 
 --
+-- Name: attendance_start_store(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.attendance_start_store() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  store uuid;
+  o record;
+begin
+  if new.type <> 'opening' or auth.uid() is null or auth.uid() <> new.user_id then
+    return new;
+  end if;
+  -- Marketers only: a merchandiser's day is their store.
+  if not exists (select 1 from public.profiles p where p.id = new.user_id and p.role = 'marketer') then
+    return new;
+  end if;
+
+  if not exists (select 1 from public.outlets_for_user(new.user_id) f
+                 join public.outlets x on x.id = f.outlet_id where x.is_active) then
+    raise exception 'No stores are allocated to you yet. Send the office the stores you visit, with each store''s Google Maps link, and clock in once they are added'
+      using hint = 'no_stores';
+  end if;
+
+  store := public.start_store_of(new.device_info);
+  if store is null then
+    raise exception 'Pick the store you are starting your day at, then clock in'
+      using hint = 'pick_store';
+  end if;
+  if not exists (select 1 from public.outlets_for_user(new.user_id) f
+                 join public.outlets x on x.id = f.outlet_id
+                 where f.outlet_id = store and x.is_active) then
+    raise exception 'That store is not on your list. Pick one of your stores, or ask the office to add it'
+      using hint = 'store_not_yours';
+  end if;
+
+  -- Measured against the store they said they are at.
+  select x.id, x.lat, x.lng, x.geofence_radius_m into o from public.outlets x where x.id = store;
+  new.outlet_id       := o.id;
+  new.outlet_lat      := o.lat;
+  new.outlet_lng      := o.lng;
+  new.outlet_radius_m := o.geofence_radius_m;
+  new.distance_m      := case when o.lat is null then null
+                              else public.distance_metres(new.lat, new.lng, o.lat, o.lng) end;
+  new.status := case
+    when new.accuracy_m > 100 then 'flagged'::attendance_status
+    when new.distance_m is null then null
+    when new.distance_m <= coalesce(new.outlet_radius_m, 150) then 'on_site'::attendance_status
+    else 'off_site'::attendance_status
+  end;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: attendance_store_check_in(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1133,21 +1190,26 @@ begin
   if new.type <> 'opening' or auth.uid() is null or auth.uid() <> new.user_id then
     return null;
   end if;
-  if not public.can_visit_stores() or not public.has_allocated_stores(new.user_id) then
+  if not public.can_visit_stores() then
     return null;
   end if;
-  if new.accuracy_m is null or new.accuracy_m > 100
-     or new.client_captured_at < now() - interval '30 minutes' then
-    return null;
+  -- 0101: the store they picked to start their day at. Without one (an
+  -- older phone), a good, fresh fix inside one of their stores, as in 0087.
+  store := public.start_store_of(new.device_info);
+  if store is null then
+    if not public.has_allocated_stores(new.user_id)
+       or new.accuracy_m is null or new.accuracy_m > 100
+       or new.client_captured_at < now() - interval '30 minutes' then
+      return null;
+    end if;
+    select x.id into store
+    from public.outlets x
+    where x.id in (select f.outlet_id from public.outlets_for_user(new.user_id) f)
+      and x.is_active
+      and public.distance_metres(new.lat, new.lng, x.lat, x.lng) <= x.geofence_radius_m
+    order by public.distance_metres(new.lat, new.lng, x.lat, x.lng)
+    limit 1;
   end if;
-
-  select x.id into store
-  from public.outlets x
-  where x.id in (select f.outlet_id from public.outlets_for_user(new.user_id) f)
-    and x.is_active
-    and public.distance_metres(new.lat, new.lng, x.lat, x.lng) <= x.geofence_radius_m
-  order by public.distance_metres(new.lat, new.lng, x.lat, x.lng)
-  limit 1;
   if store is null then
     return null;
   end if;
@@ -8529,6 +8591,21 @@ $$;
 
 
 --
+-- Name: start_store_of(jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.start_store_of(p_device jsonb) RETURNS uuid
+    LANGUAGE plpgsql IMMUTABLE
+    AS $$
+begin
+  return nullif(p_device->>'start_store_id', '')::uuid;
+exception when others then
+  return null;
+end;
+$$;
+
+
+--
 -- Name: store_count_status(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9261,7 +9338,7 @@ CREATE FUNCTION public.visit_reminder_max() RETURNS integer
 
 CREATE FUNCTION public.visit_reminder_minutes() RETURNS integer
     LANGUAGE sql IMMUTABLE
-    AS $$ select 25 $$;
+    AS $$ select 20 $$;
 
 
 --
@@ -13985,6 +14062,13 @@ CREATE TRIGGER trg_attendance_selfie_check BEFORE INSERT ON public.attendance FO
 
 
 --
+-- Name: attendance trg_attendance_start_store; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_attendance_start_store BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT public.office_entry_on())) EXECUTE FUNCTION public.attendance_start_store();
+
+
+--
 -- Name: attendance trg_attendance_timing; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -16732,6 +16816,13 @@ REVOKE ALL ON FUNCTION public.attendance_replace_for_correction() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION attendance_start_store(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.attendance_start_store() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION attendance_store_check_in(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -18584,6 +18675,14 @@ GRANT ALL ON FUNCTION public.staff_day(p_date date) TO service_role;
 REVOKE ALL ON FUNCTION public.staff_no_show(p_grace_minutes integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.staff_no_show(p_grace_minutes integer) TO authenticated;
 GRANT ALL ON FUNCTION public.staff_no_show(p_grace_minutes integer) TO service_role;
+
+
+--
+-- Name: FUNCTION start_store_of(p_device jsonb); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.start_store_of(p_device jsonb) TO authenticated;
+GRANT ALL ON FUNCTION public.start_store_of(p_device jsonb) TO service_role;
 
 
 --

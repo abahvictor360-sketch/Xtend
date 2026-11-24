@@ -458,7 +458,7 @@ Metrics. Both work offline and are sent when there is signal.
 
 - File: `src/app/field/page.tsx`
 - Who: FIELD_ROLES
-- Components: `field/field-home`, `field/dashboard-retry`, `field/count-due-banner`, `field/messages-banner`, `field/store-visits`
+- Components: `field/start-store-sheet`, `field/field-home`, `field/dashboard-retry`, `field/count-due-banner`, `field/messages-banner`, `field/store-visits`
 
 ## `/field/report` — Daily report — Xtend
 

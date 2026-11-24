@@ -564,10 +564,11 @@ begin
     perform public.set_staff_outlets(mia, array[mall_id, kiosk_id]);
     perform public.set_staff_outlets(ola, array[kiosk_id]);
 
-    -- Clocks in inside the mall's fence, the mall being one of her stores.
+    -- 0101: she picks the mall, one of her stores, and clocks in inside its fence.
     perform act_as(mia);
-    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
-    values ('opening', 6.6019, 3.3516, 12, fresh_photo('selfies', 'mia-in.jpg'), now());
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, device_info)
+    values ('opening', 6.6019, 3.3516, 12, fresh_photo('selfies', 'mia-in.jpg'), now(),
+            jsonb_build_object('start_store_id', mall_id));
     perform assert(
       (select count(*) from public.store_visits where user_id = mia and status = 'open' and outlet_id = mall_id) = 1,
       'clock-in 0087: clocking in at your own store checks you in there');
@@ -579,14 +580,55 @@ begin
       exists (select 1 from public.my_store_visits() where status = 'open'),
       'clock-in 0087: Home shows the check-in, ready to check out');
 
-    -- Clocks in at the mall, but the mall is not one of his stores.
+    -- 0101: a marketer must say which of their stores they start at.
     perform act_as(ola);
-    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
-    values ('opening', 6.6019, 3.3516, 12, fresh_photo('selfies', 'ola-in.jpg'), now());
+    begin
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
+      values ('opening', 6.6019, 3.3516, 12, fresh_photo('selfies', 'ola-none.jpg'), now());
+      perform assert(false, 'start 0101: no store picked must be refused');
+    exception when others then
+      perform assert(sqlerrm like 'Pick the store you are starting your day at%', 'start 0101: a marketer cannot clock in without picking a store');
+    end;
+    begin
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, device_info)
+      values ('opening', 6.6019, 3.3516, 12, fresh_photo('selfies', 'ola-mall.jpg'), now(),
+              jsonb_build_object('start_store_id', mall_id));
+      perform assert(false, 'start 0101: a store not on the list must be refused');
+    exception when others then
+      perform assert(sqlerrm like 'That store is not on your list%', 'start 0101: nor at a store that is not theirs');
+    end;
+    -- Standing in the mall but saying the kiosk: off site, checked in at the kiosk.
+    insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, device_info)
+    values ('opening', 6.6019, 3.3516, 12, fresh_photo('selfies', 'ola-in.jpg'), now(),
+            jsonb_build_object('start_store_id', kiosk_id));
     perform assert(
-      not exists (select 1 from public.store_visits where user_id = ola),
-      'clock-in 0087: not at one of your stores, no check-in');
+      (select outlet_id from public.attendance where user_id = ola and type = 'opening') = kiosk_id
+      and (select status from public.attendance where user_id = ola and type = 'opening') = 'off_site',
+      'start 0101: the clock-in is measured against the store they picked');
+    perform assert(
+      (select count(*) from public.store_visits where user_id = ola and status = 'open' and outlet_id = kiosk_id
+         and device_info ->> 'source' = 'clock_in') = 1,
+      'start 0101: and checks them in there with the same selfie');
 
+    -- A marketer with no stores at all is told to ask the office.
+    perform act_as(boss);
+    insert into auth.users (id, email) values (gen_random_uuid(), 'nostore@xpel.ng');
+    declare
+      nobody uuid := (select id from auth.users where email = 'nostore@xpel.ng');
+    begin
+      insert into public.profiles (id, full_name, email, role) values (nobody, 'No Store', 'nostore@xpel.ng', 'marketer');
+      perform notifications_on(nobody);
+      perform act_as(nobody);
+      begin
+        insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, device_info)
+        values ('opening', 6.6019, 3.3516, 12, fresh_photo('selfies', 'nobody.jpg'), now(),
+                jsonb_build_object('start_store_id', mall_id));
+        perform assert(false, 'start 0101: no stores must be refused');
+      exception when others then
+        perform assert(sqlerrm like 'No stores are allocated to you yet%Google Maps link%',
+          'start 0101: with no stores they are told to send the office their stores and Google Maps links');
+      end;
+    end;
     raise exception 'clock-in-0087-done';
   exception when others then
     if sqlerrm <> 'clock-in-0087-done' then raise; end if;
@@ -1010,8 +1052,9 @@ begin
   -- The daily clock measures against the nearest allocated store.
   -- ---------------------------------------------------------------
   perform act_as(grace);
-  insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
-  values ('opening', 9.0766, 7.3987, 10, fresh_photo('selfies', 'g-1.jpg'), now())
+  insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, device_info)
+  values ('opening', 9.0766, 7.3987, 10, fresh_photo('selfies', 'g-1.jpg'), now(),
+          jsonb_build_object('start_store_id', kiosk_id))
   returning id, status, distance_m into attendance_id, row_status, row_dist;
 
   perform assert(row_status = 'on_site',
@@ -1158,14 +1201,20 @@ begin
     (select count(*) from public.staff_day()) = 1,
     'a marketer sees only their own day');
 
-  -- The daily clock, for someone with no store of their own.
+  -- The daily clock, for someone with no store of their own. Grace (a
+  -- marketer) is not used: since 0101 a marketer with no stores cannot clock
+  -- in at all. A merchandiser with no store, Noor, can.
   perform act_as(boss);
   perform set_staff_outlets(grace, array[]::uuid[]);
   update public.profiles set outlet_id = null where id = grace;
   delete from public.attendance where user_id = grace;
+  insert into auth.users (id, email) values (gen_random_uuid(), 'noor.nostore@xpel.ng');
+  insert into public.profiles (id, full_name, email, role)
+  select id, 'Noor No-Store', 'noor.nostore@xpel.ng', 'merchandiser' from auth.users where email = 'noor.nostore@xpel.ng';
+  perform notifications_on((select id from auth.users where email = 'noor.nostore@xpel.ng'));
 
-  perform act_as(grace);
-  select count(*) into alert_count from public.location_alerts where user_id = grace;
+  perform act_as((select id from auth.users where email = 'noor.nostore@xpel.ng'));
+  select count(*) into alert_count from public.location_alerts where user_id = auth.uid();
   insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at)
   values ('opening', 9.0766, 7.3987, 10, fresh_photo('selfies', 'g-clock.jpg'), now())
   returning id into attendance_id;
@@ -1187,13 +1236,14 @@ begin
     (select status from public.attendance where id = attendance_id) is null,
     'with no status, because there is nowhere they were due');
   perform assert(
-    (select count(*) from public.location_alerts where user_id = grace) = alert_count,
+    (select count(*) from public.location_alerts where user_id = auth.uid()) = alert_count,
     'and nobody is interrupted about it');
   -- But they must name the spot before their next store visit (045).
   perform assert((select count(*) from public.my_place_due()) = 1,
     'clocking in somewhere nobody can name asks them to name it');
   perform act_as(boss);
-  perform public.dismiss_place_due((select id from public.place_naming_due where user_id = grace), 'Test: not a shop');
+  perform public.dismiss_place_due((select d.id from public.place_naming_due d join auth.users u on u.id = d.user_id
+                                    where u.email = 'noor.nostore@xpel.ng'), 'Test: not a shop');
   perform act_as(grace);
 
   -- ---------------------------------------------------------------
@@ -1232,6 +1282,12 @@ begin
     (select outlet_name from public.store_visit_detail where id = visit_id) is null,
     'and there is no outlet, because they were not in one');
   perform public.end_store_visit(visit_id, 6.45, 3.40, 10, null, null);
+  -- (0101: Grace no longer clocked in at this spot, so the spot she is
+  -- asked to name now comes from this visit; set it aside to go on.)
+  perform act_as(boss);
+  perform public.dismiss_place_due(d.id, 'Test: not a shop')
+  from public.place_naming_due d where d.user_id = grace and d.named_at is null and d.dismissed_at is null;
+  perform act_as(grace);
 
   insert into public.store_visits
     (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)
@@ -3047,8 +3103,11 @@ begin
       perform act_as(boss);
       insert into auth.users (id, email) values (zed, 'place-test@xpel.ng'), (yemi, 'place-test2@xpel.ng');
       insert into public.profiles (id, full_name, email, role) values
-        (zed, 'Zainab Bello', 'place-test@xpel.ng', 'marketer'),
-        (yemi, 'Yemi Ade', 'place-test2@xpel.ng', 'marketer');
+        (zed, 'Zainab Bello', 'place-test@xpel.ng', 'merchandiser'),
+        (yemi, 'Yemi Ade', 'place-test2@xpel.ng', 'merchandiser');
+      -- (0101: a marketer must clock in at one of their stores, so the
+      -- clock-ins at an unknown place are a merchandiser's with no store;
+      -- Zainab becomes a marketer below for the store visits.)
       perform notifications_on(zed);
       perform notifications_on(yemi);
 
@@ -3077,6 +3136,9 @@ begin
         'place: when they agree, the surer of the two readings is kept');
       due := (select id from public.my_place_due());
       perform assert(due is not null, 'place: clocking in somewhere unknown asks for its name');
+      perform act_as(boss);
+      update public.profiles set role = 'marketer' where id = zed;
+      perform act_as(zed);
 
       begin
         insert into public.store_visits (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at)

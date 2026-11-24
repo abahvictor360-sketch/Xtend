@@ -606,7 +606,7 @@ what to do, step by step, with a button that opens the right setting
 where the phone allows it. Pure, so scripts/check-field-guide.ts can test
 it. Staff are told what to do, never how they are monitored.
 
-Exports: `GuideProblem`, `GuideAction`, `Guide`, `GuidePlatform`, `problemFromGeo`, `guideFor`
+Exports: `GuideProblem`, `GuideAction`, `Guide`, `GuidePlatform`, `problemFromGeo`, `problemFromMessage`, `STAFF_GUIDE_HREF`, `guideFor`
 
 ## `src/lib/fields.ts`
 
@@ -1488,7 +1488,7 @@ Exports: `cn`, `TZ`, `formatLagos`, `lagosDateString`, `metres`, `addDays`, `day
 
 "Check out of the store before you leave" (migration 0099): what the
 reminder says while someone is checked in at a store. The database
-decides when (every visit_reminder_minutes(), 25); this is only the
+decides when (every visit_reminder_minutes(), 20 since 0101); this is only the
 words. Pure, so scripts/check-field-guide.ts can test it.
 
 Exports: `VISIT_REMINDER_MINUTES`, `visitReminderMessage`
@@ -2055,7 +2055,7 @@ Exports: `CLOCK_OUT_EVENT`, `startClockOut`, `ClockOutPrompt`
 
 Older than this and the fix is read again before it is submitted.
 
-Exports: `ClockPanel`
+Exports: `PICK_START_STORE_EVENT`, `ClockPanel`
 
 ## `src/components/field/count-due-banner.tsx`
 
@@ -2085,7 +2085,7 @@ Exports: `DayStrip`
 
 ## `src/components/field/field-home.tsx`
 
-Overrides the day's own answer when an admin views as a role.
+Marketers (0101): their stores, to pick where they start the day.
 
 Exports: `FieldHome`
 
@@ -2108,7 +2108,8 @@ Exports: `GreetingHeader`
 
 The pop-up that tells staff why something did not work and what to do
 next (lib/field-guide.ts). Opens from the clock-in, store check-in and
-check-out when a phone setting or the location is in the way.
+check-out when a phone setting, the location or the server's answer is
+in the way, and always points to the staff guide.
 
 Exports: `GuideSheet`
 
@@ -2255,6 +2256,15 @@ setting changed for that to work, without explaining why: how tracking
 works is for the office, not for staff. Nothing in a browser.
 
 Exports: `ShiftTracker`
+
+## `src/components/field/start-store-sheet.tsx`
+
+A marketer starts the day at a store (0101): before the clock-in camera
+opens, they pick the store they are at, from their own stores. Clocking
+in there checks them in there too. With no stores yet, it says what to
+send the office instead.
+
+Exports: `StartStore`, `StartStoreSheet`
 
 ## `src/components/field/store-count-form.tsx`
 

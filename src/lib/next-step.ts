@@ -35,15 +35,22 @@ export function nextStep(s: NextStepState): NextStep {
     return { key: 'off', title: 'Enjoy your time off', description: 'You are not scheduled to work today.', action: null, actionLabel: null }
   }
   if (!s.clockedIn) {
-    return {
-      key: 'clock_in',
-      title: 'Start your day: clock in',
-      description: s.visitsStores
-        ? 'Clock in when you start work. Then check in at your first store.'
-        : 'Clock in when you arrive at your store.',
-      action: 'clock',
-      actionLabel: 'Clock in',
-    }
+    return s.visitsStores
+      ? {
+          key: 'clock_in',
+          title: 'Start your day at your first store',
+          description:
+            'At the store, tap Clock in and pick the store: clocking in checks you in there too. Your day only counts once you clock in at a store.',
+          action: 'clock',
+          actionLabel: 'Pick a store and clock in',
+        }
+      : {
+          key: 'clock_in',
+          title: 'Start your day: clock in',
+          description: 'Clock in when you arrive at your store.',
+          action: 'clock',
+          actionLabel: 'Clock in',
+        }
   }
   const reportDue = s.reportRequired && !s.reportFiled
   if (s.openVisit) {

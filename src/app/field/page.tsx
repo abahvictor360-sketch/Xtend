@@ -1,5 +1,6 @@
 import { FIELD_ROLES, requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
+import type { StartStore } from '@/components/field/start-store-sheet'
 import { FieldHome } from '@/components/field/field-home'
 import { DashboardRetry } from '@/components/field/dashboard-retry'
 import { CountDueBanner } from '@/components/field/count-due-banner'
@@ -34,6 +35,7 @@ export default async function FieldPage() {
     { data: calendar },
     { data: unread },
     { data: openVisits },
+    { data: myStores },
   ] = await Promise.all([
     supabase.rpc('my_day'),
     supabase.rpc('my_store_visits'),
@@ -48,6 +50,8 @@ export default async function FieldPage() {
     // An open store visit from any day (0086), so Check out always shows.
     // Missing function (0086 not run): nothing extra.
     supabase.rpc('my_open_store_visits'),
+    // Their own stores (home and allocated): a marketer starts the day at one (0101).
+    supabase.rpc('my_outlets'),
   ])
 
   if (error || !data) {
@@ -65,6 +69,13 @@ export default async function FieldPage() {
   // database's own answer stands.
   const showStores = acting ? acting === 'marketer' : canVisitStores === true
   const canFileReport = acting ? acting === 'marketer' : undefined
+  // Marketers pick the store they start at before clocking in (0101).
+  const isMarketer = acting ? acting === 'marketer' : session.profile.role === 'marketer'
+  const startStores = isMarketer
+    ? ((myStores ?? []) as (StartStore & { is_active: boolean })[])
+        .filter((o) => o.is_active)
+        .map(({ id, name, address, lat, lng, geofence_radius_m }) => ({ id, name, address, lat, lng, geofence_radius_m }))
+    : null
 
   return (
     <>
@@ -75,6 +86,7 @@ export default async function FieldPage() {
         visits={allVisits}
         outlets={(outlets ?? []) as VisitOutlet[]}
         canVisitStores={showStores}
+        startStores={startStores}
         canFileReport={canFileReport}
         notificationsRequired={!session.profile.push_exempt}
         avatarUrl={photo}

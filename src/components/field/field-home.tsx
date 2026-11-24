@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
-import { CalendarDays, Camera, CheckCircle2, ChevronRight, Clock3, FileText, LogIn, LogOut, MapPin, Palmtree, Store } from 'lucide-react'
+import { CalendarDays, CheckCircle2, ChevronRight, Clock3, FileText, LogIn, LogOut, MapPin, Palmtree, Store } from 'lucide-react'
 import { TodayFocus } from '@/components/field/today-focus'
 import { GreetingHeader } from '@/components/field/greeting-header'
 import { LocationGate } from '@/components/field/location-gate'
@@ -14,10 +14,11 @@ import { useDashboardRefresh } from '@/components/field/use-dashboard-refresh'
 import { ShiftTracker } from '@/components/field/shift-tracker'
 import { usePlace } from '@/components/field/use-place'
 import { OutboxBanner } from '@/components/field/outbox-banner'
-import { ClockPanel } from '@/components/field/clock-panel'
+import { ClockPanel, PICK_START_STORE_EVENT } from '@/components/field/clock-panel'
 import { ClockOutPrompt } from '@/components/field/clock-out-prompt'
 import { ShiftSoonPrompt } from '@/components/field/shift-soon-prompt'
 import type { VisitOutlet, VisitRow } from '@/components/field/store-visits'
+import type { StartStore } from '@/components/field/start-store-sheet'
 import { SectionHeader } from '@/components/field/screen'
 import { Chip } from '@/components/ui/chip'
 import { Card, CardContent } from '@/components/ui/card'
@@ -28,7 +29,6 @@ import { calendarMark, type CalendarDay } from '@/lib/schedule'
 import { CalendarLegend, MARK_CLASS, MARK_WORD, WORD_CLASS } from '@/components/field/calendar-marks'
 import { redoBanner } from '@/lib/field-corrections'
 import { Alert } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
 
 type Tab = 'stores' | 'day' | 'outlet'
 
@@ -44,6 +44,7 @@ export function FieldHome({
   visits,
   outlets,
   canVisitStores,
+  startStores = null,
   canFileReport,
   notificationsRequired = true,
   avatarUrl = null,
@@ -54,6 +55,8 @@ export function FieldHome({
   visits: VisitRow[]
   outlets: VisitOutlet[]
   canVisitStores: boolean
+  /** Marketers (0101): their stores, to pick where they start the day. */
+  startStores?: StartStore[] | null
   /** Overrides the day's own answer when an admin views as a role. */
   canFileReport?: boolean
   notificationsRequired?: boolean
@@ -116,21 +119,6 @@ export function FieldHome({
     window.setTimeout(() => document.getElementById('stores')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
   }
 
-  // A marketer who has just clocked in (or opens the app clocked in with no
-  // store yet today) is asked straight away to check in at a store, once a day.
-  const [checkInAsk, setCheckInAsk] = useState(false)
-  const noVisitYet = visitsStore && onShift && !openVisit && visitsDone === 0
-  useEffect(() => {
-    if (!noVisitYet) return
-    const key = `xt-checkin-ask-${day.date}`
-    try {
-      if (window.localStorage.getItem(key)) return
-      window.localStorage.setItem(key, '1')
-    } catch {
-      // Private mode: ask anyway.
-    }
-    setCheckInAsk(true)
-  }, [noVisitYet, day.date])
 
   // What the office asked them to do again today (0090).
   const redo = (day.redo ?? []).filter((r) => redoBanner(r.action))
@@ -190,23 +178,13 @@ export function FieldHome({
         onAction={(action) => {
           if (action === 'check_in') startVisit('here')
           else if (action === 'check_out') startVisit('out')
-          else document.getElementById('clock')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          else {
+            document.getElementById('clock')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+            if (startStores && !day.opening) window.dispatchEvent(new Event(PICK_START_STORE_EVENT))
+          }
         }}
       />
 
-      {checkInAsk && (
-        <CheckInAsk
-          onHere={() => {
-            setCheckInAsk(false)
-            startVisit('here')
-          }}
-          onPick={() => {
-            setCheckInAsk(false)
-            startVisit('pick')
-          }}
-          onLater={() => setCheckInAsk(false)}
-        />
-      )}
 
       <ShiftPill
         state={day.closing ? 'done' : onShift ? 'on' : 'before'}
@@ -221,7 +199,12 @@ export function FieldHome({
         message={gate.message}
         onRetry={() => void gate.retry()}
       >
-        <ClockPanel day={day} notificationsRequired={notificationsRequired} />
+        <ClockPanel
+          day={day}
+          notificationsRequired={notificationsRequired}
+          startStores={startStores}
+          currentFix={gate.fix ? { lat: gate.fix.lat, lng: gate.fix.lng } : null}
+        />
       </LocationGate>
       </div>
 
@@ -653,46 +636,6 @@ function Detail({
       >
         {value}
       </dd>
-    </div>
-  )
-}
-
-/** Straight after a marketer clocks in: check in at the first store. */
-function CheckInAsk({ onHere, onPick, onLater }: { onHere: () => void; onPick: () => void; onLater: () => void }) {
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="check-in-ask-title"
-    >
-      <div className="w-full max-w-md space-y-4 rounded-3xl bg-background p-5 shadow-xl">
-        <div className="flex items-start gap-3">
-          <span className="icon-tile">
-            <Store className="h-5 w-5" />
-          </span>
-          <div>
-            <h2 id="check-in-ask-title" className="font-bold">
-              You are clocked in. Now check in at a store
-            </h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Check in when you get to each store, and check out of it before you leave. Xtend will remind you to
-              check out.
-            </p>
-          </div>
-        </div>
-        <div className="grid gap-2">
-          <Button size="lg" onClick={onHere}>
-            <Camera className="h-4 w-4" /> I am at a store: check in here
-          </Button>
-          <Button size="lg" variant="outline" onClick={onPick}>
-            Pick the store
-          </Button>
-          <Button variant="ghost" onClick={onLater}>
-            Later, I am on my way
-          </Button>
-        </div>
-      </div>
     </div>
   )
 }

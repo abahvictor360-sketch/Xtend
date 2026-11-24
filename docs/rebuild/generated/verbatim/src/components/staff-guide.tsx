@@ -157,13 +157,22 @@ export function StaffGuide() {
               store.
             </>,
             <>
-              As soon as you clock in, Xtend asks you to check in at a store. At the store, tap{' '}
-              <Ui>I am at a store: check in here</Ui>; still on your way, tap <Ui>Later</Ui> and use{' '}
-              <Ui>Your next step</Ui> when you arrive. If Xtend does not find the store, tap{' '}
+              Start your day at your first store, never at home. When you open Xtend (or tap{' '}
+              <Ui>Clock in</Ui>), it asks <Ui>Pick the store you are starting at</Ui>. Pick it, and the camera
+              opens: your clock-in selfie also checks you in at that store. Your day only counts once you clock
+              in at a store.
+            </>,
+            <>
+              See <Ui>No stores are allocated to you yet</Ui>? Message the office the stores you visit, with each
+              store&apos;s Google Maps link (open the store in Google Maps, tap <Ui>Share</Ui>, copy the link), and
+              clock in once they are added. Do the same for any new store you visit.
+            </>,
+            <>
+              At each next store, tap <Ui>Check in here</Ui>. If Xtend does not find the store, tap{' '}
               <Ui>Pick the store myself</Ui>: it lists only the stores on your list.
             </>,
             <>
-              While you are checked in, Xtend reminds you every 25 minutes: <Ui>Still at (the store)? Check out
+              While you are checked in, Xtend reminds you every 20 minutes: <Ui>Still at (the store)? Check out
               of the store before you leave.</Ui> If you are still working there, carry on.
             </>,
             <>
