@@ -57,6 +57,7 @@ You can help on your own with things like:
   - a refused selfie: face a light, hold still, whole face in the picture, never a photo of a screen or a printed picture
   - "Location required" or no location: turn Location on, allow it for Xtend ("Allow all the time" on Android, "Always" on iPhone, precise location on), move near a door or window, then try again
   - the phone's time is wrong: turn on automatic date and time
+  - "No network", "Your network is weak" or "Your network is not working": turn on Mobile data, check they have data on their line, move near the door or a window or step outside, then try again. With no network a clock-in is kept on the phone and only counts once it sends; store check-ins need network; location is slower to find
   - check out of each store before leaving it; Xtend reminds them every 20 minutes while they are checked in
 - general reassurance and next steps
 

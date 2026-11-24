@@ -645,7 +645,7 @@ what to do, step by step, with a button that opens the right setting
 where the phone allows it. Pure, so scripts/check-field-guide.ts can test
 it. Staff are told what to do, never how they are monitored.
 
-Exports: `GuideProblem`, `GUIDE_PROBLEMS`, `GuideAction`, `Guide`, `GuidePlatform`, `problemFromGeo`, `problemFromMessage`, `STAFF_GUIDE_HREF`, `guideFor`
+Exports: `GuideProblem`, `GUIDE_PROBLEMS`, `GuideAction`, `Guide`, `GuidePlatform`, `NetworkQuality`, `networkQuality`, `currentNetwork`, `isNetworkError`, `problemFromGeo`, `problemFromMessage`, `STAFF_GUIDE_HREF`, `guideFor`
 
 ## `src/lib/fields.ts`
 
@@ -2205,6 +2205,16 @@ when the first photo is taken. Next time anyone stands there, Xtend
 recognises the place.
 
 Exports: `PlaceDue`, `NamePlace`
+
+## `src/components/field/network-notice.tsx`
+
+Tells staff straight away when their network is off or weak, and what
+that means for clocking in, store check-ins and finding their location,
+then says when it is back. Reads the browser's own connection signals
+(lib/field-guide.ts networkQuality), checked on every change and every
+10 seconds.
+
+Exports: `NetworkNotice`
 
 ## `src/components/field/notification-gate.tsx`
 

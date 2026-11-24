@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { CameraCapture } from '@/components/field/camera-capture'
 import { OutboxBanner } from '@/components/field/outbox-banner'
+import { NetworkNotice } from '@/components/field/network-notice'
 import { GeoBlocked, requireFix, type Fix } from '@/lib/geo'
 import { processReportPhoto } from '@/lib/image'
 import { PermanentJobError, submitOrQueue } from '@/lib/offline/sync'
@@ -100,6 +101,7 @@ export function XmFieldForms({
 
   return (
     <div className="space-y-4">
+      <NetworkNotice />
       <OutboxBanner onFlushed={() => router.refresh()} />
       {view.tabs.length > 1 && (
         <div className="flex gap-2">

@@ -1955,6 +1955,27 @@ role name or the base label). Sections:
   `NEXT_PUBLIC_REALTIME_DISABLED=1` (the fleet-wide release valve); sending
   still refreshes the thread.
 
+**Network notice (2026-11-24).** `NetworkNotice` sits above `OutboxBanner`
+on Home and the X Metrics forms. It reads `currentNetwork()` on load, on
+`online`/`offline`, on `navigator.connection` `change` and every 10 s:
+offline → warning box (WifiOff) "No network" / "Your clock-in or clock-out
+is kept on this phone and only counts once it sends. Store check-ins and
+check-outs need network. Your location may also be slow to find."; weak
+(2G, rtt ≥ 1500 ms, downlink < 0.15 Mbit/s; Signal icon) → "Your network is
+weak" / "Clocking in, store check-ins and finding your location may be slow
+or fail."; both end "Turn on Mobile data, check you have data, and move near
+the door or a window, or step outside." Back from offline → green "Your
+network is back. Anything waiting is sending now." for 5 s. `OutboxBanner`
+shows only "<n> item(s) waiting to send" (Send now). Pop-ups: a request that
+never reached the server (`isNetworkError`: TypeError, failed to fetch, load
+failed, network error, no connection, timed out, abort) opens `no_network`
+("Your network is not working": Mobile data on and Aeroplane mode off, data
+on the line, move near a door or window or use Wi-Fi, Try again); location
+`position_unavailable` or `low_accuracy` while offline or weak opens
+`location_no_network` ("Weak network: your location is slow"). A queued
+clock-in's message ends "To send it sooner: check Mobile data is on and you
+have data, then move near the door or a window."
+
 ### 11.5 Staff guide (`/field/guide`, public `/guide`)
 
 `StaffGuide` (`src/components/staff-guide.tsx`) inside a sheet "How to use
@@ -1988,7 +2009,7 @@ you** (2026-11-24: one card per `GUIDE_PROBLEMS` entry in
 `src/lib/field-guide.ts`, its `guideFor(problem, platform, 'clock in or check
 in')` title, why and numbered steps for Android, then "On iPhone:" steps when
 they differ; then "Still stuck after the steps? Go to You, then Message
-support"); **Questions staff ask** (19: why pick a store, store not on my
+support"); **Questions staff ask** (20, including "Home says No network or Your network is weak"; why pick a store, store not on my
 list, no stores allocated, clock in from home, what time to clock in, the
 20-minute check-out reminder, forgot to check out, forgot to clock out, Your
 next step, did my clock-in work, why a selfie, selfie not accepted, no

@@ -169,6 +169,17 @@ const FAQ: { q: string; a: React.ReactNode }[] = [
     ),
   },
   {
+    q: 'Home says “No network” or “Your network is weak”',
+    a: (
+      <>
+        Your data or signal is off or too weak. Turn on Mobile data, check you have data on your line, and move near the
+        door or a window, or step outside. With no network, a clock-in or clock-out is kept on your phone and only counts
+        once it sends; store check-ins and check-outs need network, and your location is slower to find. When it says{' '}
+        <Ui>Your network is back</Ui>, anything waiting sends by itself.
+      </>
+    ),
+  },
+  {
     q: 'I got a new phone',
     a: (
       <>

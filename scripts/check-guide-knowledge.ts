@@ -25,7 +25,7 @@ const { text, file } = guideFile()
 check(fs.readFileSync(GUIDE_TEXT_FILE, 'utf8') === file, "the AI's copy of the staff guide is current (else run scripts/make-guide-knowledge.ts)")
 check(text.length > 15_000 && text.length < 40_000, `the guide is rich but not too long for every question (${text.length} characters)`)
 check(!/<[a-z][^>]*>/i.test(text) && !/&(amp|quot|#39);/.test(text), 'it is plain text: no HTML left in it')
-check(GUIDE_PROBLEMS.length === 14, 'every pop-up problem is listed')
+check(GUIDE_PROBLEMS.length === 16, 'every pop-up problem is listed')
 for (const p of GUIDE_PROBLEMS) {
   const a = guideFor(p, 'android', 'clock in or check in')
   const i = guideFor(p, 'ios', 'clock in or check in')

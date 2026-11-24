@@ -12,7 +12,7 @@ import { SectionHeader } from '@/components/field/screen'
 import { TaskRow } from '@/components/field/task-row'
 import { deviceInfo } from '@/lib/device'
 import { GeoBlocked, haversineMetres, positionCheck, requireFix, type Fix, type SampledFix } from '@/lib/geo'
-import { problemFromGeo, problemFromMessage, type GuideProblem } from '@/lib/field-guide'
+import { currentNetwork, isNetworkError, problemFromGeo, problemFromMessage, type GuideProblem } from '@/lib/field-guide'
 import { GuideSheet } from '@/components/field/guide-sheet'
 import { processSelfie } from '@/lib/image'
 import { supabase } from '@/lib/supabase/client'
@@ -67,7 +67,7 @@ function uuid() {
  */
 function failureMessage(err: unknown, what: string) {
   const text = err instanceof Error ? err.message : ''
-  if (err instanceof TypeError || /failed to fetch|load failed|network ?error|networkerror/i.test(text)) {
+  if (isNetworkError(err)) {
     return `No signal. Your ${what} was NOT recorded. Try again when you have signal.`
   }
   return text || 'That did not go through.'
@@ -231,7 +231,7 @@ export function StoreVisits({
     } catch (err) {
       if (err instanceof GeoBlocked) {
         setError(err.message)
-        setGuide(problemFromGeo(err.reason))
+        setGuide(problemFromGeo(err.reason, currentNetwork()))
       }
       else setError(err instanceof Error ? err.message : 'Could not read your location.')
     } finally {
@@ -322,9 +322,13 @@ export function StoreVisits({
       } catch (err) {
         if (err instanceof GeoBlocked) {
         setError(err.message)
-        setGuide(problemFromGeo(err.reason))
+        setGuide(problemFromGeo(err.reason, currentNetwork()))
       }
-        else setError(failureMessage(err, 'check-in'))
+        else {
+          setError(failureMessage(err, 'check-in'))
+          // No network: say so, with what to do (field-guide).
+          if (isNetworkError(err)) setGuide('no_network')
+        }
       } finally {
         setBusy(null)
       }
@@ -346,7 +350,7 @@ export function StoreVisits({
     } catch (err) {
       if (err instanceof GeoBlocked) {
         setError(err.message)
-        setGuide(problemFromGeo(err.reason))
+        setGuide(problemFromGeo(err.reason, currentNetwork()))
       }
       else setError(err instanceof Error ? err.message : 'Could not read your location.')
     } finally {
@@ -416,9 +420,13 @@ export function StoreVisits({
     } catch (err) {
       if (err instanceof GeoBlocked) {
         setError(err.message)
-        setGuide(problemFromGeo(err.reason))
+        setGuide(problemFromGeo(err.reason, currentNetwork()))
       }
-      else setError(failureMessage(err, 'check-out'))
+      else {
+        setError(failureMessage(err, 'check-out'))
+        // No network: say so, with what to do (field-guide).
+        if (isNetworkError(err)) setGuide('no_network')
+      }
     } finally {
       setBusy(null)
     }

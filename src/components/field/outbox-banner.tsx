@@ -55,7 +55,8 @@ export function OutboxBanner({ onFlushed }: { onFlushed?: () => void }) {
     }
   }, [flush, refresh])
 
-  if (!pending && online) return null
+  // Offline with nothing waiting: the network notice says so (network-notice.tsx).
+  if (!pending) return null
 
   return (
     <div
@@ -71,9 +72,7 @@ export function OutboxBanner({ onFlushed }: { onFlushed?: () => void }) {
         )}
       </span>
       <span className="flex-1 text-xs font-medium leading-snug">
-        {pending > 0
-          ? `${pending} item${pending > 1 ? 's' : ''} waiting to send.`
-          : 'You are offline. Anything you save is kept on this phone.'}
+        {`${pending} item${pending > 1 ? 's' : ''} waiting to send.`}
       </span>
       {pending > 0 && online && (
         <Button size="sm" variant="outline" onClick={flush} disabled={busy}>
