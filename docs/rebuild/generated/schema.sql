@@ -3642,6 +3642,18 @@ $$;
 
 
 --
+-- Name: is_active_staff(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.is_active_staff() RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_active);
+$$;
+
+
+--
 -- Name: is_admin(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -15549,7 +15561,7 @@ CREATE POLICY app_releases_admin_update ON public.app_releases FOR UPDATE TO aut
 -- Name: app_releases app_releases_read; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY app_releases_read ON public.app_releases FOR SELECT TO authenticated USING (((withdrawn_at IS NULL) OR public.is_admin()));
+CREATE POLICY app_releases_read ON public.app_releases FOR SELECT TO authenticated USING ((((withdrawn_at IS NULL) AND public.is_active_staff()) OR public.is_admin()));
 
 
 --
@@ -15697,7 +15709,7 @@ ALTER TABLE public.count_sheet_templates ENABLE ROW LEVEL SECURITY;
 -- Name: count_sheet_templates count_sheet_templates_read; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY count_sheet_templates_read ON public.count_sheet_templates FOR SELECT USING ((auth.uid() IS NOT NULL));
+CREATE POLICY count_sheet_templates_read ON public.count_sheet_templates FOR SELECT USING (public.is_active_staff());
 
 
 --
@@ -15943,7 +15955,7 @@ CREATE POLICY outlets_admin_write ON public.outlets USING (public.is_admin()) WI
 -- Name: outlets outlets_read; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY outlets_read ON public.outlets FOR SELECT USING ((auth.uid() IS NOT NULL));
+CREATE POLICY outlets_read ON public.outlets FOR SELECT USING (public.is_active_staff());
 
 
 --
@@ -15969,7 +15981,7 @@ ALTER TABLE public.photo_checks ENABLE ROW LEVEL SECURITY;
 -- Name: location_pings pings_insert_own; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY pings_insert_own ON public.location_pings FOR INSERT WITH CHECK ((auth.uid() IS NOT NULL));
+CREATE POLICY pings_insert_own ON public.location_pings FOR INSERT WITH CHECK (public.is_active_staff());
 
 
 --
@@ -16042,7 +16054,7 @@ CREATE POLICY products_admin ON public.products USING (public.is_admin()) WITH C
 -- Name: products products_read; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY products_read ON public.products FOR SELECT USING ((auth.uid() IS NOT NULL));
+CREATE POLICY products_read ON public.products FOR SELECT USING (public.is_active_staff());
 
 
 --
@@ -16214,7 +16226,7 @@ CREATE POLICY role_store_counts_admin ON public.role_store_counts FOR UPDATE USI
 -- Name: role_store_counts role_store_counts_read; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY role_store_counts_read ON public.role_store_counts FOR SELECT USING ((auth.uid() IS NOT NULL));
+CREATE POLICY role_store_counts_read ON public.role_store_counts FOR SELECT USING (public.is_active_staff());
 
 
 --
@@ -16312,7 +16324,7 @@ CREATE POLICY staff_roles_admin_update ON public.staff_roles FOR UPDATE USING (p
 -- Name: staff_roles staff_roles_read; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY staff_roles_read ON public.staff_roles FOR SELECT USING ((auth.uid() IS NOT NULL));
+CREATE POLICY staff_roles_read ON public.staff_roles FOR SELECT USING (public.is_active_staff());
 
 
 --
@@ -16553,7 +16565,7 @@ ALTER TABLE public.xm_monthly_grades ENABLE ROW LEVEL SECURITY;
 -- Name: xm_policy_versions xm_policy_read; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY xm_policy_read ON public.xm_policy_versions FOR SELECT USING ((auth.uid() IS NOT NULL));
+CREATE POLICY xm_policy_read ON public.xm_policy_versions FOR SELECT USING (public.is_active_staff());
 
 
 --
@@ -16648,7 +16660,7 @@ CREATE POLICY xm_settings_history_read ON public.xm_settings_history FOR SELECT 
 -- Name: xm_settings xm_settings_read; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY xm_settings_read ON public.xm_settings FOR SELECT USING ((auth.uid() IS NOT NULL));
+CREATE POLICY xm_settings_read ON public.xm_settings FOR SELECT USING (public.is_active_staff());
 
 
 --
@@ -16661,7 +16673,7 @@ ALTER TABLE public.xm_stores ENABLE ROW LEVEL SECURITY;
 -- Name: xm_stores xm_stores_read; Type: POLICY; Schema: public; Owner: -
 --
 
-CREATE POLICY xm_stores_read ON public.xm_stores FOR SELECT USING ((auth.uid() IS NOT NULL));
+CREATE POLICY xm_stores_read ON public.xm_stores FOR SELECT USING (public.is_active_staff());
 
 
 --
@@ -17511,6 +17523,15 @@ GRANT ALL ON FUNCTION public.has_live_push(p_user uuid) TO service_role;
 REVOKE ALL ON FUNCTION public.hr_sees(target uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.hr_sees(target uuid) TO authenticated;
 GRANT ALL ON FUNCTION public.hr_sees(target uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION is_active_staff(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.is_active_staff() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.is_active_staff() TO authenticated;
+GRANT ALL ON FUNCTION public.is_active_staff() TO service_role;
 
 
 --

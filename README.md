@@ -124,6 +124,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0100_shift_times_per_person.sql         # working hours belong to the person, not the store
    supabase/migrations/0101_start_day_at_a_store.sql           # marketers start the day at a store: clocking in checks them in
    supabase/migrations/0102_ai_providers.sql                   # AI keys the admin adds (OpenAI, Gemini, Anthropic, NVIDIA, OpenRouter)
+   supabase/migrations/0103_close_public_key.sql               # the public (anon) key opens nothing; "signed in" rules need active staff
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

@@ -58,7 +58,7 @@ Policies:
 Policies:
 - `app_releases_admin_insert` INSERT to authenticated; check `(is_admin() AND (created_by = auth.uid()))`
 - `app_releases_admin_update` UPDATE to authenticated: using `is_admin()`; check `is_admin()`
-- `app_releases_read` SELECT to authenticated: using `((withdrawn_at IS NULL) OR is_admin())`
+- `app_releases_read` SELECT to authenticated: using `(((withdrawn_at IS NULL) AND is_active_staff()) OR is_admin())`
 
 ### `app_update_notices`
 
@@ -203,7 +203,7 @@ Policies:
 | created_at | timestamp with time zone(timestamptz) |  | now() |
 
 Policies:
-- `count_sheet_templates_read` SELECT to public: using `(auth.uid() IS NOT NULL)`
+- `count_sheet_templates_read` SELECT to public: using `is_active_staff()`
 
 ### `device_beacons`
 
@@ -401,7 +401,7 @@ Policies:
 | received_at | timestamp with time zone(timestamptz) | yes |  |
 
 Policies:
-- `pings_insert_own` INSERT to public; check `(auth.uid() IS NOT NULL)`
+- `pings_insert_own` INSERT to public; check `is_active_staff()`
 - `pings_select` SELECT to public: using `((user_id = auth.uid()) OR is_admin())`
 - `pings_supervisor_select` SELECT to public: using `supervises_user(user_id)`
 
@@ -519,7 +519,7 @@ Policies:
 
 Policies:
 - `outlets_admin_write` ALL to public: using `is_admin()`; check `is_admin()`
-- `outlets_read` SELECT to public: using `(auth.uid() IS NOT NULL)`
+- `outlets_read` SELECT to public: using `is_active_staff()`
 
 ### `phone_checks`
 
@@ -618,7 +618,7 @@ Policies:
 
 Policies:
 - `products_admin` ALL to public: using `is_admin()`; check `is_admin()`
-- `products_read` SELECT to public: using `(auth.uid() IS NOT NULL)`
+- `products_read` SELECT to public: using `is_active_staff()`
 
 ### `profiles`
 
@@ -748,7 +748,7 @@ Policies:
 
 Policies:
 - `role_store_counts_admin` UPDATE to public: using `is_admin()`; check `is_admin()`
-- `role_store_counts_read` SELECT to public: using `(auth.uid() IS NOT NULL)`
+- `role_store_counts_read` SELECT to public: using `is_active_staff()`
 
 ### `schedule_overrides`
 
@@ -856,7 +856,7 @@ Policies:
 Policies:
 - `staff_roles_admin_insert` INSERT to public; check `is_admin()`
 - `staff_roles_admin_update` UPDATE to public: using `is_admin()`; check `is_admin()`
-- `staff_roles_read` SELECT to public: using `(auth.uid() IS NOT NULL)`
+- `staff_roles_read` SELECT to public: using `is_active_staff()`
 
 ### `staff_temp_passwords`
 
@@ -1194,7 +1194,7 @@ Policies:
 | published_at | timestamp with time zone(timestamptz) |  | clock_timestamp() |
 
 Policies:
-- `xm_policy_read` SELECT to public: using `(auth.uid() IS NOT NULL)`
+- `xm_policy_read` SELECT to public: using `is_active_staff()`
 
 ### `xm_reconciliations`
 
@@ -1282,7 +1282,7 @@ Policies:
 
 Policies:
 - `xm_settings_admin` UPDATE to public: using `is_admin()`; check `is_admin()`
-- `xm_settings_read` SELECT to public: using `(auth.uid() IS NOT NULL)`
+- `xm_settings_read` SELECT to public: using `is_active_staff()`
 
 ### `xm_settings_history`
 
@@ -1306,7 +1306,7 @@ Policies:
 | is_active | boolean(bool) |  | true |
 
 Policies:
-- `xm_stores_read` SELECT to public: using `(auth.uid() IS NOT NULL)`
+- `xm_stores_read` SELECT to public: using `is_active_staff()`
 
 ### `xm_supplies`
 
@@ -1531,6 +1531,7 @@ Policies:
 - `hmac(bytea, bytea, text)` → bytea
 - `hmac(text, text, text)` → bytea
 - `hr_sees(target uuid)` → boolean · definer · 0072_hr_role.sql
+- `is_active_staff()` → boolean · definer · 0103_close_public_key.sql
 - `is_admin()` → boolean · definer · 0080_zero_trust.sql
 - `is_field_role(r user_role)` → boolean · 0013_harden_triggers.sql
 - `is_hr()` → boolean · definer · 0080_zero_trust.sql

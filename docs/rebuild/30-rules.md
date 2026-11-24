@@ -1334,6 +1334,16 @@ label and the store's own point.
   unknown or inactive store refuses the whole call and changes nothing.
   Every call writes an `audit_log` row `staff.allocate_outlets` directly
   (supervisors may call it).
+- **0103, the public key opens nothing:** `revoke all on all tables,
+  sequences, functions in schema public from anon` plus the same as default
+  privileges for future objects. `is_active_staff()` (definer; the caller
+  has a profile and `is_active`; authenticated and service role only).
+  Every policy in public whose USING or WITH CHECK was exactly `auth.uid()
+  IS NOT NULL` is altered to `is_active_staff()` (outlets_read,
+  products_read, staff_roles_read, role_store_counts_read,
+  count_sheet_templates_read, xm_settings_read, xm_policy_read,
+  xm_stores_read, pings_insert_own); `app_releases_read` becomes
+  `(withdrawn_at is null and is_active_staff()) or is_admin()`.
 - **0102, AI keys:** tables `ai_provider_keys` (provider pk in anthropic /
   openai / gemini / nvidia / openrouter, `key_cipher` 20–4000, `key_hint` ≤ 8,
   `updated_at`, `updated_by` → profiles set null) and `ai_feature_settings`

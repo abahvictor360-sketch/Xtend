@@ -121,5 +121,6 @@ run supabase/migrations/0099_store_checkout_reminders.sql
 run supabase/migrations/0100_shift_times_per_person.sql
 run supabase/migrations/0101_start_day_at_a_store.sql
 run supabase/migrations/0102_ai_providers.sql
+run supabase/migrations/0103_close_public_key.sql
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rules.sql 2>&1 | grep -E 'NOTICE|ERROR' | sed 's/^psql:[^ ]*: //'
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_counts.sql 2>&1 | grep -E 'NOTICE|ERROR|PASSED' | sed 's/^psql:[^ ]*: //'

@@ -880,5 +880,23 @@ end $$;
 reset role;
 delete from public.ai_provider_keys;
 
+-- 0103: "signed in" is not enough; it takes an active member of staff.
+reset role;
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'ada', false);
+select assert((select count(*) from public.outlets) > 0 and (select count(*) from public.products) >= 0,
+  'rls 0103: active staff still read the store list');
+select set_config('request.jwt.claim.sub', '7e0d1c2b-0000-4000-8000-00000000abcd', false);
+select assert((select count(*) from public.outlets) = 0 and (select count(*) from public.staff_roles) = 0
+                and (select count(*) from public.xm_stores) = 0 and (select count(*) from public.app_releases) = 0,
+  'rls 0103: an account that is not Xtend staff reads nothing');
+reset role;
+update public.profiles set is_active = false where id = :'ada';
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'ada', false);
+select assert((select count(*) from public.outlets) = 0, 'rls 0103: nor does a deactivated account');
+reset role;
+update public.profiles set is_active = true where id = :'ada';
+
 reset role;
 select 'ALL RLS CHECKS PASSED';
