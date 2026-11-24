@@ -35,27 +35,32 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0095_offline_movement_always_kept.sql`;
    - `supabase/migrations/0096_every_synced_position_kept.sql`;
    - `supabase/migrations/0097_allocate_from_store.sql`;
-   - `supabase/migrations/0098_delete_for_good.sql`.
+   - `supabase/migrations/0098_delete_for_good.sql`;
+   - `supabase/migrations/0103_close_public_key.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18;
    0099, 0100, 0101 and 0102 are done: you ran them on 2026-11-24.)
-4. **Clock-out reminder fix (0069)**, if never pasted:
+4. **Turn off self sign-up in Supabase**: Authentication → Sign In /
+   Providers → turn off **Allow new users to sign up** (self-hosted: set
+   `DISABLE_SIGNUP=true` in the Supabase server's `.env` and restart). Staff
+   are only ever created by you on Staff, which keeps working.
+5. **Clock-out reminder fix (0069)**, if never pasted:
    ```sql
    alter table public.clock_out_reminders drop constraint if exists clock_out_reminders_stage_check;
    alter table public.clock_out_reminders add constraint clock_out_reminders_stage_check check (stage in (1, 2, 3, 4));
    ```
-5. **Scheduled jobs on the new server**: check that the alerts job (every 5
+6. **Scheduled jobs on the new server**: check that the alerts job (every 5
    minutes) and the two nightly jobs run with the right `CRON_SECRET`. When
    the nightly job does not run, old photos are not deleted on time and
    forgotten store check-ins were not closed (0086 now covers the second).
-6. **Android signing secrets** (`ANDROID_KEYSTORE_BASE64`,
+7. **Android signing secrets** (`ANDROID_KEYSTORE_BASE64`,
    `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`): until they are set,
    each new APK cannot replace the old one, and phones say "App not
    installed". Staff must uninstall, then install again.
-7. **New phone app builds**: several fixes below say "needs a new app build".
+8. **New phone app builds**: several fixes below say "needs a new app build".
    Publish the latest APK (and TestFlight build) so staff get them.
-8. **Add `SITE_URL=https://www.withxtend.com`** to the environment in
+9. **Add `SITE_URL=https://www.withxtend.com`** to the environment in
    Dokploy (no rebuild), so the server always knows its real address.
-9. **Try fingerprint sign-in on one Android phone and one iPhone** before
+10. **Try fingerprint sign-in on one Android phone and one iPhone** before
    telling all staff (it could not be tested on a real phone here). Sign in
    with the password in the new app, tap **Use my fingerprint**, sign out,
    then tap **Sign in with fingerprint**.
@@ -63,6 +68,31 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-24
+
+### Nobody can use developer tools to get into your data
+- **What was done:** every browser can see two Supabase values in its
+  developer tools: the project address and the public ("anon") key. That is
+  normal for every Supabase app; the secret key never reaches a browser
+  (checked earlier). What matters is what someone can do with the public
+  key, so a copy of your database was built the way Supabase sets it up and
+  attacked with it:
+  - signed out, with only the public key: they read **nothing** (no staff,
+    attendance, locations, photos, reports or stores), and can run nothing
+    that acts with the database's own rights;
+  - all photo and file storage is private;
+  - one gap was found and closed: if Supabase self sign-up were left on, a
+    stranger could make an account and read the store list, products, roles
+    and X Metrics settings. Those now need an **active member of staff**, so
+    a stranger's account, or a deactivated one, reads nothing;
+  - and the public key's rights in the database are removed altogether, so
+    even a future mistake cannot expose anything to it.
+  A check (`scripts/check-anon-exposure.sh`) repeats this attack after
+  every change.
+- **The impact:** the values a hacker can see in developer tools give them
+  nothing.
+- **What you need to do:** run `supabase/migrations/0103_close_public_key.sql`
+  in the Supabase SQL editor, then turn off self sign-up in Supabase (see
+  "Waiting on you"). No redeploy needed for this one.
 
 ### Migrations 0099 to 0102 are in
 - **What was done:** you ran 0099 (store check-out reminders), 0100 (working

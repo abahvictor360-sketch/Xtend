@@ -154,6 +154,15 @@ server (`src/lib/ai/secret-box.ts`: AES-256-GCM, key = SHA-256 of
 stored where only the service role can read them; only the last 4
 characters are ever sent to a browser.
 
+**The public Supabase key opens nothing (0103).** The project address and
+the anon key are visible to any browser by design; the anon role has no
+rights in `public` (revoked, also for future objects), every table has RLS,
+views are `security_invoker`, no definer function is executable by anon,
+storage buckets are private with owner/admin/supervisor rules, and the
+"signed in" rules require `is_active_staff()`. Self sign-up is off in
+Supabase Auth (staff are created by admins with the service role).
+Verified by `scripts/check-anon-exposure.sh`.
+
 **Secrets never reach a browser.** Only settings named `NEXT_PUBLIC_…` are
 built into browser code, so no secret ever gets such a name (the browser
 gets only the Supabase URL and publishable/anon key, the browser-restricted
