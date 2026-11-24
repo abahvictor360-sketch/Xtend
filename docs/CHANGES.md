@@ -80,6 +80,25 @@ the live database, so it cannot tell which of these are already done.)
   email or screenshot, create a new one in Supabase (Project Settings → API
   Keys) and replace it on the server.
 
+### Clock-in: camera opens at once, slow phones find location sooner, selfie lens always starts on the front
+- **What was done:** the clock-in used to find the location first and only
+  then open the camera, so the waits added up. Now the camera opens the
+  moment someone taps Clock in, while the phone finds its location at the
+  same time; the shutter stays greyed out and says "Getting your
+  location..." until the location is in. The place name is looked up while
+  they frame the photo instead of before it. If a phone has found nothing
+  after 4 seconds (entry-level phones such as the Tecno Pop 20, or anyone
+  indoors), it also listens to the phone's network location, which is quick.
+  The camera now always opens on the front (selfie) lens, even if the last
+  person switched to the back one; the switch button is still there. The
+  camera asks for a smaller picture, so it starts faster on cheap phones.
+- **The impact:** clock-in and clock-out feel quicker, and phones that
+  struggled to find GPS get a location sooner. A location still has to be
+  within 100 m accuracy, as before.
+- **What you need to do:** redeploy Xtend in Dokploy. No migration. Phone
+  apps need a new build only if you want it inside the installed app; the
+  web part updates on its own.
+
 ## 2026-11-21
 
 ### Delete test accounts and stores for good

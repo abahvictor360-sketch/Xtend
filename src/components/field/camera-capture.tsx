@@ -20,8 +20,11 @@ export function CameraCapture({
   onCapture,
   onClose,
   locate = false,
+  shutterHeld = false,
   facing: startFacing = 'user',
 }: {
+  /** Keep the shutter off while something else (the location) is still being found. */
+  shutterHeld?: boolean
   open: boolean
   /** Which lens to start on: the selfie camera, or the back one for a shelf. */
   facing?: Facing
@@ -65,7 +68,9 @@ export function CameraCapture({
 
     try {
       const media = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: facing, width: { ideal: 960 }, height: { ideal: 720 }, frameRate: { ideal: 24, max: 30 } },
+        // Modest size: starts faster on entry-level phones, and the photo is
+        // compressed before sending anyway.
+        video: { facingMode: { ideal: facing }, width: { ideal: 720 }, height: { ideal: 540 }, frameRate: { ideal: 24, max: 30 } },
         audio: false,
       })
       stream.current = media
@@ -85,6 +90,12 @@ export function CameraCapture({
       )
     }
   }, [facing])
+
+  // Every time the camera opens it starts on the selfie lens, whatever the
+  // last person switched to; the switch button is still there.
+  useEffect(() => {
+    if (open) setFacing(startFacing)
+  }, [open, startFacing])
 
   useEffect(() => {
     if (!open) {
@@ -119,7 +130,7 @@ export function CameraCapture({
   // Freeze the current frame and hand it back as a JPEG.
   const shoot = useCallback(() => {
     const el = video.current
-    if (!el || !ready) return
+    if (!el || !ready || shutterHeld) return
 
     setBusy(true)
     try {
@@ -167,7 +178,7 @@ export function CameraCapture({
       setBusy(false)
       setError('That frame could not be saved. Try again.')
     }
-  }, [locate, onCapture, ready, stop])
+  }, [locate, onCapture, ready, shutterHeld, stop])
 
   if (!open) return null
 
@@ -237,7 +248,7 @@ export function CameraCapture({
         <button
           type="button"
           aria-label="Take the photo"
-          disabled={!ready || busy}
+          disabled={!ready || busy || shutterHeld}
           onClick={shoot}
           className="flex h-20 w-20 items-center justify-center rounded-full border-4 border-white/70 bg-white/10 transition-transform active:scale-95 disabled:opacity-40"
         >
