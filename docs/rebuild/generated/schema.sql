@@ -2126,6 +2126,52 @@ $$;
 
 
 --
+-- Name: claim_visit_checkout_reminders(timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.claim_visit_checkout_reminders(p_now timestamp with time zone DEFAULT now()) RETURNS TABLE(user_id uuid, visit_id uuid, store text, since text, reminder integer)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+#variable_conflict use_column
+declare
+  at_now timestamptz := coalesce(p_now, now());
+  today date := (at_now at time zone 'Africa/Lagos')::date;
+  gap interval := make_interval(mins => public.visit_reminder_minutes());
+begin
+  return query
+    with due as (
+      select v.id as vid, v.user_id as uid, v.arrived_at
+      from public.store_visits v
+      join public.profiles p on p.id = v.user_id and p.is_active
+      left join public.visit_checkout_reminders r on r.visit_id = v.id
+      where v.status = 'open'
+        and v.departed_at is null
+        and v.visit_date = today
+        and v.arrived_at <= at_now - gap
+        and not exists (select 1 from public.attendance a
+                        where a.user_id = v.user_id and a.attendance_date = today and a.type = 'closing')
+        and (r.visit_id is null or (r.last_sent_at <= at_now - gap and r.sent < public.visit_reminder_max()))
+    ),
+    claimed as (
+      insert into public.visit_checkout_reminders as r (visit_id, user_id, sent, last_sent_at)
+      select d.vid, d.uid, 1, at_now from due d
+      on conflict on constraint visit_checkout_reminders_pkey do update
+        set sent = r.sent + 1, last_sent_at = excluded.last_sent_at
+        where r.last_sent_at <= at_now - gap and r.sent < public.visit_reminder_max()
+      returning r.visit_id, r.user_id, r.sent
+    )
+    select c.user_id, c.visit_id,
+           coalesce(d.store_label, d.outlet_name, 'the store'),
+           to_char(d.arrived_at at time zone 'Africa/Lagos', 'HH24:MI'),
+           c.sent
+    from claimed c
+    join public.store_visit_detail d on d.id = c.visit_id;
+end;
+$$;
+
+
+--
 -- Name: clear_temp_password(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -6980,7 +7026,7 @@ CREATE FUNCTION public.reset_category_tables() RETURNS TABLE(category text, tabl
     'stock_counts:store_count_sheets', 'stock_counts:store_counts',
     'stock_counts:count_request_targets', 'stock_counts:count_requests', 'reports:report_files',
     'reports:report_photos', 'reports:reports', 'visits_places:place_naming_due',
-    'visits_places:store_visits', 'clock_ins:follow_sessions',
+    'visits_places:visit_checkout_reminders', 'visits_places:store_visits', 'clock_ins:follow_sessions',
     'clock_ins:location_alerts',
     'clock_ins:location_pings', 'clock_ins:excuse_checks', 'clock_ins:phone_checks',
     'clock_ins:photo_checks', 'clock_ins:device_beacons', 'clock_ins:clock_out_reminders',
@@ -9179,6 +9225,24 @@ begin
   return null;
 end;
 $$;
+
+
+--
+-- Name: visit_reminder_max(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.visit_reminder_max() RETURNS integer
+    LANGUAGE sql IMMUTABLE
+    AS $$ select 16 $$;
+
+
+--
+-- Name: visit_reminder_minutes(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.visit_reminder_minutes() RETURNS integer
+    LANGUAGE sql IMMUTABLE
+    AS $$ select 25 $$;
 
 
 --
@@ -11859,6 +11923,18 @@ ALTER TABLE public.user_activity ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTIT
 
 
 --
+-- Name: visit_checkout_reminders; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.visit_checkout_reminders (
+    visit_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    sent integer DEFAULT 0 NOT NULL,
+    last_sent_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: work_patterns; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -12995,6 +13071,14 @@ ALTER TABLE ONLY public.tracking_tokens
 
 ALTER TABLE ONLY public.user_activity
     ADD CONSTRAINT user_activity_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: visit_checkout_reminders visit_checkout_reminders_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visit_checkout_reminders
+    ADD CONSTRAINT visit_checkout_reminders_pkey PRIMARY KEY (visit_id);
 
 
 --
@@ -14892,6 +14976,22 @@ ALTER TABLE ONLY public.user_activity
 
 
 --
+-- Name: visit_checkout_reminders visit_checkout_reminders_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visit_checkout_reminders
+    ADD CONSTRAINT visit_checkout_reminders_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: visit_checkout_reminders visit_checkout_reminders_visit_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.visit_checkout_reminders
+    ADD CONSTRAINT visit_checkout_reminders_visit_id_fkey FOREIGN KEY (visit_id) REFERENCES public.store_visits(id) ON DELETE CASCADE;
+
+
+--
 -- Name: work_patterns work_patterns_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -16183,6 +16283,12 @@ CREATE POLICY user_activity_admin_read ON public.user_activity FOR SELECT USING 
 
 
 --
+-- Name: visit_checkout_reminders; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.visit_checkout_reminders ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: work_patterns; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -16856,6 +16962,14 @@ GRANT ALL ON FUNCTION public.claim_selfie_sweep(p_min_minutes integer) TO servic
 
 REVOKE ALL ON FUNCTION public.claim_shift_soon_reminders(p_now timestamp with time zone) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.claim_shift_soon_reminders(p_now timestamp with time zone) TO service_role;
+
+
+--
+-- Name: FUNCTION claim_visit_checkout_reminders(p_now timestamp with time zone); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.claim_visit_checkout_reminders(p_now timestamp with time zone) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.claim_visit_checkout_reminders(p_now timestamp with time zone) TO service_role;
 
 
 --
@@ -18589,6 +18703,22 @@ GRANT ALL ON FUNCTION public.unread_messages() TO authenticated;
 --
 
 REVOKE ALL ON FUNCTION public.visit_place_due() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION visit_reminder_max(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.visit_reminder_max() TO authenticated;
+GRANT ALL ON FUNCTION public.visit_reminder_max() TO service_role;
+
+
+--
+-- Name: FUNCTION visit_reminder_minutes(); Type: ACL; Schema: public; Owner: -
+--
+
+GRANT ALL ON FUNCTION public.visit_reminder_minutes() TO authenticated;
+GRANT ALL ON FUNCTION public.visit_reminder_minutes() TO service_role;
 
 
 --

@@ -117,5 +117,6 @@ run supabase/migrations/0095_offline_movement_always_kept.sql
 run supabase/migrations/0096_every_synced_position_kept.sql
 run supabase/migrations/0097_allocate_from_store.sql
 run supabase/migrations/0098_delete_for_good.sql
+run supabase/migrations/0099_store_checkout_reminders.sql
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rules.sql 2>&1 | grep -E 'NOTICE|ERROR' | sed 's/^psql:[^ ]*: //'
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_counts.sql 2>&1 | grep -E 'NOTICE|ERROR|PASSED' | sed 's/^psql:[^ ]*: //'

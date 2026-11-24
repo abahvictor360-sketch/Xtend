@@ -12,6 +12,8 @@ import { useLocationPermission } from '@/components/field/location-help'
 import { LocationGate } from '@/components/field/location-gate'
 import { BackgroundGate, useBackgroundNeeds } from '@/components/field/background-gate'
 import { Alert } from '@/components/ui/alert'
+import { GuideSheet } from '@/components/field/guide-sheet'
+import { problemFromGeo, type GuideProblem } from '@/lib/field-guide'
 import { processSelfie } from '@/lib/image'
 import { deviceInfo } from '@/lib/device'
 import { nativeDeviceSignals } from '@/lib/native'
@@ -151,6 +153,9 @@ export function ClockPanel({
   const placeLookup = useRef<Promise<ResolvedPlace> | null>(null)
   const [busyStep, setBusyStep] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // The step-by-step pop-up when a setting or the location is in the way.
+  const [guide, setGuide] = useState<GuideProblem | null>(null)
+  const [guideRetry, setGuideRetry] = useState<AttendanceType | null>(null)
   const [outcome, setOutcome] = useState<Outcome | null>(null)
   // Clock-ins and clock-outs made with no signal that the server then
   // refused: told here, since the saved copy has been deleted by then.
@@ -196,7 +201,7 @@ export function ClockPanel({
 
   const start = useCallback(async (type: AttendanceType) => {
     if (heldBack.current) {
-      setError('Finish the settings on this screen first, then try again.')
+      setGuide('phone_settings')
       return
     }
     setError(null)
@@ -217,8 +222,12 @@ export function ClockPanel({
     } catch (err) {
       if (run !== startRun.current) return
       setOpening(null)
-      if (err instanceof GeoBlocked) setError(err.message)
-      else setError(err instanceof Error ? err.message : 'Could not read your location.')
+      if (err instanceof GeoBlocked) {
+        setError(err.message)
+        // Say what to do, step by step, as well (field-guide).
+        setGuide(problemFromGeo(err.reason))
+        setGuideRetry(type)
+      } else setError(err instanceof Error ? err.message : 'Could not read your location.')
     }
   }, [])
 
@@ -399,8 +408,11 @@ export function ClockPanel({
 
         router.refresh()
       } catch (err) {
-        if (err instanceof GeoBlocked) setError(err.message)
-        else if (err instanceof PermanentJobError) setError(err.message)
+        if (err instanceof GeoBlocked) {
+          setError(err.message)
+          setGuide(problemFromGeo(err.reason))
+          setGuideRetry(type)
+        } else if (err instanceof PermanentJobError) setError(err.message)
         else setError(err instanceof Error ? err.message : 'That did not go through. Try again.')
       } finally {
         setBusyStep(null)
@@ -426,6 +438,12 @@ export function ClockPanel({
       ))}
 
       {error && <Alert variant="destructive">{error}</Alert>}
+      <GuideSheet
+        problem={guide}
+        task={(guideRetry ?? nextType) === 'closing' ? 'clock out' : 'clock in'}
+        onClose={() => setGuide(null)}
+        onRetry={guideRetry ? () => void start(guideRetry) : undefined}
+      />
 
       {outcome && (
         <Alert

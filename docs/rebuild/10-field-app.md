@@ -745,6 +745,44 @@ selfie).
   inside it). Returns `{ name, address, label, source: outlet|known|google
   |osm|coordinates }`; failure → all null.
 
+### 5.2a The guide: "Your next step" and the fix-it pop-up
+
+- **Your next step** (`today-focus.tsx`, rule in `src/lib/next-step.ts`,
+  `nextStep(state)`), in order: day off ("Enjoy your time off", no
+  button); not clocked in → "Start your day: clock in" (marketers: "Clock
+  in when you start work. Then check in at your first store."; button
+  "Clock in" scrolls to `#clock`); checked in at a store → "You are in
+  <store>" / "Checked in at HH:MM. Check out of <store> before you leave it."
+  / "Check out of <store>" (starts the check-out); marketer on shift with
+  no visit yet → "Next: check in at your first store" / "Check in at a
+  store"; with visits done → "Going to another store?" / "N stores done
+  today. Check in when you get to the next one[, or write your report].
+  Clock out when your day ends." / "Check in at the next store"; report due
+  → "Your daily report is next" / "Open daily report" (link); clocked out →
+  "Your day is complete"; else "You’re on shift" / "Clock controls".
+- **After a marketer clocks in** (or opens Home clocked in with no visit
+  today), once a day per phone (`localStorage xt-checkin-ask-<date>`): a
+  bottom sheet "You are clocked in. Now check in at a store" / "Check in
+  when you get to each store, and check out of it before you leave. Xtend
+  will remind you to check out." with **I am at a store: check in here**
+  (starts `beginCheckIn(null)`), **Pick the store** (opens the list) and
+  **Later, I am on my way**. Home passes `ask={kind: here|pick|out, n}` to
+  `StoreVisits`, switching to the Stores tab.
+- **Fix-it pop-up** (`guide-sheet.tsx`, words in `src/lib/field-guide.ts`,
+  `guideFor(problem, platform, task)`): when clock-in, clock-out, a store
+  check-in or check-out is stopped by the location (`GeoBlocked` →
+  `problemFromGeo`: `location_permission`, `location_off`, `low_accuracy`,
+  `location_unsupported`) or, for clock-in, by the phone settings card
+  (`phone_settings`), a bottom sheet shows a title, one line of why, numbered
+  steps worded for Android, iPhone or a browser, and **Try again** (retries
+  the same action) or **Show me the settings** (scrolls to the settings
+  card), plus **Close**. It never mentions monitoring.
+- **Check-out reminders** (0099): while checked in at a store, a
+  notification every 25 minutes "Still at <store>?" / "Check out of <store>
+  before you leave. You checked in at HH:MM." (`src/lib/visit-reminder.ts`),
+  sent by `/api/cron/alerts` (`flushVisitCheckoutReminders`), at most 16 per
+  visit; none after checking out or clocking out.
+
 ### 5.3 Step 2: the in-app camera (`camera-capture.tsx`)
 
 - Full-screen black dialog. Top: cancel (X, Escape also closes), title

@@ -6196,6 +6196,9 @@ begin
     values ('Test Run Supermarket', 6.4321, 3.4567, 'staff', ada, place_photo, place_selfie);
     insert into storage.objects (bucket_id, name) values ('selfies', place_photo), ('selfies', place_selfie);
     insert into public.app_update_notices (user_id, platform, build) values (ada, 'android', 999);
+    -- 0099: a store check-out reminder that went out.
+    insert into public.visit_checkout_reminders (visit_id, user_id)
+    select v.id, v.user_id from public.store_visits v limit 1;
 
     perform assert((select test_mode from public.system_settings), 'reset: test mode starts on');
     perform assert((select count(*) from public.system_settings) = 1, 'reset: there is one system settings row');
@@ -6990,6 +6993,53 @@ begin
     if sqlerrm <> 'delete-for-good-0098-done' then raise; end if;
   end;
   perform set_config('request.jwt.claim.sub', '', false);
+
+  -- "Check out of the store before you leave" (0099). Rolled back.
+  begin
+    declare
+      vid uuid;
+      who uuid;
+      t0 timestamptz;
+      got record;
+      n integer;
+    begin
+      delete from public.visit_checkout_reminders;
+      -- An open visit checked in 30 minutes ago today, by someone not clocked out.
+      select v.id, v.user_id into vid, who from public.store_visits v
+      where not exists (select 1 from public.attendance a where a.user_id = v.user_id
+                        and a.attendance_date = public.business_date() and a.type = 'closing')
+      limit 1;
+      perform assert(vid is not null, 'visit reminders 0099: (a visit to test with)');
+      update public.store_visits set status = 'closed', departed_at = now()
+       where user_id = who and id <> vid and status = 'open';
+      update public.store_visits set status = 'open', departed_at = null, visit_date = public.business_date(),
+             arrived_at = now() - interval '30 minutes' where id = vid;
+      t0 := now();
+
+      select count(*) into n from public.claim_visit_checkout_reminders(t0) c where c.visit_id = vid;
+      perform assert(n = 1, 'visit reminders 0099: 25 minutes in a store brings the first reminder');
+      select * into got from public.visit_checkout_reminders r where r.visit_id = vid;
+      perform assert(got.sent = 1, 'visit reminders 0099: it is recorded');
+      select count(*) into n from public.claim_visit_checkout_reminders(t0 + interval '10 minutes') c where c.visit_id = vid;
+      perform assert(n = 0, 'visit reminders 0099: not again before 25 minutes, however often the job runs');
+      select count(*) into n from public.claim_visit_checkout_reminders(t0 + interval '26 minutes') c where c.visit_id = vid;
+      perform assert(n = 1, 'visit reminders 0099: again 25 minutes later');
+      perform assert((select r.sent from public.visit_checkout_reminders r where r.visit_id = vid) = 2, 'visit reminders 0099: counted');
+      select c.store, c.since, c.reminder into got from public.claim_visit_checkout_reminders(t0 + interval '52 minutes') c where c.visit_id = vid;
+      perform assert(got.store is not null and got.since ~ '^\d\d:\d\d$' and got.reminder = 3,
+        'visit reminders 0099: it names the store and the check-in time');
+      update public.visit_checkout_reminders r set sent = public.visit_reminder_max() where r.visit_id = vid;
+      select count(*) into n from public.claim_visit_checkout_reminders(t0 + interval '3 hours') c where c.visit_id = vid;
+      perform assert(n = 0, 'visit reminders 0099: they stop after the most a visit gets');
+      update public.visit_checkout_reminders r set sent = 1 where r.visit_id = vid;
+      update public.store_visits set status = 'closed', departed_at = now() where id = vid;
+      select count(*) into n from public.claim_visit_checkout_reminders(t0 + interval '4 hours') c where c.visit_id = vid;
+      perform assert(n = 0, 'visit reminders 0099: none once they check out');
+      raise exception 'visit-reminders-0099-done';
+    end;
+  exception when others then
+    if sqlerrm <> 'visit-reminders-0099-done' then raise; end if;
+  end;
 
   raise notice 'ALL RULES PASSED';
 end $$;

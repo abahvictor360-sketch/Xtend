@@ -1592,7 +1592,8 @@ and asks anyone still clocked in after their shift end to clock out
 (migration 0061), and gives a heads-up five minutes before each shift
 starts and ends (migration 0069; it only sends inside those five minutes,
 so it depends on this job running on time), and tells anyone on an older
-phone app that a new one is out (0082). It runs every five minutes from
+phone app that a new one is out (0082), and reminds anyone still checked
+in at a store to check out before they leave, every 25 minutes (0099). It runs every five minutes from
 .github/workflows/alerts-cron.yml, or from a server's crontab:
 
   0-59/5 * * * *  curl -s -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/alerts
