@@ -1978,8 +1978,22 @@ words are said (about 5½ minutes in all), captions stay on screen. Made by `scr
 from `src/components/video/staff-video-scenes.tsx` on the dev-only page
 `/guide/video-scenes`.
 Sections: Get started; Before your first clock-in; Your profile photo; Clock
-in; Store visits (marketers); Adding a place; Daily report; Stock count;
-Clock out; History and your account; Report a problem; Common problems
+in (opens with: clock in at your store, never at home, by the start time
+under You → Your hours, after it shows as late; marketers pick the store they
+are starting at, nearest first with Here, and the selfie clocks them in and
+checks them in there; without one of their stores today does not count);
+Store visits (marketers); Adding a place; Daily report; Stock count;
+Clock out; History and your account; Report a problem; **When Xtend stops
+you** (2026-11-24: one card per `GUIDE_PROBLEMS` entry in
+`src/lib/field-guide.ts`, its `guideFor(problem, platform, 'clock in or check
+in')` title, why and numbered steps for Android, then "On iPhone:" steps when
+they differ; then "Still stuck after the steps? Go to You, then Message
+support"); **Questions staff ask** (19: why pick a store, store not on my
+list, no stores allocated, clock in from home, what time to clock in, the
+20-minute check-out reminder, forgot to check out, forgot to clock out, Your
+next step, did my clock-in work, why a selfie, selfie not accepted, no
+signal, new phone, profile photo, missed report, sick or a day off, who
+answers support, where this guide is); Common problems
 (location blocked, not accurate enough, off site but in my store,
 notifications blocked, camera does not open, banner waiting to send, "App not
 installed" or "package appears to be invalid" (uninstall the old Xtend, install

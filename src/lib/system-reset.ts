@@ -168,6 +168,7 @@ export const KEPT_TABLES: { table: string; what: string }[] = [
   { table: 'known_places', what: 'Places Xtend learned from clock-ins and visits (name, address, where it is, photos)' },
   { table: 'ai_provider_keys', what: 'AI keys you added (Settings → AI)' },
   { table: 'ai_feature_settings', what: 'Which AI answers staff and Ask Xtend' },
+  { table: 'ai_knowledge', what: 'What the AI should know (Settings → AI keys)' },
   { table: 'place_addresses', what: 'Street addresses Google gave for spots with no shop' },
   { table: 'place_lookup_stats', what: 'Counts of place lookups (Google use)' },
   { table: 'sign_in_lockouts', what: 'Sign-in pauses after wrong passwords (they lift by themselves)' },

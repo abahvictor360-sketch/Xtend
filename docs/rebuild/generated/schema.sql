@@ -10449,6 +10449,20 @@ CREATE TABLE public.ai_feature_settings (
 
 
 --
+-- Name: ai_knowledge; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ai_knowledge (
+    id boolean DEFAULT true NOT NULL,
+    body text DEFAULT ''::text NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT ai_knowledge_body_check CHECK ((length(body) <= 20000)),
+    CONSTRAINT ai_knowledge_id_check CHECK (id)
+);
+
+
+--
 -- Name: ai_provider_keys; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -12614,6 +12628,14 @@ ALTER TABLE ONLY public.ai_feature_settings
 
 
 --
+-- Name: ai_knowledge ai_knowledge_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_knowledge
+    ADD CONSTRAINT ai_knowledge_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: ai_provider_keys ai_provider_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -14459,6 +14481,14 @@ ALTER TABLE ONLY public.ai_feature_settings
 
 
 --
+-- Name: ai_knowledge ai_knowledge_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_knowledge
+    ADD CONSTRAINT ai_knowledge_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
 -- Name: ai_provider_keys ai_provider_keys_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -15503,6 +15533,12 @@ ALTER TABLE ONLY public.xm_targets
 --
 
 ALTER TABLE public.ai_feature_settings ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: ai_knowledge; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.ai_knowledge ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: ai_provider_keys; Type: ROW SECURITY; Schema: public; Owner: -

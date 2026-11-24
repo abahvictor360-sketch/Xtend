@@ -36,13 +36,14 @@ it can never grant a field member more than their role allows.
 - File: `src/app/api/admin/ai/route.ts`
 - Who: ['admin']
 
-Settings → AI (0102). Admins only. A key is encrypted before it is stored
-and never sent back: only its last 4 characters. Saving or removing a key
-asks for the password again; every change is in the audit log (without
-the key).
+The most the office can write for the AI (0104).
 
 ```ts
 const schema = z.discriminatedUnion('action', [
+  z.object({
+    action: z.literal('set_knowledge'),
+    body: z.string().max(KNOWLEDGE_MAX, `Keep it under ${KNOWLEDGE_MAX.toLocaleString('en-GB')} characters`),
+  }),
   z.object({ action: z.literal('save_key'), provider, key: z.string().max(400) }),
   z.object({ action: z.literal('remove_key'), provider }),
   z.object({ action: z.literal('test'), provider, model: z.string().trim().max(120).optional() }),
@@ -54,7 +55,7 @@ const schema = z.discriminatedUnion('action', [
   }),
 ])
 ```
-- Tables and views: `ai_provider_keys`, `ai_feature_settings`
+- Tables and views: `ai_knowledge`, `ai_provider_keys`, `ai_feature_settings`
 
 ## `POST /api/admin/alerts/[id]`
 

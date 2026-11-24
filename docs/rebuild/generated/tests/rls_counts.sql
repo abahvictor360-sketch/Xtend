@@ -898,5 +898,22 @@ select assert((select count(*) from public.outlets) = 0, 'rls 0103: nor does a d
 reset role;
 update public.profiles set is_active = true where id = :'ada';
 
+-- 0104: the office's notes for the AI are the server's alone.
+reset role;
+grant select, insert, update, delete on public.ai_knowledge to authenticated;
+revoke all on public.ai_knowledge from anon, authenticated;
+insert into public.ai_knowledge (body) values ('Pay day is the 25th.');
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'boss', false);
+do $$
+begin
+  perform count(*) from public.ai_knowledge;
+  perform assert(false, 'rls: the AI notes are closed');
+exception when insufficient_privilege then
+  perform assert(true, 'rls 0104: not even an admin reads the AI notes from the browser (only the server does)');
+end $$;
+reset role;
+delete from public.ai_knowledge;
+
 reset role;
 select 'ALL RLS CHECKS PASSED';

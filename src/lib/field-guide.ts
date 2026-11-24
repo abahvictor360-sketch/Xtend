@@ -24,6 +24,25 @@ export type GuideProblem =
   | 'already_done'
   | 'clock_in_first'
 
+/** Every problem, in the order the staff guide lists them ("When Xtend stops you"). */
+const ALL_PROBLEMS = {
+  location_permission: true,
+  location_off: true,
+  low_accuracy: true,
+  location_unsupported: true,
+  phone_settings: true,
+  notifications_off: true,
+  selfie_refused: true,
+  phone_clock: true,
+  pick_store: true,
+  no_stores: true,
+  store_not_yours: true,
+  name_place: true,
+  clock_in_first: true,
+  already_done: true,
+} satisfies Record<GuideProblem, true>
+export const GUIDE_PROBLEMS = Object.keys(ALL_PROBLEMS) as GuideProblem[]
+
 /** What the pop-up's main button does. */
 export type GuideAction = 'retry' | 'battery_settings' | 'always_location' | 'show_settings' | 'pick_store' | 'message_office' | 'close'
 

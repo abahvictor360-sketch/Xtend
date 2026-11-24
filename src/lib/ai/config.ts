@@ -20,6 +20,8 @@ export interface AiConnection {
 interface Stored {
   keys: Map<AiProvider, string>
   chosen: { feature: AiFeature; provider: AiProvider; model: string }[]
+  /** What the office told the AI (0104), or ''. */
+  knowledge: string
   at: number
 }
 
@@ -34,6 +36,7 @@ async function load(): Promise<Stored> {
   if (stored && Date.now() - stored.at < TTL_MS) return stored
   const keys = new Map<AiProvider, string>()
   let chosen: Stored['chosen'] = []
+  let knowledge = ''
   try {
     const admin = createAdminSupabase()
     const [{ data: keyRows }, { data: featureRows }] = await Promise.all([
@@ -45,11 +48,19 @@ async function load(): Promise<Stored> {
       if (key) keys.set(row.provider, key)
     }
     chosen = (featureRows ?? []) as Stored['chosen']
+    // Before 0104 there is no table: no notes.
+    const { data: note } = await admin.from('ai_knowledge').select('body').maybeSingle<{ body: string }>()
+    knowledge = note?.body?.trim() ?? ''
   } catch {
     // Before 0102, or the database is busy: only the server's own key.
   }
-  stored = { keys, chosen, at: Date.now() }
+  stored = { keys, chosen, knowledge, at: Date.now() }
   return stored
+}
+
+/** What the office wrote under "What the AI should know" (0104), or ''. */
+export async function aiKnowledge(): Promise<string> {
+  return (await load()).knowledge
 }
 
 const serverKey = () => process.env.ANTHROPIC_API_KEY?.trim() || null

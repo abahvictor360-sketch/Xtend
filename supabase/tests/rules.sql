@@ -6235,7 +6235,9 @@ begin
                                 -- 0081: the places Xtend learned survive every reset.
                                 'known_places',
                                 -- 0102: the AI keys and settings the admin added.
-                                'ai_provider_keys', 'ai_feature_settings'];
+                                'ai_provider_keys', 'ai_feature_settings',
+                                -- 0104: what the office told the AI.
+                                'ai_knowledge'];
     all_keys text[] := public.reset_category_keys();
     k text;
     cats text[];
@@ -7170,6 +7172,23 @@ begin
   exception when others then
     if sqlerrm <> 'hours-0100-done' then raise; end if;
   end;
+
+  -- 0104: one box of office notes for the AI, and not a novel.
+  insert into public.ai_knowledge (body) values ('Pay day is the 25th.')
+    on conflict (id) do update set body = excluded.body;
+  begin
+    insert into public.ai_knowledge (id, body) values (false, 'x');
+    perform assert(false, 'ai 0104: there is only one box of notes');
+  exception when check_violation then
+    perform assert(true, 'ai 0104: there is only one box of notes');
+  end;
+  begin
+    update public.ai_knowledge set body = repeat('x', 20001);
+    perform assert(false, 'ai 0104: the notes are capped');
+  exception when check_violation then
+    perform assert(true, 'ai 0104: notes over 20,000 characters are refused');
+  end;
+  delete from public.ai_knowledge;
 
   raise notice 'ALL RULES PASSED';
 end $$;

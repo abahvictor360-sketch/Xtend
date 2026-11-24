@@ -125,6 +125,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0101_start_day_at_a_store.sql           # marketers start the day at a store: clocking in checks them in
    supabase/migrations/0102_ai_providers.sql                   # AI keys the admin adds (OpenAI, Gemini, Anthropic, NVIDIA, OpenRouter)
    supabase/migrations/0103_close_public_key.sql               # the public (anon) key opens nothing; "signed in" rules need active staff
+   supabase/migrations/0104_ai_knowledge.sql                   # "What the AI should know": the office's notes for the staff helper and Ask Xtend
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

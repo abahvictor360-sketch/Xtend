@@ -11,7 +11,14 @@ import { compatPing } from '@/lib/ai/compat'
 import { keyHint, keyProblem, PROVIDER_IDS, providerInfo, type AiProvider } from '@/lib/ai/providers'
 
 const provider = z.enum(PROVIDER_IDS as [AiProvider, ...AiProvider[]])
+/** The most the office can write for the AI (0104). */
+const KNOWLEDGE_MAX = 20_000
+
 const schema = z.discriminatedUnion('action', [
+  z.object({
+    action: z.literal('set_knowledge'),
+    body: z.string().max(KNOWLEDGE_MAX, `Keep it under ${KNOWLEDGE_MAX.toLocaleString('en-GB')} characters`),
+  }),
   z.object({ action: z.literal('save_key'), provider, key: z.string().max(400) }),
   z.object({ action: z.literal('remove_key'), provider }),
   z.object({ action: z.literal('test'), provider, model: z.string().trim().max(120).optional() }),
@@ -37,6 +44,23 @@ export async function POST(request: Request) {
     const input = parsed.data
     const admin = createAdminSupabase()
     const supabase = await createServerSupabase()
+
+    // What the AI should know (0104): the office's own notes, read by the
+    // staff helper and Ask Xtend with every question.
+    if (input.action === 'set_knowledge') {
+      const body = input.body.replace(/\r\n/g, '\n').trim()
+      const { error } = await admin.from('ai_knowledge').upsert({
+        id: true,
+        body,
+        updated_at: new Date().toISOString(),
+        updated_by: session.userId,
+      })
+      if (error) throw new ApiError('That could not be saved. Has migration 0104 been run?', 400)
+      forgetAiSettings()
+      await audit(supabase, 'ai.knowledge_set', 'ai_knowledge', null, { characters: body.length })
+      return Response.json({ ok: true, message: body ? 'Saved. The AI uses it from the next question.' : 'Cleared.' })
+    }
+
     const label = providerInfo(input.provider)!.label
 
     if (input.action === 'save_key') {

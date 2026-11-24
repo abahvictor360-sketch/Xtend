@@ -36,7 +36,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0096_every_synced_position_kept.sql`;
    - `supabase/migrations/0097_allocate_from_store.sql`;
    - `supabase/migrations/0098_delete_for_good.sql`;
-   - `supabase/migrations/0103_close_public_key.sql`.
+   - `supabase/migrations/0103_close_public_key.sql`;
+   - `supabase/migrations/0104_ai_knowledge.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18;
    0099, 0100, 0101 and 0102 are done: you ran them on 2026-11-24.)
 4. **Turn off self sign-up in Supabase**: Authentication → Sign In /
@@ -68,6 +69,31 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-24
+
+### The AI helper answers from a much richer staff guide, and from your notes
+- **What was done:** the staff guide (You → How to use Xtend) is much
+  fuller. Clock in now explains your hours and how marketers start the day
+  at a store. A new **When Xtend stops you** section lists every pop-up
+  (location, notifications, selfie, phone time, no stores, store not on the
+  list and more) with the same steps the pop-up gives, for Android and
+  iPhone. A new **Questions staff ask** section answers 19 common questions.
+  The AI helper in Message support now reads this whole guide with every
+  question, plus where the person is in their day (clocked in or not, the
+  store they are checked in at, how many stores they have, their hours). On
+  **Settings → AI keys** there is a new box, **What the AI should know**,
+  where you write what the guide does not say; the helper and Ask Xtend
+  both read it.
+- **The impact:** once you add an AI key, staff get answers that match
+  exactly what the app and the guide say, worded for their situation, and
+  anything the guide and your notes do not cover goes to the office instead
+  of a guess. Your notes are only ever read by the server, and every save is
+  in the audit log.
+- **What you need to do:** run `supabase/migrations/0104_ai_knowledge.sql`
+  in the Supabase SQL editor (short, safe to run again), redeploy, then on
+  Settings → AI keys add a key and fill in **What the AI should know**: who
+  staff call for pay, leave or a broken phone, office hours, store rules,
+  the products. Write only what staff may be told, never passwords or keys.
+  No new phone app build is needed.
 
 ### Nobody can use developer tools to get into your data
 - **What was done:** every browser can see two Supabase values in its
