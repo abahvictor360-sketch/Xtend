@@ -1,6 +1,6 @@
 import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
-import { aiFor } from '@/lib/ai/config'
+import { aiFor, aiKnowledge } from '@/lib/ai/config'
 import { compatRound, type ConvMessage, type ToolDef } from '@/lib/ai/compat'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { lagosDateString, longDate } from '@/lib/utils'
@@ -957,7 +957,11 @@ export async function askAssistant(
       : { role: t.role, content: t.content },
   )
 
-  const todayLine = `Today is ${longDate(today)} (${today}). You are talking to ${asker.name} (${asker.role}).${xmNote ? ` ${xmNote}` : ''}`
+  // What the office wrote under Settings → AI keys (0104).
+  const officeNotes = await aiKnowledge()
+  const todayLine = `Today is ${longDate(today)} (${today}). You are talking to ${asker.name} (${asker.role}).${xmNote ? ` ${xmNote}` : ''}${
+    officeNotes ? `\n\nNotes from the office about how Xpel Beauty works (use them when they help):\n${officeNotes}` : ''
+  }`
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
     // Anthropic's own API, or OpenAI, Gemini, NVIDIA or OpenRouter in the
     // OpenAI format, answered in the same shape (lib/ai/compat.ts).

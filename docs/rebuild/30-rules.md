@@ -1334,6 +1334,11 @@ label and the store's own point.
   unknown or inactive store refuses the whole call and changes nothing.
   Every call writes an `audit_log` row `staff.allocate_outlets` directly
   (supervisors may call it).
+- **0104, what the AI should know:** table `ai_knowledge` (`id boolean
+  primary key default true check (id)`, so one row; `body text not null
+  default ''` ≤ 20,000 characters; `updated_at`; `updated_by` → profiles set
+  null). RLS on, no policies, all grants revoked from anon and
+  authenticated. The test-run reset keeps it.
 - **0103, the public key opens nothing:** `revoke all on all tables,
   sequences, functions in schema public from anon` plus the same as default
   privileges for future objects. `is_active_staff()` (definer; the caller

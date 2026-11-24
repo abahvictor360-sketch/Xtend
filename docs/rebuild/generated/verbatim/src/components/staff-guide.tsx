@@ -3,6 +3,8 @@ import {
   BellRing,
   CalendarDays,
   Camera,
+  CircleAlert,
+  CircleHelp,
   ClipboardList,
   FileText,
   LifeBuoy,
@@ -25,6 +27,7 @@ import {
   type GuideTopic,
 } from '@/components/guide'
 import { StaffVideo } from '@/components/staff-video'
+import { GUIDE_PROBLEMS, guideFor } from '@/lib/field-guide'
 
 export const STAFF_TOPICS = {
   start: { id: 'get-started', title: 'Get started', icon: Smartphone },
@@ -39,10 +42,186 @@ export const STAFF_TOPICS = {
   history: { id: 'history', title: 'History and your account', icon: CalendarDays },
   leave: { id: 'leave', title: 'Days off and leave', icon: Palmtree },
   help: { id: 'help', title: 'Report a problem', icon: LifeBuoy },
+  stops: { id: 'when-xtend-stops-you', title: 'When Xtend stops you', icon: CircleAlert },
+  faq: { id: 'questions', title: 'Questions staff ask', icon: CircleHelp },
   fix: { id: 'problems', title: 'Common problems', icon: Wrench },
 } satisfies Record<string, GuideTopic>
 
 const T = STAFF_TOPICS
+
+/** How the pop-up steps are worded in the guide (lib/field-guide.ts). */
+const TASK = 'clock in or check in'
+
+const FAQ: { q: string; a: React.ReactNode }[] = [
+  {
+    q: 'Why must I pick a store when I clock in? (marketers)',
+    a: (
+      <>
+        Your day starts at your first store. Picking it and taking your selfie clocks you in and checks you in there at
+        the same time, so there is only one selfie. If you do not clock in at one of your stores, today does not count.
+      </>
+    ),
+  },
+  {
+    q: 'The store I am at is not on my list',
+    a: (
+      <>
+        Only the office can add stores to your list. Message them the store&apos;s name and its Google Maps link (open
+        the store in Google Maps, tap <Ui>Share</Ui>, copy the link). Until it is added, start your day at one of your
+        own stores.
+      </>
+    ),
+  },
+  {
+    q: 'It says no stores are allocated to me',
+    a: (
+      <>
+        The office has not added your stores yet. Go to <Ui>You</Ui>, then <Ui>Messages</Ui>, and send the list of
+        stores you visit with each one&apos;s Google Maps link. Clock in once they are added.
+      </>
+    ),
+  },
+  {
+    q: 'Can I clock in from home or on the way?',
+    a: <>No. Clock in when you are inside your store (marketers: your first store of the day).</>,
+  },
+  {
+    q: 'What time should I clock in?',
+    a: (
+      <>
+        By the start time on <Ui>You</Ui>, under <Ui>Your hours</Ui>. These are your own hours, whichever store you go
+        to. Clocking in after your start time shows as late. Think your hours are wrong? Message the office: only they
+        can change them.
+      </>
+    ),
+  },
+  {
+    q: 'I keep getting “Still at the store? Check out before you leave”',
+    a: (
+      <>
+        While you are checked in at a store, Xtend reminds you every 20 minutes so you do not forget to check out. Still
+        working there? Carry on. Leaving? Tap <Ui>Check out</Ui> first.
+      </>
+    ),
+  },
+  {
+    q: 'I forgot to check out of a store',
+    a: (
+      <>
+        Home shows the store with a <Ui>Check out</Ui> button. Check out, then check in at the store you are in now. You
+        can only be checked in at one store at a time.
+      </>
+    ),
+  },
+  {
+    q: 'I forgot to clock out',
+    a: (
+      <>
+        Clock out as soon as you remember. If the day has already ended, message your supervisor so they can sort out
+        your record.
+      </>
+    ),
+  },
+  {
+    q: 'What does “Your next step” on Home mean?',
+    a: (
+      <>
+        It always tells you what to do now: clock in, check in at a store, check out, write your report or clock out,
+        with a button to do it. Do what it says and your day is in order.
+      </>
+    ),
+  },
+  {
+    q: 'How do I know my clock-in worked?',
+    a: (
+      <>
+        Home shows <Ui>Clocked in</Ui> and the time, and the first ring under <Ui>My day</Ui> closes. If you are not
+        sure, pull down on Home to refresh it.
+      </>
+    ),
+  },
+  {
+    q: 'Why does Xtend need a selfie?',
+    a: (
+      <>
+        It shows it is really you clocking in. Take it in good light with your whole face in the picture. Photos from
+        your gallery cannot be used.
+      </>
+    ),
+  },
+  {
+    q: 'My selfie was not accepted',
+    a: (
+      <>
+        Face a light (a window or the shop lights), hold the phone still at arm&apos;s length and keep your whole face in
+        the picture. Never take a photo of a screen or a printed picture. Then try again.
+      </>
+    ),
+  },
+  {
+    q: 'There is no signal in my store',
+    a: (
+      <>
+        Step near the door or a window, or outside for a moment, and try again. Reports and stock counts wait on your
+        phone and send themselves when you get signal; a store check-in or check-out needs signal, so try again when you
+        have it.
+      </>
+    ),
+  },
+  {
+    q: 'I got a new phone',
+    a: (
+      <>
+        Install Xtend from the download page, sign in, and allow Location, Camera and Notifications again, as in{' '}
+        <Ui>Before your first clock-in</Ui>. Your record stays with your account, not the phone.
+      </>
+    ),
+  },
+  {
+    q: 'How do I change my profile photo?',
+    a: (
+      <>
+        Go to <Ui>You</Ui> and tap your picture (or <Ui>Take your photo</Ui>), then take a new one.
+      </>
+    ),
+  },
+  {
+    q: 'I missed my daily report yesterday',
+    a: (
+      <>
+        Open <Ui>Report</Ui> and pick <Ui>Yesterday</Ui> (or another day, up to 7 days back). After 7 days a report can no
+        longer be written or changed.
+      </>
+    ),
+  },
+  {
+    q: 'I am sick or need a day off',
+    a: (
+      <>
+        Go to <Ui>You</Ui>, then <Ui>Ask for leave</Ui>, pick <Ui>Sick</Ui> or another type, the days and the reason. Call
+        your supervisor too if it is the same day.
+      </>
+    ),
+  },
+  {
+    q: 'Who answers when I message support?',
+    a: (
+      <>
+        The Xtend helper answers simple questions straight away. Anything it cannot sort out goes to the office, and you
+        get a notification when they reply.
+      </>
+    ),
+  },
+  {
+    q: 'Where is this guide in the app?',
+    a: (
+      <>
+        Go to <Ui>You</Ui>, then <Ui>How to use Xtend</Ui>. Every pop-up also has a link: <Ui>Not sure? Read the staff
+        guide</Ui>.
+      </>
+    ),
+  },
+]
 
 /**
  * The staff guide's content, shared by the public page (/guide) and the
@@ -112,6 +291,18 @@ export function StaffGuide() {
       </GuideSection>
 
       <GuideSection topic={T.clockIn} intro="Do this when you arrive at your store, once a day.">
+          <p>
+            Clock in at your store, never at home or on the way. Clock in by the start time under{' '}
+            <Ui>You</Ui>, then <Ui>Your hours</Ui>: clocking in after it shows as late. Only the office can change your
+            hours.
+          </p>
+          <p>
+            <Ui>Marketers:</Ui> your day starts at your first store. When you tap <Ui>Clock in</Ui>, Xtend asks{' '}
+            <Ui>Pick the store you are starting at</Ui> and lists your own stores, nearest first, with{' '}
+            <Ui>Here</Ui> on the one you are in. Pick it, then take the selfie: that clocks you in and checks you in at
+            that store in one go. If you do not clock in at one of your stores, today does not count. See{' '}
+            <Ui>Store visits</Ui> below.
+          </p>
           <p>
             Home shows <Ui>Your next step</Ui> above the clock controls: it always tells you what to do now, with a
             button to do it. Use <Ui>My day</Ui> below them to see your progress and recent days.
@@ -184,8 +375,8 @@ export function StaffGuide() {
               store too, so there is no second selfie.
             </>,
             <>
-              See <Ui>No stores are allocated to you yet</Ui> or{' '}
-              <Ui>This store is not on your list</Ui>? Ask your supervisor to add the store.
+              See <Ui>That store is not on your list</Ui>? Pick one of your own stores. Working at a new store? Message
+              the office its name and its Google Maps link so they can add it.
             </>,
             <>
               If Xtend does not know the place, you must <Ui>add it</Ui> before you go on. See{' '}
@@ -430,6 +621,40 @@ export function StaffGuide() {
           arrives as a notification, and the home screen shows <Ui>You have a new message</Ui> until
           you read it.
         </p>
+      </GuideSection>
+
+      <GuideSection
+        topic={T.stops}
+        intro="If something stops you clocking in, checking in or checking out, a box pops up saying what is wrong, with numbered steps and a button. These are the same steps, so you can read them any time."
+      >
+        <div className="space-y-4">
+          {GUIDE_PROBLEMS.map((problem) => {
+            const android = guideFor(problem, 'android', TASK)
+            const iphone = guideFor(problem, 'ios', TASK)
+            const sameOnIphone = iphone.steps.join('|') === android.steps.join('|')
+            return (
+              <div key={problem} className="space-y-2 rounded-2xl border border-border p-4">
+                <h3 className="font-semibold">{android.title}</h3>
+                <p className="text-sm text-muted-foreground">{android.why}</p>
+                {!sameOnIphone && <p className="text-sm font-semibold">On Android:</p>}
+                <Steps items={android.steps} />
+                {!sameOnIphone && (
+                  <>
+                    <p className="text-sm font-semibold">On iPhone:</p>
+                    <Steps items={iphone.steps} />
+                  </>
+                )}
+              </div>
+            )
+          })}
+        </div>
+        <Tip>
+          Still stuck after the steps? Go to <Ui>You</Ui>, then <Ui>Message support</Ui>, and say what the box said.
+        </Tip>
+      </GuideSection>
+
+      <GuideSection topic={T.faq} intro="Short answers to what staff ask most.">
+        <Questions items={FAQ} />
       </GuideSection>
 
       <GuideSection topic={T.fix}>

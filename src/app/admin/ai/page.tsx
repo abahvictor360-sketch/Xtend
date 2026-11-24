@@ -13,9 +13,10 @@ export default async function AiPage() {
   await requireSession(['admin'])
   // The tables are the server's alone; only the hint and dates come out.
   const admin = createAdminSupabase()
-  const [{ data: keys, error }, { data: features }, staff, office] = await Promise.all([
+  const [{ data: keys, error }, { data: features }, { data: note, error: noteError }, staff, office] = await Promise.all([
     admin.from('ai_provider_keys').select('provider, key_hint, updated_at'),
     admin.from('ai_feature_settings').select('feature, provider, model'),
+    admin.from('ai_knowledge').select('body, updated_at').maybeSingle<{ body: string; updated_at: string }>(),
     aiFor('staff_helper'),
     aiFor('admin_assistant'),
   ])
@@ -38,6 +39,7 @@ export default async function AiPage() {
         choices={(features ?? []) as FeatureChoice[]}
         using={using}
         serverAnthropic={Boolean(process.env.ANTHROPIC_API_KEY)}
+        knowledge={noteError ? null : { body: note?.body ?? '', updatedAt: note?.updated_at ?? null }}
       />
     </div>
   )

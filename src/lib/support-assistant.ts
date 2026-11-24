@@ -3,7 +3,9 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { notifyWatchers } from '@/lib/notify'
 import { supportHelperMode } from '@/lib/usage-limits'
-import { aiFor } from '@/lib/ai/config'
+import { aiFor, aiKnowledge } from '@/lib/ai/config'
+import { STAFF_GUIDE_TEXT } from '@/lib/generated/staff-guide-text'
+import { lagosDateString } from '@/lib/utils'
 import { compatToolAnswer, type ToolDef } from '@/lib/ai/compat'
 
 /**
@@ -58,7 +60,9 @@ You can help on your own with things like:
   - check out of each store before leaving it; Xtend reminds them every 20 minutes while they are checked in
 - general reassurance and next steps
 
-Always end with where to read more: "You can also read the staff guide (Account → Staff guide) for pictures of every step."
+Answer from the staff guide below (it is exactly what staff see in the app), the office's notes and the member's day, in that order. Use the guide's own words for buttons and screens. Give numbered steps when there is more than one thing to do. If none of them covers the question, do not guess: escalate.
+
+Always end with where to read more: "You can also read the staff guide (You → How to use Xtend) for pictures of every step."
 
 You MUST escalate to the office (set escalate true) when the issue is outside what you can do or know, for example:
 - anything that needs a change to their account, store allocation, outlet, team or password reset
@@ -70,6 +74,59 @@ You MUST escalate to the office (set escalate true) when the issue is outside wh
 Do not bring up location checks during the shift, whether location works with the app closed, the screen off or without network, alerts or messages to supervisors or the office, phone or integrity checks, VPN or fake-location detection, or anything being recorded or reviewed. If the member asks about their location, say only that Xtend uses their location to confirm they are at their store while they are on shift, and that location needs to stay on for the app to work. Do not deny anything and do not add more.
 
 When you escalate, still reply to the member: acknowledge the issue in one or two sentences and tell them you have passed it to the office, who will follow up. Never invent a policy, a time, a name or a decision. If you do not know, escalate rather than guess.`
+
+/** The staff guide, generated from the guide staff read (scripts/make-guide-knowledge.ts). */
+const GUIDE = `# The staff guide (what staff see under You → How to use Xtend)
+
+${STAFF_GUIDE_TEXT}`
+
+function hhmm(t: string | null | undefined) {
+  return t ? t.slice(0, 5) : null
+}
+
+/**
+ * Where the member is in their day, so the helper can say what to do next:
+ * their role, hours, today's clock-in and clock-out, the store they are
+ * checked in at and how many stores they have. What staff can see in the
+ * app themselves, nothing more.
+ */
+async function memberDay(admin: ReturnType<typeof createAdminSupabase>, userId: string): Promise<string> {
+  try {
+    const today = lagosDateString()
+    const [{ data: me }, { data: marks }, { data: open }, { data: stores }] = await Promise.all([
+      admin.from('profiles').select('role, shift_start, shift_end').eq('id', userId).maybeSingle<{
+        role: string
+        shift_start: string | null
+        shift_end: string | null
+      }>(),
+      admin.from('attendance').select('type, created_at').eq('user_id', userId).eq('attendance_date', today),
+      admin
+        .from('store_visit_detail')
+        .select('outlet_name, arrived_at')
+        .eq('user_id', userId)
+        .eq('status', 'open')
+        .order('arrived_at', { ascending: false })
+        .limit(1),
+      admin.rpc('outlets_for_user', { target: userId }),
+    ])
+    const at = (iso: string) => new Date(iso).toLocaleTimeString('en-GB', { timeZone: 'Africa/Lagos', hour: '2-digit', minute: '2-digit' })
+    const rows = (marks ?? []) as { type: string; created_at: string }[]
+    const inAt = rows.find((r) => r.type === 'opening')
+    const outAt = rows.find((r) => r.type === 'closing')
+    const visit = ((open ?? []) as { outlet_name: string | null; arrived_at: string }[])[0]
+    const storeCount = Array.isArray(stores) ? stores.length : null
+    const lines = [
+      `- Role: ${me?.role ?? 'unknown'}${me?.role === 'marketer' ? ' (starts the day at one of their stores and checks in and out of each store)' : ''}`,
+      `- Their hours: ${hhmm(me?.shift_start) && hhmm(me?.shift_end) ? `${hhmm(me?.shift_start)} to ${hhmm(me?.shift_end)}` : 'not set'}`,
+      `- Today: ${inAt ? `clocked in at ${at(inAt.created_at)}` : 'not clocked in yet'}${outAt ? `, clocked out at ${at(outAt.created_at)}` : ''}`,
+      visit ? `- Checked in now at ${visit.outlet_name ?? 'a store'} since ${at(visit.arrived_at)}` : '- Not checked in at a store now',
+      storeCount === null ? null : `- Stores allocated to them: ${storeCount}${storeCount === 0 ? ' (none yet: the office must add them)' : ''}`,
+    ].filter(Boolean)
+    return `# The member's day (Lagos time, now ${at(new Date().toISOString())})\n${lines.join('\n')}`
+  } catch {
+    return ''
+  }
+}
 
 interface ThreadMsg {
   sender_role: 'staff' | 'ai' | 'admin' | 'supervisor'
@@ -143,6 +200,12 @@ export async function respondToSupportThread(
     convo.unshift({ role: 'user', content: thread.subject })
   }
 
+  // The guide (fixed, so it can be cached), then the office's notes and
+  // this member's day, which change.
+  const [officeNotes, day] = await Promise.all([aiKnowledge(), memberDay(admin, thread.user_id)])
+  const context = [officeNotes ? `# Notes from the office\n${officeNotes}` : '', day].filter(Boolean).join('\n\n')
+  const fixedSystem = `${SYSTEM}\n\n${GUIDE}`
+
   try {
     let out: { reply?: string; escalate?: boolean; reason?: string }
     if (ai.provider === 'anthropic') {
@@ -150,7 +213,10 @@ export async function respondToSupportThread(
       const response = await client.messages.create({
         model: ai.model,
         max_tokens: 1024,
-        system: [{ type: 'text', text: SYSTEM }],
+        system: [
+          { type: 'text', text: fixedSystem, cache_control: { type: 'ephemeral' } },
+          ...(context ? [{ type: 'text' as const, text: context }] : []),
+        ],
         messages: convo,
         tool_choice: { type: 'tool', name: 'respond' },
         tools: [RESPOND as Anthropic.Tool],
@@ -163,7 +229,7 @@ export async function respondToSupportThread(
     } else {
       // OpenAI, Gemini, NVIDIA or OpenRouter (lib/ai/compat.ts).
       out = await compatToolAnswer<typeof out>(ai, {
-        system: SYSTEM,
+        system: context ? `${fixedSystem}\n\n${context}` : fixedSystem,
         messages: convo.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: typeof m.content === 'string' ? m.content : String(m.content) })),
         tool: RESPOND,
       })

@@ -16,6 +16,15 @@ A readable summary of `schema.sql`. Every table has row-level security unless ma
 | updated_at | timestamp with time zone(timestamptz) |  | now() |
 | updated_by | uuid(uuid) | yes |  |
 
+### `ai_knowledge`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| id | boolean(bool) |  | true |
+| body | text(text) |  | ''::text |
+| updated_at | timestamp with time zone(timestamptz) |  | now() |
+| updated_by | uuid(uuid) | yes |  |
+
 ### `ai_provider_keys`
 
 | Column | Type | Null | Default |

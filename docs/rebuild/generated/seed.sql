@@ -45,6 +45,12 @@ SET row_security = off;
 
 
 --
+-- Data for Name: ai_knowledge; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
 -- Data for Name: ai_provider_keys; Type: TABLE DATA; Schema: public; Owner: -
 --
 

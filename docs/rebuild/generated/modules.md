@@ -58,7 +58,7 @@ choice on Settings → AI, else the server's ANTHROPIC_API_KEY, else any
 key the admin saved. Read once a minute at most; saving on the AI page
 clears it at once on that server.
 
-Exports: `AiConnection`, `forgetAiSettings`, `aiFor`, `anthropicKey`
+Exports: `AiConnection`, `forgetAiSettings`, `aiKnowledge`, `aiFor`, `anthropicKey`
 
 ## `src/lib/ai/providers.ts`
 
@@ -645,7 +645,7 @@ what to do, step by step, with a button that opens the right setting
 where the phone allows it. Pure, so scripts/check-field-guide.ts can test
 it. Staff are told what to do, never how they are monitored.
 
-Exports: `GuideProblem`, `GuideAction`, `Guide`, `GuidePlatform`, `problemFromGeo`, `problemFromMessage`, `STAFF_GUIDE_HREF`, `guideFor`
+Exports: `GuideProblem`, `GUIDE_PROBLEMS`, `GuideAction`, `Guide`, `GuidePlatform`, `problemFromGeo`, `problemFromMessage`, `STAFF_GUIDE_HREF`, `guideFor`
 
 ## `src/lib/fields.ts`
 
@@ -692,6 +692,10 @@ new position over about one interval, so it glides like a delivery
 rider instead of jumping.
 
 Exports: `FAST_INTERVAL_MS`, `FOLLOW_MINUTES`, `FOLLOW_HEARTBEAT_MS`, `FOLLOW_GRACE_MS`, `OFFER_EXTEND_MS`, `TRAIL_MINUTES`, `MOVING_KMH`, `FAST_HOLD_MS`, `LivePoint`, `distanceM`, `bearing`, `interpolate`, `glideMs`, `glideProgress`, `speedKmh`, `isMoving`, `headingFor`, `trimTrail`, `updatedAgo`, `timeLeft`, `FollowEnd`, `FollowTiming`, `followTiming`, `nextInterval`, `fastHoldUntil`, `endedText`
+
+## `src/lib/generated/staff-guide-text.ts`
+
+Exports: `STAFF_GUIDE_TEXT`
 
 ## `src/lib/geo.ts`
 
@@ -1603,7 +1607,7 @@ Exports: `NavBadges`, `matchesQuery`, `AdminSidebarNav`, `AdminNav`
 
 ## `src/components/admin/ai-settings.tsx`
 
-Settings → AI (0102): add, test and remove keys; choose the AI per feature.
+The most the office can write for the AI (0104; the database also caps it).
 
 Exports: `SavedKey`, `FeatureChoice`, `AiSettings`
 
@@ -2498,8 +2502,7 @@ Exports: `SplashScreen`
 
 ## `src/components/staff-guide.tsx`
 
-The staff guide's content, shared by the public page (/guide) and the
-same guide inside the app (/field/guide). Worded like the staff app.
+How the pop-up steps are worded in the guide (lib/field-guide.ts).
 
 Exports: `STAFF_TOPICS`, `StaffGuide`
 

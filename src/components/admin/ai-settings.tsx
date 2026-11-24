@@ -2,10 +2,11 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Bot, CheckCircle2, ExternalLink, KeyRound, Loader2, Trash2 } from 'lucide-react'
+import { BookOpen, Bot, CheckCircle2, ExternalLink, KeyRound, Loader2, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { Select } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Panel } from '@/components/admin/page-kit'
@@ -25,6 +26,9 @@ export interface FeatureChoice {
 }
 
 type Note = { ok: boolean; text: string } | null
+
+/** The most the office can write for the AI (0104; the database also caps it). */
+const KNOWLEDGE_MAX = 20_000
 
 async function send(body: unknown): Promise<{ ok: boolean; message: string }> {
   try {
@@ -46,13 +50,17 @@ export function AiSettings({
   choices,
   using,
   serverAnthropic,
+  knowledge,
 }: {
   saved: SavedKey[]
   choices: FeatureChoice[]
   using: Record<AiFeature, { provider: string; model: string } | null>
   serverAnthropic: boolean
+  /** What the AI should know (0104); null before the migration is run. */
+  knowledge: { body: string; updatedAt: string | null } | null
 }) {
   const router = useRouter()
+  const [notesText, setNotesText] = useState(knowledge?.body ?? '')
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState<string | null>(null)
   const [notes, setNotes] = useState<Record<string, Note>>({})
@@ -237,6 +245,49 @@ export function AiSettings({
             )
           })}
         </div>
+      </Panel>
+
+      <Panel
+        icon={BookOpen}
+        title="What the AI should know"
+        note="The staff helper already knows the whole staff guide. Add what the guide does not say: who to call for what, office hours, pay and leave rules, store rules, the products. The staff helper and Ask Xtend read this with every question. Staff do not see this box, but the helper uses it to answer them, so write only what staff may be told."
+      >
+        {knowledge === null ? (
+          <p className="rounded-xl bg-warning/15 p-3 text-sm">Run migration 0104 in Supabase to add notes for the AI.</p>
+        ) : (
+          <div className="space-y-3">
+            <Label htmlFor="ai-knowledge" className="sr-only">
+              What the AI should know
+            </Label>
+            <Textarea
+              id="ai-knowledge"
+              value={notesText}
+              onChange={(e) => setNotesText(e.target.value)}
+              maxLength={KNOWLEDGE_MAX}
+              rows={12}
+              placeholder={'For example:\nFor pay questions, staff call Mrs Ade in HR on 0800 000 0000.\nThe office is open 8am to 5pm, Monday to Saturday.\nNew stores are added within one working day.'}
+            />
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>
+                {notesText.length.toLocaleString('en-GB')} / {KNOWLEDGE_MAX.toLocaleString('en-GB')} characters
+                {knowledge.updatedAt ? ` · last saved ${formatLagos(knowledge.updatedAt)}` : ''}
+              </span>
+              <Button
+                size="sm"
+                disabled={busy !== null || notesText.trim() === knowledge.body.trim()}
+                onClick={() => void run('knowledge', { action: 'set_knowledge', body: notesText })}
+              >
+                {busy === 'knowledge' ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Save
+              </Button>
+            </div>
+            {notes.knowledge && (
+              <p className={`text-sm ${notes.knowledge.ok ? 'text-success' : 'text-destructive'}`}>{notes.knowledge.text}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Do not paste passwords, keys or anything private: the AI service reads this text.
+            </p>
+          </div>
+        )}
       </Panel>
     </div>
   )

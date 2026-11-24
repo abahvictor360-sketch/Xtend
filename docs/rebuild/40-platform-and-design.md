@@ -154,6 +154,14 @@ server (`src/lib/ai/secret-box.ts`: AES-256-GCM, key = SHA-256 of
 stored where only the service role can read them; only the last 4
 characters are ever sent to a browser.
 
+**The AI answers from the staff guide (0104).** `scripts/make-guide-knowledge.ts`
+turns the staff guide into `src/lib/generated/staff-guide-text.ts` (run it
+after any guide change; `scripts/check-guide-knowledge.ts` fails if it is
+stale, if a pop-up's steps are missing or if the guide mentions monitoring).
+`tsconfig.scripts.json` sets `jsx: react-jsx` and includes `src/**/*.tsx` so
+scripts can render components. The office's notes (`ai_knowledge`) are only
+read by the server.
+
 **The public Supabase key opens nothing (0103).** The project address and
 the anon key are visible to any browser by design; the anon role has no
 rights in `public` (revoked, also for future objects), every table has RLS,

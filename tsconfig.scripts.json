@@ -3,10 +3,11 @@
   "compilerOptions": {
     "module": "commonjs",
     "moduleResolution": "node",
+    "jsx": "react-jsx",
     "paths": {
       "@/*": ["./src/*"],
       "server-only": ["./scripts/shims/server-only.ts"]
     }
   },
-  "include": ["scripts/**/*.ts", "src/**/*.ts"]
+  "include": ["scripts/**/*.ts", "src/**/*.ts", "src/**/*.tsx"]
 }

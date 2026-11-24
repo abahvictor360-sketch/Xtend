@@ -739,6 +739,15 @@ export default async function AdminGuidePage() {
             reading PDF invoices use the Anthropic key. With no key at all, staff messages go straight to the office.
           </p>
           <p>
+            The staff helper already knows the whole staff guide, and sees where the person is in their day (clocked in or
+            not, the store they are checked in at, how many stores they have, their hours). Under{' '}
+            <Ui>What the AI should know</Ui>, write what the guide does not say: who to call for pay or a broken phone,
+            office hours, leave rules, store rules, the products. Press <Ui>Save</Ui>; the AI uses it from the next
+            question, and Ask Xtend reads it too. Staff do not see the box, but the helper answers them from it, so write
+            only what staff may be told, and never passwords or keys. Anything the guide and your notes do not cover, the
+            helper passes to the office.
+          </p>
+          <p>
             <Ui>System</Ui> (admins only): <strong>test mode</strong>, for a test run before real work. While
             it is on, a dark orange strip across the top of the dashboard says <Ui>Test mode: records can be
             reset</Ui>. Supervisors and staff see nothing of it, and staff are not told it is a test.
