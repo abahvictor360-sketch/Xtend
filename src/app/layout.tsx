@@ -3,6 +3,7 @@ import './globals.css'
 import { ServiceWorker } from '@/components/service-worker'
 import { SplashScreen } from '@/components/splash-screen'
 import { UpdateManager } from '@/components/update-manager'
+import { EARLY_RECOVERY_SCRIPT } from '@/lib/app-error'
 
 export const metadata: Metadata = {
   title: 'Xtend — Xpel Beauty field attendance',
@@ -35,6 +36,11 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
+      <head>
+        {/* Before the app loads: a phone holding pages from before an update
+            reloads onto the new version instead of a blank error (app-error.ts). */}
+        <script dangerouslySetInnerHTML={{ __html: EARLY_RECOVERY_SCRIPT }} />
+      </head>
       <body className="min-h-dvh">
         <SplashScreen />
         {children}

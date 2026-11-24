@@ -2,7 +2,7 @@
 
 # API routes
 
-139 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+140 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
 
 ## `POST /api/activity`
 
@@ -1554,6 +1554,30 @@ A field phone reporting on itself (lib/phone-report.ts). The database
 checks and cleans every value; see record_beacon() in migration 026.
 
 - Database functions: `record_beacon`
+
+## `POST /api/client-error`
+
+- File: `src/app/api/client-error/route.ts`
+- Who: public / own check
+
+A screen crashed on someone's phone (lib/app-recover.ts reportAppError):
+written to the server log with its code, so the office can find what
+happened from the code the person reads out. Works before sign-in (a
+crash can come first); only the error, the page and the app version are
+kept, nothing about the person. At most 30 an hour from one address.
+
+```ts
+const schema = z.object({
+  kind: z.enum(['offline', 'new_version', 'server', 'unknown']),
+  code: z.string().max(20),
+  message: z.string().max(300).optional().default(''),
+  digest: z.string().max(40).nullable().optional(),
+  where: z.string().max(40),
+  path: z.string().max(200),
+  build: z.string().max(60).nullable().optional(),
+  online: z.boolean().optional(),
+})
+```
 
 ## `GET /api/cron/absence-sweep`
 
