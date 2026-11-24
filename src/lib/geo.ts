@@ -259,11 +259,37 @@ function browserReadings(o: Required<FixOptions>): Promise<Fix[]> {
   })
 }
 
+/** Resolves null once `ms` pass, so a slow answer cannot hold the caller. */
+function within<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve(null), ms)
+    p.then(
+      (v) => {
+        clearTimeout(t)
+        resolve(v)
+      },
+      () => {
+        clearTimeout(t)
+        resolve(null)
+      },
+    )
+  })
+}
+
+/**
+ * How long the app waits for the phone's own first reading before it also
+ * asks the browser side (which falls back to the quick network location).
+ * Indoors the app's GPS-only request can take up to 25 s or never answer.
+ */
+export const NATIVE_FIRST_WAIT_MS = 6000
+
 async function nativeReadings(o: Required<FixOptions>): Promise<Fix[] | null> {
   const started = Date.now()
   const readings: Fix[] = []
   while (readings.length < 6) {
-    const n = await getNativeFix()
+    // The first reading may take a while; later ones only fill the settle time.
+    const wait = readings.length ? Math.max(1500, o.settleMs - (Date.now() - started)) : NATIVE_FIRST_WAIT_MS
+    const n = await within(getNativeFix(), wait)
     if (!n) break
     readings.push({
       lat: n.lat,
@@ -297,6 +323,8 @@ export async function bestFix(options: FixOptions = {}): Promise<SampledFix> {
   // Inside the native shell, take readings from the OS so we also get the
   // mock-location flag the browser cannot see. Falls through to the browser
   // in a plain PWA, or if the native call returns nothing.
+  // If the app's own reading is slow (indoors, GPS only), the browser side
+  // with its network-location fallback is asked instead.
   const readings = (await nativeReadings(o)) ?? (await browserReadings(o))
   const fix = combineFixes(readings)
   if (!fix) {

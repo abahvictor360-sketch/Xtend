@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button'
 import { assessFrame } from '@/lib/photo-quality'
 import { followPosition, type SampledFix } from '@/lib/geo'
 
+/** After this long waiting for the location, say how to help it. */
+export const HELD_LONG_MS = 10_000
+
 type Facing = 'user' | 'environment'
 
 /**
@@ -49,6 +52,14 @@ export function CameraCapture({
   const [busy, setBusy] = useState(false)
   // A photo that failed the instant quality check: the camera stays open.
   const [hint, setHint] = useState<string | null>(null)
+  // How long the shutter has been held for the location, to say what to do.
+  const [heldLong, setHeldLong] = useState(false)
+  useEffect(() => {
+    setHeldLong(false)
+    if (!open || !shutterHeld) return
+    const t = setTimeout(() => setHeldLong(true), HELD_LONG_MS)
+    return () => clearTimeout(t)
+  }, [open, shutterHeld])
 
   const stop = useCallback(() => {
     stream.current?.getTracks().forEach((track) => track.stop())
@@ -258,10 +269,17 @@ export function CameraCapture({
         </button>
       </div>
 
-      <p className="safe-bottom bg-black pb-4 text-center text-[11px] text-white/60">
-        Taken live in the app. Photos from your gallery, or of a screen or a printed photo, are
-        rejected.
-      </p>
+      {shutterHeld && ready && !error ? (
+        <p role="status" className="safe-bottom bg-black px-4 pb-4 text-center text-xs text-white/90">
+          {heldLong
+            ? 'Still finding your location. Move near the door or a window, or step outside for a moment. The button turns on by itself.'
+            : 'Finding your location. The button turns on as soon as it is found.'}
+        </p>
+      ) : (
+        <p className="safe-bottom bg-black pb-4 text-center text-[11px] text-white/60">
+          Take the photo live here. Photos from your gallery, a screen or a printed photo are not accepted.
+        </p>
+      )}
     </div>
   )
 }
