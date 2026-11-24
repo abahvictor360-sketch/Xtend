@@ -391,7 +391,11 @@ export default async function AdminGuidePage() {
             check-outs have a photo from November 2026). It points out very short
             visits, check-ins away from the store and visits too far apart to be real. <Ui>By store</Ui>,{' '}
             <Ui>By person</Ui> and <Ui>Store coverage</Ui> (stores nobody visited in 7, 14 or 30 days)
-            add it up. A visit nobody checked out of by the end of the day shows as abandoned; it is
+            add it up. The app guides marketers through the day: straight after clocking in it asks them to check
+            in at a store, <Ui>Your next step</Ui> on their Home says what to do next, and while they are checked
+            in it reminds them every 25 minutes to check out before they leave (a notification on the phone, sent
+            by the five-minute alerts job, at most 16 per visit). When location or a phone setting stops them, a
+            pop-up gives them the steps to fix it. A visit nobody checked out of by the end of the day shows as abandoned; it is
             closed overnight, or as soon as that person checks in at a store again. A marketer who clocks in
             inside one of their own stores is checked in there at the same time; that visit has no
             photo of its own (the clock-in&apos;s selfie is on Attendance).

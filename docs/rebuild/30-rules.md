@@ -1334,6 +1334,18 @@ label and the store's own point.
   unknown or inactive store refuses the whole call and changes nothing.
   Every call writes an `audit_log` row `staff.allocate_outlets` directly
   (supervisors may call it).
+- **0099, store check-out reminders:** `visit_reminder_minutes()` = 25,
+  `visit_reminder_max()` = 16. Table `visit_checkout_reminders` (`visit_id`
+  pk → store_visits cascade, `user_id` → profiles cascade, `sent`,
+  `last_sent_at`; RLS on, no policies, no grants). `claim_visit_checkout_reminders(now)`
+  (service role only) claims each due reminder once: an open visit
+  (`status = 'open'`, no `departed_at`) dated today, of an active person
+  with no clock-out today, checked in at least 25 min ago, and either never
+  reminded or last reminded 25+ min ago with fewer than 16 sent; the upsert
+  only fires when still due, so overlapping runs send nothing twice.
+  Returns `user_id, visit_id, store (label or outlet name), since (HH24:MI
+  Lagos), reminder (the count)`. The reset clears the table with store
+  visits (`reset_category_tables` redefined).
 - **0098, delete for good:** `delete_for_good_preview(kind, id)` and
   `delete_for_good(kind, id, confirm)` (`kind` 'outlet' or 'staff'),
   admins only (`delete_for_good_target`: "Only an admin can delete for

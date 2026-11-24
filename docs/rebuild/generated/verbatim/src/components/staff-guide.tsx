@@ -112,7 +112,14 @@ export function StaffGuide() {
       </GuideSection>
 
       <GuideSection topic={T.clockIn} intro="Do this when you arrive at your store, once a day.">
-          <p>Home shows <Ui>Your next step</Ui> above the clock controls. Use <Ui>My day</Ui> below them to see your progress and recent days.</p>
+          <p>
+            Home shows <Ui>Your next step</Ui> above the clock controls: it always tells you what to do now, with a
+            button to do it. Use <Ui>My day</Ui> below them to see your progress and recent days.
+          </p>
+          <p>
+            If something stops you (location off, a setting Xtend needs, a weak signal indoors), a box pops up with
+            numbered steps to fix it and a <Ui>Try again</Ui> button. Do the steps in order.
+          </p>
         <Steps
           items={[
             <>Open Xtend while you are inside your store. If Home cannot load, check your connection and tap <Ui>Try again</Ui>.</>,
@@ -150,8 +157,14 @@ export function StaffGuide() {
               store.
             </>,
             <>
-              At each store, tap <Ui>Check in here</Ui>. If Xtend does not find the store, tap{' '}
+              As soon as you clock in, Xtend asks you to check in at a store. At the store, tap{' '}
+              <Ui>I am at a store: check in here</Ui>; still on your way, tap <Ui>Later</Ui> and use{' '}
+              <Ui>Your next step</Ui> when you arrive. If Xtend does not find the store, tap{' '}
               <Ui>Pick the store myself</Ui>: it lists only the stores on your list.
+            </>,
+            <>
+              While you are checked in, Xtend reminds you every 25 minutes: <Ui>Still at (the store)? Check out
+              of the store before you leave.</Ui> If you are still working there, carry on.
             </>,
             <>
               When you leave, tap <Ui>Check out</Ui> and take a selfie, as when you checked in,

@@ -614,6 +614,12 @@ INSERT INTO public.system_settings VALUES (true, true, NULL, NULL, NULL, NULL, N
 
 
 --
+-- Data for Name: visit_checkout_reminders; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
 -- Data for Name: work_patterns; Type: TABLE DATA; Schema: public; Owner: -
 --
 

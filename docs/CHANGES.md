@@ -35,7 +35,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0095_offline_movement_always_kept.sql`;
    - `supabase/migrations/0096_every_synced_position_kept.sql`;
    - `supabase/migrations/0097_allocate_from_store.sql`;
-   - `supabase/migrations/0098_delete_for_good.sql`.
+   - `supabase/migrations/0098_delete_for_good.sql`;
+   - `supabase/migrations/0099_store_checkout_reminders.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18.)
 4. **Clock-out reminder fix (0069)**, if never pasted:
    ```sql
@@ -62,6 +63,29 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-24
+
+### The app now guides staff through the day
+- **What was done:**
+  - **Your next step** on Home always says what to do now, with a button:
+    clock in; then (marketers) check in at your first store; while in a
+    store, "Check out of (store) before you leave"; then the next store,
+    the report and clocking out.
+  - **Marketers are asked to check in straight away**: right after clocking
+    in, a box pops up: "You are clocked in. Now check in at a store", with
+    **Check in here**, **Pick the store** or **Later, I am on my way**.
+  - **Check-out reminders**: while a marketer is checked in at a store, the
+    phone gets "Still at (store)? Check out of (store) before you leave" every
+    25 minutes, until they check out (at most 16 times per visit).
+  - **When something stops them**, such as location off, location not
+    allowed for Xtend, a weak signal indoors, or the battery/location
+    settings not finished, a box pops up with numbered steps for their phone
+    (Android or iPhone) and a **Try again** button, instead of a one-line
+    error.
+- **The impact:** staff always know the next thing to do, and marketers
+  forget fewer check-outs.
+- **What you need to do:** run `supabase/migrations/0099_store_checkout_reminders.sql`
+  in the Supabase SQL editor, then redeploy. The reminders are sent by the
+  five-minute alerts job, so make sure it runs on the server.
 
 ### Clock-in no longer stuck on "Getting your location…" inside a shop
 - **What was done:** the photo in your screenshot was not being rejected:

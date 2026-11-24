@@ -53,7 +53,7 @@ export const RESET_CATEGORIES: ResetCategory[] = [
     key: 'visits_places',
     label: 'Store visits',
     line: 'Marketers’ store visits and the places still waiting to be named. The places Xtend learned are always kept.',
-    tables: ['store_visits', 'place_naming_due'],
+    tables: ['store_visits', 'place_naming_due', 'visit_checkout_reminders'],
     files: 'visit selfies',
   },
   {

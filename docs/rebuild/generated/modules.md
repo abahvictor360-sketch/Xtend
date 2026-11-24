@@ -581,6 +581,16 @@ scripts/check-field-corrections.ts can test it.
 
 Exports: `CORRECTION_ACTIONS`, `CorrectionAction`, `CORRECTION_LABELS`, `correctionNotice`, `redoBanner`, `CorrectionDay`, `CorrectionAsk`, `CorrectionPlan`, `planCorrection`, `parseCorrectionCommand`
 
+## `src/lib/field-guide.ts`
+
+The staff app as a guide: when something stops a clock-in, a store
+check-in or a check-out, a pop-up says what is wrong in plain words and
+what to do, step by step, with a button that opens the right setting
+where the phone allows it. Pure, so scripts/check-field-guide.ts can test
+it. Staff are told what to do, never how they are monitored.
+
+Exports: `GuideProblem`, `GuideAction`, `Guide`, `GuidePlatform`, `problemFromGeo`, `guideFor`
+
 ## `src/lib/fields.ts`
 
 What every form field accepts, in one place, so a name is a name, a phone
@@ -888,6 +898,16 @@ Field staff are never told about this, nor is anyone about field staff's
 devices. Never holds up or fails the sign-in.
 
 Exports: `alertNewOfficeDevice`
+
+## `src/lib/next-step.ts`
+
+"Your next step" on the staff Home screen: what to do now, in order,
+so the app guides the day. Marketers go store to store: after clocking
+in, check in at a store; while in one, check out before leaving; then the
+next store, the report and the clock-out. Pure, so
+scripts/check-field-guide.ts can test every case.
+
+Exports: `NextStepState`, `NextStepAction`, `NextStep`, `nextStep`
 
 ## `src/lib/notification-log.ts`
 
@@ -1446,6 +1466,24 @@ Exports: `HOUR_MS`, `PHOTO_CHECKS_PER_HOUR`, `GEOCODE_LOOKUPS_PER_HOUR`, `SUPPOR
 Africa/Lagos is the timezone of record for every human-facing timestamp.
 
 Exports: `cn`, `TZ`, `formatLagos`, `lagosDateString`, `metres`, `addDays`, `dayOfMonth`, `weekdayShort`, `monthLabel`, `longDate`
+
+## `src/lib/visit-reminder.ts`
+
+"Check out of the store before you leave" (migration 0099): what the
+reminder says while someone is checked in at a store. The database
+decides when (every visit_reminder_minutes(), 25); this is only the
+words. Pure, so scripts/check-field-guide.ts can test it.
+
+Exports: `VISIT_REMINDER_MINUTES`, `visitReminderMessage`
+
+## `src/lib/visit-reminders.ts`
+
+The five-minute job's part (migration 0099): everyone still checked in at
+a store is reminded every 25 minutes to check out before they leave. The
+database hands each reminder over once, so overlapping runs never send
+one twice. Never throws.
+
+Exports: `flushVisitCheckoutReminders`
 
 ## `src/lib/visit-review.ts`
 
@@ -2049,6 +2087,14 @@ messages bell on the right, as in the reference.
 
 Exports: `GreetingHeader`
 
+## `src/components/field/guide-sheet.tsx`
+
+The pop-up that tells staff why something did not work and what to do
+next (lib/field-guide.ts). Opens from the clock-in, store check-in and
+check-out when a phone setting or the location is in the way.
+
+Exports: `GuideSheet`
+
 ## `src/components/field/heartbeat.ts`
 
 Absent entirely on older Android WebViews, so it is read defensively.
@@ -2218,7 +2264,9 @@ Exports: `TaskRow`
 
 ## `src/components/field/today-focus.tsx`
 
-A presentation-only guide to the next daily task; clock rules remain in ClockPanel.
+"Your next step": the guide to what to do now (lib/next-step.ts). Clock
+rules remain in ClockPanel; store check-ins and check-outs are started in
+StoreVisits through `onAction`.
 
 Exports: `TodayFocus`
 

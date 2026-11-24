@@ -42,7 +42,7 @@ const throws = (f: () => unknown) => {
 // 0066's two, 0068's two, 0070's one and 0073's three), as the owner classified them.
 const FIXTURE: Record<string, 'wipe' | 'admins-kept' | 'keep'> = {
   app_installs: 'admins-kept', app_releases: 'keep', assistant_conversations: 'wipe', attendance: 'wipe', field_corrections: 'wipe',
-  audit_log: 'wipe', clock_out_reminders: 'wipe', count_request_targets: 'wipe', count_requests: 'wipe',
+  audit_log: 'wipe', clock_out_reminders: 'wipe', visit_checkout_reminders: 'wipe', count_request_targets: 'wipe', count_requests: 'wipe',
   count_sheet_templates: 'keep', device_beacons: 'wipe', excuse_checks: 'wipe', integrity_flags: 'wipe',
   job_runs: 'keep', known_places: 'keep', leave_requests: 'wipe', location_alerts: 'wipe', location_pings: 'wipe',
   notification_deliveries: 'wipe', app_update_notices: 'wipe', notification_templates: 'keep', notifications: 'wipe', outlets: 'wipe',
@@ -95,8 +95,8 @@ const sql = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '0066_t
 // The table list as last redefined (0073 added the three messages tables;
 // 0081 took known_places out: learned places survive every reset; 0082
 // added app_update_notices to notifications; 0090 field_corrections to
-// clock-ins).
-const tablesSql = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '0090_field_corrections.sql'), 'utf8')
+// clock-ins; 0099 visit_checkout_reminders to store visits).
+const tablesSql = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '0099_store_checkout_reminders.sql'), 'utf8')
   .replace(/\r\n/g, '\n')
   .split('create or replace function public.reset_category_tables()')[1]
 const fromSql = new Map<string, string>()

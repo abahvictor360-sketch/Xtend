@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
-import { CalendarDays, CheckCircle2, ChevronRight, Clock3, FileText, LogIn, LogOut, MapPin, Palmtree, Store } from 'lucide-react'
+import { CalendarDays, Camera, CheckCircle2, ChevronRight, Clock3, FileText, LogIn, LogOut, MapPin, Palmtree, Store } from 'lucide-react'
 import { TodayFocus } from '@/components/field/today-focus'
 import { GreetingHeader } from '@/components/field/greeting-header'
 import { LocationGate } from '@/components/field/location-gate'
@@ -28,6 +28,7 @@ import { calendarMark, type CalendarDay } from '@/lib/schedule'
 import { CalendarLegend, MARK_CLASS, MARK_WORD, WORD_CLASS } from '@/components/field/calendar-marks'
 import { redoBanner } from '@/lib/field-corrections'
 import { Alert } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 
 type Tab = 'stores' | 'day' | 'outlet'
 
@@ -101,6 +102,31 @@ export function FieldHome({
 
   // Still checked in at a store: that comes first, then the clock-out.
   const openVisit = visits.find((v) => v.status === 'open') ?? null
+  const visitsDone = visits.filter((v) => v.status !== 'open' && v.visit_date === day.date).length
+
+  // The guide starts a store check-in or check-out in the Stores tab.
+  const [visitAsk, setVisitAsk] = useState<{ kind: 'here' | 'pick' | 'out'; n: number } | null>(null)
+  const startVisit = (kind: 'here' | 'pick' | 'out') => {
+    setTab('stores')
+    setVisitAsk((a) => ({ kind, n: (a?.n ?? 0) + 1 }))
+    window.setTimeout(() => document.getElementById('stores')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50)
+  }
+
+  // A marketer who has just clocked in (or opens the app clocked in with no
+  // store yet today) is asked straight away to check in at a store, once a day.
+  const [checkInAsk, setCheckInAsk] = useState(false)
+  const noVisitYet = visitsStore && onShift && !openVisit && visitsDone === 0
+  useEffect(() => {
+    if (!noVisitYet) return
+    const key = `xt-checkin-ask-${day.date}`
+    try {
+      if (window.localStorage.getItem(key)) return
+      window.localStorage.setItem(key, '1')
+    } catch {
+      // Private mode: ask anyway.
+    }
+    setCheckInAsk(true)
+  }, [noVisitYet, day.date])
 
   // What the office asked them to do again today (0090).
   const redo = (day.redo ?? []).filter((r) => redoBanner(r.action))
@@ -144,7 +170,39 @@ export function FieldHome({
 
       <ShiftTracker onShift={onShift} clockedOut={Boolean(day.closing)} />
 
-      <TodayFocus clockedIn={Boolean(day.opening)} clockedOut={Boolean(day.closing)} reportRequired={day.can_file_report} reportFiled={day.report_filed} offDay={todayKind !== 'working'} openVisit={Boolean(openVisit)} onVisit={() => { setTab('stores'); window.setTimeout(() => document.getElementById('stores')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50) }} />
+      <TodayFocus
+        state={{
+          clockedIn: Boolean(day.opening),
+          clockedOut: Boolean(day.closing),
+          offDay: todayKind !== 'working',
+          reportRequired: reportAllowed,
+          reportFiled: day.report_filed,
+          visitsStores: visitsStore,
+          openVisit: openVisit
+            ? { store: openVisit.store_label ?? openVisit.outlet_name ?? 'the store', since: formatLagos(openVisit.arrived_at, false) }
+            : null,
+          visitsDone,
+        }}
+        onAction={(action) => {
+          if (action === 'check_in') startVisit('here')
+          else if (action === 'check_out') startVisit('out')
+          else document.getElementById('clock')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }}
+      />
+
+      {checkInAsk && (
+        <CheckInAsk
+          onHere={() => {
+            setCheckInAsk(false)
+            startVisit('here')
+          }}
+          onPick={() => {
+            setCheckInAsk(false)
+            startVisit('pick')
+          }}
+          onLater={() => setCheckInAsk(false)}
+        />
+      )}
 
       <ShiftPill
         state={day.closing ? 'done' : onShift ? 'on' : 'before'}
@@ -208,6 +266,7 @@ export function FieldHome({
             visits={visits}
             currentFix={gate.fix ? { lat: gate.fix.lat, lng: gate.fix.lng } : null}
             onShift={onShift}
+            ask={visitAsk}
           />
         </LocationGate>
         </div>
@@ -582,6 +641,46 @@ function Detail({
       >
         {value}
       </dd>
+    </div>
+  )
+}
+
+/** Straight after a marketer clocks in: check in at the first store. */
+function CheckInAsk({ onHere, onPick, onLater }: { onHere: () => void; onPick: () => void; onLater: () => void }) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-4 sm:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="check-in-ask-title"
+    >
+      <div className="w-full max-w-md space-y-4 rounded-3xl bg-background p-5 shadow-xl">
+        <div className="flex items-start gap-3">
+          <span className="icon-tile">
+            <Store className="h-5 w-5" />
+          </span>
+          <div>
+            <h2 id="check-in-ask-title" className="font-bold">
+              You are clocked in. Now check in at a store
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Check in when you get to each store, and check out of it before you leave. Xtend will remind you to
+              check out.
+            </p>
+          </div>
+        </div>
+        <div className="grid gap-2">
+          <Button size="lg" onClick={onHere}>
+            <Camera className="h-4 w-4" /> I am at a store: check in here
+          </Button>
+          <Button size="lg" variant="outline" onClick={onPick}>
+            Pick the store
+          </Button>
+          <Button variant="ghost" onClick={onLater}>
+            Later, I am on my way
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }

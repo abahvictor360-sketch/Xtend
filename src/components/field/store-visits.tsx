@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Camera, CheckCircle2, Clock3, LogOut, MapPin, Store } from 'lucide-react'
 import { Alert } from '@/components/ui/alert'
@@ -12,6 +12,8 @@ import { SectionHeader } from '@/components/field/screen'
 import { TaskRow } from '@/components/field/task-row'
 import { deviceInfo } from '@/lib/device'
 import { GeoBlocked, haversineMetres, positionCheck, requireFix, type Fix, type SampledFix } from '@/lib/geo'
+import { problemFromGeo, type GuideProblem } from '@/lib/field-guide'
+import { GuideSheet } from '@/components/field/guide-sheet'
 import { processSelfie } from '@/lib/image'
 import { supabase } from '@/lib/supabase/client'
 import { checkPhoto } from '@/lib/offline/sync'
@@ -150,12 +152,18 @@ export function StoreVisits({
   visits,
   currentFix,
   onShift = true,
+  ask = null,
 }: {
   outlets: VisitOutlet[]
   visits: VisitRow[]
   currentFix: { lat: number; lng: number } | null
   /** Clocked in and not yet clocked out today: checking in at a store needs it. */
   onShift?: boolean
+  /**
+   * Started from Home's "next step" (after clocking in, or the guide card):
+   * check in here, pick the store, or check out. A new `n` starts it again.
+   */
+  ask?: { kind: 'here' | 'pick' | 'out'; n: number } | null
 }) {
   const router = useRouter()
   // An open visit the server told us about when a check-in was refused,
@@ -176,6 +184,8 @@ export function StoreVisits({
   const [leaving, setLeaving] = useState<{ fix: Fix; place: { name: string | null; address: string | null } } | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // The step-by-step pop-up when the location is in the way (field-guide).
+  const [guide, setGuide] = useState<GuideProblem | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
   // Nearest store first: the one they are standing in should be the easy tap.
@@ -219,7 +229,10 @@ export function StoreVisits({
       setPending({ outlet, fix, place })
       setPicking(false)
     } catch (err) {
-      if (err instanceof GeoBlocked) setError(err.message)
+      if (err instanceof GeoBlocked) {
+        setError(err.message)
+        setGuide(problemFromGeo(err.reason))
+      }
       else setError(err instanceof Error ? err.message : 'Could not read your location.')
     } finally {
       setBusy(null)
@@ -305,7 +318,10 @@ export function StoreVisits({
         )
         router.refresh()
       } catch (err) {
-        if (err instanceof GeoBlocked) setError(err.message)
+        if (err instanceof GeoBlocked) {
+        setError(err.message)
+        setGuide(problemFromGeo(err.reason))
+      }
         else setError(failureMessage(err, 'check-in'))
       } finally {
         setBusy(null)
@@ -326,7 +342,10 @@ export function StoreVisits({
       const place = await namePlace(fix.lat, fix.lng)
       setLeaving({ fix, place })
     } catch (err) {
-      if (err instanceof GeoBlocked) setError(err.message)
+      if (err instanceof GeoBlocked) {
+        setError(err.message)
+        setGuide(problemFromGeo(err.reason))
+      }
       else setError(err instanceof Error ? err.message : 'Could not read your location.')
     } finally {
       setBusy(null)
@@ -393,12 +412,28 @@ export function StoreVisits({
       setStuck(null)
       router.refresh()
     } catch (err) {
-      if (err instanceof GeoBlocked) setError(err.message)
+      if (err instanceof GeoBlocked) {
+        setError(err.message)
+        setGuide(problemFromGeo(err.reason))
+      }
       else setError(failureMessage(err, 'check-out'))
     } finally {
       setBusy(null)
     }
   }, [open, leaving, router])
+
+  // Home asked to start a check-in or check-out (the next-step guide).
+  const asked = useRef(0)
+  useEffect(() => {
+    if (!ask || ask.n === asked.current || busy) return
+    asked.current = ask.n
+    if (ask.kind === 'out') {
+      if (open) void beginCheckOut()
+    } else if (!open && onShift) {
+      if (ask.kind === 'pick' && outlets.length > 0) setPicking(true)
+      else void beginCheckIn(null)
+    }
+  }, [ask, busy, open, onShift, outlets.length, beginCheckIn, beginCheckOut])
 
   return (
     <section className="space-y-3">
@@ -413,6 +448,12 @@ export function StoreVisits({
 
       {error && <Alert variant="destructive">{error}</Alert>}
       {notice && <Alert variant="success">{notice}</Alert>}
+      <GuideSheet
+        problem={guide}
+        task={open ? 'check out of the store' : 'check in at the store'}
+        onClose={() => setGuide(null)}
+        onRetry={() => void (open ? beginCheckOut() : beginCheckIn(null))}
+      />
 
       {open ? (
         <Card className="border border-brand/30">

@@ -1041,6 +1041,15 @@ Policies:
 Policies:
 - `user_activity_admin_read` SELECT to public: using `is_admin()`
 
+### `visit_checkout_reminders`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| visit_id | uuid(uuid) |  |  |
+| user_id | uuid(uuid) |  |  |
+| sent | integer(int4) |  | 0 |
+| last_sent_at | timestamp with time zone(timestamptz) |  | now() |
+
 ### `work_patterns`
 
 | Column | Type | Null | Default |
@@ -1436,6 +1445,7 @@ Policies:
 - `claim_scheduled_notification(p_id uuid)` → SETOF scheduled_notifications · definer · 0053_support_notifications.sql
 - `claim_selfie_sweep(p_min_minutes integer)` → boolean · definer · 0012_selfie_retention_24h.sql
 - `claim_shift_soon_reminders(p_now timestamp with time zone)` → TABLE(user_id uuid, reminder_date date, stage text, shift_time text, store text) · definer · 0069_shift_soon_reminders.sql
+- `claim_visit_checkout_reminders(p_now timestamp with time zone)` → TABLE(user_id uuid, visit_id uuid, store text, since text, reminder integer) · definer · 0099_store_checkout_reminders.sql
 - `clear_temp_password()` → trigger · definer · 0041_staff_login_sheet.sql
 - `clock_timing(p_user uuid, p_captured timestamp with time zone, p_device jsonb, p_now timestamp with time zone)` → jsonb · definer · 0029_offline_positions.sql
 - `close_abandoned_visits()` → integer · definer · 0010_store_visits.sql
@@ -1638,7 +1648,7 @@ Policies:
 - `request_phone_check(p_user uuid)` → uuid · definer · 0026_phone_evidence.sql
 - `request_store_count(p_user_ids uuid[], p_due_date date, p_note text)` → uuid · definer · 0046_role_store_counts.sql
 - `reset_category_keys()` → text[] · 0066_test_mode_reset.sql
-- `reset_category_tables()` → TABLE(category text, table_name text, step integer) · 0090_field_corrections.sql
+- `reset_category_tables()` → TABLE(category text, table_name text, step integer) · 0099_store_checkout_reminders.sql
 - `reset_files_done(p_bucket text, p_names text[])` → integer · definer · 0066_test_mode_reset.sql
 - `reset_files_next(p_limit integer)` → TABLE(bucket text, name text) · definer · 0066_test_mode_reset.sql
 - `reset_files_pending()` → integer · definer · 0066_test_mode_reset.sql
@@ -1706,6 +1716,8 @@ Policies:
 - `unlock_sign_in(p_user uuid)` → boolean · definer · 0077_sign_in_lockout.sql
 - `unread_messages()` → integer · definer · 0073_messages.sql
 - `visit_place_due()` → trigger · definer · 0045_mandatory_place_naming.sql
+- `visit_reminder_max()` → integer · 0099_store_checkout_reminders.sql
+- `visit_reminder_minutes()` → integer · 0099_store_checkout_reminders.sql
 - `write_audit(p_action text, p_target_table text, p_target_id uuid, p_meta jsonb, p_context jsonb)` → uuid · definer · 0072_hr_role.sql
 - `xm_acknowledge_expiry(p_alert uuid, p_note text)` → void · definer · 0043_x_metrics.sql
 - `xm_can_submit()` → boolean · definer · 0046_role_store_counts.sql

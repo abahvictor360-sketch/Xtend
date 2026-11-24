@@ -835,5 +835,26 @@ select assert(not has_table_privilege('authenticated', 'public.field_corrections
   'rls: corrections are written only through the office functions');
 delete from public.field_corrections;
 
+-- 0099: store check-out reminders are the server's alone. Replay the
+-- default grant and the migration's revoke, as Supabase does.
+grant select, insert, update, delete on public.visit_checkout_reminders to authenticated;
+revoke all on public.visit_checkout_reminders from anon, authenticated;
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'boss', false);
+do $$
+begin
+  perform count(*) from public.visit_checkout_reminders;
+  perform assert(false, 'rls: the reminder log is closed');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: nobody reads the store check-out reminder log directly');
+end $$;
+do $$
+begin
+  perform * from public.claim_visit_checkout_reminders();
+  perform assert(false, 'rls: only the server claims reminders');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: only the server hands out store check-out reminders');
+end $$;
+
 reset role;
 select 'ALL RLS CHECKS PASSED';

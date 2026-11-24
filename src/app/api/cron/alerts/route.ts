@@ -5,6 +5,7 @@ import { flushFlagAlerts } from '@/lib/flag-alerts'
 import { runMetricsSweep } from '@/lib/metrics/server'
 import { flushScheduledNotifications } from '@/lib/notification-send'
 import { flushAppUpdateNotices } from '@/lib/app-update-notices'
+import { flushVisitCheckoutReminders } from '@/lib/visit-reminders'
 
 export const maxDuration = 60
 
@@ -17,7 +18,8 @@ export const maxDuration = 60
  * (migration 0061), and gives a heads-up five minutes before each shift
  * starts and ends (migration 0069; it only sends inside those five minutes,
  * so it depends on this job running on time), and tells anyone on an older
- * phone app that a new one is out (0082). It runs every five minutes from
+ * phone app that a new one is out (0082), and reminds anyone still checked
+ * in at a store to check out before they leave, every 25 minutes (0099). It runs every five minutes from
  * .github/workflows/alerts-cron.yml, or from a server's crontab:
  *
  *   0-59/5 * * * *  curl -s -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/alerts
@@ -36,7 +38,9 @@ export async function GET(request: Request) {
   const scheduled = await flushScheduledNotifications()
   // "Time to clock out" at the shift end, and once more an hour later.
   const clock_out_reminders = await flushClockOutReminders()
+  // "Check out of the store before you leave", every 25 minutes in a store (0099).
+  const store_check_out_reminders = await flushVisitCheckoutReminders()
   // "A new Xtend app is ready" for anyone on an older phone app (0082).
   const app_updates = await flushAppUpdateNotices()
-  return Response.json({ sent, metrics, scheduled, shift_heads_ups, clock_out_reminders, app_updates, ran_at: new Date().toISOString() })
+  return Response.json({ sent, metrics, scheduled, shift_heads_ups, clock_out_reminders, store_check_out_reminders, app_updates, ran_at: new Date().toISOString() })
 }
