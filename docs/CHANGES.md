@@ -63,6 +63,25 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-24
 
+### Clock-in no longer stuck on "Getting your location…" inside a shop
+- **What was done:** the photo in your screenshot was not being rejected:
+  the camera was still waiting for a location, so the button stayed grey,
+  and the line under it ("…are rejected") made it look like a refusal.
+  Inside the phone app, Xtend asked only the GPS, which often cannot lock on
+  inside a shop or mall, and waited up to 25 seconds each time. Now it waits
+  at most 6 seconds for the GPS, then uses the phone's quick network
+  location (Wi-Fi and mobile network) instead. While it waits, the camera
+  says "Finding your location. The button turns on as soon as it is found",
+  and after 10 seconds tells them to move near the door or a window. The
+  line under the camera now reads "Take the photo live here. Photos from
+  your gallery, a screen or a printed photo are not accepted." The Android
+  app also asks the GPS and the network location at the same time.
+- **The impact:** clock-in inside stores is much quicker and no longer looks
+  like the photo is refused. The location must still be accurate to 100 m.
+- **What you need to do:** redeploy (the website part reaches the phones by
+  itself). Install the new Android app build from this push for the
+  GPS-and-network change inside the app.
+
 ### Checked: your secret keys cannot be seen in a browser
 - **What was done:** checked that nobody can find your Supabase secret key
   (`sb_secret_…`) or any other secret key (Google, Anthropic, push, cron,

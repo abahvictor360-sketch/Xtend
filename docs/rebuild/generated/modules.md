@@ -631,7 +631,7 @@ Exports: `FAST_INTERVAL_MS`, `FOLLOW_MINUTES`, `FOLLOW_HEARTBEAT_MS`, `FOLLOW_GR
 
 A fix worse than this is not evidence of anything.
 
-Exports: `ACCURACY_CEILING_M`, `HEARTBEAT_INTERVAL_MS`, `HEARTBEAT_GEOFENCE_M`, `GeoBlockReason`, `Fix`, `GeoBlocked`, `readPosition`, `LocationProbe`, `probeLocation`, `FixOptions`, `SampledFix`, `combineFixes`, `fixesAgree`, `bestFix`, `requireFix`, `followPosition`, `positionCheck`, `haversineMetres`
+Exports: `ACCURACY_CEILING_M`, `HEARTBEAT_INTERVAL_MS`, `HEARTBEAT_GEOFENCE_M`, `GeoBlockReason`, `Fix`, `GeoBlocked`, `readPosition`, `LocationProbe`, `probeLocation`, `FixOptions`, `SampledFix`, `combineFixes`, `fixesAgree`, `NATIVE_FIRST_WAIT_MS`, `bestFix`, `requireFix`, `followPosition`, `positionCheck`, `haversineMetres`
 
 ## `src/lib/geocode.ts`
 
@@ -1986,11 +1986,9 @@ Exports: `MARK_CLASS`, `MARK_WORD`, `WORD_CLASS`, `byDay`, `CalendarLegend`, `Mo
 
 ## `src/components/field/camera-capture.tsx`
 
-In-app camera. The selfie is taken here, from a live stream, and never
-chosen from the gallery: there is deliberately no file input anywhere in
-this flow, so a saved photo cannot be submitted as a clock-in.
+After this long waiting for the location, say how to help it.
 
-Exports: `CameraCapture`
+Exports: `HELD_LONG_MS`, `CameraCapture`
 
 ## `src/components/field/clock-out-prompt.tsx`
 

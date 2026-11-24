@@ -1264,8 +1264,10 @@ Native classes (`android/app/src/main/java/ng/xpelbeauty/xtend/`):
   `confirmedFetch('/api/admin/staff-logins?check=1')` (204 after the admin and recent-password checks, nothing
   built) then `downloadUrl('/api/admin/staff-logins')`. `scripts/check-downloads.ts` guards this.
 - **`LocationIntegrity`** plugin, method `getFix`. Requests `ACCESS_FINE_LOCATION` (alias `location`) if needed.
-  Provider GPS, else network, else reject "Location is turned off". Reuses last known if < `FRESH_MS = 30_000`;
-  otherwise `requestSingleUpdate` with a `TIMEOUT_MS = 25_000` reject "No location fix in time".
+  Listens to GPS **and** network together (whichever are on; neither → reject "Location is turned off"). Reuses the
+  most accurate last-known reading of either if < `FRESH_MS = 30_000`; otherwise `requestSingleUpdate` on each,
+  first answer wins and the others are removed; `TIMEOUT_MS = 25_000` reject "No location fix in time". (Indoors GPS
+  may never lock; the network location answers in a second or two.)
   Resolves `{ lat, lng, accuracy_m, altitude|null, speed|null, heading|null, is_mock, compromised, platform: 'android', captured_at (ISO UTC) }`.
   `is_mock` = `loc.isMock()` on API ≥ 31 else `isFromMockProvider()`. `compromised` = any of ten `su`
   paths exists (`/system/app/Superuser.apk`, `/sbin/su`, `/system/bin/su`, `/system/xbin/su`,

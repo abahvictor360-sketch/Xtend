@@ -22,6 +22,8 @@ import com.getcapacitor.annotation.PermissionCallback;
 import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -64,43 +66,63 @@ public class LocationIntegrity extends Plugin {
     @SuppressWarnings({ "MissingPermission", "deprecation" })
     private void requestSingleFix(PluginCall call) {
         LocationManager lm = (LocationManager) getContext().getSystemService(Context.LOCATION_SERVICE);
-        String provider;
-        if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) provider = LocationManager.GPS_PROVIDER;
-        else if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) provider = LocationManager.NETWORK_PROVIDER;
-        else {
+        // GPS and the network location together: indoors (a shop, a mall) GPS
+        // can take very long or never lock on, while the network location
+        // (Wi-Fi, cell) answers in a second or two. The first answer is
+        // used; the web side keeps asking and prefers the more accurate ones.
+        List<String> providers = new ArrayList<>();
+        if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER)) providers.add(LocationManager.GPS_PROVIDER);
+        if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) providers.add(LocationManager.NETWORK_PROVIDER);
+        if (providers.isEmpty()) {
             call.reject("Location is turned off");
             return;
         }
 
         try {
-            Location last = lm.getLastKnownLocation(provider);
-            if (last != null && System.currentTimeMillis() - last.getTime() < FRESH_MS) {
-                resolve(call, last);
+            Location freshest = null;
+            for (String provider : providers) {
+                Location last = lm.getLastKnownLocation(provider);
+                if (last != null && System.currentTimeMillis() - last.getTime() < FRESH_MS
+                    && (freshest == null || last.getAccuracy() < freshest.getAccuracy())) {
+                    freshest = last;
+                }
+            }
+            if (freshest != null) {
+                resolve(call, freshest);
                 return;
             }
 
             AtomicBoolean done = new AtomicBoolean(false);
             Handler main = new Handler(Looper.getMainLooper());
-            LocationListener listener = new LocationListener() {
-                @Override
-                public void onLocationChanged(@NonNull Location location) {
-                    lm.removeUpdates(this);
-                    if (done.compareAndSet(false, true)) resolve(call, location);
-                }
-
-                @Override
-                public void onStatusChanged(String p, int s, Bundle e) {}
-
-                @Override
-                public void onProviderEnabled(@NonNull String p) {}
-
-                @Override
-                public void onProviderDisabled(@NonNull String p) {}
+            List<LocationListener> listeners = new ArrayList<>();
+            Runnable stopAll = () -> {
+                for (LocationListener l : listeners) lm.removeUpdates(l);
             };
-            lm.requestSingleUpdate(provider, listener, Looper.getMainLooper());
+            for (String provider : providers) {
+                LocationListener listener = new LocationListener() {
+                    @Override
+                    public void onLocationChanged(@NonNull Location location) {
+                        if (done.compareAndSet(false, true)) {
+                            stopAll.run();
+                            resolve(call, location);
+                        }
+                    }
+
+                    @Override
+                    public void onStatusChanged(String p, int s, Bundle e) {}
+
+                    @Override
+                    public void onProviderEnabled(@NonNull String p) {}
+
+                    @Override
+                    public void onProviderDisabled(@NonNull String p) {}
+                };
+                listeners.add(listener);
+                lm.requestSingleUpdate(provider, listener, Looper.getMainLooper());
+            }
             main.postDelayed(
                 () -> {
-                    lm.removeUpdates(listener);
+                    stopAll.run();
                     if (done.compareAndSet(false, true)) call.reject("No location fix in time");
                 },
                 TIMEOUT_MS

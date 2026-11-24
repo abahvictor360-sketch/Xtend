@@ -722,7 +722,11 @@ selfie).
 - **Native shell**: up to **6** readings from the OS plugin
   (`getNativeFix`, with Android mock-location flag and root/jailbreak
   check); stop early when the best reading ≤ target and min samples met, or
-  after `settleMs`.
+  after `settleMs`. Each call is capped (`within`): the first at
+  `NATIVE_FIRST_WAIT_MS` (**6 s**), later ones at what is left of
+  `settleMs` (at least 1.5 s). No native reading in time → the browser
+  readings below (with their network-location fallback) are used instead,
+  so a phone indoors with no GPS lock is never held for the plugin's 25 s.
 - **Browser**: `watchPosition` (high accuracy, maximumAge 0). Readings with
   a timestamp older than 2 s before the start are ignored (cached). Stop as
   soon as best ≤ 20 m; otherwise stop `settleMs` (8 s) after the first
@@ -754,9 +758,13 @@ selfie).
   device."; other "The camera could not start. Close other apps using it and
   try again." with a **"Try again"** button. "Starting the camera…" while
   loading.
-- Shutter: 80px round button (aria "Take the photo"). Footer text: "Taken
-  live in the app. Photos from your gallery, or of a screen or a printed
-  photo, are rejected."
+- Shutter: 80px round button (aria "Take the photo"). Footer text: "Take
+  the photo live here. Photos from your gallery, a screen or a printed photo
+  are not accepted." While the shutter is held for the location
+  (`shutterHeld`, camera ready): instead, a status line "Finding your
+  location. The button turns on as soon as it is found." and after
+  `HELD_LONG_MS` (**10 s**) "Still finding your location. Move near the door
+  or a window, or step outside for a moment. The button turns on by itself."
 - **Client quality check** (`src/lib/photo-quality.ts`): frame downscaled to
   160 px wide, grayscale. In order:
   - mean brightness < 35: "The photo is too dark. Move to better light, or
@@ -2263,8 +2271,8 @@ What this means in practice:
   - Native tracker: "Finish setting up Xtend" / "Set Location to “Allow all
     the time” for Xtend." / "Turn off battery saving for Xtend." — no
     reason given.
-  - Camera: "Taken live in the app. Photos from your gallery, or of a screen
-    or a printed photo, are rejected."
+  - Camera: "Take the photo live here. Photos from your gallery, a screen or
+    a printed photo are not accepted."
   - Heartbeat offline (internal state): "No connection right now. Xtend will
     carry on when you are back online."
   - Support helper is described as "The Xtend helper answers straight away.
