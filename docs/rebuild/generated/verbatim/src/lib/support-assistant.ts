@@ -3,6 +3,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { notifyWatchers } from '@/lib/notify'
 import { supportHelperMode } from '@/lib/usage-limits'
+import { aiFor } from '@/lib/ai/config'
+import { compatToolAnswer, type ToolDef } from '@/lib/ai/compat'
 
 /**
  * The AI that answers a field member's support message.
@@ -18,10 +20,23 @@ import { supportHelperMode } from '@/lib/usage-limits'
  * after the member's message is saved.
  */
 
-const MODEL = 'claude-opus-5'
+/** Whether any AI is set up for the staff helper (Settings → AI, 0102). */
+export async function supportAssistantConfigured() {
+  return Boolean(await aiFor('staff_helper'))
+}
 
-export function supportAssistantConfigured() {
-  return Boolean(process.env.ANTHROPIC_API_KEY)
+const RESPOND: ToolDef = {
+  name: 'respond',
+  description: 'Reply to the field member and decide whether to escalate to the office.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      reply: { type: 'string', description: 'The message shown to the member. A few short sentences.' },
+      escalate: { type: 'boolean', description: 'True when the issue needs a person or you are unsure.' },
+      reason: { type: 'string', description: 'One short line for the office on why this was escalated.' },
+    },
+    required: ['reply', 'escalate'],
+  },
 }
 
 const SYSTEM = `You are Xtend's in-app helper for Xpel Beauty's field staff (merchandisers and marketers). A member has sent a message about a problem. Reply to them directly, warmly and briefly, in simple English. Keep it to a few short sentences.
@@ -32,7 +47,18 @@ You can help on your own with things like:
 - what a result means: "off site" means the GPS was outside the store area; "flagged" means the location was not clear, so wait a moment outside for a better signal and try again
 - "location permission is off" or a weak GPS signal
 - how to change their password, file the daily report, or do a stock count
+- why a clock-in or check-in did not work, and what to do, step by step:
+  - marketers start the day at a store: tap Clock in, pick the store they are at, then take the selfie; clocking in also checks them in there. They cannot clock in without picking a store
+  - "No stores are allocated to you yet": message the office (Messages) the stores they visit, with each store's Google Maps link (open the store in Google Maps, tap Share, copy the link); they clock in once the office adds them. This needs the office, so also escalate
+  - "That store is not on your list": pick one of their own stores, or send the office the new store's name and Google Maps link (escalate)
+  - "Turn on Xtend notifications": allow notifications for Xtend in the phone's settings, then try again
+  - a refused selfie: face a light, hold still, whole face in the picture, never a photo of a screen or a printed picture
+  - "Location required" or no location: turn Location on, allow it for Xtend ("Allow all the time" on Android, "Always" on iPhone, precise location on), move near a door or window, then try again
+  - the phone's time is wrong: turn on automatic date and time
+  - check out of each store before leaving it; Xtend reminds them every 20 minutes while they are checked in
 - general reassurance and next steps
+
+Always end with where to read more: "You can also read the staff guide (Account → Staff guide) for pictures of every step."
 
 You MUST escalate to the office (set escalate true) when the issue is outside what you can do or know, for example:
 - anything that needs a change to their account, store allocation, outlet, team or password reset
@@ -101,7 +127,8 @@ export async function respondToSupportThread(
   }
 
   // If there is no key, escalate straight to a person rather than go silent.
-  if (!supportAssistantConfigured()) {
+  const ai = await aiFor('staff_helper')
+  if (!ai) {
     return finish(admin, thread, staffName, true, "Thanks for your message. I've passed this to the office and someone will follow up with you.")
   }
 
@@ -117,35 +144,30 @@ export async function respondToSupportThread(
   }
 
   try {
-    const client = new Anthropic()
-    const response = await client.messages.create({
-      model: MODEL,
-      max_tokens: 1024,
-      system: [{ type: 'text', text: SYSTEM }],
-      messages: convo,
-      tool_choice: { type: 'tool', name: 'respond' },
-      tools: [
-        {
-          name: 'respond',
-          description: 'Reply to the field member and decide whether to escalate to the office.',
-          input_schema: {
-            type: 'object',
-            properties: {
-              reply: { type: 'string', description: 'The message shown to the member. A few short sentences.' },
-              escalate: { type: 'boolean', description: 'True when the issue needs a person or you are unsure.' },
-              reason: { type: 'string', description: 'One short line for the office on why this was escalated.' },
-            },
-            required: ['reply', 'escalate'],
-          },
-        },
-      ],
-    })
-
-    const block = response.content.find((b) => b.type === 'tool_use')
-    if (!block || block.type !== 'tool_use') {
-      return finish(admin, thread, staffName, true, "Thanks for your message. I've passed this to the office and someone will follow up.")
+    let out: { reply?: string; escalate?: boolean; reason?: string }
+    if (ai.provider === 'anthropic') {
+      const client = new Anthropic({ apiKey: ai.apiKey })
+      const response = await client.messages.create({
+        model: ai.model,
+        max_tokens: 1024,
+        system: [{ type: 'text', text: SYSTEM }],
+        messages: convo,
+        tool_choice: { type: 'tool', name: 'respond' },
+        tools: [RESPOND as Anthropic.Tool],
+      })
+      const block = response.content.find((b) => b.type === 'tool_use')
+      if (!block || block.type !== 'tool_use') {
+        return finish(admin, thread, staffName, true, "Thanks for your message. I've passed this to the office and someone will follow up.")
+      }
+      out = block.input as typeof out
+    } else {
+      // OpenAI, Gemini, NVIDIA or OpenRouter (lib/ai/compat.ts).
+      out = await compatToolAnswer<typeof out>(ai, {
+        system: SYSTEM,
+        messages: convo.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: typeof m.content === 'string' ? m.content : String(m.content) })),
+        tool: RESPOND,
+      })
     }
-    const out = block.input as { reply?: string; escalate?: boolean; reason?: string }
     const reply = (out.reply ?? '').trim() || "Thanks for your message. I've passed this to the office."
     return finish(admin, thread, staffName, out.escalate !== false ? out.escalate === true : false, reply, out.reason)
   } catch (err) {

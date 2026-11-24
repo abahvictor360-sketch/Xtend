@@ -10421,6 +10421,38 @@ $$;
 
 
 --
+-- Name: ai_feature_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ai_feature_settings (
+    feature text NOT NULL,
+    provider text NOT NULL,
+    model text NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT ai_feature_settings_feature_check CHECK ((feature = ANY (ARRAY['staff_helper'::text, 'admin_assistant'::text]))),
+    CONSTRAINT ai_feature_settings_model_check CHECK (((length(btrim(model)) >= 1) AND (length(btrim(model)) <= 120))),
+    CONSTRAINT ai_feature_settings_provider_check CHECK ((provider = ANY (ARRAY['anthropic'::text, 'openai'::text, 'gemini'::text, 'nvidia'::text, 'openrouter'::text])))
+);
+
+
+--
+-- Name: ai_provider_keys; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ai_provider_keys (
+    provider text NOT NULL,
+    key_cipher text NOT NULL,
+    key_hint text NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT ai_provider_keys_key_cipher_check CHECK (((length(key_cipher) >= 20) AND (length(key_cipher) <= 4000))),
+    CONSTRAINT ai_provider_keys_key_hint_check CHECK ((length(key_hint) <= 8)),
+    CONSTRAINT ai_provider_keys_provider_check CHECK ((provider = ANY (ARRAY['anthropic'::text, 'openai'::text, 'gemini'::text, 'nvidia'::text, 'openrouter'::text])))
+);
+
+
+--
 -- Name: attendance; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -12562,6 +12594,22 @@ CREATE VIEW public.xm_supply_detail WITH (security_invoker='true') AS
 
 
 --
+-- Name: ai_feature_settings ai_feature_settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_feature_settings
+    ADD CONSTRAINT ai_feature_settings_pkey PRIMARY KEY (feature);
+
+
+--
+-- Name: ai_provider_keys ai_provider_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_provider_keys
+    ADD CONSTRAINT ai_provider_keys_pkey PRIMARY KEY (provider);
+
+
+--
 -- Name: app_installs app_installs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -14391,6 +14439,22 @@ CREATE TRIGGER trg_xm_targets_feature_guard BEFORE INSERT ON public.xm_targets F
 
 
 --
+-- Name: ai_feature_settings ai_feature_settings_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_feature_settings
+    ADD CONSTRAINT ai_feature_settings_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: ai_provider_keys ai_provider_keys_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_provider_keys
+    ADD CONSTRAINT ai_provider_keys_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
 -- Name: app_installs app_installs_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -15421,6 +15485,18 @@ ALTER TABLE ONLY public.xm_targets
 ALTER TABLE ONLY public.xm_targets
     ADD CONSTRAINT xm_targets_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE RESTRICT;
 
+
+--
+-- Name: ai_feature_settings; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.ai_feature_settings ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: ai_provider_keys; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.ai_provider_keys ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: location_alerts alerts_admin; Type: POLICY; Schema: public; Owner: -

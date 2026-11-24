@@ -1,5 +1,7 @@
 import 'server-only'
 import Anthropic from '@anthropic-ai/sdk'
+import { aiFor } from '@/lib/ai/config'
+import { compatRound, type ConvMessage, type ToolDef } from '@/lib/ai/compat'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { lagosDateString, longDate } from '@/lib/utils'
 import {
@@ -50,9 +52,9 @@ import {
  * supervisor's people. Nothing here writes.
  */
 
-// ASSISTANT_MODEL lets the deployment pick a cheaper model (for example
-// claude-sonnet-5-5) without a code change; the default stays as it was.
-const MODEL = process.env.ASSISTANT_MODEL?.trim() || 'claude-opus-5'
+// The provider and model come from Settings → AI (0102, lib/ai/config.ts);
+// with nothing chosen there, the server's ANTHROPIC_API_KEY with
+// ASSISTANT_MODEL (or claude-opus-5), as before.
 const MAX_TOOL_ROUNDS = 10
 
 // Work already done, kept briefly in memory (lib/ttl-cache.ts): whole answers
@@ -91,8 +93,9 @@ export interface Asker {
   role: 'admin' | 'supervisor'
 }
 
-export function assistantConfigured() {
-  return Boolean(process.env.ANTHROPIC_API_KEY)
+/** Whether any AI is set up for Ask Xtend (Settings → AI, 0102). */
+export async function assistantConfigured() {
+  return Boolean(await aiFor('admin_assistant'))
 }
 
 const SYSTEM = `You are Xtend's assistant for Xpel Beauty. Office staff (admins and supervisors) ask you about field staff: who clocked in, who clocked out, who has not clocked in or out, who was late, who clocked in away from their store, a person's history, the daily reports marketers file, store visits, and stock counts (merchandisers count the products physically in their store and report, product by product, how many are left and how many were sold since their previous count; product names are as they typed them). Stock counts are taken when a supervisor or admin asks for one, and by everyone in the last three days of each month. You also produce downloadable reports, prepare store allocations and team changes for the user to approve, and carry out dashboard actions (notifications, stock count requests, phone checks, reviews, targets, store clock-in and clock-out times) once the user approves them.
@@ -914,7 +917,17 @@ export async function askAssistant(
     if (saved) return { ...saved.reply, cached_at: saved.at }
   }
 
-  const client = new Anthropic()
+  const ai = await aiFor('admin_assistant')
+  if (!ai) {
+    return {
+      answer: 'Ask Xtend has no AI key yet. An admin adds one on Settings → AI.',
+      reports: [],
+      plans: [],
+      actions: [],
+      links: [],
+    }
+  }
+  const client = ai.provider === 'anthropic' ? new Anthropic({ apiKey: ai.apiKey }) : null
   const allocation = new AllocationContext(supabase, asker.role === 'admin')
   // X Metrics parts switched off (0063): their tools are not offered. The
   // same for everyone, so it is read once in a while, not on every question.
@@ -944,9 +957,13 @@ export async function askAssistant(
       : { role: t.role, content: t.content },
   )
 
+  const todayLine = `Today is ${longDate(today)} (${today}). You are talking to ${asker.name} (${asker.role}).${xmNote ? ` ${xmNote}` : ''}`
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const response = await client.beta.messages.create({
-      model: MODEL,
+    // Anthropic's own API, or OpenAI, Gemini, NVIDIA or OpenRouter in the
+    // OpenAI format, answered in the same shape (lib/ai/compat.ts).
+    const response = client
+      ? await client.beta.messages.create({
+      model: ai.model,
       max_tokens: 16000,
       betas: ['server-side-fallback-2026-07-01'],
       fallbacks: 'default',
@@ -955,12 +972,18 @@ export async function askAssistant(
         { type: 'text', text: SYSTEM, cache_control: { type: 'ephemeral' } },
         {
           type: 'text',
-          text: `Today is ${longDate(today)} (${today}). You are talking to ${asker.name} (${asker.role}).${xmNote ? ` ${xmNote}` : ''}`,
+          text: todayLine,
         },
       ],
       tools: offered,
       messages: withCacheMark(messages),
     })
+      : ((await compatRound(ai, {
+          system: `${SYSTEM}\n\n${todayLine}`,
+          messages: messages as unknown as ConvMessage[],
+          tools: offered as unknown as ToolDef[],
+          maxTokens: 8000,
+        })) as unknown as Anthropic.Beta.BetaMessage)
 
     if (response.stop_reason === 'refusal') {
       return {

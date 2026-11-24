@@ -2,7 +2,7 @@
 
 # API routes
 
-140 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+141 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
 
 ## `POST /api/activity`
 
@@ -30,6 +30,31 @@ const schema = z.object({
 An admin picks whether to view the app as an admin, a merchandiser or a
 marketer. Only an admin may call this; the cookie is otherwise ignored, so
 it can never grant a field member more than their role allows.
+
+## `POST /api/admin/ai`
+
+- File: `src/app/api/admin/ai/route.ts`
+- Who: ['admin']
+
+Settings → AI (0102). Admins only. A key is encrypted before it is stored
+and never sent back: only its last 4 characters. Saving or removing a key
+asks for the password again; every change is in the audit log (without
+the key).
+
+```ts
+const schema = z.discriminatedUnion('action', [
+  z.object({ action: z.literal('save_key'), provider, key: z.string().max(400) }),
+  z.object({ action: z.literal('remove_key'), provider }),
+  z.object({ action: z.literal('test'), provider, model: z.string().trim().max(120).optional() }),
+  z.object({
+    action: z.literal('set_feature'),
+    feature: z.enum(['staff_helper', 'admin_assistant']),
+    provider,
+    model: z.string().trim().min(1, 'Type a model name').max(120),
+  }),
+])
+```
+- Tables and views: `ai_provider_keys`, `ai_feature_settings`
 
 ## `POST /api/admin/alerts/[id]`
 

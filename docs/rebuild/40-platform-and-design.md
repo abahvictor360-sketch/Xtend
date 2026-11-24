@@ -148,6 +148,12 @@ The root layout's `<head>` runs `EARLY_RECOVERY_SCRIPT` before the app: a
 failed `/_next/static/` script or stylesheet, or a chunk error, clears Cache
 Storage and reloads once (sessionStorage `xt_early_reload`, 30 s).
 
+**AI keys (0102)** are entered by admins on `/admin/ai`, encrypted on the
+server (`src/lib/ai/secret-box.ts`: AES-256-GCM, key = SHA-256 of
+"xtend-ai-keys:" + `AI_KEYS_SECRET` or `SUPABASE_SERVICE_ROLE_KEY`) and
+stored where only the service role can read them; only the last 4
+characters are ever sent to a browser.
+
 **Secrets never reach a browser.** Only settings named `NEXT_PUBLIC_…` are
 built into browser code, so no secret ever gets such a name (the browser
 gets only the Supabase URL and publishable/anon key, the browser-restricted

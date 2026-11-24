@@ -71,7 +71,7 @@ export async function POST(request: Request) {
     let problem: string | null = null
     let message: string | null = null
     let setting: PhotoSetting = 'unclear'
-    if (photoCheckConfigured()) {
+    if ((await photoCheckConfigured())) {
       try {
         const judged = await judgePhoto(await file.arrayBuffer(), kind)
         verdict = judged.verdict
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
 
     // A rejected photo is worth a supervisor knowing about: one is a bad
     // photo, several photos of a screen is somebody trying it on.
-    if (verdict === 'reject' || (verdict === 'unchecked' && photoCheckConfigured())) {
+    if (verdict === 'reject' || (verdict === 'unchecked' && (await photoCheckConfigured()))) {
       await admin.from('integrity_flags').insert({
         user_id: session.userId,
         kind: verdict === 'reject' ? 'photo_rejected' : 'photo_unchecked',

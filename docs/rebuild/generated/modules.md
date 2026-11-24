@@ -41,6 +41,45 @@ signing in, out or changing a password.
 
 Exports: `RecordedKind`, `recordActivity`, `fetchActivity`, `MISSING`
 
+## `src/lib/ai/compat.ts`
+
+Talking to OpenAI, Gemini, NVIDIA and OpenRouter, which all take the
+OpenAI chat format at their own address (lib/ai/providers.ts). Xtend's
+conversations are kept in Anthropic's shape (text, tool_use and
+tool_result blocks), so each round is translated there and back: the rest
+of Ask Xtend and the staff helper never need to know which AI answered.
+
+Exports: `Block`, `ConvMessage`, `ToolDef`, `toOpenAiMessages`, `toOpenAiTools`, `compatRound`, `compatToolAnswer`, `compatPing`
+
+## `src/lib/ai/config.ts`
+
+Which AI a feature uses right now, with its key (0102): the admin's
+choice on Settings → AI, else the server's ANTHROPIC_API_KEY, else any
+key the admin saved. Read once a minute at most; saving on the AI page
+clears it at once on that server.
+
+Exports: `AiConnection`, `forgetAiSettings`, `aiFor`, `anthropicKey`
+
+## `src/lib/ai/providers.ts`
+
+The AI providers an admin can add a key for (migration 0102), and which
+one each feature uses. Pure, so scripts/check-ai-providers.ts can test it.
+
+Anthropic is called with its own API; the other four speak the OpenAI
+chat format at their own address (lib/ai/compat.ts).
+
+Exports: `AiProvider`, `AiFeature`, `ProviderInfo`, `PROVIDERS`, `FEATURES`, `PROVIDER_IDS`, `providerInfo`, `keyHint`, `keyProblem`, `ResolvedAi`, `resolveAi`
+
+## `src/lib/ai/secret-box.ts`
+
+Encrypts the AI keys an admin adds (0102) before they are stored, with
+AES-256-GCM. The encryption key comes from AI_KEYS_SECRET, or, when that
+is not set, from SUPABASE_SERVICE_ROLE_KEY, so it works with no extra
+setting. Changing whichever is used means the saved AI keys must be
+entered again. Values are never logged or sent to a browser.
+
+Exports: `seal`, `unseal`
+
 ## `src/lib/alert-review.ts`
 
 Location alerts (location_alerts, alert_detail) turned into what a
@@ -1561,6 +1600,12 @@ Exports: `AdminLocation`
 Shown to supervisors only (admins have their own version).
 
 Exports: `NavBadges`, `matchesQuery`, `AdminSidebarNav`, `AdminNav`
+
+## `src/components/admin/ai-settings.tsx`
+
+Settings → AI (0102): add, test and remove keys; choose the AI per feature.
+
+Exports: `SavedKey`, `FeatureChoice`, `AiSettings`
 
 ## `src/components/admin/alerts-list.tsx`
 

@@ -46,7 +46,7 @@ const badPublic = [...publicNames].filter((n) => SECRETISH.test(n))
 check(badPublic.length === 0, 'no secret has a NEXT_PUBLIC_ (browser) name', badPublic.join(', '))
 
 // 2. Browser files read no secret settings and import no server-only client.
-const SERVER_ONLY_MODULES = ['@/lib/supabase/admin', '@/lib/system-reset-server', '@/lib/geocode', '@/lib/push', '@/lib/push-native', '@/lib/redis', '@/lib/cron', '@/lib/credentials', '@/lib/assistant', '@/lib/reconfirm']
+const SERVER_ONLY_MODULES = ['@/lib/supabase/admin', '@/lib/system-reset-server', '@/lib/geocode', '@/lib/push', '@/lib/push-native', '@/lib/redis', '@/lib/cron', '@/lib/credentials', '@/lib/assistant', '@/lib/reconfirm', '@/lib/ai/config', '@/lib/ai/secret-box', '@/lib/ai/compat']
 const leaks: string[] = []
 for (const f of files) {
   const src = read(f)

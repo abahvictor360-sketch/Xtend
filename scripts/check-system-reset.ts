@@ -41,7 +41,7 @@ const throws = (f: () => unknown) => {
 // Every table in the database (docs/rebuild/generated/database.md, plus
 // 0066's two, 0068's two, 0070's one and 0073's three), as the owner classified them.
 const FIXTURE: Record<string, 'wipe' | 'admins-kept' | 'keep'> = {
-  app_installs: 'admins-kept', app_releases: 'keep', assistant_conversations: 'wipe', attendance: 'wipe', field_corrections: 'wipe',
+  app_installs: 'admins-kept', app_releases: 'keep', ai_provider_keys: 'keep', ai_feature_settings: 'keep', assistant_conversations: 'wipe', attendance: 'wipe', field_corrections: 'wipe',
   audit_log: 'wipe', clock_out_reminders: 'wipe', visit_checkout_reminders: 'wipe', count_request_targets: 'wipe', count_requests: 'wipe',
   count_sheet_templates: 'keep', device_beacons: 'wipe', excuse_checks: 'wipe', integrity_flags: 'wipe',
   job_runs: 'keep', known_places: 'keep', leave_requests: 'wipe', location_alerts: 'wipe', location_pings: 'wipe',

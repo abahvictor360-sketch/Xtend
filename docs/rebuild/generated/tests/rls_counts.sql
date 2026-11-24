@@ -856,5 +856,29 @@ exception when insufficient_privilege then
   perform assert(true, 'rls: only the server hands out store check-out reminders');
 end $$;
 
+-- 0102: the AI keys and settings are the server's alone (encrypted keys).
+reset role;
+grant select, insert, update, delete on public.ai_provider_keys, public.ai_feature_settings to authenticated;
+revoke all on public.ai_provider_keys, public.ai_feature_settings from anon, authenticated;
+insert into public.ai_provider_keys (provider, key_cipher, key_hint) values ('openai', 'v1:' || repeat('x', 40), '1234');
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'boss', false);
+do $$
+begin
+  perform count(*) from public.ai_provider_keys;
+  perform assert(false, 'rls: the AI keys are closed');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: not even an admin reads the AI keys from the browser (only the server does)');
+end $$;
+do $$
+begin
+  insert into public.ai_feature_settings (feature, provider, model) values ('staff_helper', 'openai', 'x');
+  perform assert(false, 'rls: the AI settings are closed');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: nor changes the AI settings directly');
+end $$;
+reset role;
+delete from public.ai_provider_keys;
+
 reset role;
 select 'ALL RLS CHECKS PASSED';

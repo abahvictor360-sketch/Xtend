@@ -6,6 +6,26 @@ A readable summary of `schema.sql`. Every table has row-level security unless ma
 
 ## Tables
 
+### `ai_feature_settings`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| feature | text(text) |  |  |
+| provider | text(text) |  |  |
+| model | text(text) |  |  |
+| updated_at | timestamp with time zone(timestamptz) |  | now() |
+| updated_by | uuid(uuid) | yes |  |
+
+### `ai_provider_keys`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| provider | text(text) |  |  |
+| key_cipher | text(text) |  |  |
+| key_hint | text(text) |  |  |
+| updated_at | timestamp with time zone(timestamptz) |  | now() |
+| updated_by | uuid(uuid) | yes |  |
+
 ### `app_installs`
 
 | Column | Type | Null | Default |

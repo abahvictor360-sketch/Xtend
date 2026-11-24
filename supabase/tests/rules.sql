@@ -6233,7 +6233,9 @@ begin
                                 -- 0080: confirmations expire in minutes; staff deletions cascade.
                                 'recent_auth', 'sign_in_keys',
                                 -- 0081: the places Xtend learned survive every reset.
-                                'known_places'];
+                                'known_places',
+                                -- 0102: the AI keys and settings the admin added.
+                                'ai_provider_keys', 'ai_feature_settings'];
     all_keys text[] := public.reset_category_keys();
     k text;
     cats text[];

@@ -3,41 +3,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import {
-  Activity,
-  BarChart3,
-  BookOpen,
-  Bell,
-  CalendarDays,
-  CalendarCheck,
-  ChevronDown,
-  ClipboardList,
-  FileClock,
-  FileText,
-  LayoutDashboard,
-  MapPin,
-  MapPinned,
-  Headset,
-  Menu,
-  MessageSquareText,
-  MessagesSquare,
-  PackageSearch,
-  PhoneOff,
-  Route,
-  ShieldAlert,
-  Siren,
-  Store,
-  UserCog,
-  Users,
-  UsersRound,
-  BadgeCheck,
-  Gauge,
-  type LucideIcon,
-  RefreshCw,
-  Search,
-  Wrench,
-  X,
-} from 'lucide-react'
+import { Activity, BadgeCheck, BarChart3, Bell, BookOpen, Bot, CalendarCheck, CalendarDays, ChevronDown, ClipboardList, FileClock, FileText, Gauge, Headset, LayoutDashboard, MapPin, MapPinned, Menu, MessageSquareText, MessagesSquare, PackageSearch, PhoneOff, RefreshCw, Route, Search, ShieldAlert, Siren, Store, UserCog, Users, UsersRound, Wrench, X, type LucideIcon } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { xmMenuItem, XM_ALL_ON } from '@/lib/metrics/features'
 
@@ -108,6 +74,7 @@ const GROUPS: { title: string | null; links: NavLink[] }[] = [
       { href: '/admin/audit', label: 'Audit log', icon: FileClock, adminOnly: true },
       { href: '/admin/activity', label: 'Activity log', icon: Activity, adminOnly: true },
       { href: '/admin/updates', label: 'Updates', icon: RefreshCw, adminOnly: true },
+      { href: '/admin/ai', label: 'AI keys', icon: Bot, adminOnly: true },
       { href: '/admin/system', label: 'System', icon: Wrench, adminOnly: true },
     ],
   },

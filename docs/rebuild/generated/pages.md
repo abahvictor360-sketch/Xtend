@@ -2,7 +2,7 @@
 
 # Pages
 
-66 pages. "Who" is what `requireSession` admits (field pages are also guarded by their layout).
+67 pages. "Who" is what `requireSession` admits (field pages are also guarded by their layout).
 
 ## `/admin/activity` — Activity log — Xtend
 
@@ -11,6 +11,14 @@
 - Components: `admin/activity-view`
 
 Everybody's activity in Xtend (migration 062). Admins only.
+
+## `/admin/ai` — AI keys — Xtend
+
+- File: `src/app/admin/ai/page.tsx`
+- Who: ['admin']
+- Components: `admin/page-kit`, `admin/ai-settings`
+
+Settings → AI (0102): the keys and which AI answers staff and Ask Xtend. Admins only.
 
 ## `/admin/alerts` — Alerts — Xtend
 

@@ -50,7 +50,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       role={hr ? 'HR' : readOnly ? 'Supervisor' : 'Admin'}
       readOnly={readOnly}
       openAlerts={openAlerts}
-      assistant={assistantConfigured()}
+      assistant={await assistantConfigured()}
       xmEnabled={xmFeatures.enabled}
       testMode={testMode}
       isAdmin={session.profile.role === 'admin'}
