@@ -61,6 +61,25 @@ the live database, so it cannot tell which of these are already done.)
 
 ---
 
+## 2026-11-24
+
+### Checked: your secret keys cannot be seen in a browser
+- **What was done:** checked that nobody can find your Supabase secret key
+  (`sb_secret_…`) or any other secret key (Google, Anthropic, push, cron,
+  Redis, Turnstile) by opening the browser's developer tools on Xtend. Fake
+  marked keys were built into a test copy of the site and nothing a browser
+  downloads contained them; the code, the repository (all history) and the
+  phone app builds hold no key either. The only keys a browser sees are the
+  ones meant to be public: the Supabase publishable (anon) key and the
+  browser Google Maps key. Two new checks now run with every change so this
+  stays true.
+- **The impact:** none visible; it protects the database's master key.
+- **What you need to do:** nothing. Two good habits: keep the browser Google
+  Maps key (`NEXT_PUBLIC_GOOGLE_MAPS_BROWSER_KEY`) restricted to your
+  website in Google Cloud, and if a secret key was ever pasted into a chat,
+  email or screenshot, create a new one in Supabase (Project Settings → API
+  Keys) and replace it on the server.
+
 ## 2026-11-21
 
 ### Delete test accounts and stores for good
