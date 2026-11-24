@@ -13,6 +13,9 @@ export type GuideProblem =
   | 'low_accuracy'
   | 'location_unsupported'
   | 'phone_settings'
+  // The network, not the phone's settings (networkQuality).
+  | 'no_network'
+  | 'location_no_network'
   // What the server said when it refused (problemFromMessage).
   | 'no_stores'
   | 'pick_store'
@@ -31,6 +34,8 @@ const ALL_PROBLEMS = {
   low_accuracy: true,
   location_unsupported: true,
   phone_settings: true,
+  no_network: true,
+  location_no_network: true,
   notifications_off: true,
   selfie_refused: true,
   phone_clock: true,
@@ -58,7 +63,50 @@ export interface Guide {
 
 export type GuidePlatform = 'android' | 'ios' | null
 
-export function problemFromGeo(reason: GeoBlockReason): GuideProblem {
+/** How good the phone's connection is right now. */
+export type NetworkQuality = 'offline' | 'weak' | 'ok'
+
+/**
+ * Reads what the browser knows about the connection: offline, or so slow
+ * (2G, or replies taking over 1.5 s, or under 150 kbit/s) that a clock-in or
+ * a location fix will struggle. Pure, so check-network-notice can test it.
+ */
+export function networkQuality(n: {
+  onLine?: boolean
+  effectiveType?: string | null
+  rtt?: number | null
+  downlink?: number | null
+}): NetworkQuality {
+  if (n.onLine === false) return 'offline'
+  if (n.effectiveType === 'slow-2g' || n.effectiveType === '2g') return 'weak'
+  if (typeof n.rtt === 'number' && n.rtt >= 1500) return 'weak'
+  if (typeof n.downlink === 'number' && n.downlink > 0 && n.downlink < 0.15) return 'weak'
+  return 'ok'
+}
+
+/** The connection now, in the browser (always 'ok' on the server). */
+export function currentNetwork(): NetworkQuality {
+  if (typeof navigator === 'undefined') return 'ok'
+  const c = (navigator as Navigator & { connection?: { effectiveType?: string; rtt?: number; downlink?: number } }).connection
+  return networkQuality({ onLine: navigator.onLine, effectiveType: c?.effectiveType, rtt: c?.rtt, downlink: c?.downlink })
+}
+
+/** True when a request never reached the server or gave up waiting. */
+export function isNetworkError(err: unknown): boolean {
+  const text = err instanceof Error ? `${err.name} ${err.message}` : String(err ?? '')
+  return (
+    err instanceof TypeError ||
+    /failed to fetch|load failed|network ?error|networkerror|no connection|timed? ?out|timeouterror|aborterror|internet/i.test(text)
+  )
+}
+
+/**
+ * The location problem, read with the connection: a phone with no network
+ * or a weak one finds its place slowly and roughly (it uses the network to
+ * help), so that is what they are told, not to change a setting.
+ */
+export function problemFromGeo(reason: GeoBlockReason, network: NetworkQuality = 'ok'): GuideProblem {
+  if (network !== 'ok' && (reason === 'position_unavailable' || reason === 'low_accuracy')) return 'location_no_network'
   switch (reason) {
     case 'permission_denied':
       return 'location_permission'
@@ -79,6 +127,7 @@ export function problemFromGeo(reason: GeoBlockReason): GuideProblem {
 export function problemFromMessage(message: string | null | undefined): GuideProblem | null {
   const m = (message ?? '').toLowerCase()
   if (!m) return null
+  if (isNetworkError(new Error(m))) return 'no_network'
   if (m.includes('no stores are allocated')) return 'no_stores'
   if (m.includes('pick the store')) return 'pick_store'
   if (m.includes('not on your list')) return 'store_not_yours'
@@ -142,6 +191,34 @@ export function guideFor(problem: GuideProblem, platform: GuidePlatform, task = 
           : ['Set Location for Xtend to "Allow all the time".', 'Set Battery for Xtend to "Unrestricted" (or turn off battery saving for Xtend).', 'Come back to Xtend. The card on Home clears by itself when it is done.'],
         action: 'show_settings',
         actionLabel: 'Show me the settings',
+      }
+    case 'no_network':
+      return {
+        title: 'Your network is not working',
+        why: `Xtend could not reach the office, so you cannot ${task} right now. Your data or signal is off or too weak.`,
+        steps: [
+          ios
+            ? 'Check Mobile Data is on (Settings, Mobile Data) and Aeroplane Mode is off.'
+            : 'Pull down from the top: check Mobile data is on and Aeroplane mode is off.',
+          'Check you have data on your line (airtime or a data plan).',
+          'Move near the door or a window, or step outside, where the signal is stronger. Or connect to Wi-Fi.',
+          'Tap Try again.',
+        ],
+        action: 'retry',
+        actionLabel: 'Try again',
+      }
+    case 'location_no_network':
+      return {
+        title: 'Weak network: your location is slow',
+        why: 'Your network is off or weak, so your phone is finding where you are slowly and roughly.',
+        steps: [
+          'Turn on Mobile data (and Wi-Fi if there is one nearby; you do not need to connect).',
+          'Step outside or near the door, where the signal and the sky are clearer.',
+          'Wait a few seconds for the signal bars to come back.',
+          'Tap Try again.',
+        ],
+        action: 'retry',
+        actionLabel: 'Try again',
       }
     case 'no_stores':
       return {

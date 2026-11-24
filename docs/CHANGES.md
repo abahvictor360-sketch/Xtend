@@ -70,6 +70,25 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-24
 
+### Staff are told when the network is the problem
+- **What was done:** Xtend now notices when a phone has no network or a
+  weak one. Home shows **No network** or **Your network is weak**, says what
+  that means (a clock-in is kept on the phone and only counts once it
+  sends; store check-ins need network; the location is slower to find) and
+  what to do: turn on Mobile data, check there is data on the line, move
+  near the door or a window. When it comes back it says **Your network is
+  back**. If a clock-in, store check-in or check-out fails because it could
+  not reach the office, a pop-up says **Your network is not working**, with
+  steps and a Try again button. If the location fails because the network
+  is weak, it says so (**Weak network: your location is slow**) instead of
+  telling them to change a phone setting. The staff guide and the AI helper
+  explain it too.
+- **The impact:** staff stop guessing why the app "is not working" when it
+  is really their data or signal, and stop thinking a clock-in saved on the
+  phone has already counted. Fewer calls to supervisors about it.
+- **What you need to do:** nothing beyond redeploying. No migration and no
+  new phone app build.
+
 ### The AI helper answers from a much richer staff guide, and from your notes
 - **What was done:** the staff guide (You → How to use Xtend) is much
   fuller. Clock in now explains your hours and how marketers start the day

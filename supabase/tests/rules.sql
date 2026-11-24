@@ -7085,9 +7085,11 @@ begin
       perform assert(vid is not null, 'visit reminders 0099: (a visit to test with)');
       update public.store_visits set status = 'closed', departed_at = now()
        where user_id = who and id <> vid and status = 'open';
+      -- The test runs up to 4 hours past t0, all inside today (Lagos): late at
+      -- night, t0 moves back to 19:00 so it never crosses midnight.
+      t0 := least(now(), (public.business_date()::timestamp + interval '19 hours') at time zone 'Africa/Lagos');
       update public.store_visits set status = 'open', departed_at = null, visit_date = public.business_date(),
-             arrived_at = now() - interval '30 minutes' where id = vid;
-      t0 := now();
+             arrived_at = t0 - interval '30 minutes' where id = vid;
 
       select count(*) into n from public.claim_visit_checkout_reminders(t0) c where c.visit_id = vid;
       perform assert(n = 1, 'visit reminders 0099: 25 minutes in a store brings the first reminder');

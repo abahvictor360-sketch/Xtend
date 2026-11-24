@@ -13,7 +13,7 @@ import { LocationGate } from '@/components/field/location-gate'
 import { BackgroundGate, useBackgroundNeeds } from '@/components/field/background-gate'
 import { Alert } from '@/components/ui/alert'
 import { GuideSheet } from '@/components/field/guide-sheet'
-import { problemFromGeo, problemFromMessage, type GuideProblem } from '@/lib/field-guide'
+import { currentNetwork, isNetworkError, problemFromGeo, problemFromMessage, type GuideProblem } from '@/lib/field-guide'
 import { StartStoreSheet, type StartStore } from '@/components/field/start-store-sheet'
 import { processSelfie } from '@/lib/image'
 import { deviceInfo } from '@/lib/device'
@@ -241,9 +241,15 @@ export function ClockPanel({
       if (err instanceof GeoBlocked) {
         setError(err.message)
         // Say what to do, step by step, as well (field-guide).
-        setGuide(problemFromGeo(err.reason))
+        setGuide(problemFromGeo(err.reason, currentNetwork()))
         setGuideRetry(type)
-      } else setError(err instanceof Error ? err.message : 'Could not read your location.')
+      } else {
+        setError(err instanceof Error ? err.message : 'Could not read your location.')
+        if (isNetworkError(err)) {
+          setGuide('no_network')
+          setGuideRetry(type)
+        }
+      }
     }
   }, [])
 
@@ -372,7 +378,7 @@ export function ClockPanel({
             title: `Not recorded yet: ${what} saved on your phone`,
             detail: `No signal right now. Your ${what} from ${where} at ${formatLagos(fix.captured_at, false)}${
               guess ? `, about ${metres(guess)} from your outlet` : ''
-            } is kept on this phone but is NOT recorded yet. It sends itself when you get signal. Do not count it as done until Home says you are ${type === 'opening' ? 'clocked in' : 'clocked out'}; if it is refused, you will be told.`,
+            } is kept on this phone but is NOT recorded yet. It sends itself when you get signal. Do not count it as done until Home says you are ${type === 'opening' ? 'clocked in' : 'clocked out'}; if it is refused, you will be told. To send it sooner: check Mobile data is on and you have data, then move near the door or a window.`,
           })
         } else {
           const signOut = (result.data as { sign_out?: boolean }).sign_out === true
@@ -454,7 +460,7 @@ export function ClockPanel({
       } catch (err) {
         if (err instanceof GeoBlocked) {
           setError(err.message)
-          setGuide(problemFromGeo(err.reason))
+          setGuide(problemFromGeo(err.reason, currentNetwork()))
           setGuideRetry(type)
         } else {
           const message = err instanceof Error ? err.message : 'That did not go through. Try again.'

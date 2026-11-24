@@ -14,6 +14,7 @@ import { useDashboardRefresh } from '@/components/field/use-dashboard-refresh'
 import { ShiftTracker } from '@/components/field/shift-tracker'
 import { usePlace } from '@/components/field/use-place'
 import { OutboxBanner } from '@/components/field/outbox-banner'
+import { NetworkNotice } from '@/components/field/network-notice'
 import { ClockPanel, PICK_START_STORE_EVENT } from '@/components/field/clock-panel'
 import { ClockOutPrompt } from '@/components/field/clock-out-prompt'
 import { ShiftSoonPrompt } from '@/components/field/shift-soon-prompt'
@@ -158,6 +159,7 @@ export function FieldHome({
         }
       />
 
+      <NetworkNotice />
       <OutboxBanner onFlushed={() => router.refresh()} />
 
       <ShiftTracker onShift={onShift} clockedOut={Boolean(day.closing)} />
