@@ -998,6 +998,13 @@ The member of staff the alert is about.
 
 Exports: `WatcherAlert`, `notifyWatchers`, `notifyUsers`
 
+## `src/lib/off-site-refusal.ts`
+
+Off site (0106): the database refused the clock-in or check-in and named
+the store to go to. Passed on with the store, so the app can show the way.
+
+Exports: `offSiteRefusal`
+
 ## `src/lib/offline/db.ts`
 
 The moment of capture, never the moment of sync.
@@ -1010,6 +1017,16 @@ A capture older than this can never be accepted by the server, so it is
 dropped locally instead of retried forever.
 
 Exports: `PermanentJobError`, `NamePlaceFirstError`, `checkPhoto`, `noticeStore`, `queuedRemovals`, `runJob`, `FlushResult`, `flushOutbox`, `submitOrQueue`
+
+## `src/lib/on-site.ts`
+
+On site only (0106): nobody clocks in or checks in at a store from
+outside it. The phone checks before the camera opens, so nobody takes a
+selfie for nothing; the database refuses it anyway (it has the last
+word). Pure, so scripts/check-on-site.ts can test it, and the same rule
+as public.too_far() in the database.
+
+Exports: `ACCURACY_ALLOWANCE_M`, `SiteStore`, `OffSite`, `tooFar`, `offSite`, `distanceWords`, `directionsTo`, `offSiteWords`, `offSiteFromServer`
 
 ## `src/lib/origin.ts`
 
@@ -2223,6 +2240,15 @@ phone. The database refuses a clock-in without them (migration 027);
 this says why, and turns them on in one tap where the browser allows.
 
 Exports: `NotificationGate`
+
+## `src/components/field/off-site-sheet.tsx`
+
+"You are off site" (0106): pops up whenever someone tries to clock in or
+check in from outside their store, says which store to go to and how far
+it is, and opens the way there in Google Maps. Nothing goes through until
+they are there.
+
+Exports: `OffSiteSheet`
 
 ## `src/components/field/onboarding.tsx`
 

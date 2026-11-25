@@ -83,7 +83,22 @@ const FAQ: { q: string; a: React.ReactNode }[] = [
   },
   {
     q: 'Can I clock in from home or on the way?',
-    a: <>No. Clock in when you are inside your store (marketers: your first store of the day).</>,
+    a: (
+      <>
+        No. Xtend only lets you clock in when you are at your store (marketers: the store you picked to start at). Away
+        from it you see <Ui>You are off site</Ui>.
+      </>
+    ),
+  },
+  {
+    q: 'It says “You are off site”',
+    a: (
+      <>
+        You are not at your store yet. The box names the store you need to be at and how far it is. Tap{' '}
+        <Ui>Directions</Ui> to see the way in Google Maps, go inside the store, then tap <Ui>I am at the store</Ui> and
+        try again. Marketers: if you picked the wrong store, pick the one you are in.
+      </>
+    ),
   },
   {
     q: 'What time should I clock in?',
@@ -302,6 +317,12 @@ export function StaffGuide() {
       </GuideSection>
 
       <GuideSection topic={T.clockIn} intro="Do this when you arrive at your store, once a day.">
+          <p>
+            You can only clock in, or check in at a store, when you are at the store. If you are not, Xtend shows{' '}
+            <Ui>You are off site</Ui> with the store you need to go to, how far it is and a <Ui>Directions</Ui>{' '}
+            button that opens the way in Google Maps. Go there, then tap <Ui>I am at the store</Ui>. Clocking out
+            works anywhere.
+          </p>
           <p>
             Clock in at your store, never at home or on the way. Clock in by the start time under{' '}
             <Ui>You</Ui>, then <Ui>Your hours</Ui>: clocking in after it shows as late. Only the office can change your
@@ -695,8 +716,9 @@ export function StaffGuide() {
               q: 'It says I am off site, but I am in my store',
               a: (
                 <>
-                  Try again near the entrance or a window. If it keeps happening, tell support
-                  through <Ui>Message support</Ui> so your store’s location can be checked.
+                  Try again near the entrance or a window, so your phone finds you. If it keeps happening,
+                  call your supervisor (they can clock you in) and tell support through{' '}
+                  <Ui>Message support</Ui> so your store’s location can be checked.
                 </>
               ),
             },

@@ -1037,6 +1037,7 @@ Policies:
 | updated_at | timestamp with time zone(timestamptz) |  | now() |
 | follow_max_sessions | integer(int4) |  | 20 |
 | mfa_roles | ARRAY(_user_role) |  | '{admin,hr}'::user_role[] |
+| block_off_site | boolean(bool) |  | true |
 
 Policies:
 - `system_settings_admin_read` SELECT to authenticated: using `is_admin()`
@@ -1442,6 +1443,7 @@ Policies:
 - `attendance_integrity()` → trigger · definer · 0022_integrity_checks.sql
 - `attendance_learn_waiting_store()` → trigger · definer · 0034_stores_pinned_from_clock_in.sql
 - `attendance_office_time()` → trigger · definer · 0090_field_corrections.sql
+- `attendance_on_site_only()` → trigger · definer · 0106_on_site_only.sql
 - `attendance_place_due()` → trigger · definer · 0045_mandatory_place_naming.sql
 - `attendance_punctuality()` → trigger · definer · 0105_clock_out_window.sql
 - `attendance_push_check()` → trigger · definer · 0027_notifications_required.sql
@@ -1503,6 +1505,7 @@ Policies:
 - `digest(text, text)` → bytea
 - `dismiss_place_due(p_due uuid, p_reason text)` → void · definer · 0045_mandatory_place_naming.sql
 - `distance_metres(lat1 double precision, lng1 double precision, lat2 double precision, lng2 double precision)` → double precision · 0001_init.sql
+- `distance_words(p_m double precision)` → text · 0106_on_site_only.sql
 - `encrypt(bytea, bytea, text)` → bytea
 - `encrypt_iv(bytea, bytea, bytea, text)` → bytea
 - `end_store_visit(p_visit_id uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_place_name text, p_address text, p_selfie_path text, p_thumb_path text)` → jsonb · definer · 0091_visit_checkout_photo.sql
@@ -1588,6 +1591,7 @@ Policies:
 - `note_place_visit(p_id uuid)` → void · definer · 0068_place_lookups.sql
 - `note_place_visit_for(p_user uuid, p_id uuid)` → void · definer · 0068_place_lookups.sql
 - `notification_sent_by_me(p_notification uuid)` → boolean · definer · 0053_support_notifications.sql
+- `off_site_blocked()` → boolean · definer · 0106_on_site_only.sql
 - `office_act_as(p_user uuid, p_actor uuid)` → void · definer · 0090_field_corrections.sql
 - `office_act_done()` → void · definer · 0090_field_corrections.sql
 - `office_entry_on()` → boolean · 0090_field_corrections.sql
@@ -1657,6 +1661,7 @@ Policies:
 - `record_offline_pings(p_points jsonb, p_sent_at timestamp with time zone)` → integer · definer · 0096_every_synced_position_kept.sql
 - `record_retention_purge(p_result jsonb)` → void · definer · 0067_report_photos_offline.sql
 - `record_selfie_sweep(p_result jsonb)` → void · definer · 0012_selfie_retention_24h.sql
+- `refuse_off_site(p_store uuid, p_distance double precision, p_radius double precision, p_task text)` → void · definer · 0106_on_site_only.sql
 - `release_reports_on_demotion()` → trigger · definer · 0018_reporting_line_upkeep.sql
 - `remember_address(p_lat double precision, p_lng double precision, p_address text)` → uuid · definer · 0068_place_lookups.sql
 - `remove_my_sign_in_key(p_id uuid)` → boolean · definer · 0089_quick_sign_in.sql
@@ -1735,6 +1740,7 @@ Policies:
 - `store_visit_close_stale()` → trigger · definer · 0086_close_stale_visit_on_check_in.sql
 - `store_visit_enforce()` → trigger · definer · 0060_marketer_visits_reports.sql
 - `store_visit_no_departure_photo()` → trigger · 0091_visit_checkout_photo.sql
+- `store_visit_on_site_only()` → trigger · definer · 0106_on_site_only.sql
 - `store_visits_today()` → SETOF store_visit_detail · definer · 0016_visits_without_allocation.sql
 - `submit_count_sheet(p_outlet_id uuid, p_path text, p_file_name text)` → uuid · definer · 0064_count_sheets_any_time_report_files.sql
 - `submit_store_count(p_outlet_id uuid, p_lines jsonb, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_photo_path text)` → integer · definer · 0040_xpel_count_sheet.sql
@@ -1745,6 +1751,7 @@ Policies:
 - `system_settings_guard()` → trigger · 0066_test_mode_reset.sql
 - `text_has_words(p_text text, p_min_length integer)` → boolean · 0039_field_rules.sql
 - `text_is_clean(p_text text)` → boolean · 0039_field_rules.sql
+- `too_far(p_distance double precision, p_radius double precision, p_accuracy double precision)` → boolean · 0106_on_site_only.sql
 - `touch_updated_at()` → trigger · 0002_logic.sql
 - `tracking_coverage(p_user uuid, p_date date)` → jsonb · definer · 0004_tracking_coverage.sql
 - `unflag_photo(p_path text)` → boolean · definer · 0092_photo_flags.sql
@@ -1800,6 +1807,7 @@ Policies:
 - `attendance`: `trg_attendance_start_store` — BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_start_store()
 - `attendance`: `trg_attendance_timing` — BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_timing()
 - `attendance`: `trg_attendance_timing_flag` — AFTER INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_timing_flag()
+- `attendance`: `trg_attendance_zx_on_site` — BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_on_site_only()
 - `attendance`: `trg_attendance_zy_office_time` — BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_office_time()
 - `attendance`: `trg_attendance_zz_correction` — BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_replace_for_correction()
 - `attendance`: `trg_attendance_zz_correction_done` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_correction_done()
@@ -1831,6 +1839,7 @@ Policies:
 - `store_visits`: `trg_store_visit_alert` — AFTER INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION store_visit_alert()
 - `store_visits`: `trg_store_visit_enforce` — BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION store_visit_enforce()
 - `store_visits`: `trg_store_visit_no_departure_photo` — BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION store_visit_no_departure_photo()
+- `store_visits`: `trg_store_visit_on_site` — BEFORE INSERT ON public.store_visits FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION store_visit_on_site_only()
 - `store_visits`: `trg_store_visit_selfie_check` — BEFORE INSERT ON public.store_visits FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION selfie_check()
 - `store_visits`: `trg_store_visit_zz_close_stale` — BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION store_visit_close_stale()
 - `store_visits`: `trg_store_visits_place_due_guard` — BEFORE INSERT ON public.store_visits FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION place_due_guard()

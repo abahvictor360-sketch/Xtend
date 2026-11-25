@@ -38,7 +38,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0098_delete_for_good.sql`;
    - `supabase/migrations/0103_close_public_key.sql`;
    - `supabase/migrations/0104_ai_knowledge.sql`;
-   - `supabase/migrations/0105_clock_out_window.sql`.
+   - `supabase/migrations/0105_clock_out_window.sql`;
+   - `supabase/migrations/0106_on_site_only.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18;
    0099, 0100, 0101 and 0102 are done: you ran them on 2026-11-24.)
 4. **Turn off self sign-up in Supabase**: Authentication → Sign In /
@@ -70,6 +71,28 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-25
+
+### Nobody can clock in off site
+- **What was done:** clocking in, or checking in at a store, now only
+  works at the store. Anyone who tries from somewhere else gets a pop-up,
+  **You are off site**, every time they try. It names the store they must
+  go to (a merchandiser's nearest store, or the store a marketer picked to
+  start at), says how far away it is, and has a **Directions** button that
+  opens the way in Google Maps. Once there they tap **I am at the store**
+  and carry on. The phone stops them before the selfie, and the server
+  refuses an off-site clock-in even if the phone is old or offline.
+  Clocking out and checking out still work anywhere. The phone's accuracy
+  gets up to 50 m of benefit of the doubt, so someone standing at the
+  door is not shut out.
+- **The impact:** no more off-site clock-ins. A store pinned in the wrong
+  place will now stop everyone there, so check your store pins (Outlets →
+  Check on Google Maps). Until a pin is fixed, a supervisor can clock the
+  person in from their day page.
+- **What you need to do:** run `supabase/migrations/0106_on_site_only.sql`
+  in Supabase, then redeploy. No new phone app build is needed. To switch
+  the rule off at any time:
+  `update public.system_settings set block_off_site = false;`
+  (`true` turns it back on).
 
 ### A retired AI model no longer stops Ask Xtend
 - **What was done:** NVIDIA has also retired `openai/gpt-oss-120b`. Now,
