@@ -7,6 +7,8 @@ import { Badge } from '@/components/ui/badge'
 import { flagHeadline } from '@/lib/flag-labels'
 import { formatLagos, lagosDateString, longDate, metres } from '@/lib/utils'
 import { DayCorrections } from '@/components/admin/day-corrections'
+import { ClockOutHoldSwitch } from '@/components/admin/clock-out-hold-switch'
+import { clockOutOpensAt } from '@/lib/clock-out-time'
 import { toDayVisit } from '@/components/admin/visit-photo-list'
 import { DayPhotoGallery, type DayPhoto } from '@/components/admin/day-photo-gallery'
 import { isPhotoFlagReason, type PhotoFlagReason } from '@/lib/photo-flags'
@@ -266,6 +268,20 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
     person.is_active &&
     (person.role === 'merchandiser' || person.role === 'marketer') &&
     (viewer === 'admin' || viewer === 'hr' || person.supervisor_id === session.userId)
+  // The clock-out hold (0111): any day's page, for the same people. Read
+  // with * so the page still works before 0111 adds the column.
+  const canHold =
+    person.is_active &&
+    (person.role === 'merchandiser' || person.role === 'marketer') &&
+    (viewer === 'admin' || viewer === 'hr' || person.supervisor_id === session.userId)
+  const { data: holdRow } = canHold
+    ? await supabase.from('profiles').select('*').eq('id', id).maybeSingle<{
+        hold_clock_out?: boolean
+        shift_end?: string | null
+        clock_out_from?: string | null
+      }>()
+    : { data: null }
+  const holdState = typeof holdRow?.hold_clock_out === 'boolean' ? holdRow.hold_clock_out : null
   const [fixStores, corrections] = canFix
     ? await Promise.all([
         supabase
@@ -384,6 +400,15 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
         <Box label="Stores visited" value={String(visitList.length)} />
         <Box label="Photos flagged" value={String(flaggedPhotos)} warn={flaggedPhotos > 0} />
       </section>
+
+      {holdState !== null && (
+        <ClockOutHoldSwitch
+          personId={id}
+          personName={person.full_name}
+          hold={holdState}
+          opensAt={clockOutOpensAt(holdRow?.shift_end ?? null, holdRow?.clock_out_from ?? null)}
+        />
+      )}
 
       {canFix && (
         <DayCorrections

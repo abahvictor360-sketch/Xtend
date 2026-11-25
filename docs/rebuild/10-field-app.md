@@ -790,7 +790,9 @@ out of it when you leave, then check in at your next store."), a tinted box
 "You can clock out from" / the time, and buttons **Check out of <store>** or
 **Check in at a store** (marketers: opens the Stores tab) and **OK**. The
 server's refusal (422 `{code:'too_early', opens_at}`) opens the same sheet.
-The Clock out row reads "From 18:00" until then.
+The Clock out row reads "From 18:00" until then. With the person's hold
+switched off by the office (0111, `profiles.hold_clock_out = false`),
+`holdEarlyClockOut` is false and nothing is held back.
 
 ### 5.2a The guide: "Your next step" and the fix-it pop-up
 

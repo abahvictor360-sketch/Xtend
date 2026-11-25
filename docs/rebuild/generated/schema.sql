@@ -1005,6 +1005,10 @@ begin
      or not public.early_clock_out_blocked() then
     return new;
   end if;
+  -- 0111: the office has let them clock out whenever.
+  if not coalesce((select p.hold_clock_out from public.profiles p where p.id = new.user_id), true) then
+    return new;
+  end if;
   opens := public.clock_out_opens_at(new.user_id);
   if opens is null then
     return new;
@@ -4655,7 +4659,8 @@ CREATE TABLE public.profiles (
     clock_out_from time without time zone,
     paused_at timestamp with time zone,
     paused_reason text,
-    paused_flag uuid
+    paused_flag uuid,
+    hold_clock_out boolean DEFAULT true NOT NULL
 );
 
 
@@ -4685,6 +4690,13 @@ COMMENT ON COLUMN public.profiles.clock_out_from IS 'From when (Lagos time) this
 --
 
 COMMENT ON COLUMN public.profiles.paused_at IS 'When the account was paused for a fake location (0108); null when not paused.';
+
+
+--
+-- Name: COLUMN profiles.hold_clock_out; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.profiles.hold_clock_out IS 'On: no clocking out before their clock-out time (0109). Off: the office has let them clock out whenever (0111).';
 
 
 --
@@ -6028,6 +6040,8 @@ begin
   new.shift_start    := old.shift_start;
   new.shift_end      := old.shift_end;
   new.clock_out_from := old.clock_out_from;
+  -- 0111: and whether their clock-out waits for their time.
+  new.hold_clock_out := old.hold_clock_out;
   -- 0108: a pause for a fake location is lifted by the office only. (The
   -- pause itself is set by trigger in the person's own request, so only
   -- lifting or changing one is blocked here.)
@@ -8285,6 +8299,27 @@ CREATE FUNCTION public.session_aal() RETURNS text
     SET search_path TO 'public'
     AS $$
   select coalesce(nullif(auth.jwt() ->> 'aal', ''), 'aal1');
+$$;
+
+
+--
+-- Name: set_clock_out_hold(uuid, boolean); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_clock_out_hold(p_user uuid, p_hold boolean) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if p_hold is null then
+    raise exception 'Say on or off.';
+  end if;
+  if not public.may_correct_field(p_user) then
+    raise exception 'Not permitted';
+  end if;
+  update public.profiles set hold_clock_out = p_hold where id = p_user;
+  return p_hold;
+end;
 $$;
 
 
@@ -19230,6 +19265,15 @@ GRANT ALL ON FUNCTION public.send_message(p_staff uuid, p_body text, p_attachmen
 REVOKE ALL ON FUNCTION public.session_aal() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.session_aal() TO authenticated;
 GRANT ALL ON FUNCTION public.session_aal() TO service_role;
+
+
+--
+-- Name: FUNCTION set_clock_out_hold(p_user uuid, p_hold boolean); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.set_clock_out_hold(p_user uuid, p_hold boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.set_clock_out_hold(p_user uuid, p_hold boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.set_clock_out_hold(p_user uuid, p_hold boolean) TO service_role;
 
 
 --

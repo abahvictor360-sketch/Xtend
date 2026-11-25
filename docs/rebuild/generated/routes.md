@@ -2,7 +2,7 @@
 
 # API routes
 
-142 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+143 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
 
 ## `POST /api/activity`
 
@@ -202,6 +202,21 @@ const schema = z.object({
 ```
 
 - Database functions: `set_staff_outlets`
+
+## `POST /api/admin/clock-out-hold`
+
+- File: `src/app/api/admin/clock-out-hold/route.ts`
+- Who: ['admin', 'supervisor', 'hr']
+
+The office switches one person's clock-out hold (0111): on, they cannot
+clock out before their clock-out time (0109); off, they can clock out
+now. Postgres decides who may (an admin, HR, or their supervisor).
+
+```ts
+const schema = z.object({ user_id: z.string().guid(), hold: z.boolean() })
+```
+
+- Database functions: `set_clock_out_hold`
 
 ## `POST /api/admin/count-requests/[id]/close`
 

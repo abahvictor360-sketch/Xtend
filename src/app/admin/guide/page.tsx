@@ -933,7 +933,9 @@ export default async function AdminGuidePage() {
             than 15 minutes before the end is early. Staff see it under <Ui>Your hours</Ui>. Staff cannot clock out
             before that time (from 15 minutes before the end of their day when no time is set): the app says{' '}
             <Ui>Not time to clock out yet</Ui> and offers marketers their store check-ins instead. To let someone
-            leave early, clock them out yourself with <Ui>Fix today&apos;s record</Ui> on their day. To go back to
+            leave early, open their day (Attendance, tap their name) and turn off{' '}
+            <Ui>Hold clock-out until their time</Ui>: they are told they can clock out now, and it stays off until
+            you turn it on again. Or clock them out yourself with <Ui>Fix today&apos;s record</Ui>. To go back to
             only flagging early clock-outs, run{' '}
             <code>update public.system_settings set block_early_clock_out = false;</code> in Supabase. Ask Xtend can set
             hours too (&quot;set all marketers to 08:30–18:30, they can clock out from 18:00&quot;).

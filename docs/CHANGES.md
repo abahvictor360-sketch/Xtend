@@ -43,7 +43,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0107_offline_clock_day.sql`;
    - `supabase/migrations/0108_pause_on_fake_location.sql`;
    - `supabase/migrations/0109_no_early_clock_out.sql`;
-   - `supabase/migrations/0110_ai_limits.sql`.
+   - `supabase/migrations/0110_ai_limits.sql`;
+   - `supabase/migrations/0111_clock_out_hold.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18;
    0099, 0100, 0101 and 0102 are done: you ran them on 2026-11-24.)
 4. **Turn off self sign-up in Supabase**: Authentication → Sign In /
@@ -75,6 +76,21 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-25
+
+### Let one person clock out early, or hold them (migration 0111)
+- **What was done:** on each person's day (Attendance → tap their name)
+  there is now a switch, **Hold clock-out until their time**. On (the
+  normal setting): they cannot clock out before their clock-out time. Off:
+  they can clock out now, and they get a notification saying so. It stays
+  off until you turn it on again. Admins, HR and the person's own
+  supervisor can switch it.
+- **The impact:** when someone has to leave early (sick, an emergency, an
+  errand for the office), you turn their hold off instead of clocking them
+  out yourself. Their clock-out is still their own selfie and location, and
+  it is still marked as early. Every switch is in the audit log.
+- **What you need to do:** run `supabase/migrations/0111_clock_out_hold.sql`
+  in Supabase (after 0109) and redeploy. No new app build. Remember to turn
+  the hold back on afterwards if you want them held again the next day.
 
 ### A short video for TECNO, Infinix and itel phones
 - **What was done:** a video of about a minute and a half, with a

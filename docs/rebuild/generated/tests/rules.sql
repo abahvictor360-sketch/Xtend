@@ -7537,5 +7537,71 @@ begin
     if sqlerrm <> 'early-out-0109-done' then raise; end if;
   end;
 
+  -- 0111: the office switches the clock-out hold per person. Rolled back.
+  begin
+    declare
+      ho uuid := gen_random_uuid();
+      other uuid := gen_random_uuid();
+      boss_id uuid := (select id from public.profiles where role = 'admin' order by created_at limit 1);
+      words text;
+    begin
+      update public.system_settings set block_early_clock_out = true;
+      insert into auth.users (id, email) values (ho, 'hold.out@xpel.ng'), (other, 'hold.sup@xpel.ng');
+      insert into public.profiles (id, full_name, email, role, push_exempt, shift_start, shift_end, clock_out_from)
+      values (ho, 'Hold Out', 'hold.out@xpel.ng', 'merchandiser', true, '00:00', '23:59', '23:59'),
+             (other, 'Other Sup', 'hold.sup@xpel.ng', 'supervisor', true, '08:00', '18:00', null);
+      perform assert((select hold_clock_out from public.profiles where id = ho), 'clock-out hold 0111: on for everyone at first');
+
+      perform act_as(ho);
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name)
+      values ('opening', 6.61, 3.36, 10, fresh_photo('selfies', 'ho-1.jpg'), now(), 'Somewhere');
+      begin
+        insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name)
+        values ('closing', 6.61, 3.36, 10, fresh_photo('selfies', 'ho-2.jpg'), now(), 'Somewhere');
+        perform assert(false, 'clock-out hold 0111: with the hold on, an early clock-out is refused');
+      exception when raise_exception then
+        get stacked diagnostics words = message_text;
+        perform assert(words like 'It is not time to clock out yet.%', 'clock-out hold 0111: with the hold on, an early clock-out is refused');
+      end;
+
+      -- Staff cannot switch it themselves.
+      update public.profiles set hold_clock_out = false where id = ho;
+      perform assert((select hold_clock_out from public.profiles where id = ho), 'clock-out hold 0111: staff cannot switch off their own hold');
+      begin
+        perform public.set_clock_out_hold(ho, false);
+        perform assert(false, 'clock-out hold 0111: staff cannot use set_clock_out_hold');
+      exception when raise_exception then
+        perform assert(sqlerrm = 'Not permitted', 'clock-out hold 0111: staff cannot use set_clock_out_hold');
+      end;
+      -- Nor a supervisor of another team.
+      perform act_as(other);
+      begin
+        perform public.set_clock_out_hold(ho, false);
+        perform assert(false, 'clock-out hold 0111: another team''s supervisor cannot switch it');
+      exception when raise_exception then
+        perform assert(sqlerrm = 'Not permitted', 'clock-out hold 0111: another team''s supervisor cannot switch it');
+      end;
+
+      -- The admin lets them clock out now.
+      perform act_as(boss_id);
+      perform assert(public.set_clock_out_hold(ho, false) = false, 'clock-out hold 0111: the admin switches it off');
+      perform act_as(ho);
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name)
+      values ('closing', 6.61, 3.36, 10, fresh_photo('selfies', 'ho-3.jpg'), now(), 'Somewhere');
+      perform assert(exists (select 1 from public.attendance where user_id = ho and type = 'closing'),
+        'clock-out hold 0111: with the hold off, they can clock out before their time');
+      perform assert(exists (select 1 from public.integrity_flags where user_id = ho and kind = 'early_clock_out'),
+        'clock-out hold 0111: and it is still flagged as early');
+
+      -- And switches it back on.
+      perform act_as(boss_id);
+      perform public.set_clock_out_hold(ho, true);
+      perform assert((select hold_clock_out from public.profiles where id = ho), 'clock-out hold 0111: the admin switches it back on');
+      raise exception 'hold-out-0111-done';
+    end;
+  exception when others then
+    if sqlerrm <> 'hold-out-0111-done' then raise; end if;
+  end;
+
   raise notice 'ALL RULES PASSED';
 end $$;
