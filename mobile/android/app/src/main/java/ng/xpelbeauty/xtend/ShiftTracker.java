@@ -45,6 +45,7 @@ public class ShiftTracker extends Plugin {
             .putString("token", token)
             .putString("endpoint", endpoint)
             .putLong("expires_at", expires.longValue())
+            .putBoolean("draining", false)
             .putString("title", call.getString("title", "Xtend"))
             .putString("text", call.getString("text", "On shift"))
             .apply();
@@ -57,9 +58,14 @@ public class ShiftTracker extends Plugin {
         call.resolve(state());
     }
 
+    /**
+     * Clock-out. Nothing new is collected from now on; positions saved with
+     * no signal are still sent (the tracker keeps running only for that),
+     * then it stops by itself.
+     */
     @PluginMethod
     public void stop(PluginCall call) {
-        ShiftTrackerService.clear(getContext());
+        ShiftTrackerService.finish(getContext());
         call.resolve(state());
     }
 
@@ -150,7 +156,9 @@ public class ShiftTracker extends Plugin {
         SharedPreferences p = ShiftTrackerService.prefs(context);
         JSObject o = new JSObject();
         o.put("platform", "android");
-        o.put("active", ShiftTrackerService.configured(context));
+        o.put("active", ShiftTrackerService.collecting(context));
+        // This build stops collecting at clock-out and still sends what was saved.
+        o.put("drains", true);
         o.put("running", p.getBoolean("running", false));
         o.put("location", hasLocation());
         o.put("always", hasBackground());

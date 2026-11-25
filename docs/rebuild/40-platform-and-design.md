@@ -1321,19 +1321,32 @@ Native classes (`android/app/src/main/java/ng/xpelbeauty/xtend/`):
   (`ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS`, falling back to app details);
   `follow({ intervalMs })` (0070): when configured and 2000–60000, stores prefs `fast_ms` and
   `fast_until = now + 60 000` and starts the service again → `{ ok: true }`, else `{ ok: false }`.
-  State: `{ platform: 'android', active, running, location, always, batteryUnrestricted, queued, lastSentAt?, lastError }`.
+  State: `{ platform: 'android', active (collecting), running, location, always, batteryUnrestricted, queued, drains: true, lastSentAt?, lastError }`.
+  `start` also clears `draining`; `stop` calls `ShiftTrackerService.finish` (2026-11-25): with points
+  queued and a token, sets prefs `draining = true` (and clears fast mode) and starts the service to send
+  them; otherwise `clear`.
 - **`ShiftTrackerService`** (foreground, notification channel `xtend_on_shift` "On shift", importance LOW,
   notification id 7301, ongoing, title/text from prefs, tap opens `MainActivity`).
   Constants: `EVERY_MS = 150_000` (a point at least every 2.5 min), `MOVED_M = 100` (or sooner after
   100 m), `ROUGH_M = 250` (rougher readings skipped unless nothing better for 2×EVERY_MS),
   `RETRY_MS = 60_000` after a failure, `MAX_QUEUE = 2000` (oldest dropped).
-  Location updates from GPS and network providers every 60 000 ms, distance 0; a tick every
-  `EVERY_MS` takes the best last-known fix (< 10 min old) if nothing was saved, and flushes.
+  Location updates from GPS and network providers every 60 000 ms, distance 0 (only while
+  **collecting** = configured and not `draining`; `applyMode` removes them otherwise). A tick every
+  `EVERY_MS` (Handler while awake, and an **alarm**: `AlarmManager.setAndAllowWhileIdle(ELAPSED_REALTIME_WAKEUP,
+  now + EVERY_MS)` → `PendingIntent.getForegroundService` (API 26+, else `getService`) with action
+  `ng.xpelbeauty.xtend.SHIFT_TICK`, rescheduled at every `onStartCommand`, cancelled by `clear` and when
+  stopping; it restarts a stopped service): if nothing was saved for `EVERY_MS`, keeps the best last-known
+  fix under **2 min** old, else asks for a **fresh fix** (one-shot listener on network then GPS, wake lock
+  `xtend:shift-tick` up to 45 s, gives up after 40 s and then keeps a last-known fix under 10 min old),
+  then flushes. **Draining** (stopped at clock-out with points queued, or the token expired with points
+  queued): no new points (`keep` returns at once), the tick only flushes, and the service stops when the
+  queue is empty.
   Points `{ lat, lng, accuracy_m (999 if none), captured_at (min of fix time and now), is_mock }`
   are kept in prefs key `queue` (JSON). Send: up to 500 points,
   `POST <endpoint>` `Authorization: Bearer <token>`, body `{ sent_at, points }`, connect timeout 20 000,
-  read 30 000; wake lock held up to 60 000 ms. 401 → clear queue and stop; non-2xx → `last_error = "server <status>"`;
-  2xx → drop the sent points; answer `{ stop: true }` → clear; exactly 500 sent → send again.
+  read 30 000; wake lock held up to 60 000 ms. 401 → `clear` (forget the token; **the queue is kept** for the
+  next shift's token); non-2xx → `last_error = "server <status>"`; 2xx → drop the sent points; exactly 500 sent
+  with more queued → send again; else answer `{ stop: true }`, or draining/not collecting with nothing left → `clear`.
   **Follow live (0070)**: each 2xx answer's `interval_ms` (2000–60000) sets `fast_ms` and
   `fast_until = now + 60 000`; an answer without it clears them (as does `clear`). While fast
   (`fastMs()` > 0) the location updates are re-registered at `fast_ms` (normally 60 000; done on
@@ -1342,9 +1355,9 @@ Native classes (`android/app/src/main/java/ng/xpelbeauty/xtend/`):
   2 intervals), each new fix becomes `liveLoc` and flushes when an interval has passed, and the
   body gains `live: { lat, lng, accuracy_m, captured_at, is_mock, heading? (bearing), speed? }`
   for a `liveLoc` under 60 s old. Stored points are unchanged. Notification text unchanged.
-  `START_STICKY`; `onTaskRemoved` flushes. Returns `START_NOT_STICKY` and stops when not configured
-  (no token or `expires_at` past).
-- **`ShiftTrackerBoot`** receiver: on the three actions, if configured, starts the service (ignores refusals).
+  `START_STICKY`; `onTaskRemoved` flushes. Returns `START_NOT_STICKY` and stops when neither
+  collecting nor draining.
+- **`ShiftTrackerBoot`** receiver: on the three actions, if collecting or draining, starts the service (ignores refusals).
 
 ### 5.4 iOS project
 
@@ -1365,11 +1378,15 @@ Native classes (`android/app/src/main/java/ng/xpelbeauty/xtend/`):
 - **`ShiftTracker.swift`**: `ShiftTrackerCore` singleton. UserDefaults keys `xtend.tracker.token`,
   `.endpoint`, `.expires` (ms), `.queue`, `.lastAt`, `.lastLat`, `.lastLng`, `.sent`, `.error`.
   `every = 150` s, `movedMetres = 100`, `desiredAccuracy = kCLLocationAccuracyNearestTenMeters`,
-  `distanceFilter = 50`, `pausesLocationUpdatesAutomatically = false`, `activityType = .otherNavigation`,
+  `distanceFilter = kCLDistanceFilterNone` (2026-11-25; it was 50 m, so standing still sent nothing), `pausesLocationUpdatesAutomatically = false`, `activityType = .otherNavigation`,
   background updates and indicator on when `UIBackgroundModes` has `location`; also
   `startMonitoringSignificantLocationChanges()`. Asks for Always after When-In-Use. Queue capped at 2000.
   Flush: up to 500 points, `URLRequest` timeout 25 s, inside a background task `xtend-positions`;
-  retry gap 60 s; same 401 / non-2xx / `stop` handling as Android. **Follow live (0070)**: keys
+  retry gap 60 s; 401 → `halt` (the queue is kept); a full batch of 500 with more queued → flush again,
+  else `stop` or draining with nothing left → `halt`. Key `xtend.tracker.draining`: `finish()` (plugin
+  `stop`) with points queued sets it, stops location services and flushes; with none, `halt`. While
+  draining or past expiry no point is kept and updates stop; `configure` clears it; state adds
+  `drains: true` and `active`/`running` are false while draining. **Follow live (0070)**: keys
   `xtend.tracker.fastMs`, `.fastUntil` (answer `interval_ms` → now + 60 s; none → cleared); while
   fast, `desiredAccuracy = kCLLocationAccuracyBest` and `distanceFilter = kCLDistanceFilterNone`
   (`applyAccuracy`, main thread), the latest fix is sent as `live` (`heading` = course ≥ 0,
@@ -1949,7 +1966,7 @@ A rebuild matches this specification when all of the following hold.
 20. A dark or blurry frame keeps the camera open with the matching hint; there is no file picker in any capture flow.
 
 **Native**
-21. The Android build has the permissions, service and boot receiver in 5.3; the tracker posts at least every 150 s while on shift, with `Authorization: Bearer <token>`, and stops on 401 or `{ stop: true }`.
+21. The Android build has the permissions, service and boot receiver in 5.3; the tracker posts at least every 150 s while on shift (an idle-allowed alarm keeps it going asleep), with `Authorization: Bearer <token>`, stops on 401 or `{ stop: true }` without discarding saved positions, and after clock-out only sends what was saved.
 22. `getNativeFix()` returns `is_mock`/`compromised`; clock-in `device_info.native` carries them.
 23. The workflow publishes `xtend.apk` on release tag `android` named `Xtend for Android 1.0.<code>`, and `/api/version` reports that build.
 

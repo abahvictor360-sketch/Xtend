@@ -1,6 +1,7 @@
 package ng.xpelbeauty.xtend;
 
 import android.Manifest;
+import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -20,6 +21,7 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
@@ -56,6 +58,15 @@ import org.json.JSONObject;
  * a ping); the stored positions keep their usual pace. When an answer comes
  * without interval_ms, or none comes for a minute, it goes back to normal.
  * Nothing on the phone changes: the notification stays "On shift".
+ *
+ * Asleep (2026-11-25): a Handler timer does not run while the phone sleeps,
+ * so a phone lying still on a desk could send nothing for an hour. Each
+ * tick is now also an Android alarm allowed while idle, which wakes the
+ * phone, restarts the service if the phone's maker stopped it, and, when
+ * nothing new came in, asks for a fresh position instead of reusing an old
+ * one. After clock-out the tracker only sends what it saved offline
+ * ("draining"): it never collects new positions after the shift, and what it
+ * saved is never thrown away.
  */
 public class ShiftTrackerService extends Service implements LocationListener {
 
@@ -72,12 +83,19 @@ public class ShiftTrackerService extends Service implements LocationListener {
     /** Do not try the network more often than this after a failure. */
     private static final long RETRY_MS = 60_000;
     private static final int MAX_QUEUE = 2000;
+    /** The alarm that wakes the tracker for its tick, even when the phone sleeps. */
+    static final String ACTION_TICK = "ng.xpelbeauty.xtend.SHIFT_TICK";
+    /** How long a fresh position may take before giving up until the next tick. */
+    private static final long FRESH_FIX_MS = 40_000;
 
     private HandlerThread thread;
     private Handler handler;
     private final ExecutorService sender = Executors.newSingleThreadExecutor();
     private LocationManager locations;
     private PowerManager.WakeLock wakeLock;
+    /** Held while a tick looks for a fresh position (separate from sending). */
+    private PowerManager.WakeLock tickLock;
+    private LocationListener freshListener = null;
     private long lastFailureAt = 0;
     private volatile boolean sending = false;
     /** Follow live: the latest position, and when one was last sent. */
@@ -97,6 +115,75 @@ public class ShiftTrackerService extends Service implements LocationListener {
     static boolean configured(Context context) {
         SharedPreferences p = prefs(context);
         return p.getString("token", null) != null && p.getLong("expires_at", 0) > System.currentTimeMillis();
+    }
+
+    /** Collecting positions: a shift is on and it has not been stopped. */
+    static boolean collecting(Context context) {
+        return configured(context) && !prefs(context).getBoolean("draining", false);
+    }
+
+    /** Positions saved on the phone and not yet sent. */
+    static int queued(Context context) {
+        try {
+            return new JSONArray(prefs(context).getString("queue", "[]")).length();
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
+    /**
+     * After the shift (clocked out, or the token ran out) with positions
+     * still on the phone: send them, collect nothing new. The server accepts
+     * them with the ended token (0096).
+     */
+    static boolean draining(Context context) {
+        return !collecting(context) && prefs(context).getString("token", null) != null && queued(context) > 0;
+    }
+
+    /** Clock-out: stop collecting; keep running only to send what is waiting. */
+    static void finish(Context context) {
+        if (queued(context) > 0 && prefs(context).getString("token", null) != null) {
+            prefs(context).edit().putBoolean("draining", true).remove("fast_ms").remove("fast_until").apply();
+            try {
+                start(context);
+            } catch (Exception e) {
+                // Android refused a start now: the next app start or alarm sends them.
+            }
+        } else {
+            clear(context);
+        }
+    }
+
+    /**
+     * The next tick as an alarm allowed while idle: it fires with the phone
+     * asleep (in deep sleep Android may hold it for up to about 10 minutes)
+     * and restarts the service if it was stopped.
+     */
+    static void scheduleTick(Context context) {
+        AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        if (am == null) return;
+        try {
+            am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + EVERY_MS, tickIntent(context));
+        } catch (Exception ignored) {
+            // No alarm: the service's own timer still runs while awake.
+        }
+    }
+
+    static void cancelTick(Context context) {
+        AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        if (am != null) {
+            try {
+                am.cancel(tickIntent(context));
+            } catch (Exception ignored) {}
+        }
+    }
+
+    private static PendingIntent tickIntent(Context context) {
+        Intent i = new Intent(context, ShiftTrackerService.class).setAction(ACTION_TICK);
+        int flags = PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT;
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
+            ? PendingIntent.getForegroundService(context, 1, i, flags)
+            : PendingIntent.getService(context, 1, i, flags);
     }
 
     static void start(Context context) {
@@ -122,14 +209,16 @@ public class ShiftTrackerService extends Service implements LocationListener {
 
     /** Forgets the token (positions not yet sent are kept until a new shift sends them). */
     static void clear(Context context) {
-        prefs(context).edit().remove("token").remove("endpoint").remove("expires_at").remove("fast_ms").remove("fast_until").putBoolean("running", false).apply();
+        prefs(context).edit().remove("token").remove("endpoint").remove("expires_at").remove("fast_ms").remove("fast_until").remove("draining").putBoolean("running", false).apply();
+        cancelTick(context);
         context.stopService(new Intent(context, ShiftTrackerService.class));
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (!configured(this)) {
+        if (!collecting(this) && !draining(this)) {
             prefs(this).edit().putBoolean("running", false).apply();
+            cancelTick(this);
             stopSelf();
             return START_NOT_STICKY;
         }
@@ -148,14 +237,17 @@ public class ShiftTrackerService extends Service implements LocationListener {
             return START_NOT_STICKY;
         }
         prefs(this).edit().putBoolean("running", true).apply();
+        boolean alarm = intent != null && ACTION_TICK.equals(intent.getAction());
         if (thread == null) {
             begin();
         } else if (handler != null) {
             // Started again while running: the follow-live instruction may
-            // have changed (ShiftTracker.follow).
+            // have changed (ShiftTracker.follow), or the alarm woke us.
             handler.post(this::applyMode);
-            flush();
+            if (alarm) handler.post(this::tickOnce);
+            else flush();
         }
+        scheduleTick(this);
         return START_STICKY;
     }
 
@@ -171,7 +263,13 @@ public class ShiftTrackerService extends Service implements LocationListener {
             wakeLock.setReferenceCounted(false);
         }
 
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+        if (pm != null) {
+            tickLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "xtend:shift-tick");
+            tickLock.setReferenceCounted(false);
+        }
+
+        if (collecting(this)
+            && ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
             && ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             prefs(this).edit().putString("last_error", "no location permission").apply();
             stopSelf();
@@ -187,20 +285,87 @@ public class ShiftTrackerService extends Service implements LocationListener {
     private final Runnable tick = new Runnable() {
         @Override
         public void run() {
-            if (!configured(ShiftTrackerService.this)) {
-                stopSelf();
-                return;
-            }
-            long last = prefs(ShiftTrackerService.this).getLong("last_saved_at", 0);
-            if (System.currentTimeMillis() - last >= EVERY_MS) {
-                Location best = bestLastKnown();
-                if (best != null && System.currentTimeMillis() - best.getTime() < 10 * 60_000) keep(best, true);
-            }
-            flush();
-            applyMode();
-            handler.postDelayed(this, EVERY_MS);
+            if (tickOnce()) handler.postDelayed(this, EVERY_MS);
         }
     };
+
+    /**
+     * One tick: a position if none was saved for a while (a recent one
+     * Android has, else a fresh one), then send what is waiting. False when
+     * the tracker has stopped.
+     */
+    private boolean tickOnce() {
+        if (!collecting(this)) {
+            // After the shift: only send what was saved, then stop.
+            if (draining(this)) {
+                flush();
+                return true;
+            }
+            cancelTick(this);
+            stopSelf();
+            return false;
+        }
+        long last = prefs(this).getLong("last_saved_at", 0);
+        if (System.currentTimeMillis() - last >= EVERY_MS) {
+            Location best = bestLastKnown();
+            if (best != null && System.currentTimeMillis() - best.getTime() < 2 * 60_000) keep(best, true);
+            else freshFix(best);
+        }
+        flush();
+        applyMode();
+        return true;
+    }
+
+    /**
+     * Asks Android for a position now (network first, it answers indoors;
+     * GPS too), keeping the phone awake for up to 40 seconds. If none comes,
+     * a reading up to 10 minutes old is kept rather than nothing.
+     */
+    private void freshFix(Location fallback) {
+        if (locations == null || thread == null || freshListener != null) return;
+        if (tickLock != null) tickLock.acquire(FRESH_FIX_MS + 5_000);
+        final LocationListener once = new LocationListener() {
+            @Override
+            public void onLocationChanged(@NonNull Location l) {
+                endFresh(this);
+                keep(l, true);
+            }
+
+            @Override
+            public void onStatusChanged(String provider, int status, Bundle extras) {}
+
+            @Override
+            public void onProviderEnabled(@NonNull String provider) {}
+
+            @Override
+            public void onProviderDisabled(@NonNull String provider) {}
+        };
+        freshListener = once;
+        try {
+            for (String provider : new String[] { LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER }) {
+                if (locations.isProviderEnabled(provider)) {
+                    locations.requestLocationUpdates(provider, 0L, 0f, once, thread.getLooper());
+                }
+            }
+        } catch (Exception e) {
+            endFresh(once);
+            return;
+        }
+        handler.postDelayed(() -> {
+            if (freshListener == once) {
+                endFresh(once);
+                if (fallback != null && System.currentTimeMillis() - fallback.getTime() < 10 * 60_000) keep(fallback, true);
+            }
+        }, FRESH_FIX_MS);
+    }
+
+    private void endFresh(LocationListener once) {
+        try {
+            if (locations != null) locations.removeUpdates(once);
+        } catch (Exception ignored) {}
+        if (freshListener == once) freshListener = null;
+        if (tickLock != null && tickLock.isHeld()) tickLock.release();
+    }
 
     /**
      * Asks Android for positions every minute, or every few seconds while
@@ -208,6 +373,15 @@ public class ShiftTrackerService extends Service implements LocationListener {
      */
     private void applyMode() {
         if (locations == null || thread == null) return;
+        if (!collecting(this)) {
+            // After the shift: no new positions, only sending what is saved.
+            try {
+                locations.removeUpdates(this);
+            } catch (Exception ignored) {}
+            appliedMinTime = -1;
+            handler.removeCallbacks(liveTick);
+            return;
+        }
         long fast = fastMs(this);
         long want = fast > 0 ? fast : 60_000;
         if (want != appliedMinTime) {
@@ -283,6 +457,8 @@ public class ShiftTrackerService extends Service implements LocationListener {
 
     /** Keeps a position on the phone if it is due, then tries to send. */
     private synchronized void keep(Location l, boolean forced) {
+        // Never after the shift (clocked out, or the token ran out).
+        if (!collecting(this)) return;
         SharedPreferences p = prefs(this);
         long now = System.currentTimeMillis();
         long lastAt = p.getLong("last_saved_at", 0);
@@ -381,8 +557,9 @@ public class ShiftTrackerService extends Service implements LocationListener {
             }
             int status = c.getResponseCode();
             if (status == 401) {
-                // The token has ended (clocked out, a new phone, expired).
-                p.edit().putString("queue", "[]").apply();
+                // The token is not known (a new phone, or the account was
+                // deactivated). What was saved stays on the phone: the next
+                // shift's token sends it. Nothing is thrown away.
                 clear(this);
                 return;
             }
@@ -414,10 +591,10 @@ public class ShiftTrackerService extends Service implements LocationListener {
             long before = fastMs(this);
             setFast(this, answer.optLong("interval_ms", 0));
             if (fastMs(this) != before && handler != null) handler.post(this::applyMode);
-            if (answer.optBoolean("stop", false)) {
-                clear(this);
-            } else if (count == 500) {
+            if (count == 500 && queued(this) > 0) {
                 send();
+            } else if (answer.optBoolean("stop", false) || (draining(this) && queued(this) == 0) || (!collecting(this) && queued(this) == 0)) {
+                clear(this);
             }
         } catch (Exception e) {
             // No network: everything stays on the phone for the next try.
@@ -475,6 +652,8 @@ public class ShiftTrackerService extends Service implements LocationListener {
             handler.removeCallbacks(tick);
             handler.removeCallbacks(liveTick);
         }
+        if (freshListener != null) endFresh(freshListener);
+        if (tickLock != null && tickLock.isHeld()) tickLock.release();
         if (locations != null) {
             try {
                 locations.removeUpdates(this);

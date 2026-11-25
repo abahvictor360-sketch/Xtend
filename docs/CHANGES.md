@@ -72,6 +72,35 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-25
 
+### Movement tracking: fixes for phones that went quiet
+- **What was done:** I went through how movement gets from a phone to the
+  office and fixed what made it go quiet or lose positions:
+  1. An Android phone lying still with the screen off stopped sending,
+     because its 2½-minute timer pauses while the phone sleeps. It now also
+     sets a phone alarm that wakes it (in deep sleep Android may hold it to
+     about 10 minutes). The same alarm restarts the tracker if the phone
+     stopped it.
+  2. Standing still indoors, it reused a position up to 10 minutes old or
+     saved nothing. It now asks the phone for a fresh position.
+  3. If the server ever refused the phone's tracking pass, the phone threw
+     away every position it had saved offline. They are now kept and sent
+     with the next shift.
+  4. After clock-out, a phone that still had offline positions to send also
+     kept collecting new ones. It now stops collecting at clock-out and only
+     sends what it saved during the shift.
+  5. iPhones only recorded after a 50 m move, so someone in one store all
+     morning sent nothing. They now record every few minutes standing still.
+  6. A position saved offline by the open app page was timed when it was
+     saved, not when it was taken. Fixed.
+  Positions saved with no signal were already kept and sent when the
+  signal is back (that part worked; the server accepts them at any age).
+- **The impact:** fewer "Updated 1 h ago" gaps; no lost offline movement;
+  no tracking after clock-out.
+- **What you need to do:** these are in the phone app, so publish the new
+  Android build (and iPhone build) and ask staff to install it. On Tecno,
+  Infinix and itel phones also turn on **Auto-start** for Xtend and lock it
+  in recent apps (see the admin guide, Movement). Redeploy the website too.
+
 ### The attendance map shows each person's photo and name
 - **What was done:** on Attendance → **Map**, every clock-in and clock-out
   is now the person's profile photo (or their initials if they have none)
