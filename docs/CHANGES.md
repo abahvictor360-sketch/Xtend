@@ -72,6 +72,17 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-25
 
+### The attendance map shows each person's photo and name
+- **What was done:** on Attendance → **Map**, every clock-in and clock-out
+  is now the person's profile photo (or their initials if they have none)
+  with their name underneath. The ring is green when they were at the
+  store and orange when not, and a small **IN** / **OUT** badge says which
+  it was. Tap a pin for the time and the distance from the store.
+- **The impact:** you can tell at a glance who is where, instead of
+  tapping each dot.
+- **What you need to do:** redeploy. Staff without a profile photo show
+  initials; they add one under You → Take your photo.
+
 ### Nobody can clock in off site
 - **What was done:** clocking in, or checking in at a store, now only
   works at the store. Anyone who tries from somewhere else gets a pop-up,

@@ -1,4 +1,5 @@
 import { attendanceWriteUp } from '../src/lib/attendance-writeup'
+import { initialsOf, personPinHtml } from '../src/components/admin/attendance-map'
 import { attendanceReportModel } from '../src/lib/attendance-report-model'
 /**
  * Checks how clock events become attendance days (src/lib/attendance-report.ts):
@@ -340,6 +341,19 @@ check(clock(485) === '08:05' && clock(null) === '—', 'times back from minutes'
 check(delta(80, 70, true).better === true && delta(5, 3, false).better === false && delta(null, 3, true).change === null, 'deltas know which way is better')
 check(deviceText({ ua: 'Mozilla/5.0 (Linux; Android 13; TECNO KG5 Build/TP1A) Chrome/120', native: { platform: 'android' } }) === 'TECNO KG5, Android 13 in the Xtend app', 'device named from the browser string', deviceText({ ua: 'Mozilla/5.0 (Linux; Android 13; TECNO KG5 Build/TP1A) Chrome/120', native: { platform: 'android' } }))
 check(deviceText({}) === 'Not reported', 'no device info')
+
+// The map's pins are the people: photo (or initials), ring, badge, name underneath.
+{
+  const pin = personPinHtml('Ada <Okafor>', 'https://x.test/a.jpg', true, 'in')
+  check(pin.includes('<img src="https://x.test/a.jpg"') && pin.includes('#15803d') && pin.includes('>IN<') && pin.includes('Ada &lt;Okafor&gt;'),
+    'a pin shows the photo, a green ring on site, IN, and the escaped name underneath')
+  const none = personPinHtml('Tunde Bakare', null, false, 'out')
+  check(none.includes('>TB<') && none.includes('#c2410c') && none.includes('>OUT<') && !none.includes('<img'), 'no photo: initials, orange off site, OUT')
+  check(initialsOf('ada') === 'A' && initialsOf('  ') === '?', 'initials')
+  const fs = require('node:fs') as typeof import('node:fs')
+  const page = fs.readFileSync(require('node:path').join(__dirname, '..', 'src/app/admin/attendance/page.tsx'), 'utf8')
+  check(page.includes('avatarUrls(supabase,') && page.includes('photo: photos.get(p.id)'), 'the page signs the photos of the people listed, in the viewer’s own session')
+}
 
 console.log(failed ? `\n${failed} FAILED` : '\nALL ATTENDANCE CHECKS PASSED')
 process.exit(failed ? 1 : 0)

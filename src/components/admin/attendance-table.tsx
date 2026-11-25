@@ -28,6 +28,8 @@ export interface TablePerson {
   store: string | null
   team: string | null
   role: string
+  /** Their profile photo (a signed link), for the map; null for initials. */
+  photo?: string | null
 }
 
 type Row = DayRecord<AttendanceDetail>
@@ -155,7 +157,7 @@ export function AttendanceTable({
       </div>
 
       {view === 'map' ? (
-        <AttendanceMap rows={events} />
+        <AttendanceMap rows={events} people={people} />
       ) : (
         <>
           <div className="space-y-2 md:hidden">
