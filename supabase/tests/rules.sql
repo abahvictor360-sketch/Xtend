@@ -7169,6 +7169,54 @@ begin
                      and (public.day_kind(mk, public.business_date()) <> 'working'
                           or exists (select 1 from public.staff_no_show(0) n where n.user_id = mk and n.outlet_id is null)),
         'hours 0100: someone with no home store who has not clocked in is still a no-show');
+      -- 0105: a clock-out window. 08:30 to 18:30, clocking out from 18:00 is fine.
+      update public.profiles set shift_start = '08:30', shift_end = '18:30', clock_out_from = '18:00' where id = mk;
+      begin
+        update public.profiles set clock_out_from = '19:00' where id = mk;
+        perform assert(false, 'window 0105: no later than the end');
+      exception when check_violation then
+        perform assert(true, 'window 0105: a window after the day ends is refused');
+      end;
+      begin
+        update public.profiles set clock_out_from = '08:00' where id = mk;
+        perform assert(false, 'window 0105: after the start');
+      exception when check_violation then
+        perform assert(true, 'window 0105: a window before the day starts is refused');
+      end;
+      perform act_as(mk);
+      update public.profiles set clock_out_from = '09:00' where id = mk;
+      perform act_as(boss);
+      perform assert((select clock_out_from from public.profiles where id = mk) = '18:00', 'window 0105: staff cannot change their own window');
+
+      -- Only the punctuality trigger runs, on yesterday's clock-outs.
+      alter table public.attendance enable always trigger trg_attendance_punctuality;
+      perform set_config('session_replication_role', 'replica', true);
+      delete from public.integrity_flags where user_id = mk;
+      insert into public.attendance (user_id, type, lat, lng, accuracy_m, selfie_path, client_captured_at, created_at, attendance_date)
+      values (mk, 'closing', 6.45, 3.40, 10, 'x',
+              (d + time '18:10') at time zone 'Africa/Lagos', (d + time '18:10') at time zone 'Africa/Lagos', d);
+      perform assert(not exists (select 1 from public.integrity_flags where user_id = mk and kind = 'early_clock_out'),
+        'window 0105: clocking out at 18:10, inside the window, is not early');
+      delete from public.attendance where user_id = mk and type = 'closing';
+      insert into public.attendance (user_id, type, lat, lng, accuracy_m, selfie_path, client_captured_at, created_at, attendance_date)
+      values (mk, 'closing', 6.45, 3.40, 10, 'x',
+              (d + time '17:50') at time zone 'Africa/Lagos', (d + time '17:50') at time zone 'Africa/Lagos', d);
+      perform assert(exists (select 1 from public.integrity_flags where user_id = mk and kind = 'early_clock_out'
+                             and summary like 'Clocked out 10 min early%they may clock out from 18:00%'),
+        'window 0105: clocking out at 17:50, before the window, is early by 10 minutes');
+      -- With no window, 18:10 is 20 minutes before an 18:30 end: early, as before.
+      delete from public.integrity_flags where user_id = mk;
+      delete from public.attendance where user_id = mk and type = 'closing';
+      update public.profiles set clock_out_from = null where id = mk;
+      insert into public.attendance (user_id, type, lat, lng, accuracy_m, selfie_path, client_captured_at, created_at, attendance_date)
+      values (mk, 'closing', 6.45, 3.40, 10, 'x',
+              (d + time '18:10') at time zone 'Africa/Lagos', (d + time '18:10') at time zone 'Africa/Lagos', d);
+      perform assert(exists (select 1 from public.integrity_flags where user_id = mk and kind = 'early_clock_out'
+                             and summary like '%their day ends 18:30%'),
+        'window 0105: with no window, more than 15 minutes before the end is still early');
+      perform set_config('session_replication_role', 'origin', true);
+      alter table public.attendance enable trigger trg_attendance_punctuality;
+
       raise exception 'hours-0100-done';
     end;
   exception when others then

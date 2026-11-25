@@ -752,7 +752,9 @@ Hours are the person's, wherever they clock in: Home reads `my_day.shift`
 heads-ups, the clock-out prompt, the outlet card's **Your hours** and the
 "My day" line ("<store> · 09:00–17:00", or just the hours with no store).
 Account shows **Your hours: 09:00–17:00** / "Clock in by the start, wherever
-your first store is. Only the office can change your hours."
+your first store is. Only the office can change your hours." With a
+clock-out window (0105, `profiles.clock_out_from`) the line reads "… first
+store is. You can clock out from 18:00. Only the office …"
 
 ### 5.2a The guide: "Your next step" and the fix-it pop-up
 

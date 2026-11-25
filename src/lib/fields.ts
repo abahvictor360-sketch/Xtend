@@ -164,9 +164,29 @@ export const clockTime = z
   .trim()
   .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Enter the time as HH:MM, for example 09:00')
 
-/** Working hours: both or neither, and the day ends after it starts. */
-export function hoursProblem(start: string | undefined, end: string | undefined): string | null {
-  if (start === undefined && end === undefined) return null
+/** An optional clock-out window (0105): a time, or empty / null for none. */
+export const optionalClockTime = z
+  .union([z.literal(''), z.null(), clockTime])
+  .optional()
+  .transform((v) => (v === '' ? null : v))
+
+/**
+ * Working hours: both or neither, and the day ends after it starts. The
+ * clock-out window (0105), when set, comes with the hours and falls after
+ * the start and no later than the end.
+ */
+export function hoursProblem(
+  start: string | undefined,
+  end: string | undefined,
+  clockOutFrom?: string | null,
+): string | null {
+  if (start === undefined && end === undefined) {
+    return clockOutFrom ? 'Send the working hours with the time they can clock out from.' : null
+  }
   if (start === undefined || end === undefined) return 'Send both the clock-in and the clock-out time.'
-  return end > start ? null : 'The clock-out time must be after the clock-in time.'
+  if (end <= start) return 'The clock-out time must be after the clock-in time.'
+  if (clockOutFrom && (clockOutFrom <= start || clockOutFrom > end)) {
+    return '“Can clock out from” must be after the start of the day and no later than its end.'
+  }
+  return null
 }

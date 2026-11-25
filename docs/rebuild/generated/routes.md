@@ -1304,6 +1304,8 @@ const patchSchema = z.object({
   /** Their working hours, wherever they clock in (0100); both together. */
   shift_start: clockTime.optional(),
   shift_end: clockTime.optional(),
+  /** From when they may clock out without it being early (0105); null: none. Sent with the hours. */
+  clock_out_from: optionalClockTime,
 })
 ```
 
@@ -1354,6 +1356,8 @@ const createUserSchema = z.object({
   /** Their working hours, wherever they clock in (0100). */
   shift_start: clockTime.default('08:00'),
   shift_end: clockTime.default('18:00'),
+  /** From when they may clock out without it being early (0105); empty: none. */
+  clock_out_from: optionalClockTime,
 })
 ```
 

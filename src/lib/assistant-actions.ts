@@ -261,6 +261,12 @@ export class ActionBuilder {
       throw new Error('Give both a clock-in and a clock-out time, like 09:00 and 18:00.')
     }
     if (end <= start) throw new Error('The clock-out time must be after the clock-in time.')
+    // 0105: optional; empty leaves each person's window as it is.
+    const leaveFrom = input.clock_out_from ? normTime(input.clock_out_from) : null
+    if (input.clock_out_from && !leaveFrom) throw new Error('Give the clock-out-from time like 18:00.')
+    if (leaveFrom && (leaveFrom <= start || leaveFrom > end)) {
+      throw new Error('They can only clock out from a time after the start and no later than the end of the day.')
+    }
     const group = input.group as string
     let people
     if (group === 'people' || (!group && list(input.people).length)) {
@@ -279,12 +285,13 @@ export class ActionBuilder {
       title: `Set the working hours for ${people.length} ${people.length === 1 ? 'person' : 'people'}`,
       lines: [
         `Who: ${names(people.map((p) => p.name))}`,
-        `Clock in by ${start}, clock out from ${end}`,
+        `Clock in by ${start}, day ends at ${end}`,
+        ...(leaveFrom ? [`They can clock out from ${leaveFrom}: clocking out from then is not early.`] : []),
         'Applies wherever they clock in; it sets who counts as late.',
       ],
       warning: null,
       verb: 'Set hours',
-      payload: { user_ids: people.map((p) => p.id), shift_start: start, shift_end: end },
+      payload: { user_ids: people.map((p) => p.id), shift_start: start, shift_end: end, ...(leaveFrom ? { clock_out_from: leaveFrom } : {}) },
     }
   }
 

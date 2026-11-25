@@ -60,6 +60,8 @@ export default async function AccountPage() {
   const start = session.profile.shift_start ?? outlet?.shift_start ?? '08:00'
   const end = session.profile.shift_end ?? outlet?.shift_end ?? '18:00'
   const hours = `${start.slice(0, 5)}–${end.slice(0, 5)}`
+  // 0105: from when they may clock out, if the office set it.
+  const leaveFrom = (session.profile as { clock_out_from?: string | null }).clock_out_from?.slice(0, 5) ?? null
   const businessDate = (today as string | null) ?? ''
 
   // The stock count sheet, any time (0064): their stores, this month's
@@ -143,7 +145,7 @@ export default async function AccountPage() {
           <TaskRow
             icon={<Clock3 className="h-5 w-5" />}
             title={`Your hours: ${hours}`}
-            meta="Clock in by the start, wherever your first store is. Only the office can change your hours."
+            meta={`Clock in by the start, wherever your first store is.${leaveFrom ? ` You can clock out from ${leaveFrom}.` : ''} Only the office can change your hours.`}
           />
         </section>
 

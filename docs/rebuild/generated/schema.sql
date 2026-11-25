@@ -1007,7 +1007,6 @@ declare
   shift record;
   -- When the photo was taken, which is when they clocked: a clock-in made
   -- offline and sent later is not late for having waited for signal.
-  -- (A phone clock moved to look punctual is flagged by 026.)
   at_local timestamp := (coalesce(new.client_captured_at, new.created_at) at time zone 'Africa/Lagos');
   minutes integer;
 begin
@@ -1015,9 +1014,7 @@ begin
     return null;
   end if;
 
-  -- 0100: the person's own hours, wherever they clock; the store they
-  -- clocked at (or their home store) only names where.
-  select p.shift_start, p.shift_end,
+  select p.shift_start, p.shift_end, p.clock_out_from,
          o.id, o.name
     into shift
   from public.profiles p
@@ -1034,6 +1031,17 @@ begin
       values (new.user_id, 'late_clock_in', case when minutes > 60 then 'high' else 'medium' end,
               format('Clocked in %s late%s (their day starts %s)',
                      public.minutes_label(minutes), coalesce(' at ' || shift.name, ''), to_char(shift.shift_start, 'HH24:MI')),
+              jsonb_build_object('attendance_id', new.id, 'minutes', minutes),
+              shift.id, new.attendance_date);
+    end if;
+  elsif new.type = 'closing' and shift.clock_out_from is not null then
+    -- 0105: any time from their window is fine; before it is early.
+    minutes := floor(extract(epoch from (new.attendance_date + shift.clock_out_from) - at_local) / 60);
+    if minutes > 0 then
+      insert into public.integrity_flags (user_id, kind, severity, summary, detail, outlet_id, flag_date)
+      values (new.user_id, 'early_clock_out', case when minutes > 60 then 'high' else 'medium' end,
+              format('Clocked out %s early%s (they may clock out from %s)',
+                     public.minutes_label(minutes), coalesce(' at ' || shift.name, ''), to_char(shift.clock_out_from, 'HH24:MI')),
               jsonb_build_object('attendance_id', new.id, 'minutes', minutes),
               shift.id, new.attendance_date);
     end if;
@@ -4473,7 +4481,8 @@ CREATE TABLE public.profiles (
     staff_role_id uuid,
     app_only boolean DEFAULT false NOT NULL,
     shift_start time without time zone DEFAULT '08:00:00'::time without time zone NOT NULL,
-    shift_end time without time zone DEFAULT '18:00:00'::time without time zone NOT NULL
+    shift_end time without time zone DEFAULT '18:00:00'::time without time zone NOT NULL,
+    clock_out_from time without time zone
 );
 
 
@@ -4489,6 +4498,13 @@ COMMENT ON COLUMN public.profiles.shift_start IS 'When this person''s working da
 --
 
 COMMENT ON COLUMN public.profiles.shift_end IS 'When this person''s working day ends (Lagos time) (0100).';
+
+
+--
+-- Name: COLUMN profiles.clock_out_from; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.profiles.clock_out_from IS 'From when (Lagos time) this person may clock out without it counting as early; null: 15 minutes before shift_end (0105).';
 
 
 --
@@ -5786,9 +5802,10 @@ begin
   new.is_active     := old.is_active;
   new.push_exempt   := old.push_exempt;
   new.app_only      := old.app_only;
-  -- 0100: their working hours are set by the office.
-  new.shift_start   := old.shift_start;
-  new.shift_end     := old.shift_end;
+  -- 0100: their working hours are set by the office; 0105: and the window.
+  new.shift_start    := old.shift_start;
+  new.shift_end      := old.shift_end;
+  new.clock_out_from := old.clock_out_from;
   if coalesce(current_setting('xtend.own_photo', true), '') <> 'on' then
     new.avatar_path := old.avatar_path;
   end if;
@@ -12937,6 +12954,14 @@ ALTER TABLE ONLY public.place_naming_due
 
 ALTER TABLE ONLY public.products
     ADD CONSTRAINT products_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: profiles profiles_clock_out_window; Type: CHECK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE public.profiles
+    ADD CONSTRAINT profiles_clock_out_window CHECK (((clock_out_from IS NULL) OR ((clock_out_from > shift_start) AND (clock_out_from <= shift_end)))) NOT VALID;
 
 
 --

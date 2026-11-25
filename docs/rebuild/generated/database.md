@@ -651,6 +651,7 @@ Policies:
 | app_only | boolean(bool) |  | false |
 | shift_start | time without time zone(time) |  | '08:00:00'::time without time zone |
 | shift_end | time without time zone(time) |  | '18:00:00'::time without time zone |
+| clock_out_from | time without time zone(time) | yes |  |
 
 Policies:
 - `profiles_admin_all` ALL to public: using `is_admin()`; check `is_admin()`
@@ -1442,7 +1443,7 @@ Policies:
 - `attendance_learn_waiting_store()` → trigger · definer · 0034_stores_pinned_from_clock_in.sql
 - `attendance_office_time()` → trigger · definer · 0090_field_corrections.sql
 - `attendance_place_due()` → trigger · definer · 0045_mandatory_place_naming.sql
-- `attendance_punctuality()` → trigger · definer · 0100_shift_times_per_person.sql
+- `attendance_punctuality()` → trigger · definer · 0105_clock_out_window.sql
 - `attendance_push_check()` → trigger · definer · 0027_notifications_required.sql
 - `attendance_replace_for_correction()` → trigger · definer · 0090_field_corrections.sql
 - `attendance_start_store()` → trigger · definer · 0101_start_day_at_a_store.sql
@@ -1637,7 +1638,7 @@ Policies:
 - `post_support_message(p_thread uuid, p_body text)` → uuid · definer · 0053_support_notifications.sql
 - `product_key(p_name text)` → text · 0021_counted_product_names.sql
 - `profiles_field_only_reporting()` → trigger · definer · 0079_security_fixes.sql
-- `profiles_self_guard()` → trigger · definer · 0100_shift_times_per_person.sql
+- `profiles_self_guard()` → trigger · definer · 0105_clock_out_window.sql
 - `profiles_staff_role_sync()` → trigger · definer · 0042_staff_roles.sql
 - `profiles_supervisor_check()` → trigger · definer · 0017_supervisor_manages_staff.sql
 - `punctuality_grace_minutes()` → integer · 0036_supervisor_alerts.sql

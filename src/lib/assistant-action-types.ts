@@ -94,6 +94,8 @@ export const actionSchema = z.discriminatedUnion('kind', [
       user_ids: z.array(uuid).min(1).max(500),
       shift_start: z.string().regex(/^\d{2}:\d{2}$/),
       shift_end: z.string().regex(/^\d{2}:\d{2}$/),
+      /** From when they may clock out without it being early (0105). */
+      clock_out_from: z.string().regex(/^\d{2}:\d{2}$/).optional(),
     }),
   }),
   z.object({
