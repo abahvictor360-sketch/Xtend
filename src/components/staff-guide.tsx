@@ -786,6 +786,10 @@ export function StaffGuide() {
               a: <>Ask your supervisor or admin to reset it. You will choose a new one when you sign in.</>,
             },
             {
+              q: 'It says “Your account is paused”',
+              a: <>Contact your supervisor or admin. They will tell you what to do next.</>,
+            },
+            {
               q: 'It says signing in is paused',
               a: (
                 <>

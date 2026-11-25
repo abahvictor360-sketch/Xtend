@@ -3725,7 +3725,7 @@ CREATE FUNCTION public.is_active_staff() RETURNS boolean
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
-  select exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_active);
+  select exists (select 1 from public.profiles p where p.id = auth.uid() and p.is_active and p.paused_at is null);
 $$;
 
 
@@ -4550,7 +4550,10 @@ CREATE TABLE public.profiles (
     app_only boolean DEFAULT false NOT NULL,
     shift_start time without time zone DEFAULT '08:00:00'::time without time zone NOT NULL,
     shift_end time without time zone DEFAULT '18:00:00'::time without time zone NOT NULL,
-    clock_out_from time without time zone
+    clock_out_from time without time zone,
+    paused_at timestamp with time zone,
+    paused_reason text,
+    paused_flag uuid
 );
 
 
@@ -4573,6 +4576,13 @@ COMMENT ON COLUMN public.profiles.shift_end IS 'When this person''s working day 
 --
 
 COMMENT ON COLUMN public.profiles.clock_out_from IS 'From when (Lagos time) this person may clock out without it counting as early; null: 15 minutes before shift_end (0105).';
+
+
+--
+-- Name: COLUMN profiles.paused_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.profiles.paused_at IS 'When the account was paused for a fake location (0108); null when not paused.';
 
 
 --
@@ -5485,6 +5495,36 @@ $$;
 
 
 --
+-- Name: pause_for_fake_location(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.pause_for_fake_location() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  paused boolean;
+begin
+  if new.kind <> 'mock_location_confirmed' or new.user_id is null then
+    return null;
+  end if;
+  perform set_config('xtend.pausing', 'on', true);
+  update public.profiles
+     set paused_at = now(), paused_reason = 'fake_location', paused_flag = new.id
+   where id = new.user_id and paused_at is null
+     and role in ('merchandiser', 'marketer');
+  paused := found;
+  perform set_config('xtend.pausing', '', true);
+  if paused then
+    update public.tracking_tokens set revoked_at = now()
+     where user_id = new.user_id and revoked_at is null;
+  end if;
+  return null;
+end;
+$$;
+
+
+--
 -- Name: person_counts_stock(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5886,6 +5926,18 @@ begin
   new.shift_start    := old.shift_start;
   new.shift_end      := old.shift_end;
   new.clock_out_from := old.clock_out_from;
+  -- 0108: a pause for a fake location is lifted by the office only. (The
+  -- pause itself is set by trigger in the person's own request, so only
+  -- lifting or changing one is blocked here.)
+  if old.paused_at is not null then
+    new.paused_at     := old.paused_at;
+    new.paused_reason := old.paused_reason;
+    new.paused_flag   := old.paused_flag;
+  elsif coalesce(current_setting('xtend.pausing', true), '') <> 'on' then
+    new.paused_at     := null;
+    new.paused_reason := null;
+    new.paused_flag   := null;
+  end if;
   if coalesce(current_setting('xtend.own_photo', true), '') <> 'on' then
     new.avatar_path := old.avatar_path;
   end if;
@@ -9476,6 +9528,33 @@ begin
   insert into public.audit_log (actor_id, action, target_table, target_id, meta)
   values (auth.uid(), 'user.unlock', 'profiles', p_user, jsonb_build_object('was_locked', was_locked));
   return was_locked;
+end;
+$$;
+
+
+--
+-- Name: unpause_staff(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.unpause_staff(p_user uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  was record;
+begin
+  if not public.can_unlock_sign_in(p_user) then
+    raise exception 'You can only unpause your own team';
+  end if;
+  select paused_at, paused_reason, paused_flag into was from public.profiles where id = p_user;
+  if was.paused_at is null then
+    return false;
+  end if;
+  update public.profiles set paused_at = null, paused_reason = null, paused_flag = null where id = p_user;
+  insert into public.audit_log (actor_id, action, target_table, target_id, meta)
+  values (auth.uid(), 'user.unpause', 'profiles', p_user,
+          jsonb_build_object('reason', was.paused_reason, 'paused_at', was.paused_at, 'flag', was.paused_flag));
+  return true;
 end;
 $$;
 
@@ -14425,6 +14504,13 @@ CREATE TRIGGER trg_follow_end_at_clock_out AFTER INSERT ON public.attendance FOR
 
 
 --
+-- Name: integrity_flags trg_integrity_flags_pause; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_integrity_flags_pause AFTER INSERT ON public.integrity_flags FOR EACH ROW EXECUTE FUNCTION public.pause_for_fake_location();
+
+
+--
 -- Name: location_pings trg_ping_alert; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -18275,6 +18361,13 @@ GRANT ALL ON FUNCTION public.owns_count_request(p_id uuid) TO service_role;
 
 
 --
+-- Name: FUNCTION pause_for_fake_location(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.pause_for_fake_location() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION person_counts_stock(target uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -19202,6 +19295,14 @@ GRANT ALL ON FUNCTION public.unflag_photo(p_path text) TO service_role;
 
 REVOKE ALL ON FUNCTION public.unlock_sign_in(p_user uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.unlock_sign_in(p_user uuid) TO authenticated;
+
+
+--
+-- Name: FUNCTION unpause_staff(p_user uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.unpause_staff(p_user uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.unpause_staff(p_user uuid) TO authenticated;
 
 
 --

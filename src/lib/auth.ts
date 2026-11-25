@@ -132,6 +132,8 @@ export async function requireSession(roles?: UserRole[]): Promise<Session> {
   const session = await getSession()
   if (!session) redirect('/login')
   if (!session.profile.is_active) redirect('/deactivated')
+  // A fake location paused the account (0108): signed out, told to call the office.
+  if (session.profile.paused_at) redirect('/api/auth/paused')
   // An admin made this account app-only (0084): a browser is sent to the page
   // that says so. The apps announce themselves in their user agent.
   if (await appOnlyHere(session.profile)) redirect(APP_ONLY_PATH)
@@ -142,6 +144,9 @@ export async function requireSession(roles?: UserRole[]): Promise<Session> {
   if (roles && !roles.includes(session.profile.role)) redirect('/')
   return session
 }
+
+/** What a paused account is told (0108). Not why: the office explains. */
+export const PAUSED_MESSAGE = 'Your account is paused. Contact your supervisor or admin.'
 
 export class ApiError extends Error {
   constructor(
@@ -168,6 +173,7 @@ export async function requireApiSession(
   const session = await getSession()
   if (!session) throw new ApiError('Not authenticated', 401)
   if (!session.profile.is_active) throw new ApiError('Account deactivated', 403)
+  if (session.profile.paused_at) throw new ApiError(PAUSED_MESSAGE, 403, 'paused')
   if (await appOnlyHere(session.profile)) {
     throw new ApiError(APP_ONLY_MESSAGE, 403, APP_ONLY_CODE)
   }

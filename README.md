@@ -129,6 +129,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0105_clock_out_window.sql               # "Can clock out from": a time from which clocking out is not early
    supabase/migrations/0106_on_site_only.sql                   # on site only: no clock-in or store check-in from outside the store
    supabase/migrations/0107_offline_clock_day.sql              # a clock-in saved with no signal keeps the day it was taken
+   supabase/migrations/0108_pause_on_fake_location.sql         # a fake-GPS app pauses the account until the office lifts it
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

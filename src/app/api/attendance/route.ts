@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { offSiteRefusal } from '@/lib/off-site-refusal'
 import { createServerSupabase } from '@/lib/supabase/server'
-import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage } from '@/lib/auth'
+import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage, PAUSED_MESSAGE } from '@/lib/auth'
 import { notifyWatchers } from '@/lib/notify'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
 import { clientIp } from '@/lib/ip-geo'
@@ -164,6 +164,19 @@ export async function POST(request: Request) {
     // New flags from this clock-in (late, early, a VPN, a jump across the
     // country...) go to the person's admins and supervisor now.
     await flushFlagAlerts()
+
+    // A fake-GPS app paused the account just now (0108): the clock-in and its
+    // photo are kept as evidence; the phone signs the person out.
+    const { data: me } = await supabase
+      .from('profiles')
+      .select('paused_at')
+      .eq('id', session.userId)
+      .maybeSingle<{ paused_at: string | null }>()
+    if (me?.paused_at) {
+      // Recorded (201), so a phone sending it from its offline queue does not
+      // think it failed; the app then signs the person out.
+      return Response.json({ attendance: data, paused: true, message: PAUSED_MESSAGE }, { status: 201 })
+    }
 
     // The trigger measures against whichever of the person's stores they
     // are nearest, which may not be their home outlet, so the response says

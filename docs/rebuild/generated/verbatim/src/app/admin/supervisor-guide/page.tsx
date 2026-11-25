@@ -262,6 +262,11 @@ export default async function SupervisorGuidePage() {
             together).
           </p>
           <p>
+            If someone&apos;s phone uses a fake GPS app, Xtend pauses their account at once and signs them out; they
+            are only told to contact you or an admin. Speak to them, then on <Ui>Staff</Ui> press <Ui>Unpause</Ui>{' '}
+            next to <Ui>Paused: fake GPS app</Ui> if they may carry on. It is written to the audit log.
+          </p>
+          <p>
             A <Ui>Photo not checked</Ui> flag means the automatic photo check was not available, so the
             photo was let through unseen. Open the flag and press <Ui>Show photo</Ui> to look at it
             yourself: is it a live face, taken now, at the place? Then mark it reviewed with what you found.

@@ -2013,6 +2013,14 @@ window so your phone finds you, then try again. If it keeps happening, call
 your supervisor."; the staff guide link. A server refusal (422 `off_site`)
 opens the same sheet (clock-ins through `PermanentJobError.body`).
 
+**Paused account (0108).** `requireSession` sends a session whose profile has
+`paused_at` to `/api/auth/paused` (signs out, records `sign_out` with reason
+`paused`, then `/login?reason=paused`: "Your account is paused. Contact your
+supervisor or admin."); `requireApiSession` refuses with 403 code `paused`
+and that message. `POST /api/attendance` answers a clock-in that has just
+paused the account with 201 `{ attendance, paused: true, message }` (kept as
+evidence) and the clock panel goes to `/api/auth/paused`.
+
 ### 11.5 Staff guide (`/field/guide`, public `/guide`)
 
 `StaffGuide` (`src/components/staff-guide.tsx`) inside a sheet "How to use

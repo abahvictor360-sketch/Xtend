@@ -360,7 +360,7 @@ Set when the person must log in again before going on: a field
 sign-in from yesterday or after clocking out, or an office sign-in
 past 12 hours or idle for an hour (zero trust, lib/zero-trust.ts).
 
-Exports: `Session`, `ReloginReason`, `getSession`, `appOnlyHere`, `requireSession`, `ApiError`, `requireApiSession`, `apiError`, `dbErrorMessage`, `dbErrorResponse`, `FIELD_ROLES`, `REPORTING_ROLES`, `landingPathFor`
+Exports: `Session`, `ReloginReason`, `getSession`, `appOnlyHere`, `requireSession`, `PAUSED_MESSAGE`, `ApiError`, `requireApiSession`, `apiError`, `dbErrorMessage`, `dbErrorResponse`, `FIELD_ROLES`, `REPORTING_ROLES`, `landingPathFor`
 
 ## `src/lib/avatars.ts`
 

@@ -1334,6 +1334,16 @@ label and the store's own point.
   unknown or inactive store refuses the whole call and changes nothing.
   Every call writes an `audit_log` row `staff.allocate_outlets` directly
   (supervisors may call it).
+- **0108, a fake location pauses the account:** `profiles.paused_at`,
+  `paused_reason` ('fake_location'), `paused_flag`. AFTER INSERT on
+  `integrity_flags` `trg_integrity_flags_pause` → `pause_for_fake_location()`:
+  kind `mock_location_confirmed`, role merchandiser or marketer, not already
+  paused → set them (under setting `xtend.pausing`) and revoke the person's
+  tracking tokens. `profiles_self_guard` keeps a set pause and only lets the
+  pause trigger set one. `is_active_staff()` also needs `paused_at is null`.
+  `unpause_staff(p_user)` (definer; `can_unlock_sign_in`: admin, their
+  supervisor or HR) clears it and writes audit `user.unpause` {reason,
+  paused_at, flag}.
 - **0107, a clock-in saved with no signal keeps its day:** BEFORE INSERT
   `trg_attendance_enforce_day` (after `trg_attendance_enforce` by name;
   not for office entries) → `attendance_capture_day()`: taken =

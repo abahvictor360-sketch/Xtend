@@ -588,6 +588,16 @@ export default async function AdminGuidePage() {
             phone is on now. Tick several and mark them reviewed with one note.
           </p>
           <p>
+            <Ui>A fake GPS app pauses the account</Ui> (0108). When a phone reports that its location comes from a
+            fake-location app (at a clock-in, or from the app&apos;s positions during the shift), that merchandiser
+            or marketer is paused at once: signed out on every page, their phone stops sending positions, and the
+            login page says <Ui>Your account is paused. Contact your supervisor or admin.</Ui> They are not told
+            why. The clock-in that showed it stays, with its photo, the flag (<Ui>fake GPS app in use</Ui>) is on
+            Integrity, and you get the flag alert. After you have spoken to them, open <Ui>Staff</Ui>: the person
+            shows <Ui>Paused: fake GPS app</Ui>; press <Ui>Unpause</Ui> (an admin, or their supervisor). Lifting it
+            is written to the audit log; the flag stays.
+          </p>
+          <p>
             <Ui>Check an excuse</Ui>: someone says their network was bad, their phone was off, their
             location would not work, they were at the store all along, or the app would not let them clock
             in. Pick who, what they said and when (up to 3 days). Xtend says whether it holds up and shows a

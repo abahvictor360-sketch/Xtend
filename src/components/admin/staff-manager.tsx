@@ -244,6 +244,20 @@ export function StaffManager({
     }
   }
 
+  /**
+   * Lifts a pause for a fake location (0108), after the office has spoken
+   * to the person. Asked first: the flag stays on Integrity either way.
+   */
+  async function unpause(person: Profile) {
+    if (
+      !window.confirm(
+        `Unpause ${person.full_name}? Their phone reported a fake-GPS app. Do this only after you have spoken to them. The flag stays on Integrity, and this is written to the audit log.`,
+      )
+    )
+      return
+    if (await patch(person.id, { unpause: true })) setSaved(`${person.full_name} can use Xtend again.`)
+  }
+
   function editDetails(person: Profile) {
     setError(null)
     setSaved(null)
@@ -769,6 +783,11 @@ export function StaffManager({
                       Sign-in paused until {formatLagos(locked[person.id], false)}
                     </Badge>
                   )}
+                  {person.paused_at && (
+                    <Badge variant="destructive" className="ml-1" title={`Paused ${formatLagos(person.paused_at)}`}>
+                      Paused: fake GPS app
+                    </Badge>
+                  )}
                   {isField(person.role) && (
                     <NotificationBadge
                       on={hasPush.has(person.id)}
@@ -807,6 +826,11 @@ export function StaffManager({
                       onClick={() => void patch(person.id, { unlock: true })}
                     >
                       Unlock
+                    </Button>
+                  )}
+                  {person.paused_at && (
+                    <Button size="sm" variant="ghost" disabled={busy} onClick={() => void unpause(person)}>
+                      Unpause
                     </Button>
                   )}
                   <Button
@@ -881,6 +905,7 @@ export function StaffManager({
                   {locked[person.id] && (
                     <Badge variant="destructive">Sign-in paused until {formatLagos(locked[person.id], false)}</Badge>
                   )}
+                  {person.paused_at && <Badge variant="destructive">Paused: fake GPS app</Badge>}
                   {isField(person.role) && (
                     <NotificationBadge on={hasPush.has(person.id)} exempt={Boolean(person.push_exempt)} />
                   )}
@@ -974,6 +999,11 @@ export function StaffManager({
                     onClick={() => void patch(person.id, { unlock: true })}
                   >
                     Unlock
+                  </Button>
+                )}
+                {person.paused_at && (
+                  <Button size="sm" variant="outline" disabled={busy} onClick={() => void unpause(person)}>
+                    Unpause
                   </Button>
                 )}
                 <Button
