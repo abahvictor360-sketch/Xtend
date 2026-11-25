@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { lagosDateString } from '@/lib/utils'
-import { BatteryWarning, CheckCircle2, MapPin, ShieldAlert } from 'lucide-react'
+import { BatteryWarning, CheckCircle2, Lock, MapPin, ShieldAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import { askAlwaysLocation, hasShiftTracker, openBatterySettings, shiftTrackerState } from '@/lib/native'
-import { backgroundNeeds, type BackgroundNeeds, type BackgroundState } from '@/lib/background-gate'
+import { askAlwaysLocation, hasShiftTracker, openAutoStart, openBatterySettings, shiftTrackerState } from '@/lib/native'
+import { backgroundNeeds, strictMaker, type BackgroundNeeds, type BackgroundState } from '@/lib/background-gate'
 
 const CONFIRM_KEY = 'xtend-battery-confirmed'
+/** TECNO, Infinix, itel: Auto-start and the lock confirmed on this phone (kept until the app is reinstalled). */
+const MAKER_KEY = 'xtend-maker-setup-v1'
 
 /**
  * Reads the phone app's settings and keeps them current: when the page opens,
@@ -22,12 +24,23 @@ export function useBackgroundNeeds() {
   const [checked, setChecked] = useState(!hasShiftTracker())
   // "I turned battery saving off", good for today only.
   const [batteryConfirmed, setBatteryConfirmed] = useState(false)
+  // TECNO, Infinix, itel: "I turned on Auto-start and locked Xtend", once per phone.
+  const [makerConfirmed, setMakerConfirmed] = useState(false)
   useEffect(() => {
     try {
       setBatteryConfirmed(localStorage.getItem(CONFIRM_KEY) === lagosDateString())
+      setMakerConfirmed(Boolean(localStorage.getItem(MAKER_KEY)))
     } catch {
       // Storage blocked: the step simply stays required.
     }
+  }, [])
+  const confirmMaker = useCallback(() => {
+    try {
+      localStorage.setItem(MAKER_KEY, new Date().toISOString())
+    } catch {
+      // Still allowed for this visit.
+    }
+    setMakerConfirmed(true)
   }, [])
   const confirmBattery = useCallback(() => {
     try {
@@ -57,14 +70,14 @@ export function useBackgroundNeeds() {
     }
   }, [recheck])
 
-  const needs = backgroundNeeds(state, { batteryConfirmed })
+  const needs = backgroundNeeds(state, { batteryConfirmed, makerConfirmed })
   useEffect(() => {
     if (!needs.blocked) return
     const timer = window.setInterval(() => void recheck(), 3000)
     return () => window.clearInterval(timer)
   }, [needs.blocked, recheck])
 
-  return { state, needs, checked, recheck, confirmBattery }
+  return { state, needs, checked, recheck, confirmBattery, confirmMaker }
 }
 
 /**
@@ -78,6 +91,7 @@ export function BackgroundGate({
   action,
   onDone,
   onConfirmBattery,
+  onConfirmMaker,
 }: {
   state: BackgroundState | null
   needs: BackgroundNeeds
@@ -86,8 +100,11 @@ export function BackgroundGate({
   onDone: () => void
   /** Phones that cannot report the battery setting: the person says it is off. */
   onConfirmBattery?: () => void
+  /** TECNO, Infinix, itel: the person says Auto-start is on and Xtend is locked. */
+  onConfirmMaker?: () => void
 }) {
   const ios = state?.platform === 'ios'
+  const maker = strictMaker(state)
   return (
     <Card className="animate-fade-up border border-warning/40">
       <CardContent className="space-y-4 pt-5">
@@ -164,6 +181,42 @@ export function BackgroundGate({
                     )}
                   </>
                 )}
+              </div>
+            </div>
+          )}
+
+          {maker && needs.maker && (
+            <div className="flex items-start gap-2">
+              <Lock className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="flex-1 space-y-1.5 text-sm">
+                <p className="font-semibold">On your {maker} phone: Auto-start and lock Xtend</p>
+                <p className="text-xs text-muted-foreground">
+                  {maker} phones close apps by themselves to save battery. Do both steps once, so Xtend keeps working
+                  when your screen is off.
+                </p>
+                <ol className="list-decimal space-y-1 pl-4 text-xs text-muted-foreground">
+                  <li>
+                    Tap <span className="font-semibold text-foreground">Open Auto-start</span>, find Xtend and turn it on.
+                    (Or open Phone Master, then App management or Auto-start, and turn on Xtend.)
+                  </li>
+                  <li>
+                    Open your recent apps (the square button, or swipe up from the bottom and hold), find Xtend and pull
+                    it down until a lock shows on it.
+                  </li>
+                  <li>
+                    Come back here and tap <span className="font-semibold text-foreground">I did both</span>.
+                  </li>
+                </ol>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <Button size="sm" variant="outline" onClick={() => void openAutoStart().then(onDone)}>
+                    Open Auto-start
+                  </Button>
+                  {onConfirmMaker && (
+                    <Button size="sm" onClick={onConfirmMaker}>
+                      I did both
+                    </Button>
+                  )}
+                </div>
               </div>
             </div>
           )}

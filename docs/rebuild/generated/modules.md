@@ -380,7 +380,7 @@ app build without the tracker, or one that does not report a setting says
 nothing (null or undefined), and is never locked out: the gate must not
 stop someone whose phone it cannot read.
 
-Exports: `BackgroundState`, `BackgroundNeeds`, `backgroundNeeds`
+Exports: `BackgroundState`, `STRICT_MAKERS`, `strictMaker`, `BackgroundNeeds`, `backgroundNeeds`
 
 ## `src/lib/base-map.ts`
 
@@ -946,7 +946,7 @@ location while the screen is off or the app is in the background, and
 native push. In an ordinary browser none of this exists and every helper
 here is a no-op, so the site behaves exactly as before.
 
-Exports: `NativePlatform`, `nativePlatform`, `isNativeApp`, `hasPlugin`, `callNative`, `listenNative`, `NativeLocation`, `watchBackgroundLocation`, `ShiftTrackerState`, `hasShiftTracker`, `startShiftTracker`, `stopShiftTracker`, `followFast`, `shiftTrackerState`, `askAlwaysLocation`, `openBatterySettings`, `nativePostJson`, `NativePushPermission`, `nativePushPermission`, `registerNativePush`, `NativeFix`, `getNativeFix`, `nativeDeviceSignals`
+Exports: `NativePlatform`, `nativePlatform`, `isNativeApp`, `hasPlugin`, `callNative`, `listenNative`, `NativeLocation`, `watchBackgroundLocation`, `ShiftTrackerState`, `hasShiftTracker`, `startShiftTracker`, `stopShiftTracker`, `followFast`, `shiftTrackerState`, `askAlwaysLocation`, `openAutoStart`, `openBatterySettings`, `nativePostJson`, `NativePushPermission`, `nativePushPermission`, `registerNativePush`, `NativeFix`, `getNativeFix`, `nativeDeviceSignals`
 
 ## `src/lib/new-device-alert.ts`
 
@@ -1009,7 +1009,7 @@ Exports: `offSiteRefusal`
 
 The moment of capture, never the moment of sync.
 
-Exports: `OutboxKind`, `ClockJob`, `PingJob`, `ReportJob`, `ReportFileRemoveJob`, `XmCountJob`, `XmSalesJob`, `OutboxJob`, `OutboxRecord`, `enqueue`, `listOutbox`, `countOutbox`, `dropOutbox`, `saveOutboxRecord`, `markAttempt`
+Exports: `OutboxKind`, `ClockJob`, `PingJob`, `ReportJob`, `ReportFileRemoveJob`, `XmCountJob`, `XmSalesJob`, `OutboxJob`, `OutboxRecord`, `sessionOwner`, `enqueue`, `listOutbox`, `countOutbox`, `dropOutbox`, `saveOutboxRecord`, `markAttempt`
 
 ## `src/lib/offline/sync.ts`
 
@@ -2085,11 +2085,7 @@ Exports: `XpelMark`, `XpelTile`, `XpelLockup`
 
 ## `src/components/field/background-gate.tsx`
 
-Reads the phone app's settings and keeps them current: when the page opens,
-when the app comes back to the screen (from the phone's Settings), and
-every few seconds while something is still missing, since some phones do
-not announce the return. Nothing in a browser or an app without the
-tracker: `checked` is true and nothing is demanded.
+TECNO, Infinix, itel: Auto-start and the lock confirmed on this phone (kept until the app is reinstalled).
 
 Exports: `useBackgroundNeeds`, `BackgroundGate`
 

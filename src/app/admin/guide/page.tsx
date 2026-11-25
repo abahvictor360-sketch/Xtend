@@ -448,6 +448,18 @@ export default async function AdminGuidePage() {
               by itself when they come back. An app that does not report these settings (an old version, or a
               browser) is not held back, so ask staff to keep the app updated.
             </li>
+            <li>
+              <Ui>Why someone shows &quot;Updated 1 h ago&quot;</Ui>. Phones with no signal keep every position and
+              send them all when the signal is back, so the gap fills in later. From the app build of 25 November
+              2026, a phone lying still with the screen off still sends a position every few minutes (Android wakes
+              itself for it; in deep sleep it can be up to about 10 minutes), and asks for a fresh position instead of
+              reusing an old one. If someone still goes quiet: check they have the latest app (Updates). On
+              TECNO, Infinix and itel phones the app itself holds clocking in until the person turns on{' '}
+              <Ui>Auto-start</Ui> for Xtend (a button opens Phone Master&apos;s screen) and locks Xtend in the
+              recent apps, and taps <Ui>I did both</Ui>, once per phone; Android cannot check this for us, so if
+              that person still goes quiet, ask to see both settings on their phone. After clock-out nothing new is collected; positions saved
+              without signal during the shift are still sent, never thrown away.
+            </li>
           </ul>
         </GuideSection>
 

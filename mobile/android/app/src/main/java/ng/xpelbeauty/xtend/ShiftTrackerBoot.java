@@ -17,7 +17,8 @@ public class ShiftTrackerBoot extends BroadcastReceiver {
             && !"android.intent.action.QUICKBOOT_POWERON".equals(action)) {
             return;
         }
-        if (!ShiftTrackerService.configured(context)) return;
+        // On shift, or positions from the shift still waiting to be sent.
+        if (!ShiftTrackerService.collecting(context) && !ShiftTrackerService.draining(context)) return;
         try {
             ShiftTrackerService.start(context);
         } catch (Exception ignored) {

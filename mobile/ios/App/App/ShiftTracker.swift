@@ -23,6 +23,12 @@ import UIKit
 /// goes back to normal when an answer comes without interval_ms, or after
 /// a minute without one. With the app closed iOS only wakes it on
 /// significant changes (about 500 m), so following is far coarser then.
+///
+/// 2026-11-25: standing still, iOS sent nothing while the filter was 50 m,
+/// so someone in one store all morning looked silent. Updates now come
+/// without a distance filter (still saved at most every 2½ minutes, or after
+/// 100 m). At clock-out nothing new is collected; what was saved offline is
+/// still sent ("draining") and never thrown away.
 final class ShiftTrackerCore: NSObject, CLLocationManagerDelegate {
     static let shared = ShiftTrackerCore()
 
@@ -61,7 +67,11 @@ final class ShiftTrackerCore: NSObject, CLLocationManagerDelegate {
 
     var authorization: CLAuthorizationStatus { manager.authorizationStatus }
 
+    /// After clock-out: send what was saved, collect nothing new.
+    var draining: Bool { defaults.bool(forKey: "xtend.tracker.draining") }
+
     func configure(token: String, endpoint: String, expiresAt: Double) {
+        defaults.set(false, forKey: "xtend.tracker.draining")
         defaults.set(token, forKey: "xtend.tracker.token")
         defaults.set(endpoint, forKey: "xtend.tracker.endpoint")
         defaults.set(expiresAt, forKey: "xtend.tracker.expires")
@@ -124,13 +134,32 @@ final class ShiftTrackerCore: NSObject, CLLocationManagerDelegate {
         DispatchQueue.main.async { self.applyAccuracy() }
     }
 
-    /// Every movement at best accuracy while followed live; otherwise
-    /// every 50 m at about 10 m. Main thread.
+    /// Every update: at best accuracy while followed live, about 10 m
+    /// otherwise. No distance filter, so standing still still gives a
+    /// position every few minutes (keep() decides what is saved). Main thread.
     private func applyAccuracy() {
         let fast = fastInterval != nil
         manager.desiredAccuracy = fast ? kCLLocationAccuracyBest : kCLLocationAccuracyNearestTenMeters
-        manager.distanceFilter = fast ? kCLDistanceFilterNone : 50
+        manager.distanceFilter = kCLDistanceFilterNone
         appliedFast = fast
+    }
+
+    /// Clock-out: stop collecting at once; send what was saved offline, then stop.
+    func finish() {
+        if queued == 0 || token == nil {
+            halt()
+            return
+        }
+        defaults.set(true, forKey: "xtend.tracker.draining")
+        defaults.removeObject(forKey: "xtend.tracker.fastMs")
+        defaults.removeObject(forKey: "xtend.tracker.fastUntil")
+        DispatchQueue.main.async {
+            self.manager.stopUpdatingLocation()
+            self.manager.stopMonitoringSignificantLocationChanges()
+            self.manager.allowsBackgroundLocationUpdates = false
+        }
+        lastFailure = nil
+        flush()
     }
 
     /// Forgets the token and stops every location service.
@@ -140,6 +169,7 @@ final class ShiftTrackerCore: NSObject, CLLocationManagerDelegate {
         defaults.removeObject(forKey: "xtend.tracker.token")
         defaults.removeObject(forKey: "xtend.tracker.endpoint")
         defaults.removeObject(forKey: "xtend.tracker.expires")
+        defaults.removeObject(forKey: "xtend.tracker.draining")
         DispatchQueue.main.async {
             self.manager.stopUpdatingLocation()
             self.manager.stopMonitoringSignificantLocationChanges()
@@ -152,8 +182,13 @@ final class ShiftTrackerCore: NSObject, CLLocationManagerDelegate {
     var lastError: String? { defaults.string(forKey: "xtend.tracker.error") }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard configured else {
-            halt()
+        guard configured, !draining else {
+            // The shift is over: keep what was saved (it is sent next), collect nothing.
+            DispatchQueue.main.async {
+                self.manager.stopUpdatingLocation()
+                self.manager.stopMonitoringSignificantLocationChanges()
+            }
+            flush()
             return
         }
         for l in locations { keep(l) }
@@ -171,6 +206,7 @@ final class ShiftTrackerCore: NSObject, CLLocationManagerDelegate {
     }
 
     private func keep(_ l: CLLocation) {
+        guard configured, !draining else { return }
         let now = Date()
         let lastAt = defaults.double(forKey: "xtend.tracker.lastAt")
         let last = CLLocation(latitude: defaults.double(forKey: "xtend.tracker.lastLat"),
@@ -252,7 +288,7 @@ final class ShiftTrackerCore: NSObject, CLLocationManagerDelegate {
                 return
             }
             if status == 401 {
-                self.defaults.set([], forKey: self.queueKey)
+                // Token not known: what was saved stays for the next shift's token.
                 self.halt()
                 return
             }
@@ -269,7 +305,12 @@ final class ShiftTrackerCore: NSObject, CLLocationManagerDelegate {
             let answer = (data.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]) ?? [:]
             // Follow live: faster while the server asks, normal otherwise.
             self.setFast((answer["interval_ms"] as? NSNumber)?.doubleValue ?? 0)
-            if answer["stop"] as? Bool == true { self.halt() }
+            let left = (self.defaults.array(forKey: self.queueKey) ?? []).count
+            if batch.count == 500 && left > 0 {
+                DispatchQueue.main.async { self.flush() }
+            } else if answer["stop"] as? Bool == true || (self.draining && left == 0) {
+                self.halt()
+            }
         }.resume()
     }
 }
@@ -299,8 +340,9 @@ public class ShiftTracker: CAPPlugin, CAPBridgedPlugin {
         call.resolve(state())
     }
 
+    /// Clock-out: nothing new is collected; positions saved offline are still sent.
     @objc func stop(_ call: CAPPluginCall) {
-        ShiftTrackerCore.shared.halt()
+        ShiftTrackerCore.shared.finish()
         call.resolve(state())
     }
 
@@ -337,8 +379,9 @@ public class ShiftTracker: CAPPlugin, CAPBridgedPlugin {
         let auth = core.authorization
         var o: [String: Any] = [
             "platform": "ios",
-            "active": core.configured,
-            "running": core.configured,
+            "active": core.configured && !core.draining,
+            "running": core.configured && !core.draining,
+            "drains": true,
             "location": auth == .authorizedAlways || auth == .authorizedWhenInUse,
             "always": auth == .authorizedAlways,
             "batteryUnrestricted": true,

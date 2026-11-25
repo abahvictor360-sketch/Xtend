@@ -131,6 +131,13 @@ export interface ShiftTrackerState {
   /** Android: the battery saver will not stop it. Always true on iPhone. */
   batteryUnrestricted: boolean
   queued: number
+  /**
+   * App builds from 2026-11-25: stopping collects nothing more and still
+   * sends what was saved offline, then the tracker stops by itself.
+   */
+  drains?: boolean
+  /** Android: the phone's maker, lower case (2026-11-25 builds). */
+  maker?: string
   lastSentAt?: number
   lastError?: string | null
 }
@@ -162,12 +169,12 @@ export async function startShiftTracker(): Promise<ShiftTrackerState | null> {
 
 export async function stopShiftTracker() {
   if (!hasShiftTracker()) return
-  // Positions saved with no signal are still on the phone. Stopping now would
-  // strand them, so the tracker is left running: the server accepts positions
-  // taken during the shift whenever they arrive (0085, 0095: no time limit), and tells the
-  // tracker to stop by itself once they are in.
+  // Positions saved with no signal are still on the phone. A current app
+  // build stops collecting at once and keeps sending only those (drains);
+  // an older build is left running while it has some, so they are not
+  // stranded. The server accepts them whenever they arrive (0096).
   const state = await shiftTrackerState()
-  if (!(state && state.queued > 0)) await callNative('ShiftTracker', 'stop').catch(() => {})
+  if (!state || state.drains || state.queued === 0) await callNative('ShiftTracker', 'stop').catch(() => {})
   await fetch('/api/track/stop', { method: 'POST' }).catch(() => {})
 }
 
@@ -195,6 +202,20 @@ export async function shiftTrackerState(): Promise<ShiftTrackerState | null> {
 
 export async function askAlwaysLocation() {
   if (hasShiftTracker()) await callNative('ShiftTracker', 'requestBackground').catch(() => {})
+}
+
+/**
+ * TECNO, Infinix and itel: opens Phone Master's Auto-start screen (or Phone
+ * Master, or the app's settings). An older app build opens the battery
+ * settings instead.
+ */
+export async function openAutoStart() {
+  if (!hasShiftTracker()) return
+  try {
+    await callNative('ShiftTracker', 'openAutoStart')
+  } catch {
+    await openBatterySettings()
+  }
 }
 
 export async function openBatterySettings() {

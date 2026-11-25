@@ -39,7 +39,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0103_close_public_key.sql`;
    - `supabase/migrations/0104_ai_knowledge.sql`;
    - `supabase/migrations/0105_clock_out_window.sql`;
-   - `supabase/migrations/0106_on_site_only.sql`.
+   - `supabase/migrations/0106_on_site_only.sql`;
+   - `supabase/migrations/0107_offline_clock_day.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18;
    0099, 0100, 0101 and 0102 are done: you ran them on 2026-11-24.)
 4. **Turn off self sign-up in Supabase**: Authentication → Sign In /
@@ -71,6 +72,78 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-25
+
+### Can a clock-in happen without its location and photo? Can one be lost?
+- **What was checked:** whether anyone can clock in without the server
+  getting where they were and their selfie, and every way a clock-in could
+  go missing between the phone and the server.
+- **What I found:**
+  - The server cannot store a clock-in without its position (latitude,
+    longitude and accuracy are required) or without a selfie taken in the app
+    just now, checked, and never used before. The only clock-ins with no photo
+    are the ones a supervisor or admin enters for someone (Fix today's record),
+    and each of those is in the audit log with who did it.
+  - Three ways a clock-in could be lost or go wrong, now fixed:
+    1. A clock-in saved with no signal was deleted after 8 failed tries to
+       send it, which a weak signal can use up in minutes. Saved positions had
+       the same problem. They are now kept until the server takes them.
+    2. On a phone shared by two people, a clock-in one person saved with no
+       signal was sent as the other person when they signed in. Each saved
+       item now remembers who saved it and is only sent as them.
+    3. A clock-out saved with no signal at 18:20 and sent after midnight was
+       recorded on the next day. It now keeps the day it was taken (0107).
+  - What remains by design: a clock-in saved with no signal must reach the
+    server within 24 hours, or it cannot be accepted and the person is told
+    to clock in again; a clock-in the server refuses (off site, no store
+    picked) is not recorded and the person is told why; clock-in photos are
+    deleted after 14 days (the place and the time stay);
+    someone could still try to fake their position, which the integrity
+    checks flag but cannot always prove.
+- **What you need to do:** run `supabase/migrations/0107_offline_clock_day.sql`
+  in Supabase and redeploy. No new app build is needed for these three.
+
+### TECNO, Infinix and itel phones are walked through Auto-start and the lock
+- **What was done:** the Xtend app now knows when it is on a TECNO, Infinix
+  or itel phone. Before such a phone can clock in, Xtend shows **Auto-start
+  and lock Xtend** with the steps: tap **Open Auto-start** (it opens Phone
+  Master's Auto-start screen) and turn on Xtend, then open recent apps and
+  pull Xtend down until a lock shows, then tap **I did both**. It is asked
+  once per phone (again if the app is reinstalled). Android does not let an
+  app check these two settings, so the person confirms them.
+- **The impact:** on the phones that most often go quiet, staff set them up
+  before they start, without you having to visit each phone.
+- **What you need to do:** this is in the phone app: publish the new
+  Android build and ask staff to install it. Phones on older app versions
+  are not asked.
+
+### Movement tracking: fixes for phones that went quiet
+- **What was done:** I went through how movement gets from a phone to the
+  office and fixed what made it go quiet or lose positions:
+  1. An Android phone lying still with the screen off stopped sending,
+     because its 2½-minute timer pauses while the phone sleeps. It now also
+     sets a phone alarm that wakes it (in deep sleep Android may hold it to
+     about 10 minutes). The same alarm restarts the tracker if the phone
+     stopped it.
+  2. Standing still indoors, it reused a position up to 10 minutes old or
+     saved nothing. It now asks the phone for a fresh position.
+  3. If the server ever refused the phone's tracking pass, the phone threw
+     away every position it had saved offline. They are now kept and sent
+     with the next shift.
+  4. After clock-out, a phone that still had offline positions to send also
+     kept collecting new ones. It now stops collecting at clock-out and only
+     sends what it saved during the shift.
+  5. iPhones only recorded after a 50 m move, so someone in one store all
+     morning sent nothing. They now record every few minutes standing still.
+  6. A position saved offline by the open app page was timed when it was
+     saved, not when it was taken. Fixed.
+  Positions saved with no signal were already kept and sent when the
+  signal is back (that part worked; the server accepts them at any age).
+- **The impact:** fewer "Updated 1 h ago" gaps; no lost offline movement;
+  no tracking after clock-out.
+- **What you need to do:** these are in the phone app, so publish the new
+  Android build (and iPhone build) and ask staff to install it. On Tecno,
+  Infinix and itel phones also turn on **Auto-start** for Xtend and lock it
+  in recent apps (see the admin guide, Movement). Redeploy the website too.
 
 ### The attendance map shows each person's photo and name
 - **What was done:** on Attendance → **Map**, every clock-in and clock-out

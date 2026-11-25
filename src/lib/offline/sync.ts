@@ -15,6 +15,7 @@ import { addClockNotice, clockNotice } from '@/lib/clock-notices'
 import { formatLagos } from '@/lib/utils'
 import {
   dropOutbox,
+  sessionOwner,
   enqueue,
   listOutbox,
   markAttempt,
@@ -44,6 +45,16 @@ function maxAge(kind: OutboxRecord['kind']) {
 }
 const MAX_ATTEMPTS = 8
 
+/**
+ * Clock-ins, clock-outs and positions are never given up for failed tries
+ * (2026-11-25): with a weak signal eight tries can fail in minutes, and the
+ * record of where and when someone clocked in was then deleted. They stay
+ * until the server takes them or refuses them (or, for a clock event, until
+ * the 24 hours the server allows have passed).
+ */
+function givesUp(kind: OutboxRecord['kind']) {
+  return kind !== 'clock' && kind !== 'ping'
+}
 function uuid() {
   if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID()
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`
@@ -403,7 +414,10 @@ export async function flushOutbox(): Promise<FlushResult> {
   const result: FlushResult = { sent: 0, failed: 0, dropped: 0, remaining: 0 }
 
   try {
-    const records = await listOutbox()
+    // Only what the signed-in person saved: someone else's clock-in or
+    // positions on a shared phone wait for them to sign in again.
+    const me = await sessionOwner()
+    const records = (await listOutbox()).filter((r) => !r.owner || r.owner === me)
     for (let i = 0; i < records.length; i++) {
       const record = records[i]
 
@@ -413,7 +427,7 @@ export async function flushOutbox(): Promise<FlushResult> {
         while (i < records.length && records[i].job.kind === 'ping' && run.length < 400) {
           const r = records[i]
           const old = Date.now() - new Date(r.job.client_captured_at).getTime() > maxAge('ping')
-          if (old || r.attempts >= MAX_ATTEMPTS) {
+          if (old || (givesUp('ping') && r.attempts >= MAX_ATTEMPTS)) {
             await dropOutbox(r.id!)
             result.dropped += 1
           } else {
@@ -441,7 +455,7 @@ export async function flushOutbox(): Promise<FlushResult> {
       }
 
       const age = Date.now() - new Date(record.job.client_captured_at).getTime()
-      if (age > maxAge(record.kind) || record.attempts >= MAX_ATTEMPTS) {
+      if (age > maxAge(record.kind) || (givesUp(record.kind) && record.attempts >= MAX_ATTEMPTS)) {
         await dropOutbox(record.id!)
         result.dropped += 1
         noteAbandoned(record)

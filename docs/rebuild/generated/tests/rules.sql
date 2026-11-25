@@ -7352,5 +7352,31 @@ begin
     if sqlerrm <> 'on-site-0106-done' then raise; end if;
   end;
 
+  -- 0107: a clock-in saved with no signal keeps the day it was taken. Rolled back.
+  begin
+    declare
+      od uuid := gen_random_uuid();
+      taken timestamptz := now() - interval '23 hours';
+      want date;
+    begin
+      insert into auth.users (id, email) values (od, 'offline.day@xpel.ng');
+      insert into public.profiles (id, full_name, email, role, push_exempt)
+      values (od, 'Offline Day', 'offline.day@xpel.ng', 'merchandiser', true);
+      perform act_as(od);
+      want := least((taken at time zone 'Africa/Lagos')::date, public.business_date());
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name)
+      values ('opening', 6.6, 3.35, 10, fresh_photo('selfies', 'od-1.jpg'), taken, 'Somewhere');
+      perform assert((select attendance_date from public.attendance where user_id = od and type = 'opening') = want,
+        'offline day 0107: a clock-in sent 23 hours late is dated by the day it was taken');
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name)
+      values ('closing', 6.6, 3.35, 10, fresh_photo('selfies', 'od-2.jpg'), now(), 'Somewhere');
+      perform assert((select attendance_date from public.attendance where user_id = od and type = 'closing') = public.business_date(),
+        'offline day 0107: one sent at once keeps today');
+      raise exception 'offline-day-0107-done';
+    end;
+  exception when others then
+    if sqlerrm <> 'offline-day-0107-done' then raise; end if;
+  end;
+
   raise notice 'ALL RULES PASSED';
 end $$;

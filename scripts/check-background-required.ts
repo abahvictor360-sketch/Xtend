@@ -68,6 +68,26 @@ check(confirmedNoLocation.blocked && confirmedNoLocation.always && !confirmedNoL
     'every synced position is kept, at any time, and a late clock-in takes in its day (0096)')
 }
 
+// TECNO, Infinix and itel: Auto-start and the lock, confirmed once on the phone.
+{
+  const { backgroundNeeds: needs, strictMaker } = require('@/lib/background-gate') as typeof import('@/lib/background-gate')
+  const tecno = { platform: 'android', always: true, batteryUnrestricted: true, maker: 'tecno' }
+  check(strictMaker(tecno) === 'TECNO' && strictMaker({ ...tecno, maker: 'infinix mobility' }) === 'Infinix' && strictMaker({ ...tecno, maker: 'itel' }) === 'itel',
+    'TECNO, Infinix and itel phones are recognised')
+  check(strictMaker({ ...tecno, maker: 'samsung' }) === null && strictMaker({ ...tecno, platform: 'ios' }) === null && strictMaker({ platform: 'android' }) === null,
+    'other phones, iPhones and older app builds are not asked')
+  check(needs(tecno).maker && needs(tecno).blocked, 'a TECNO phone is held until Auto-start and the lock are confirmed')
+  check(!needs(tecno, { makerConfirmed: true }).blocked, 'once confirmed on the phone, it clears')
+  const fs2 = require('node:fs') as typeof import('node:fs')
+  const path2 = require('node:path') as typeof import('node:path')
+  const gate = fs2.readFileSync(path2.join(__dirname, '..', 'src/components/field/background-gate.tsx'), 'utf8')
+  check(gate.includes('Open Auto-start') && gate.includes('until a lock shows') && gate.includes('I did both') && !/monitor|tracked|follow/i.test(gate),
+    'the card gives both steps, a button for Auto-start and a confirmation, and never mentions monitoring')
+  const java = fs2.readFileSync(path2.join(__dirname, '..', 'mobile/android/app/src/main/java/ng/xpelbeauty/xtend/ShiftTracker.java'), 'utf8')
+  check(java.includes('public void openAutoStart(PluginCall call)') && java.includes('com.transsion.phonemaster') && java.includes('o.put("maker"'),
+    'the app reports the maker and opens Phone Master’s Auto-start screen')
+}
+
 if (failed) {
   console.log(`\n${failed} check(s) FAILED`)
   process.exit(1)

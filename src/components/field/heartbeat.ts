@@ -121,7 +121,8 @@ export function useHeartbeat(active: boolean): HeartbeatStatus {
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
           accuracy_m: pos.coords.accuracy,
-          client_captured_at: new Date().toISOString(),
+          // When the position was taken, not when it was saved.
+          client_captured_at: new Date(Math.min(pos.timestamp || Date.now(), Date.now())).toISOString(),
         }
         // No network: keep the position on the phone; it is sent with the
         // rest of the offline queue when the network is back (migration 029).
