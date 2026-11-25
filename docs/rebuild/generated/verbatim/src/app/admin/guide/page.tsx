@@ -658,7 +658,9 @@ export default async function AdminGuidePage() {
                 places to pick from. Or paste a Google Maps link of the store into{' '}
                 <Ui>Or paste a Google Maps link</Ui> (open the store in Google Maps, or press and hold to
                 drop a pin, tap <Ui>Share</Ui> and copy the link; the two numbers like 6.6019, 3.3516 work
-                too). Or, standing inside the store, click <Ui>I am standing here</Ui>.
+                too). Xtend fills in the store&apos;s name, address, latitude and longitude from the link (from
+                the map at that spot when the link has no name). Boxes you already typed in are kept; if the link
+                says something else, click <Ui>Use these</Ui> to take its words. Or, standing inside the store, click <Ui>I am standing here</Ui>.
               </>,
               <>
                 Click <Ui>Check on Google Maps</Ui> to make sure the pin is on the store, not the middle of
