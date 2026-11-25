@@ -17,6 +17,38 @@ export interface LinkReading {
   query: string | null
   /** A shared short link (maps.app.goo.gl, goo.gl/maps) the server must open first. */
   short: boolean
+  /** The store's name, when the link carries one (/maps/place/Name,+Address/). */
+  name?: string | null
+  /** The address in the link, after the name. */
+  address?: string | null
+}
+
+/**
+ * The name and address a Google Maps link carries: "Shoprite Ikeja City
+ * Mall, 194 Obafemi Awolowo Way, Ikeja" → name "Shoprite Ikeja City Mall",
+ * address "194 Obafemi Awolowo Way, Ikeja". Coordinates are not a name.
+ */
+export function placeWords(text: string | null | undefined): { name: string | null; address: string | null } {
+  const t = (text ?? '').replace(/\s+/g, ' ').trim().slice(0, 400)
+  if (!t || pair(t.replace(/[()°]/g, '')) || /^-?\d/.test(t) && /^[\d\s.,°'"NSEW+-]+$/i.test(t)) return { name: null, address: null }
+  const comma = t.indexOf(',')
+  if (comma === -1) return { name: t.slice(0, 160), address: null }
+  const name = t.slice(0, comma).trim()
+  const address = t.slice(comma + 1).trim()
+  // "12 Allen Avenue, Ikeja": it starts with a house number, so it is all address.
+  if (/^\d+[a-z]?\s/i.test(name)) return { name: null, address: t.slice(0, 300) }
+  return { name: name.slice(0, 160) || null, address: address ? address.slice(0, 300) : null }
+}
+
+/** Google's cookie page wraps the real map link in ?continue=. */
+function unwrapConsent(url: URL): URL {
+  if (!/^consent\./i.test(url.hostname)) return url
+  const next = url.searchParams.get('continue')
+  try {
+    return next ? new URL(next) : url
+  } catch {
+    return url
+  }
 }
 
 const NUM = String.raw`(-?\d{1,3}(?:\.\d+)?)`
@@ -76,7 +108,7 @@ export function readMapLink(input: string): LinkReading {
   if (!found) return none
   let url: URL
   try {
-    url = new URL(found[0])
+    url = unwrapConsent(new URL(found[0]))
   } catch {
     return none
   }
@@ -84,11 +116,21 @@ export function readMapLink(input: string): LinkReading {
   if (isShortMapLink(url)) return { point: null, query: null, short: true }
 
   const full = decode(url.href)
+  // The name and address the link carries, whatever gives the position.
+  const placeSeg = url.pathname.match(/\/maps\/(?:place|search)\/([^/@]+)/)
+  const words = placeWords(placeSeg ? decode(placeSeg[1]) : url.searchParams.get('q') ?? url.searchParams.get('query'))
+  const read = (point: LinkPoint | null, query: string | null = null): LinkReading => ({
+    point,
+    query,
+    short: false,
+    name: words.name,
+    address: words.address,
+  })
 
   const pin = full.match(new RegExp(String.raw`!3d${NUM}!4d${NUM}`))
   if (pin) {
     const p = validPoint(Number(pin[1]), Number(pin[2]))
-    if (p) return { point: p, query: null, short: false }
+    if (p) return read(p)
   }
 
   for (const key of ['q', 'query', 'll', 'center', 'destination', 'daddr', 'sll', 'mlat']) {
@@ -96,38 +138,37 @@ export function readMapLink(input: string): LinkReading {
     if (key === 'mlat') {
       const lon = url.searchParams.get('mlon')
       const p = value && lon ? validPoint(Number(value), Number(lon)) : null
-      if (p) return { point: p, query: null, short: false }
+      if (p) return read(p)
       continue
     }
     const p = pair(value?.replace(/^loc:/i, ''))
-    if (p) return { point: p, query: null, short: false }
+    if (p) return read(p)
   }
 
   // OpenStreetMap: #map=17/6.6019/3.3516
   const osm = url.hash.match(new RegExp(String.raw`map=\d+(?:\.\d+)?/${NUM}/${NUM}`))
   if (osm) {
     const p = validPoint(Number(osm[1]), Number(osm[2]))
-    if (p) return { point: p, query: null, short: false }
+    if (p) return read(p)
   }
 
   // /maps/search/6.6019,+3.3516 or /maps/place/6.6019,3.3516
   const pathPair = full.match(new RegExp(String.raw`/(?:search|place|dir)/${NUM}\s*,\s*${NUM}`))
   if (pathPair) {
     const p = validPoint(Number(pathPair[1]), Number(pathPair[2]))
-    if (p) return { point: p, query: null, short: false }
+    if (p) return read(p)
   }
 
   const centre = full.match(new RegExp(String.raw`@${NUM},${NUM}`))
   if (centre) {
     const p = validPoint(Number(centre[1]), Number(centre[2]))
-    if (p) return { point: p, query: null, short: false }
+    if (p) return read(p)
   }
 
   // No position, but a place to search: /maps/place/Justrite+Ogba/ or ?q=Justrite Ogba
-  const place = url.pathname.match(/\/maps\/(?:place|search)\/([^/@]+)/)
-  const q = place ? decode(place[1]) : url.searchParams.get('q') ?? url.searchParams.get('query')
+  const q = placeSeg ? decode(placeSeg[1]) : url.searchParams.get('q') ?? url.searchParams.get('query')
   const query = q?.trim() ? q.trim().slice(0, 300) : null
-  return { point: null, query, short: false }
+  return read(null, query)
 }
 
 /** A link to check a position on Google Maps. */

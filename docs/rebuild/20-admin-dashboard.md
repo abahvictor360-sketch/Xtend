@@ -1954,7 +1954,20 @@ Loads `outlets` (id, name, address, lat, lng, geofence_radius_m, shift_start, sh
   `{link}`: `openShortMapLink` follows redirects manually (`redirect:
   'manual'`, at most 6, https and map hosts only), then reads the final link;
   a link with only a place name is searched. Failure messages explain how to
-  copy the link or the numbers.
+  copy the link or the numbers. Google's cookie page (`consent.…?continue=`)
+  is looked through. **Name and address (2026-11-25):** `placeWords` reads
+  the `/maps/place|search/<words>` segment or `q`/`query`: before the first
+  comma is the name, after it the address; words starting with a house
+  number are all address; coordinates are never a name. A local position is
+  pinned at once and the link is still sent to the route, which answers
+  `{point, name, address}`: the link's words, and for what is missing
+  `resolvePlace(lat, lng)` (the map at that point); for a name-only link the
+  places found keep the link's name. `fillFromLink` fills empty Name and
+  Address boxes; when either was already typed and differs, a strip "The
+  link says: <name, address>" with **Use these** replaces them. The pin
+  note reads "Taken from the link: <name, address>. Check it on Google Maps
+  before saving." The help line adds "Xtend fills in the store's name,
+  address, latitude and longitude from it."
 - After a pin is placed: a note ("Position taken from the link…" / "Pinned at
   …") and **Check on Google Maps** (`mapsLink`, new tab).
 - **I am standing here** (crosshair; "Reading…" while busy): reads the browser position (`enableHighAccuracy`, timeout **15 s**, `maximumAge: 0`), fills lat/lng to 6 decimals, warns "Your location is only accurate to N m. Step outside and try again, or the fence will be in the wrong place." when accuracy > **100 m**, then asks `/api/geocode?lat&lng` and fills an empty name and address from the answer. Failure: "Could not read your location. Type the coordinates instead."

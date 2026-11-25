@@ -811,7 +811,7 @@ link (full or shared short link, once it has been followed), an
 OpenStreetMap or Apple Maps link, or plain "6.6019, 3.3516". Pure, so
 scripts/check-map-link.ts can test it.
 
-Exports: `LinkPoint`, `LinkReading`, `validPoint`, `SHORT_LINK_HOSTS`, `MAP_HOSTS`, `isShortMapLink`, `readMapLink`, `mapsLink`
+Exports: `LinkPoint`, `LinkReading`, `placeWords`, `validPoint`, `SHORT_LINK_HOSTS`, `MAP_HOSTS`, `isShortMapLink`, `readMapLink`, `mapsLink`
 
 ## `src/lib/marketer-report-server.ts`
 

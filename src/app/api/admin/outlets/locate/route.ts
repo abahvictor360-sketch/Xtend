@@ -2,7 +2,7 @@ import { z } from 'zod'
 import { apiError, requireApiSession } from '@/lib/auth'
 import { allowAttempt } from '@/lib/rate-limit'
 import { GEOCODE_LOOKUPS_PER_HOUR, HOUR_MS } from '@/lib/usage-limits'
-import { openShortMapLink, searchPlaces, type LocatedPlace } from '@/lib/geocode'
+import { openShortMapLink, resolvePlace, searchPlaces, type LocatedPlace } from '@/lib/geocode'
 import { readMapLink } from '@/lib/map-link'
 
 export const maxDuration = 30
@@ -15,6 +15,9 @@ const schema = z.union([
 export interface LocateAnswer {
   /** The position read from a pasted link, when there is one. */
   point: { lat: number; lng: number } | null
+  /** The store's name and address from the link, or from the map at that point. */
+  name?: string | null
+  address?: string | null
   /** Places that match, to pick from. */
   places: LocatedPlace[]
   error?: string
@@ -52,10 +55,29 @@ export async function POST(request: Request) {
       const opened = await openShortMapLink(url)
       reading = opened ? readMapLink(opened) : { point: null, query: null, short: true }
     }
-    if (reading.point) return Response.json({ point: reading.point, places: [] } satisfies LocateAnswer)
+    if (reading.point) {
+      // The link gives the position; the name and address come from the link
+      // too when it carries them, else from the map at that point.
+      let name = reading.name ?? null
+      let address = reading.address ?? null
+      if (!name || !address) {
+        try {
+          const there = await resolvePlace(reading.point.lat, reading.point.lng)
+          name ??= there.name
+          address ??= there.address
+        } catch {
+          // No map answered: the position alone still helps.
+        }
+      }
+      return Response.json({ point: reading.point, name, address, places: [] } satisfies LocateAnswer)
+    }
     if (reading.query) {
       const places = await searchPlaces(reading.query)
-      if (places.length) return Response.json({ point: null, places } satisfies LocateAnswer)
+      if (places.length) {
+        // The link named the place: its own name wins over the map's.
+        const named = places.map((p) => ({ ...p, name: reading.name ?? p.name, address: p.address ?? reading.address ?? null }))
+        return Response.json({ point: null, places: named } satisfies LocateAnswer)
+      }
     }
     return Response.json(
       {

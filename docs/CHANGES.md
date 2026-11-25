@@ -71,6 +71,18 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-25
 
+### A Google Maps link now fills in the store's name and address too
+- **What was done:** on Outlets, when you paste a Google Maps link of a
+  store into **Or paste a Google Maps link**, Xtend now fills in the
+  store's **name**, **address**, **latitude** and **longitude**. The name
+  and address come from the link itself; when the link only has a
+  position (a dropped pin), Xtend looks up the name and address at that
+  spot on the map. Boxes you already typed in are kept, and if the link
+  says something different, a **Use these** button lets you take its words.
+- **The impact:** adding a store is one paste instead of typing three
+  things. Always press **Check on Google Maps** before saving.
+- **What you need to do:** redeploy. No migration and no new app build.
+
 ### NVIDIA retired the model Xtend used; Test now shows which ones work
 - **What was done:** NVIDIA switched off `meta/llama-3.3-70b-instruct` on
   26 August 2026, and it was Xtend's NVIDIA default, so Ask Xtend got

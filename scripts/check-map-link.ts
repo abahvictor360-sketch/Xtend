@@ -68,6 +68,36 @@ check(mapsLink(6.6, 3.35) === 'https://www.google.com/maps/search/?api=1&query=6
     'the outlet form finds the address, takes a link, and offers a check')
 }
 
+// The store's name and address come out of the link too.
+{
+  const fs = require('node:fs') as typeof import('node:fs')
+  const path = require('node:path') as typeof import('node:path')
+  const read = (p: string) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8')
+  const full = readMapLink(
+    'https://www.google.com/maps/place/Shoprite+Ikeja+City+Mall,+194+Obafemi+Awolowo+Way,+Alausa,+Ikeja/@6.6142,3.3570,17z/data=!3m1!4b1!4m6!3m5!1s0x0:0x0!8m2!3d6.6137594!4d3.3580512!16s',
+  )
+  check(full.point?.lat === 6.613759 && full.name === 'Shoprite Ikeja City Mall' && full.address === '194 Obafemi Awolowo Way, Alausa, Ikeja',
+    'a place link gives the position, the store name and the address', full)
+  const nameOnly = readMapLink('https://www.google.com/maps/place/Justrite+Ogba/@6.63,3.34,17z')
+  check(nameOnly.name === 'Justrite Ogba' && nameOnly.address === null && nameOnly.point?.lat === 6.63, 'a name with no address', nameOnly)
+  const q = readMapLink('https://maps.google.com/?q=Mama+Nkechi+Provisions,+12+Allen+Avenue,+Ikeja&ftid=0x0:0x1')
+  check(q.point === null && q.name === 'Mama Nkechi Provisions' && q.address === '12 Allen Avenue, Ikeja' && q.query !== null,
+    'a ?q= link with no position gives the name and address, and is searched', q)
+  const house = readMapLink('https://www.google.com/maps/place/12+Allen+Avenue,+Ikeja/@6.6,3.35,17z')
+  check(house.name === null && house.address === '12 Allen Avenue, Ikeja', 'a street address is not taken for a name', house)
+  const coords = readMapLink('https://www.google.com/maps/place/6.6019,3.3516/@6.6019,3.3516,17z')
+  check(coords.name === null && coords.address === null && coords.point?.lat === 6.6019, 'coordinates are never a name', coords)
+  const consent = readMapLink(
+    'https://consent.google.com/m?continue=' + encodeURIComponent('https://www.google.com/maps/place/Spar+Lekki/@6.44,3.47,17z/data=!3d6.4411!4d3.4722') + '&gl=NG',
+  )
+  check(consent.point?.lat === 6.4411 && consent.name === 'Spar Lekki', "Google's cookie page around a shared link is looked through", consent)
+  const form = read('src/components/admin/outlet-manager.tsx')
+  check(/fillFromLink\(/.test(form) && /Use these/.test(form) && /name, address, latitude and longitude/.test(form),
+    'the form fills empty name and address boxes from the link, and offers the link’s words for typed ones')
+  check(/resolvePlace\(reading\.point\.lat, reading\.point\.lng\)/.test(read('src/app/api/admin/outlets/locate/route.ts')),
+    'a link with only a position gets its name and address from the map there')
+}
+
 if (failed) {
   console.log(`\n${failed} check(s) FAILED`)
   process.exit(1)

@@ -70,6 +70,8 @@ export function OutletManager({
   const [found, setFound] = useState<FoundPlace[] | null>(null)
   const [mapLink, setMapLink] = useState('')
   const [readingLink, setReadingLink] = useState(false)
+  // A name and address from a pasted link, when the boxes already had others.
+  const [linkOffer, setLinkOffer] = useState<{ name: string | null; address: string | null } | null>(null)
   const [pinNote, setPinNote] = useState<string | null>(null)
   const [allocating, setAllocating] = useState<string | null>(null)
   // A store with records: delete it for good after a typed confirmation (0098).
@@ -132,6 +134,7 @@ export function OutletManager({
     setFound(null)
     setMapLink('')
     setPinNote(null)
+    setLinkOffer(null)
   }
 
   function placePin(lat: number, lng: number, note: string) {
@@ -183,25 +186,43 @@ export function OutletManager({
 
   function pick(place: FoundPlace) {
     placePin(place.lat, place.lng, `Pinned at ${place.name ?? place.address ?? 'the place found'}. Check it on Google Maps before saving.`)
-    setDraft((d) => ({
-      ...d,
-      address: d.address.trim() ? d.address : (place.address ?? ''),
-      name: d.name.trim() ? d.name : (place.name ?? ''),
-    }))
+    fillFromLink(place.name, place.address)
     setFound(null)
   }
 
-  /** Reads the position out of a pasted Google Maps link or "lat, lng". */
+  /**
+   * Fills the store's name and address from a link, into empty boxes; boxes
+   * already typed in are kept, with a button to use the link's instead.
+   */
+  function fillFromLink(name: string | null | undefined, address: string | null | undefined) {
+    const n = name?.trim() || null
+    const a = address?.trim() || null
+    if (!n && !a) return
+    let offer: { name: string | null; address: string | null } | null = null
+    setDraft((d) => {
+      const next = { ...d }
+      if (n && !d.name.trim()) next.name = n
+      if (a && !d.address.trim()) next.address = a
+      const differs = (n && d.name.trim() && d.name.trim() !== n) || (a && d.address.trim() && d.address.trim() !== a)
+      if (differs) offer = { name: n, address: a }
+      return next
+    })
+    setLinkOffer(offer)
+  }
+
+  /** Reads the position, name and address out of a pasted Google Maps link or "lat, lng". */
   async function applyMapLink(text = mapLink) {
     const value = text.trim()
     if (!value) return
     setError(null)
     setFound(null)
-    // Most links carry the position: no need to ask the server.
+    setLinkOffer(null)
+    // Most links carry the position: pin it at once, then ask the server for
+    // the name and address (from the link, or the map at that point).
     const local = readMapLink(value)
     if (local.point) {
       placePin(local.point.lat, local.point.lng, 'Position taken from the link. Check it on Google Maps before saving.')
-      return
+      fillFromLink(local.name, local.address)
     }
     setReadingLink(true)
     try {
@@ -212,11 +233,22 @@ export function OutletManager({
       })
       const body = (await res.json().catch(() => ({}))) as {
         point?: { lat: number; lng: number } | null
+        name?: string | null
+        address?: string | null
         places?: FoundPlace[]
         error?: string
       }
       if (body.point) {
-        placePin(body.point.lat, body.point.lng, 'Position taken from the link. Check it on Google Maps before saving.')
+        placePin(
+          body.point.lat,
+          body.point.lng,
+          body.name || body.address
+            ? `Taken from the link: ${[body.name, body.address].filter(Boolean).join(', ')}. Check it on Google Maps before saving.`
+            : 'Position taken from the link. Check it on Google Maps before saving.',
+        )
+        fillFromLink(body.name, body.address)
+      } else if (local.point) {
+        // The server could not add more; the pin from the link stands.
       } else if (body.places?.length === 1) {
         pick(body.places[0])
       } else if (body.places?.length) {
@@ -470,7 +502,30 @@ export function OutletManager({
                 </div>
                 <p className="text-xs text-muted-foreground">
                   In Google Maps, open the store (or press and hold on it to drop a pin), tap Share and copy the link.
+                  Xtend fills in the store&apos;s name, address, latitude and longitude from it.
                 </p>
+                {linkOffer && (
+                  <div className="flex flex-wrap items-center gap-2 rounded-lg bg-orange-50 p-2 text-xs dark:bg-orange-950/30">
+                    <span className="min-w-0 flex-1">
+                      The link says: {[linkOffer.name, linkOffer.address].filter(Boolean).join(', ')}
+                    </span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setDraft((d) => ({
+                          ...d,
+                          name: linkOffer.name ?? d.name,
+                          address: linkOffer.address ?? d.address,
+                        }))
+                        setLinkOffer(null)
+                      }}
+                    >
+                      Use these
+                    </Button>
+                  </div>
+                )}
               </div>
               <div className="space-y-1">
                 <Label>Latitude</Label>
