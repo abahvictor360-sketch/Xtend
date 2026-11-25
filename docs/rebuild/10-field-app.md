@@ -994,7 +994,9 @@ capture time, so an offline clock-in is not late for waiting for signal.
 
 Storage: IndexedDB database `xtend` version 1, object store `outbox`
 (auto-increment `id`, index `by_queued_at`) (`src/lib/offline/db.ts`).
-Record: `{ kind, job, attempts, last_error, queued_at }`. Kinds: `clock`,
+Record: `{ kind, job, attempts, last_error, queued_at, owner }` (`owner`,
+2026-11-25: the signed-in user's id from `sessionOwner()`, read from the
+stored session so it works offline; missing on older records). Kinds: `clock`,
 `ping`, `report`, `report_file_remove` (0065), `xm_count`, `xm_sales`. Blobs
 (selfie, thumb, photos, documents) are stored in the job. A queued report's
 documents record their progress on the record (`uploaded_path`), so a
@@ -1011,10 +1013,12 @@ retry only uploads what has not gone yet (0065).
 
 `flushOutbox()`:
 
-- One flush at a time. Oldest first.
+- One flush at a time. Oldest first. Only records with no `owner` or the
+  signed-in person's `owner` are sent; another person's wait on the phone.
 - Drop a record when its capture is older than **24 h** (`MAX_AGE_MS`), or
-  **72 h** for `xm_count`/`xm_sales` (`XM_MAX_AGE_MS`), or after **8**
-  attempts (`MAX_ATTEMPTS`).
+  **72 h** for `xm_count`/`xm_sales` (`XM_MAX_AGE_MS`), never for `ping`;
+  or after **8** attempts (`MAX_ATTEMPTS`), except `clock` and `ping`
+  (`givesUp`), which are kept until sent or refused.
 - Consecutive `ping` records are sent as one batch of up to **400** to
   `POST /api/pings/offline { sent_at, points[] }` (server accepts 1–500).
 - A permanent rejection drops the record; a transient failure marks the

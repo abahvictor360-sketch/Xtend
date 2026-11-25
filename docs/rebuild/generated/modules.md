@@ -1009,7 +1009,7 @@ Exports: `offSiteRefusal`
 
 The moment of capture, never the moment of sync.
 
-Exports: `OutboxKind`, `ClockJob`, `PingJob`, `ReportJob`, `ReportFileRemoveJob`, `XmCountJob`, `XmSalesJob`, `OutboxJob`, `OutboxRecord`, `enqueue`, `listOutbox`, `countOutbox`, `dropOutbox`, `saveOutboxRecord`, `markAttempt`
+Exports: `OutboxKind`, `ClockJob`, `PingJob`, `ReportJob`, `ReportFileRemoveJob`, `XmCountJob`, `XmSalesJob`, `OutboxJob`, `OutboxRecord`, `sessionOwner`, `enqueue`, `listOutbox`, `countOutbox`, `dropOutbox`, `saveOutboxRecord`, `markAttempt`
 
 ## `src/lib/offline/sync.ts`
 

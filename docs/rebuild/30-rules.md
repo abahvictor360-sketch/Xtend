@@ -1334,6 +1334,12 @@ label and the store's own point.
   unknown or inactive store refuses the whole call and changes nothing.
   Every call writes an `audit_log` row `staff.allocate_outlets` directly
   (supervisors may call it).
+- **0107, a clock-in saved with no signal keeps its day:** BEFORE INSERT
+  `trg_attendance_enforce_day` (after `trg_attendance_enforce` by name;
+  not for office entries) → `attendance_capture_day()`: taken =
+  least(`client_captured_at`, now()); within 24 h and its Lagos date
+  earlier than `attendance_date` → that date. `attendance_store_check_in`
+  (0101) also returns when `attendance_date` is not `business_date()`.
 - **0106, on site only:** `system_settings.block_off_site boolean default
   true`; `off_site_blocked()` (definer). `too_far(d, radius, accuracy)` =
   d not null and d > coalesce(radius,150) + least(greatest(accuracy,0),50).

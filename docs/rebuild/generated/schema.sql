@@ -777,6 +777,35 @@ $$;
 
 
 --
+-- Name: attendance_capture_day(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.attendance_capture_day() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  taken timestamptz;
+  taken_day date;
+begin
+  if new.user_id is null or new.client_captured_at is null then
+    return new;
+  end if;
+  taken := least(new.client_captured_at, now());
+  -- attendance_enforce refuses anything older than 24 hours.
+  if taken < now() - interval '24 hours' then
+    return new;
+  end if;
+  taken_day := (taken at time zone 'Africa/Lagos')::date;
+  if taken_day < new.attendance_date then
+    new.attendance_date := taken_day;
+  end if;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: attendance_claim_pings(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -1219,6 +1248,10 @@ declare
   store uuid;
 begin
   if new.type <> 'opening' or auth.uid() is null or auth.uid() <> new.user_id then
+    return null;
+  end if;
+  -- 0107: a clock-in from an earlier day that arrived late opens no visit today.
+  if new.attendance_date <> public.business_date() then
     return null;
   end if;
   if not public.can_visit_stores() then
@@ -14273,6 +14306,13 @@ CREATE TRIGGER trg_attendance_enforce BEFORE INSERT ON public.attendance FOR EAC
 
 
 --
+-- Name: attendance trg_attendance_enforce_day; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_attendance_enforce_day BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT public.office_entry_on())) EXECUTE FUNCTION public.attendance_capture_day();
+
+
+--
 -- Name: attendance trg_attendance_integrity; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -17045,6 +17085,13 @@ REVOKE ALL ON FUNCTION public.assistant_conversation_touch() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public.attendance_alert() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION attendance_capture_day(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.attendance_capture_day() FROM PUBLIC;
 
 
 --

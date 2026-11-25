@@ -108,6 +108,26 @@ export interface OutboxRecord {
   attempts: number
   last_error: string | null
   queued_at: string
+  /**
+   * Who saved it (their user id), so it is only ever sent as them: someone
+   * else signing in on the same phone never sends it (2026-11-25). Missing
+   * on records saved before then.
+   */
+  owner?: string | null
+}
+
+/**
+ * The signed-in person's id from the session kept on the phone: works with
+ * no signal. Null when nobody is signed in or it cannot be read.
+ */
+export async function sessionOwner(): Promise<string | null> {
+  try {
+    const { supabase } = await import('@/lib/supabase/client')
+    const { data } = await supabase().auth.getSession()
+    return data.session?.user?.id ?? null
+  } catch {
+    return null
+  }
 }
 
 interface XtendDB extends DBSchema {
@@ -136,6 +156,7 @@ function db() {
 }
 
 export async function enqueue(job: OutboxJob): Promise<number> {
+  const owner = await sessionOwner()
   const database = await db()
   return database.add('outbox', {
     kind: job.kind,
@@ -143,6 +164,7 @@ export async function enqueue(job: OutboxJob): Promise<number> {
     attempts: 0,
     last_error: null,
     queued_at: new Date().toISOString(),
+    owner,
   }) as Promise<number>
 }
 

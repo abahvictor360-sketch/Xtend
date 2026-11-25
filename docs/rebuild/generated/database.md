@@ -1437,6 +1437,7 @@ Policies:
 - `assign_support_thread(p_thread uuid, p_assignee uuid)` → void · definer · 0053_support_notifications.sql
 - `assistant_conversation_touch()` → trigger · 0054_integrity_ask.sql
 - `attendance_alert()` → trigger · definer · 0001_init.sql
+- `attendance_capture_day()` → trigger · definer · 0107_offline_clock_day.sql
 - `attendance_claim_pings()` → trigger · definer · 0096_every_synced_position_kept.sql
 - `attendance_correction_done()` → trigger · definer · 0090_field_corrections.sql
 - `attendance_enforce()` → trigger · definer · 0034_stores_pinned_from_clock_in.sql
@@ -1449,7 +1450,7 @@ Policies:
 - `attendance_push_check()` → trigger · definer · 0027_notifications_required.sql
 - `attendance_replace_for_correction()` → trigger · definer · 0090_field_corrections.sql
 - `attendance_start_store()` → trigger · definer · 0101_start_day_at_a_store.sql
-- `attendance_store_check_in()` → trigger · definer · 0101_start_day_at_a_store.sql
+- `attendance_store_check_in()` → trigger · definer · 0107_offline_clock_day.sql
 - `attendance_timing()` → trigger · definer · 0026_phone_evidence.sql
 - `attendance_timing_flag()` → trigger · definer · 0026_phone_evidence.sql
 - `audit_context_columns(p jsonb)` → TABLE(ip text, user_agent text, device jsonb, lat double precision, lng double precision, accuracy_m double precision, location_source text, place text, country text, vpn boolean) · definer · 0049_audit_context.sql
@@ -1799,6 +1800,7 @@ Policies:
 - `attendance`: `trg_attendance_alert` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_alert()
 - `attendance`: `trg_attendance_claim_pings` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_claim_pings()
 - `attendance`: `trg_attendance_enforce` — BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_enforce()
+- `attendance`: `trg_attendance_enforce_day` — BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_capture_day()
 - `attendance`: `trg_attendance_integrity` — AFTER INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_integrity()
 - `attendance`: `trg_attendance_learn_waiting_store` — AFTER INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_learn_waiting_store()
 - `attendance`: `trg_attendance_punctuality` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_punctuality()
