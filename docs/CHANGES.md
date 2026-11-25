@@ -41,7 +41,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0105_clock_out_window.sql`;
    - `supabase/migrations/0106_on_site_only.sql`;
    - `supabase/migrations/0107_offline_clock_day.sql`;
-   - `supabase/migrations/0108_pause_on_fake_location.sql`.
+   - `supabase/migrations/0108_pause_on_fake_location.sql`;
+   - `supabase/migrations/0109_no_early_clock_out.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18;
    0099, 0100, 0101 and 0102 are done: you ran them on 2026-11-24.)
 4. **Turn off self sign-up in Supabase**: Authentication → Sign In /
@@ -73,6 +74,25 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-25
+
+### Nobody can clock out before it is time (migration 0109)
+- **What was done:** tapping **Clock out** before your clock-out time no
+  longer works. The app says **Not time to clock out yet** and the time
+  you can clock out from. Your clock-out time is your **Can clock out from**
+  time (Staff → Edit details), or, when none is set, 15 minutes before the
+  end of your day. Marketers are offered their store work instead: **Check
+  in at a store**, or **Check out of** the store they are in. The **Clock
+  out** line on Home reads "From 18:00" until then. The server refuses an
+  early clock-out too, even one saved with no signal and sent later.
+- **The impact:** staff can no longer leave early and clock out on the
+  way. When someone really must leave early (sick, an emergency), the
+  office clocks them out with **Fix today's record** on their day (or Ask
+  Xtend), with a reason.
+- **What you need to do:** run `supabase/migrations/0109_no_early_clock_out.sql`
+  in Supabase and redeploy. No new app build. Check that everyone's hours
+  are right on Staff first, since a wrong end time now keeps them from
+  clocking out. To go back to only flagging early clock-outs, run
+  `update public.system_settings set block_early_clock_out = false;`.
 
 ### A fake GPS app locks the person out
 - **What was done:** when a phone reports that its location comes from a

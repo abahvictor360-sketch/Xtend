@@ -36,6 +36,7 @@ export default async function FieldPage() {
     { data: unread },
     { data: openVisits },
     { data: myStores },
+    { data: earlyBlocked },
   ] = await Promise.all([
     supabase.rpc('my_day'),
     supabase.rpc('my_store_visits'),
@@ -52,6 +53,8 @@ export default async function FieldPage() {
     supabase.rpc('my_open_store_visits'),
     // Their own stores (home and allocated): a marketer starts the day at one (0101).
     supabase.rpc('my_outlets'),
+    // No clocking out before their time (0109); missing (not run): not held back.
+    supabase.rpc('early_clock_out_blocked'),
   ])
 
   if (error || !data) {
@@ -101,6 +104,8 @@ export default async function FieldPage() {
         avatarUrl={photo}
         userId={session.userId}
         calendar={(calendar ?? []) as CalendarDay[]}
+        clockOutFrom={earlyBlocked === true ? (session.profile.clock_out_from ?? null) : undefined}
+        holdEarlyClockOut={earlyBlocked === true}
       />
     </>
   )

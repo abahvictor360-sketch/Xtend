@@ -16,6 +16,8 @@ import { GuideSheet } from '@/components/field/guide-sheet'
 import { currentNetwork, isNetworkError, problemFromGeo, problemFromMessage, type GuideProblem } from '@/lib/field-guide'
 import { StartStoreSheet, type StartStore } from '@/components/field/start-store-sheet'
 import { OffSiteSheet } from '@/components/field/off-site-sheet'
+import { TooEarlySheet } from '@/components/field/too-early-sheet'
+import { tooEarlyFromServer, tooEarlyToClockOut } from '@/lib/clock-out-time'
 import { offSite as offSiteFrom, offSiteFromServer, type OffSite, type SiteStore } from '@/lib/on-site'
 import { processSelfie } from '@/lib/image'
 import { deviceInfo } from '@/lib/device'
@@ -134,6 +136,10 @@ export function ClockPanel({
   startStores = null,
   siteStores = null,
   currentFix = null,
+  clockOutOpensAt = null,
+  canVisitStores = false,
+  openVisit = null,
+  onStoreWork,
 }: {
   day: DayState
   /** False only for someone an admin has excused (profiles.push_exempt). */
@@ -146,6 +152,12 @@ export function ClockPanel({
   /** Their own stores (0106): a clock-in from outside them is stopped before the camera. */
   siteStores?: SiteStore[] | null
   currentFix?: { lat: number; lng: number } | null
+  /** From when they may clock out, "HH:MM" (0109); null: not held back here. */
+  clockOutOpensAt?: string | null
+  /** Marketers: offered their store work while it is too early to clock out. */
+  canVisitStores?: boolean
+  openVisit?: string | null
+  onStoreWork?: () => void
 }) {
   const router = useRouter()
   const push = usePush()
@@ -180,6 +192,10 @@ export function ClockPanel({
   const [outcome, setOutcome] = useState<Outcome | null>(null)
   // "You are off site" (0106): the store to go to, until they are there.
   const [offSite, setOffSite] = useState<OffSite | null>(null)
+  // "Not time to clock out yet" (0109): the time they may clock out from.
+  const [tooEarly, setTooEarly] = useState<string | null>(null)
+  const opensAt = useRef(clockOutOpensAt)
+  opensAt.current = clockOutOpensAt
   const sites = useRef<SiteStore[] | null>(siteStores)
   sites.current = siteStores
   // Clock-ins and clock-outs made with no signal that the server then
@@ -223,6 +239,8 @@ export function ClockPanel({
   // the held-back button alone would not stop it.
   const heldBack = useRef(false)
   heldBack.current = backgroundHeld
+  const dayDate = useRef(day.date)
+  dayDate.current = day.date
 
   const start = useCallback(async (type: AttendanceType) => {
     if (heldBack.current) {
@@ -231,6 +249,12 @@ export function ClockPanel({
     }
     setError(null)
     setOutcome(null)
+    // 0109: no clock-out before their time. Said before the location and
+    // the selfie; the server refuses it too.
+    if (type === 'closing' && tooEarlyToClockOut(opensAt.current, dayDate.current)) {
+      setTooEarly(opensAt.current)
+      return
+    }
     const run = ++startRun.current
     setOpening(type)
     try {
@@ -488,6 +512,9 @@ export function ClockPanel({
         } else if (err instanceof PermanentJobError && offSiteFromServer(err.body)) {
           // 0106: the server says they are not at the store: where to go.
           setOffSite(offSiteFromServer(err.body))
+        } else if (err instanceof PermanentJobError && tooEarlyFromServer(err.body)) {
+          // 0109: the server says it is not time to clock out yet.
+          setTooEarly(tooEarlyFromServer(err.body))
         } else {
           const message = err instanceof Error ? err.message : 'That did not go through. Try again.'
           setError(message)
@@ -528,6 +555,13 @@ export function ClockPanel({
         onClose={() => setGuide(null)}
         onRetry={guideRetry ? () => (guideRetry === 'opening' && startStores ? setPicking(true) : void start(guideRetry)) : undefined}
         onPickStore={startStores ? () => setPicking(true) : undefined}
+      />
+      <TooEarlySheet
+        opensAt={tooEarly}
+        canVisitStores={canVisitStores}
+        openVisit={openVisit}
+        onStoreWork={onStoreWork}
+        onClose={() => setTooEarly(null)}
       />
       <OffSiteSheet
         offSite={offSite}
