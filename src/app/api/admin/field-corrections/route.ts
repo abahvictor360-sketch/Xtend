@@ -15,6 +15,11 @@ const schema = z.object({
   /** A clock-in or clock-out time today (ISO); left out: now. */
   at: z.string().datetime({ offset: true }).nullable().optional(),
   visit_id: z.string().guid().nullable().optional(),
+  /** Where they are (0112): a spot the office picked; left out, the store's pin. */
+  lat: z.number().min(-90).max(90).nullable().optional(),
+  lng: z.number().min(-180).max(180).nullable().optional(),
+  accuracy: z.number().min(1).max(100).nullable().optional(),
+  place: z.string().trim().max(120).nullable().optional(),
 })
 
 /**
@@ -34,6 +39,12 @@ export async function POST(request: Request) {
     const input = parsed.data
     const action = input.action as CorrectionAction
     const supabase = await createServerSupabase()
+    // 0112: the spot, sent only when one was picked (before 0112 the functions
+    // do not take it, and the store's pin is used as before).
+    const spot =
+      input.lat != null && input.lng != null
+        ? { p_lat: input.lat, p_lng: input.lng, p_accuracy: input.accuracy ?? null, p_place: input.place ?? null }
+        : {}
 
     let result: { data: unknown; error: { message: string; code?: string } | null }
     if (action === 'office_clock_in' || action === 'office_clock_out') {
@@ -44,6 +55,7 @@ export async function POST(request: Request) {
         p_outlet: input.outlet_id,
         p_at: input.at ?? null,
         p_reason: input.reason,
+        ...spot,
       })
     } else if (action === 'office_check_in' || action === 'office_check_out') {
       if (action === 'office_check_in' && !input.outlet_id) {
@@ -54,6 +66,7 @@ export async function POST(request: Request) {
         p_action: action === 'office_check_in' ? 'check_in' : 'check_out',
         p_outlet: input.outlet_id ?? null,
         p_reason: input.reason,
+        ...spot,
       })
     } else if (action === 'reset_clock_out') {
       // A clock-out made by mistake (0093): back on shift.
@@ -74,7 +87,7 @@ export async function POST(request: Request) {
       return Response.json(
         {
           error: missing
-            ? `This needs migration ${action === 'reset_clock_out' ? '0093' : '0090'}. Ask an admin to run it.`
+            ? `This needs migration ${action === 'reset_clock_out' ? '0093' : 'p_lat' in spot ? '0112' : '0090'}. Ask an admin to run it.`
             : dbErrorMessage(result.error),
         },
         { status: missing ? 503 : 400 },
@@ -86,6 +99,7 @@ export async function POST(request: Request) {
       outlet_id: input.outlet_id ?? null,
       at: input.at ?? null,
       visit_id: input.visit_id ?? null,
+      location: 'p_lat' in spot ? { lat: input.lat, lng: input.lng, place: input.place ?? null } : 'store',
       record_id: typeof result.data === 'string' ? result.data : null,
     })
 

@@ -44,7 +44,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0108_pause_on_fake_location.sql`;
    - `supabase/migrations/0109_no_early_clock_out.sql`;
    - `supabase/migrations/0110_ai_limits.sql`;
-   - `supabase/migrations/0111_clock_out_hold.sql`.
+   - `supabase/migrations/0111_clock_out_hold.sql`;
+   - `supabase/migrations/0112_office_entry_location.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18;
    0099, 0100, 0101 and 0102 are done: you ran them on 2026-11-24.)
 4. **Turn off self sign-up in Supabase**: Authentication → Sign In /
@@ -76,6 +77,21 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-25
+
+### The office says where the person is when it clocks them in (migration 0112)
+- **What was done:** when you clock someone in or out, or check them in or
+  out of a store, on **Fix today's record**, you now choose **Where is …?**:
+  **At the store** (as before), **Where their phone was** (the last place
+  their phone reported today) or **Pick on the map** (tap the spot, drag the
+  pin, or paste a Google Maps link they send you). It shows how far that is
+  from the store before you confirm.
+- **The impact:** the record shows where the person really was, not just
+  the store's pin. A spot outside the store's area is recorded as off
+  site, with the distance, so office entries stay honest. The location is
+  in the audit log.
+- **What you need to do:** run `supabase/migrations/0112_office_entry_location.sql`
+  in Supabase and redeploy. No new app build. Until it runs, office entries
+  use the store's pin, as before.
 
 ### Let one person clock out early, or hold them (migration 0111)
 - **What was done:** on each person's day (Attendance → tap their name)

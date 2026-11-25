@@ -1018,7 +1018,11 @@ export default async function AdminGuidePage() {
                     <Ui>Store check-in</Ui> and <Ui>Store check-out</Ui> groups (a greyed choice says why it cannot be used yet). Once
                     you are sure they are at the store, <Ui>Clock … in</Ui> or <Ui>Clock … out</Ui> records it for them at
                     that store, at the time you give (not in the future), marked <Ui>By the office</Ui>, with no selfie.
-                    Marketers can be checked in or out of a store the same way. If a capture went wrong, ask them to do
+                    Marketers can be checked in or out of a store the same way. When you pick one of these, say{' '}
+                    <Ui>Where is …?</Ui>: <Ui>At the store</Ui> (the store&apos;s pin), <Ui>Where their phone was</Ui>{' '}
+                    (the last place their phone reported today) or <Ui>Pick on the map</Ui> (tap the spot, drag the pin,
+                    or paste a Google Maps link). It shows how far that is from the store; a spot outside the store&apos;s
+                    area is recorded there, as off site. If a capture went wrong, ask them to do
                     it again: <Ui>Ask them to clock in again</Ui> (or out, or to check in or out of a store again); their
                     next capture replaces the old one. You can also ask <Ui>Ask Xtend</Ui> (“clock Ada in at Ikeja Mall at 8:05, her phone would not open”); it shows a card to check first. A reason is always needed; they get a notification with it, the
                     old record is kept under <Ui>Corrections today</Ui>, and it is in the audit log as{' '}

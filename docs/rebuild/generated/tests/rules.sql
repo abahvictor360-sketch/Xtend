@@ -7603,5 +7603,56 @@ begin
     if sqlerrm <> 'hold-out-0111-done' then raise; end if;
   end;
 
+  -- 0112: the office records where the person really is. Rolled back.
+  begin
+    declare
+      wp uuid := gen_random_uuid();
+      shop uuid;
+      boss_id uuid := (select id from public.profiles where role = 'admin' order by created_at limit 1);
+      r record;
+      v record;
+    begin
+      insert into public.outlets (name, address, lat, lng, geofence_radius_m)
+      values ('Where Shop', 'Allen Avenue', 6.6000, 3.3500, 150) returning id into shop;
+      insert into auth.users (id, email) values (wp, 'where.person@xpel.ng');
+      insert into public.profiles (id, full_name, email, role, outlet_id, push_exempt)
+      values (wp, 'Where Person', 'where.person@xpel.ng', 'marketer', shop, true);
+      perform act_as(boss_id);
+      perform public.set_staff_outlets(wp, array[shop]);
+
+      -- At a spot 1 km from the store: recorded there, off site, against the store picked.
+      perform public.office_record_clock(wp, 'opening', shop, null, 'Phone would not open', 6.6090, 3.3500, 20, 'Where their phone last was');
+      select a.lat, a.status, a.outlet_id, a.distance_m, a.place_name, a.device_info into r
+      from public.attendance a where a.user_id = wp and a.type = 'opening';
+      perform assert(r.lat = 6.6090 and r.outlet_id = shop and r.status = 'off_site' and r.distance_m between 900 and 1100,
+        'office location 0112: a clock-in at a picked spot is recorded there, measured against the store picked');
+      perform assert(r.place_name = 'Where their phone last was' and r.device_info->>'location_from' = 'picked',
+        'office location 0112: and says where the spot came from');
+
+      -- With no spot, the store's pin, as before.
+      perform public.office_record_clock(wp, 'opening', shop, null, 'Again at the store');
+      select a.lat, a.status, a.device_info into r from public.attendance a where a.user_id = wp and a.type = 'opening';
+      perform assert(r.lat = 6.6 and r.status = 'on_site' and r.device_info->>'location_from' = 'store',
+        'office location 0112: with no spot, the store''s pin, on site');
+
+      -- A store check-in at a picked spot.
+      update public.store_visits set status = 'closed', departed_at = now() where user_id = wp and status = 'open';
+      perform public.office_record_visit(wp, 'check_in', shop, 'Checked in by phone call', 6.6010, 3.3500, 15, 'Picked on the map');
+      select s.arrived_lat, s.arrived_place_name into v from public.store_visits s where s.user_id = wp and s.status = 'open';
+      perform assert(v.arrived_lat = 6.601 and v.arrived_place_name = 'Picked on the map',
+        'office location 0112: a store check-in at a picked spot is recorded there');
+
+      begin
+        perform public.office_record_clock(wp, 'closing', shop, null, 'Bad spot', 0, 0, null, null);
+        perform assert(false, 'office location 0112: a spot at 0,0 is refused');
+      exception when raise_exception then
+        perform assert(sqlerrm like 'That location is not a real place%', 'office location 0112: a spot at 0,0 is refused');
+      end;
+      raise exception 'where-0112-done';
+    end;
+  exception when others then
+    if sqlerrm <> 'where-0112-done' then raise; end if;
+  end;
+
   raise notice 'ALL RULES PASSED';
 end $$;

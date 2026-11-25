@@ -1468,6 +1468,7 @@ Policies:
 - `attendance_integrity()` → trigger · definer · 0022_integrity_checks.sql
 - `attendance_learn_waiting_store()` → trigger · definer · 0034_stores_pinned_from_clock_in.sql
 - `attendance_no_early_clock_out()` → trigger · definer · 0111_clock_out_hold.sql
+- `attendance_office_store()` → trigger · definer · 0112_office_entry_location.sql
 - `attendance_office_time()` → trigger · definer · 0090_field_corrections.sql
 - `attendance_on_site_only()` → trigger · definer · 0106_on_site_only.sql
 - `attendance_place_due()` → trigger · definer · 0045_mandatory_place_naming.sql
@@ -1625,10 +1626,11 @@ Policies:
 - `office_act_done()` → void · definer · 0090_field_corrections.sql
 - `office_entry_on()` → boolean · 0090_field_corrections.sql
 - `office_name(p uuid)` → text · definer · 0053_support_notifications.sql
-- `office_record_clock(p_user uuid, p_type attendance_type, p_outlet uuid, p_at timestamp with time zone, p_reason text)` → uuid · definer · 0090_field_corrections.sql
-- `office_record_visit(p_user uuid, p_action text, p_outlet uuid, p_reason text)` → uuid · definer · 0090_field_corrections.sql
+- `office_record_clock(p_user uuid, p_type attendance_type, p_outlet uuid, p_at timestamp with time zone, p_reason text, p_lat double precision, p_lng double precision, p_accuracy double precision, p_place text)` → uuid · definer · 0112_office_entry_location.sql
+- `office_record_visit(p_user uuid, p_action text, p_outlet uuid, p_reason text, p_lat double precision, p_lng double precision, p_accuracy double precision, p_place text)` → uuid · definer · 0112_office_entry_location.sql
 - `office_request_redo(p_user uuid, p_action text, p_reason text, p_visit uuid)` → uuid · definer · 0090_field_corrections.sql
 - `office_reset_clock_out(p_user uuid, p_reason text)` → uuid · definer · 0093_reset_clock_out.sql
+- `office_where(p_store_lat double precision, p_store_lng double precision, p_store_name text, p_store_address text, p_lat double precision, p_lng double precision, p_accuracy double precision, p_place text, OUT lat double precision, OUT lng double precision, OUT accuracy double precision, OUT place text, OUT address text, OUT source text)` → record · 0112_office_entry_location.sql
 - `open_support_thread(p_subject text, p_body text)` → uuid · definer · 0031_support_messages.sql
 - `outlet_containing(p_lat double precision, p_lng double precision)` → uuid · definer · 0016_visits_without_allocation.sql
 - `outlets_for_user(target uuid)` → TABLE(outlet_id uuid) · definer · 0079_security_fixes.sql
@@ -1840,6 +1842,7 @@ Policies:
 - `attendance`: `trg_attendance_start_store` — BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_start_store()
 - `attendance`: `trg_attendance_timing` — BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_timing()
 - `attendance`: `trg_attendance_timing_flag` — AFTER INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_timing_flag()
+- `attendance`: `trg_attendance_zt_office_store` — BEFORE INSERT ON public.attendance FOR EACH ROW WHEN (office_entry_on()) EXECUTE FUNCTION attendance_office_store()
 - `attendance`: `trg_attendance_zw_clock_out_time` — BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_no_early_clock_out()
 - `attendance`: `trg_attendance_zx_on_site` — BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_on_site_only()
 - `attendance`: `trg_attendance_zy_office_time` — BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_office_time()

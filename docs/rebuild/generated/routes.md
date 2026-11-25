@@ -392,6 +392,11 @@ const schema = z.object({
   /** A clock-in or clock-out time today (ISO); left out: now. */
   at: z.string().datetime({ offset: true }).nullable().optional(),
   visit_id: z.string().guid().nullable().optional(),
+  /** Where they are (0112): a spot the office picked; left out, the store's pin. */
+  lat: z.number().min(-90).max(90).nullable().optional(),
+  lng: z.number().min(-180).max(180).nullable().optional(),
+  accuracy: z.number().min(1).max(100).nullable().optional(),
+  place: z.string().trim().max(120).nullable().optional(),
 })
 ```
 

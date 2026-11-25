@@ -132,4 +132,17 @@ const panelNow = readFileSync(join(__dirname, '..', 'src', 'components', 'admin'
 check(/parseCorrectionCommand\([\s\S]{0,200}planCorrection\(/.test(panelNow) && /Do it/.test(panelNow), 'Fix today\'s record reads the command, shows what it will do, and does it on Do it')
 check(['Clock-in', 'Clock-out', 'Store check-in', 'Store check-out'].every((g) => panelNow.includes(`title: '${g}'`)), 'the options come in four groups')
 
+// --- Where the office records them (0112) ---------------------------------
+const where = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '0112_office_entry_location.sql'), 'utf8')
+check(/p_lat double precision default null/.test(where) && /function public\.office_where/.test(where),
+  'office entries take an optional spot; none means the store\'s pin (0112)')
+check(/'location_from', w\.source/.test(where), 'each office entry says whether it was the store or a picked spot')
+check(/office_store_id/.test(where) && /when \(public\.office_entry_on\(\)\)/.test(where),
+  'an office clock-in at a picked spot is measured against the store the office chose')
+const whereRoute = readFileSync(join(__dirname, '..', 'src', 'app', 'api', 'admin', 'field-corrections', 'route.ts'), 'utf8')
+check(/input\.lat != null && input\.lng != null/.test(whereRoute), 'the route sends a spot only when one was picked')
+const wherePanel = readFileSync(join(__dirname, '..', 'src', 'components', 'admin', 'day-corrections.tsx'), 'utf8')
+check(/Where is \{first\}\?/.test(wherePanel) && /Where their phone was/.test(wherePanel) && /Pick on the map/.test(wherePanel),
+  'the panel asks where they are: the store, their phone, or the map')
+
 console.log(`\nALL ${passed} FIELD CORRECTION CHECKS PASSED`)
