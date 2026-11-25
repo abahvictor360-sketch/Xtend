@@ -76,6 +76,19 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-25
 
+### A short video for TECNO, Infinix and itel phones
+- **What was done:** a video of about a minute and a half, with a
+  voice-over, showing the two steps on these phones: turn on Auto-start for
+  Xtend in Phone Master, lock Xtend in the recent apps, then tap **I did
+  both**. On those phones the setup card has a **Watch how** button that
+  plays it right there, and the staff guide shows it too. The file is
+  `public/guide/xtend-tecno-setup.mp4`, so you can also send it on
+  WhatsApp.
+- **The impact:** staff can follow the steps on their own, without you
+  visiting each phone.
+- **What you need to do:** redeploy. The **Watch how** button comes with the
+  new Android build (the one with the Auto-start step).
+
 ### Limits on how much each person can use the AI
 - **What was done:** every AI answer is paid for by your key, so each
   person now has a limit per hour and per day: 15 an hour and 40 a day for

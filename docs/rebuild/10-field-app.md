@@ -708,7 +708,13 @@ Component: `src/components/field/clock-panel.tsx`.
   Xtend, or Phone Master → App management/Auto-start; in recent apps pull
   Xtend down until a lock shows; come back and tap I did both), **Open
   Auto-start** (`openAutoStart` → plugin `openAutoStart`, an older build
-  opens the battery settings) and **I did both** (`confirmMaker`). The
+  opens the battery settings) and **I did both** (`confirmMaker`). Above
+  those buttons, **Watch how (1.5 min)** (PlayCircle) swaps itself for the
+  video `TECNO_VIDEO` (`src/lib/tecno-video.ts`:
+  `/guide/xtend-tecno-setup.mp4`, poster `.jpg`; controls, autoplay,
+  inline, max 260 px wide, rounded). The staff guide shows the same video
+  under Before your first clock-in ("TECNO, Infinix or itel phone: watch the
+  two steps (1.5 min)."). The
   "Clock out now" prompt (`CLOCK_OUT_EVENT`) is held back too: `start()`
   refuses while it is shown.
 - Done only when it is recorded: after `POST /api/attendance` answers, the

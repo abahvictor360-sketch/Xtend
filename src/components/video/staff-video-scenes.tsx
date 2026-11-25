@@ -55,7 +55,7 @@ export interface Scene {
 /* Pieces of screen                                                  */
 /* ---------------------------------------------------------------- */
 
-function AppBar({ title = 'Xtend' }: { title?: string }) {
+export function AppBar({ title = 'Xtend' }: { title?: string }) {
   return (
     <div className="flex items-center gap-2 border-b border-border bg-card px-4 py-3">
       <span className="brand-surface flex h-8 w-8 items-center justify-center rounded-lg">
@@ -67,7 +67,7 @@ function AppBar({ title = 'Xtend' }: { title?: string }) {
 }
 
 /** A plain phone system pop-up (Android-like, no brand). */
-function SystemDialog({ icon: Icon, question, options, pick }: { icon: typeof MapPin; question: string; options: string[]; pick: number }) {
+export function SystemDialog({ icon: Icon, question, options, pick }: { icon: typeof MapPin; question: string; options: string[]; pick: number }) {
   return (
     <div className="flex h-full flex-col justify-end bg-black/45 p-4 pb-10">
       <div className="rounded-[28px] bg-[#f3f1f6] p-5 text-center text-[#1d1b20]">
@@ -92,7 +92,7 @@ function SystemDialog({ icon: Icon, question, options, pick }: { icon: typeof Ma
 }
 
 /** A plain phone settings list with one choice to make. */
-function SettingsList({ heading, path, options, pick, note }: { heading: string; path: string; options: string[]; pick: number; note?: string }) {
+export function SettingsList({ heading, path, options, pick, note }: { heading: string; path: string; options: string[]; pick: number; note?: string }) {
   return (
     <div className="h-full bg-[#fbf8fd] text-[#1d1b20]">
       <div className="px-5 pb-3 pt-6">
@@ -120,7 +120,7 @@ function SettingsList({ heading, path, options, pick, note }: { heading: string;
 }
 
 /** The real clock button's look (clock-panel.tsx). */
-function ClockButton({ out = false }: { out?: boolean }) {
+export function ClockButton({ out = false }: { out?: boolean }) {
   return (
     <div className="relative flex h-16 w-full items-center rounded-full bg-brand p-2 text-primary-foreground">
       <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-brand">
@@ -134,7 +134,7 @@ function ClockButton({ out = false }: { out?: boolean }) {
   )
 }
 
-function HomeTop({ status }: { status: string }) {
+export function HomeTop({ status }: { status: string }) {
   return (
     <div className="space-y-3 p-4">
       <div>
@@ -181,7 +181,7 @@ function Camera1() {
   )
 }
 
-function Done({ title, line }: { title: string; line: string }) {
+export function Done({ title, line }: { title: string; line: string }) {
   return (
     <div className="space-y-4 p-4">
       <HomeTop status={line} />
@@ -196,7 +196,7 @@ function Done({ title, line }: { title: string; line: string }) {
   )
 }
 
-function Big({ icon: Icon, children }: { icon: typeof MapPin; children: React.ReactNode }) {
+export function Big({ icon: Icon, children }: { icon: typeof MapPin; children: React.ReactNode }) {
   return (
     <div className="flex h-full flex-col items-center justify-center gap-5 bg-card p-8 text-center">
       <span className="flex h-20 w-20 items-center justify-center rounded-3xl bg-tint text-brand">
@@ -517,11 +517,21 @@ export const VOICE: Record<string, string> = {
 
 const ICONS = [Download, LogIn, MapPin, BatteryCharging, Camera, LogIn, Store, FileText, LogOut, Footprints]
 
-/** One scene at 540×960 CSS pixels (1080×1920 at 2×). */
-export function SceneFrame({ scene }: { scene: Scene }) {
-  const chapterNo = CHAPTERS.indexOf(scene.chapter as (typeof CHAPTERS)[number])
+/** One scene at 540×960 CSS pixels (1080×1920 at 2×). Another video passes its own chapters and icons. */
+export function SceneFrame({
+  scene,
+  chapters = CHAPTERS,
+  icons = ICONS,
+  tagline = 'Xtend · staff guide',
+}: {
+  scene: Scene
+  chapters?: readonly string[]
+  icons?: (typeof MapPin)[]
+  tagline?: string
+}) {
+  const chapterNo = chapters.indexOf(scene.chapter)
   if (scene.card) {
-    const Icon = chapterNo >= 0 ? ICONS[chapterNo] : null
+    const Icon = chapterNo >= 0 ? icons[chapterNo] : null
     return (
       <div className="brand-surface flex h-[960px] w-[540px] flex-col rounded-none items-center justify-center gap-6 px-12 text-center text-white">
         {Icon ? (
@@ -536,7 +546,7 @@ export function SceneFrame({ scene }: { scene: Scene }) {
         {scene.sub && chapterNo >= 0 && <p className="text-xl font-bold uppercase tracking-[0.18em] text-white/80">{scene.sub}</p>}
         <p className="text-[44px] font-extrabold leading-tight">{scene.title}</p>
         {scene.sub && chapterNo < 0 && <p className="text-2xl leading-snug text-white/90">{scene.sub}</p>}
-        {scene.id === 'intro' && <p className="mt-6 text-lg text-white/75">Xtend · staff guide</p>}
+        {scene.id === 'intro' && <p className="mt-6 text-lg text-white/75">{tagline}</p>}
       </div>
     )
   }
@@ -606,19 +616,30 @@ function PhoneScene({ scene, chapterNo }: { scene: Scene; chapterNo: number }) {
   )
 }
 
+/** A video made by scripts/make-staff-video.ts: its scenes, voice and look. */
+export interface VideoSet {
+  scenes: Scene[]
+  voice: Record<string, string>
+  chapters: readonly string[]
+  icons: (typeof MapPin)[]
+  tagline: string
+}
+
+export const STAFF_SET: VideoSet = { scenes: SCENES, voice: VOICE, chapters: CHAPTERS, icons: ICONS, tagline: 'Xtend · staff guide' }
+
 /** The scene page's body: one scene, or the list of scenes for the script. */
-export function SceneView({ id, list }: { id: string | null; list: boolean }) {
+export function SceneView({ id, list, set = STAFF_SET }: { id: string | null; list: boolean; set?: VideoSet }) {
   if (list) {
     return (
       <pre id="list">
-        {JSON.stringify(SCENES.map((x) => ({ id: x.id, seconds: x.seconds, chapter: x.card ? x.chapter : '', say: VOICE[x.id] ?? '' })))}
+        {JSON.stringify(set.scenes.map((x) => ({ id: x.id, seconds: x.seconds, chapter: x.card ? x.chapter : '', say: set.voice[x.id] ?? '' })))}
       </pre>
     )
   }
-  const scene = SCENES.find((x) => x.id === id) ?? SCENES[0]
+  const scene = set.scenes.find((x) => x.id === id) ?? set.scenes[0]
   return (
     <div id="scene" className="w-[540px]">
-      <SceneFrame scene={scene} />
+      <SceneFrame scene={scene} chapters={set.chapters} icons={set.icons} tagline={set.tagline} />
     </div>
   )
 }

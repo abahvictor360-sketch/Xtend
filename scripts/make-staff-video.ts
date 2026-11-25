@@ -15,6 +15,10 @@
  * soundfile (see that file). Each scene then lasts as long as its words.
  *
  * Run it again whenever the app's screens or words change.
+ *
+ * VIDEO=tecno makes the short TECNO, Infinix and itel setup video instead
+ * (src/components/video/tecno-video-scenes.tsx → public/guide/xtend-tecno-setup.mp4,
+ * src/lib/tecno-video.ts).
  */
 import { execFileSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
@@ -29,6 +33,9 @@ const FADE = 0.35
 const LEAD = 0.45
 const TAIL = 0.9
 const VOICE_DIR = process.env.VOICE_DIR ?? null
+const TECNO = process.env.VIDEO === 'tecno'
+const NAME = TECNO ? 'xtend-tecno-setup' : 'xtend-staff-guide'
+const QUERY = TECNO ? '&video=tecno' : ''
 
 // Playwright comes with the machine (it is not one of Xtend's packages).
 interface Shooter {
@@ -54,16 +61,16 @@ async function main() {
     const hideDev = 'nextjs-portal{display:none!important}'
     // The download and sign-in pages, as a phone sees them (the scenes show them).
     const phone = await browser.newPage({ viewport: { width: 390, height: 640 }, deviceScaleFactor: 2 })
-    for (const [path, file] of [['/download', 'staff-download.png'], ['/login', 'staff-login.png']]) {
+    for (const [path, file] of TECNO ? [] : [['/download', 'staff-download.png'], ['/login', 'staff-login.png']]) {
       await phone.goto(`${BASE}${path}`, { waitUntil: 'networkidle', timeout: 180_000 })
       await phone.addStyleTag({ content: hideDev })
       await phone.waitForTimeout(3500)
       await phone.screenshot({ path: join(OUT, file) })
     }
-    await page.goto(`${BASE}/guide/video-scenes?list=1`, { waitUntil: 'networkidle', timeout: 180_000 })
+    await page.goto(`${BASE}/guide/video-scenes?list=1${QUERY}`, { waitUntil: 'networkidle', timeout: 180_000 })
     const SCENES = JSON.parse(await page.locator('#list').innerText()) as { id: string; seconds: number; chapter: string; say: string }[]
     for (const [i, scene] of SCENES.entries()) {
-      await page.goto(`${BASE}/guide/video-scenes?s=${scene.id}`, { waitUntil: 'networkidle', timeout: 180_000 })
+      await page.goto(`${BASE}/guide/video-scenes?s=${scene.id}${QUERY}`, { waitUntil: 'networkidle', timeout: 180_000 })
       // Fonts, pictures and the pages shown inside frames.
       await page.addStyleTag({ content: hideDev })
       await page.waitForTimeout(1200)
@@ -100,10 +107,12 @@ async function main() {
       at += x.seconds
     }
     writeFileSync(
-      join(__dirname, '..', 'src', 'lib', 'staff-video.ts'),
+      join(__dirname, '..', 'src', 'lib', TECNO ? 'tecno-video.ts' : 'staff-video.ts'),
       `// Made by scripts/make-staff-video.ts: do not edit by hand.\n\n` +
-        `/** The staff video guide, its length and where each chapter starts (seconds). */\n` +
-        `export const STAFF_VIDEO = {\n  src: '/guide/xtend-staff-guide.mp4',\n  poster: '/guide/xtend-staff-guide.jpg',\n  seconds: ${Math.round(total)},\n  chapters: ${JSON.stringify(chapters, null, 2).replace(/\n/g, '\n  ')},\n} as const\n`,
+        (TECNO
+          ? `/** The TECNO, Infinix and itel setup video, its length and where each step starts (seconds). */\nexport const TECNO_VIDEO = {\n`
+          : `/** The staff video guide, its length and where each chapter starts (seconds). */\nexport const STAFF_VIDEO = {\n`) +
+        `  src: '/guide/${NAME}.mp4',\n  poster: '/guide/${NAME}.jpg',\n  seconds: ${Math.round(total)},\n  chapters: ${JSON.stringify(chapters, null, 2).replace(/\n/g, '\n  ')},\n} as const\n`,
     )
     for (const [i, scene] of SCENES.entries()) {
       const n = String(i).padStart(3, '0')
@@ -128,11 +137,11 @@ async function main() {
       '-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', join(work, 'list.txt'),
       '-c:v', 'libx264', '-preset', 'slow', '-crf', '26', '-pix_fmt', 'yuv420p', // Speech at the usual loudness for phone speakers.
       '-af', 'loudnorm=I=-16:TP=-1.5:LRA=11', '-c:a', 'aac', '-b:a', '64k', '-ar', '48000', '-movflags', '+faststart',
-      join(OUT, 'xtend-staff-guide.mp4'),
+      join(OUT, `${NAME}.mp4`),
     ])
     // The poster: the opening card, small.
-    execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', join(work, '000.png'), '-vf', 'scale=540:960', join(OUT, 'xtend-staff-guide.jpg')])
-    console.log(`Wrote public/guide/xtend-staff-guide.mp4 (${Math.floor(total / 60)} min ${Math.round(total % 60)} s${voiced ? ', with the voice-over' : ''}) and its poster.`)
+    execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', join(work, '000.png'), '-vf', 'scale=540:960', join(OUT, `${NAME}.jpg`)])
+    console.log(`Wrote public/guide/${NAME}.mp4 (${Math.floor(total / 60)} min ${Math.round(total % 60)} s${voiced ? ', with the voice-over' : ''}) and its poster.`)
   } finally {
     rmSync(work, { recursive: true, force: true })
   }

@@ -1510,6 +1510,12 @@ who is not a supervisor or an admin as the supervisor.
 
 Exports: `assignSupervisor`
 
+## `src/lib/tecno-video.ts`
+
+The TECNO, Infinix and itel setup video, its length and where each step starts (seconds).
+
+Exports: `TECNO_VIDEO`
+
 ## `src/lib/ttl-cache.ts`
 
 A small in-memory cache for work that is the same for many people: the
@@ -2634,7 +2640,18 @@ and joins them. Screens use the app's own parts and words; phone system
 screens are plain drawings (every phone looks a little different).
 Like the written guide, it says what to switch on, never why.
 
-Exports: `Scene`, `CHAPTERS`, `SCENES`, `VOICE`, `SceneFrame`, `SceneView`
+Exports: `Scene`, `AppBar`, `SystemDialog`, `SettingsList`, `ClockButton`, `HomeTop`, `Done`, `Big`, `CHAPTERS`, `SCENES`, `VOICE`, `SceneFrame`, `VideoSet`, `STAFF_SET`, `SceneView`
+
+## `src/components/video/tecno-video-scenes.tsx`
+
+The short video for TECNO, Infinix and itel phones
+(public/guide/xtend-tecno-setup.mp4): turn on Auto-start for Xtend, lock
+it in the recent apps, then tap "I did both". Made like the staff video
+(scripts/make-staff-video.ts with VIDEO=tecno). Phone screens are plain
+drawings: Phone Master and the recent apps look a little different on
+each phone. It says what to do, never why beyond "so Xtend keeps working".
+
+Exports: `TECNO_CHAPTERS`, `TECNO_SCENES`, `TECNO_VOICE`, `TECNO_SET`
 
 ## `src/middleware.ts`
 
