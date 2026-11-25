@@ -31,6 +31,9 @@ select set_config('request.jwt.claims', '{"aal":"aal2"}', false);
 -- Most tests record off-site clock-ins on purpose; 0106 refuses them, so
 -- the rule is off until its own block at the end turns it on.
 update public.system_settings set block_off_site = false;
+-- Most tests clock out whenever they run; 0109 refuses early clock-outs,
+-- so that rule is off too until its own block turns it on.
+update public.system_settings set block_early_clock_out = false;
 
 -- Stands in for the app uploading a photo just now: the object exists in
 -- the signed-in person's folder, so the photo checks (migration 022) pass.
@@ -6248,7 +6251,7 @@ begin
                                 'ai_provider_keys', 'ai_feature_settings',
                                 -- 0104: what the office told the AI.
                                 'ai_knowledge',
-                                -- 0109: AI limits, and recent uses (kept 3 days).
+                                -- 0110: AI limits, and recent uses (kept 3 days).
                                 'ai_limits', 'ai_usage'];
     all_keys text[] := public.reset_category_keys();
     k text;
@@ -7361,7 +7364,7 @@ begin
     if sqlerrm <> 'on-site-0106-done' then raise; end if;
   end;
 
-  -- 0109: how much each person may use the AI. Rolled back.
+  -- 0110: how much each person may use the AI. Rolled back.
   begin
     declare
       u uuid := gen_random_uuid();
@@ -7373,33 +7376,33 @@ begin
       update public.ai_limits set per_hour = 3, per_day = 5 where feature = 'staff_helper';
       for i in 1..3 loop
         res := public.consume_ai_use(u, 'staff_helper');
-        perform assert((res->>'ok')::boolean, 'ai limits 0109: (within the hour)');
+        perform assert((res->>'ok')::boolean, 'ai limits 0110: (within the hour)');
       end loop;
-      perform assert((res->>'left_hour')::int = 0 and (res->>'left_day')::int = 2, 'ai limits 0109: it says how many are left');
+      perform assert((res->>'left_hour')::int = 0 and (res->>'left_day')::int = 2, 'ai limits 0110: it says how many are left');
       res := public.consume_ai_use(u, 'staff_helper');
       perform assert(not (res->>'ok')::boolean and res->>'period' = 'hour' and (res->>'limit')::int = 3,
-        'ai limits 0109: the fourth in an hour is refused, saying which limit');
-      perform assert((select count(*) from public.ai_usage where user_id = u) = 3, 'ai limits 0109: a refused one is not counted');
+        'ai limits 0110: the fourth in an hour is refused, saying which limit');
+      perform assert((select count(*) from public.ai_usage where user_id = u) = 3, 'ai limits 0110: a refused one is not counted');
       update public.ai_usage set used_at = now() - interval '61 minutes' where user_id = u;
       if (now() - interval '61 minutes') >= (((now() at time zone 'Africa/Lagos')::date)::timestamp at time zone 'Africa/Lagos') then
         res := public.consume_ai_use(u, 'staff_helper');
         res := public.consume_ai_use(u, 'staff_helper');
-        perform assert((res->>'ok')::boolean, 'ai limits 0109: a new hour allows more');
+        perform assert((res->>'ok')::boolean, 'ai limits 0110: a new hour allows more');
         res := public.consume_ai_use(u, 'staff_helper');
         perform assert(not (res->>'ok')::boolean and res->>'period' = 'day' and (res->>'limit')::int = 5,
-          'ai limits 0109: the daily limit holds across hours');
+          'ai limits 0110: the daily limit holds across hours');
       end if;
-      perform assert((public.consume_ai_use(u, 'admin_assistant')->>'ok')::boolean, 'ai limits 0109: each feature has its own count');
+      perform assert((public.consume_ai_use(u, 'admin_assistant')->>'ok')::boolean, 'ai limits 0110: each feature has its own count');
       begin
         update public.ai_limits set per_hour = 10, per_day = 5 where feature = 'staff_helper';
-        perform assert(false, 'ai limits 0109: a day cannot be less than an hour');
+        perform assert(false, 'ai limits 0110: a day cannot be less than an hour');
       exception when check_violation then
-        perform assert(true, 'ai limits 0109: a daily limit below the hourly one is refused');
+        perform assert(true, 'ai limits 0110: a daily limit below the hourly one is refused');
       end;
-      raise exception 'ai-limits-0109-done';
+      raise exception 'ai-limits-0110-done';
     end;
   exception when others then
-    if sqlerrm <> 'ai-limits-0109-done' then raise; end if;
+    if sqlerrm <> 'ai-limits-0110-done' then raise; end if;
   end;
 
   -- 0108: a fake location pauses the account. Rolled back.
@@ -7467,6 +7470,71 @@ begin
     end;
   exception when others then
     if sqlerrm <> 'offline-day-0107-done' then raise; end if;
+  end;
+
+  -- 0109: no clocking out before it is time. Rolled back.
+  begin
+    declare
+      eo uuid := gen_random_uuid();
+      shop uuid;
+      boss_id uuid := (select id from public.profiles where role = 'admin' order by created_at limit 1);
+      words text;
+      hinted text;
+      said text;
+    begin
+      update public.system_settings set block_early_clock_out = true;
+      insert into public.outlets (name, lat, lng, geofence_radius_m) values ('Early Shop', 6.61, 3.36, 150) returning id into shop;
+      insert into auth.users (id, email) values (eo, 'early.out@xpel.ng');
+      insert into public.profiles (id, full_name, email, role, outlet_id, push_exempt, shift_start, shift_end, clock_out_from)
+      values (eo, 'Early Out', 'early.out@xpel.ng', 'merchandiser', shop, true, '00:00', '23:59', '23:59');
+      perform assert(public.clock_out_opens_at(eo) = time '23:59', 'clock-out time 0109: their "can clock out from" time');
+      update public.profiles set clock_out_from = null, shift_end = '18:00' where id = eo;
+      perform assert(public.clock_out_opens_at(eo) = time '17:45', 'clock-out time 0109: with none set, 15 minutes before the end of their day');
+      update public.profiles set clock_out_from = '23:59', shift_end = '23:59' where id = eo;
+
+      perform act_as(eo);
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name)
+      values ('opening', 6.61, 3.36, 10, fresh_photo('selfies', 'eo-1.jpg'), now(), 'Early Shop');
+      begin
+        insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name)
+        values ('closing', 6.61, 3.36, 10, fresh_photo('selfies', 'eo-2.jpg'), now(), 'Early Shop');
+        perform assert(false, 'clock-out time 0109: clocking out before it is time is refused');
+      exception when raise_exception then
+        get stacked diagnostics words = message_text, hinted = pg_exception_hint, said = pg_exception_detail;
+        perform assert(words = 'It is not time to clock out yet. You can clock out from 23:59.'
+                       and hinted = 'too_early' and (said::jsonb)->>'opens_at' = '23:59',
+          'clock-out time 0109: clocking out before it is time is refused, saying from when');
+      end;
+      perform assert(not exists (select 1 from public.attendance where user_id = eo and type = 'closing'),
+        'clock-out time 0109: and nothing is recorded');
+
+      -- The office can still clock them out (0090): that is how someone leaves early.
+      perform act_as(boss_id);
+      perform public.office_record_clock(eo, 'closing', shop, null, 'Sent home sick');
+      perform assert(exists (select 1 from public.attendance where user_id = eo and type = 'closing'),
+        'clock-out time 0109: the office can still clock someone out early');
+      delete from public.attendance where user_id = eo and type = 'closing';
+
+      -- From their time, it goes through.
+      update public.profiles set clock_out_from = '00:01' where id = eo;
+      perform act_as(eo);
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name)
+      values ('closing', 6.61, 3.36, 10, fresh_photo('selfies', 'eo-3.jpg'), now(), 'Early Shop');
+      perform assert(exists (select 1 from public.attendance where user_id = eo and type = 'closing'),
+        'clock-out time 0109: from their clock-out time, clocking out goes through');
+
+      -- The switch turns it off.
+      delete from public.attendance where user_id = eo and type = 'closing';
+      update public.system_settings set block_early_clock_out = false;
+      update public.profiles set clock_out_from = '23:59' where id = eo;
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name)
+      values ('closing', 6.61, 3.36, 10, fresh_photo('selfies', 'eo-4.jpg'), now(), 'Early Shop');
+      perform assert(exists (select 1 from public.attendance where user_id = eo and type = 'closing'),
+        'clock-out time 0109: with block_early_clock_out off, an early clock-out is only flagged');
+      raise exception 'early-out-0109-done';
+    end;
+  exception when others then
+    if sqlerrm <> 'early-out-0109-done' then raise; end if;
   end;
 
   raise notice 'ALL RULES PASSED';

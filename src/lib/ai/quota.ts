@@ -8,8 +8,8 @@ export type AiQuota =
 
 /**
  * One more AI answer for this person, if they are within their limits
- * (0109, Settings → AI keys). Counted in the database, so it holds across
- * restarts and servers. Before 0109 is run (or if the count cannot be
+ * (0110, Settings → AI keys). Counted in the database, so it holds across
+ * restarts and servers. Before 0110 is run (or if the count cannot be
  * read), it allows the answer: the hourly limit in memory still applies.
  */
 export async function takeAiUse(userId: string, feature: AiFeature): Promise<AiQuota> {

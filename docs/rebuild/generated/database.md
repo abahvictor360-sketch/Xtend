@@ -1060,6 +1060,7 @@ Policies:
 | follow_max_sessions | integer(int4) |  | 20 |
 | mfa_roles | ARRAY(_user_role) |  | '{admin,hr}'::user_role[] |
 | block_off_site | boolean(bool) |  | true |
+| block_early_clock_out | boolean(bool) |  | true |
 
 Policies:
 - `system_settings_admin_read` SELECT to authenticated: using `is_admin()`
@@ -1465,6 +1466,7 @@ Policies:
 - `attendance_enforce()` → trigger · definer · 0034_stores_pinned_from_clock_in.sql
 - `attendance_integrity()` → trigger · definer · 0022_integrity_checks.sql
 - `attendance_learn_waiting_store()` → trigger · definer · 0034_stores_pinned_from_clock_in.sql
+- `attendance_no_early_clock_out()` → trigger · definer · 0109_no_early_clock_out.sql
 - `attendance_office_time()` → trigger · definer · 0090_field_corrections.sql
 - `attendance_on_site_only()` → trigger · definer · 0106_on_site_only.sql
 - `attendance_place_due()` → trigger · definer · 0045_mandatory_place_naming.sql
@@ -1505,11 +1507,12 @@ Policies:
 - `claim_shift_soon_reminders(p_now timestamp with time zone)` → TABLE(user_id uuid, reminder_date date, stage text, shift_time text, store text) · definer · 0069_shift_soon_reminders.sql
 - `claim_visit_checkout_reminders(p_now timestamp with time zone)` → TABLE(user_id uuid, visit_id uuid, store text, since text, reminder integer) · definer · 0099_store_checkout_reminders.sql
 - `clear_temp_password()` → trigger · definer · 0041_staff_login_sheet.sql
+- `clock_out_opens_at(p_user uuid)` → time without time zone · definer · 0109_no_early_clock_out.sql
 - `clock_timing(p_user uuid, p_captured timestamp with time zone, p_device jsonb, p_now timestamp with time zone)` → jsonb · definer · 0029_offline_positions.sql
 - `close_abandoned_visits()` → integer · definer · 0010_store_visits.sql
 - `close_count_request(p_request_id uuid)` → void · definer · 0020_count_requests.sql
 - `confirm_recent_auth(p_user uuid)` → void · definer · 0080_zero_trust.sql
-- `consume_ai_use(p_user uuid, p_feature text)` → jsonb · definer · 0109_ai_limits.sql
+- `consume_ai_use(p_user uuid, p_feature text)` → jsonb · definer · 0110_ai_limits.sql
 - `conversation(p_staff uuid)` → TABLE(id uuid, body text, created_at timestamp with time zone, sender_name text, from_staff boolean, mine boolean, attachment_mime text, attachment_name text, attachment_size_bytes integer, attachment_kind text) · definer · 0075_message_attachments.sql
 - `count_place_lookups(p_sources text[])` → void · definer · 0068_place_lookups.sql
 - `counted_product_names()` → TABLE(name text) · definer · 0021_counted_product_names.sql
@@ -1530,6 +1533,7 @@ Policies:
 - `dismiss_place_due(p_due uuid, p_reason text)` → void · definer · 0045_mandatory_place_naming.sql
 - `distance_metres(lat1 double precision, lng1 double precision, lat2 double precision, lng2 double precision)` → double precision · 0001_init.sql
 - `distance_words(p_m double precision)` → text · 0106_on_site_only.sql
+- `early_clock_out_blocked()` → boolean · definer · 0109_no_early_clock_out.sql
 - `encrypt(bytea, bytea, text)` → bytea
 - `encrypt_iv(bytea, bytea, bytea, text)` → bytea
 - `end_store_visit(p_visit_id uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_place_name text, p_address text, p_selfie_path text, p_thumb_path text)` → jsonb · definer · 0091_visit_checkout_photo.sql
@@ -1834,6 +1838,7 @@ Policies:
 - `attendance`: `trg_attendance_start_store` — BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_start_store()
 - `attendance`: `trg_attendance_timing` — BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_timing()
 - `attendance`: `trg_attendance_timing_flag` — AFTER INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_timing_flag()
+- `attendance`: `trg_attendance_zw_clock_out_time` — BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_no_early_clock_out()
 - `attendance`: `trg_attendance_zx_on_site` — BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_on_site_only()
 - `attendance`: `trg_attendance_zy_office_time` — BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_office_time()
 - `attendance`: `trg_attendance_zz_correction` — BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_replace_for_correction()

@@ -27,6 +27,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { haversineMetres } from '@/lib/geo'
 import { addDays, cn, dayOfMonth, formatLagos, metres, weekdayShort } from '@/lib/utils'
 import type { DayState } from '@/lib/types'
+import { clockOutOpensAt, tooEarlyToClockOut } from '@/lib/clock-out-time'
 import { calendarMark, type CalendarDay } from '@/lib/schedule'
 import { CalendarLegend, MARK_CLASS, MARK_WORD, WORD_CLASS } from '@/components/field/calendar-marks'
 import { redoBanner } from '@/lib/field-corrections'
@@ -53,6 +54,8 @@ export function FieldHome({
   avatarUrl = null,
   userId,
   calendar = [],
+  clockOutFrom = null,
+  holdEarlyClockOut = false,
 }: {
   day: DayState
   visits: VisitRow[]
@@ -69,6 +72,10 @@ export function FieldHome({
   userId: string
   /** The last seven days from my_calendar (migration 059). */
   calendar?: CalendarDay[]
+  /** Their "can clock out from" time (0105). */
+  clockOutFrom?: string | null
+  /** No clocking out before their time (0109 run and switched on). */
+  holdEarlyClockOut?: boolean
 }) {
   const reportAllowed = canFileReport ?? day.can_file_report
   const router = useRouter()
@@ -111,6 +118,15 @@ export function FieldHome({
   // Their own hours (0100), or their store's before that ran.
   const shiftStart = day.shift?.start ?? day.outlet?.shift_start ?? null
   const shiftEnd = day.shift?.end ?? day.outlet?.shift_end ?? null
+
+  // 0109: from when they may clock out, and whether that is still to come.
+  const clockOutOpens = holdEarlyClockOut ? clockOutOpensAt(shiftEnd, clockOutFrom) : null
+  const [clockNow, setClockNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = window.setInterval(() => setClockNow(Date.now()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [])
+  const tooEarly = Boolean(day.opening) && !day.closing && tooEarlyToClockOut(clockOutOpens, day.date, clockNow)
 
   // Still checked in at a store: that comes first, then the clock-out.
   const openVisit = visits.find((v) => v.status === 'open') ?? null
@@ -211,6 +227,10 @@ export function FieldHome({
           startStores={startStores}
           siteStores={siteStores}
           currentFix={gate.fix ? { lat: gate.fix.lat, lng: gate.fix.lng } : null}
+          clockOutOpensAt={clockOutOpens}
+          canVisitStores={visitsStore}
+          openVisit={openVisit ? (openVisit.store_label ?? openVisit.outlet_name) : null}
+          onStoreWork={() => startVisit(openVisit ? 'out' : 'pick')}
         />
       </LocationGate>
       </div>
@@ -306,7 +326,9 @@ export function FieldHome({
               day.closing
                 ? 'Clocked out'
                 : day.opening
-                  ? 'At the end of your shift'
+                  ? tooEarly && clockOutOpens
+                    ? `From ${clockOutOpens}`
+                    : 'At the end of your shift'
                   : 'Clock in first'
             }
             done={Boolean(day.closing)}

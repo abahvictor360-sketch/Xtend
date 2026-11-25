@@ -51,7 +51,7 @@ export async function POST(request: Request) {
     const admin = createAdminSupabase()
     const supabase = await createServerSupabase()
 
-    // How much each person may use the AI (0109).
+    // How much each person may use the AI (0110).
     if (input.action === 'set_limits') {
       if (input.per_day < input.per_hour) throw new ApiError('The daily limit cannot be less than the hourly one.', 400)
       const { error } = await admin.from('ai_limits').upsert({
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
         updated_at: new Date().toISOString(),
         updated_by: session.userId,
       })
-      if (error) throw new ApiError('That could not be saved. Has migration 0109 been run?', 400)
+      if (error) throw new ApiError('That could not be saved. Has migration 0110 been run?', 400)
       await audit(supabase, 'ai.limits_set', 'ai_limits', null, input)
       return Response.json({ ok: true, message: `Saved: ${input.per_hour} an hour, ${input.per_day} a day for each person.` })
     }

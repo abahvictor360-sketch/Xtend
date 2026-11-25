@@ -1,5 +1,5 @@
 /**
- * Checks each person's AI allowance (0109): counted in the database before
+ * Checks each person's AI allowance (0110): counted in the database before
  * every answer, the message says which limit and when it comes back, the
  * staff helper hands over to the office past it, and only admins change it.
  *
@@ -23,7 +23,7 @@ check(/today's 200 Ask Xtend questions\. It starts again tomorrow/.test(aiLimitM
   'past the daily limit: says so, and that it starts again tomorrow')
 check(/40 questions in the last hour/.test(aiLimitMessage({ period: 'hour', limit: 40 })), 'past the hourly limit: says so')
 
-const m = read('supabase/migrations/0109_ai_limits.sql')
+const m = read('supabase/migrations/0110_ai_limits.sql')
 check(/pg_advisory_xact_lock/.test(m) && /'period', 'day'/.test(m) && /'period', 'hour'/.test(m) && /check \(per_day >= per_hour\)/.test(m),
   'the database counts each use, one request at a time, against an hourly and a daily limit')
 check(/revoke all on public\.ai_limits, public\.ai_usage from anon, authenticated/.test(m) && /grant execute on function public\.consume_ai_use\(uuid, text\) to service_role/.test(m),

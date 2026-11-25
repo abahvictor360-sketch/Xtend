@@ -29,7 +29,7 @@ export function suggestModels(ids: string[], max = 8): string[] {
 }
 
 /**
- * What someone is told when they have used their AI allowance (0109):
+ * What someone is told when they have used their AI allowance (0110):
  * which one (this hour or today) and when it comes back. Pure, so
  * check-ai-limits can test it.
  */

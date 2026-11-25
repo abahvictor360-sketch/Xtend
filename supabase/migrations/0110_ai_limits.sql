@@ -1,5 +1,5 @@
 -- =====================================================================
--- XTEND migration 0109 — How much each person may use the AI
+-- XTEND migration 0110 — How much each person may use the AI
 --
 -- Each AI answer is paid for by the key the admin added (0102). The staff
 -- helper and Ask Xtend had an hourly limit kept in the server's memory,
@@ -84,4 +84,4 @@ $$;
 revoke all on function public.consume_ai_use(uuid, text) from public, anon, authenticated;
 grant execute on function public.consume_ai_use(uuid, text) to service_role;
 
-select 'AI limits per person (0109) installed' as result;
+select 'AI limits per person (0110) installed' as result;

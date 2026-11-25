@@ -61,7 +61,7 @@ export async function POST(request: Request) {
       ? await attachmentBlocks(parsed.data.attachment)
       : []
 
-    // Each person's allowance (0109, Settings → AI keys), kept in the database.
+    // Each person's allowance (0110, Settings → AI keys), kept in the database.
     const quota = await takeAiUse(session.userId, 'admin_assistant')
     if (!quota.ok) return Response.json({ error: aiLimitMessage(quota, 'Ask Xtend questions') }, { status: 429 })
 

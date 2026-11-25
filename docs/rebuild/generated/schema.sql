@@ -990,6 +990,37 @@ $$;
 
 
 --
+-- Name: attendance_no_early_clock_out(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.attendance_no_early_clock_out() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  opens time;
+  taken timestamptz;
+begin
+  if new.type <> 'closing' or auth.uid() is null or auth.uid() <> new.user_id
+     or not public.early_clock_out_blocked() then
+    return new;
+  end if;
+  opens := public.clock_out_opens_at(new.user_id);
+  if opens is null then
+    return new;
+  end if;
+  taken := least(coalesce(new.client_captured_at, now()), now());
+  if taken < ((new.attendance_date + opens) at time zone 'Africa/Lagos') then
+    raise exception 'It is not time to clock out yet. You can clock out from %.', to_char(opens, 'HH24:MI')
+      using hint = 'too_early',
+            detail = jsonb_build_object('opens_at', to_char(opens, 'HH24:MI'))::text;
+  end if;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: attendance_office_time(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2318,6 +2349,23 @@ $$;
 
 
 --
+-- Name: clock_out_opens_at(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.clock_out_opens_at(p_user uuid) RETURNS time without time zone
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select coalesce(
+    p.clock_out_from,
+    p.shift_end - make_interval(mins => public.punctuality_grace_minutes())
+  )
+  from public.profiles p
+  where p.id = p_user;
+$$;
+
+
+--
 -- Name: clock_timing(uuid, timestamp with time zone, jsonb, timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2894,6 +2942,18 @@ CREATE FUNCTION public.distance_words(p_m double precision) RETURNS text
     AS $$
   select case when p_m >= 1000 then to_char(round((p_m / 1000.0)::numeric, 1), 'FM999990.0') || ' km'
               else round(p_m)::bigint || ' m' end;
+$$;
+
+
+--
+-- Name: early_clock_out_blocked(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.early_clock_out_blocked() RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select coalesce((select s.block_early_clock_out from public.system_settings s where s.id), true);
 $$;
 
 
@@ -12366,6 +12426,7 @@ CREATE TABLE public.system_settings (
     follow_max_sessions integer DEFAULT 20 NOT NULL,
     mfa_roles public.user_role[] DEFAULT '{admin,hr}'::public.user_role[] NOT NULL,
     block_off_site boolean DEFAULT true NOT NULL,
+    block_early_clock_out boolean DEFAULT true NOT NULL,
     CONSTRAINT system_settings_follow_max_sessions_check CHECK (((follow_max_sessions >= 1) AND (follow_max_sessions <= 200))),
     CONSTRAINT system_settings_id_check CHECK (id)
 );
@@ -12376,6 +12437,13 @@ CREATE TABLE public.system_settings (
 --
 
 COMMENT ON COLUMN public.system_settings.block_off_site IS 'Refuse clock-ins and store check-ins made outside the store (0106).';
+
+
+--
+-- Name: COLUMN system_settings.block_early_clock_out; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.system_settings.block_early_clock_out IS 'Refuse clock-outs before the person''s clock-out time (0109).';
 
 
 --
@@ -14554,6 +14622,13 @@ CREATE TRIGGER trg_attendance_timing BEFORE INSERT ON public.attendance FOR EACH
 --
 
 CREATE TRIGGER trg_attendance_timing_flag AFTER INSERT ON public.attendance FOR EACH ROW WHEN ((NOT public.office_entry_on())) EXECUTE FUNCTION public.attendance_timing_flag();
+
+
+--
+-- Name: attendance trg_attendance_zw_clock_out_time; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_attendance_zw_clock_out_time BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT public.office_entry_on())) EXECUTE FUNCTION public.attendance_no_early_clock_out();
 
 
 --
@@ -17353,6 +17428,13 @@ REVOKE ALL ON FUNCTION public.attendance_learn_waiting_store() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION attendance_no_early_clock_out(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.attendance_no_early_clock_out() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION attendance_office_time(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -17677,6 +17759,15 @@ REVOKE ALL ON FUNCTION public.clear_temp_password() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION clock_out_opens_at(p_user uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.clock_out_opens_at(p_user uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.clock_out_opens_at(p_user uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.clock_out_opens_at(p_user uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION clock_timing(p_user uuid, p_captured timestamp with time zone, p_device jsonb, p_now timestamp with time zone); Type: ACL; Schema: public; Owner: -
 --
 
@@ -17824,6 +17915,15 @@ GRANT ALL ON FUNCTION public.dismiss_place_due(p_due uuid, p_reason text) TO ser
 REVOKE ALL ON FUNCTION public.distance_metres(lat1 double precision, lng1 double precision, lat2 double precision, lng2 double precision) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.distance_metres(lat1 double precision, lng1 double precision, lat2 double precision, lng2 double precision) TO authenticated;
 GRANT ALL ON FUNCTION public.distance_metres(lat1 double precision, lng1 double precision, lat2 double precision, lng2 double precision) TO service_role;
+
+
+--
+-- Name: FUNCTION early_clock_out_blocked(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.early_clock_out_blocked() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.early_clock_out_blocked() TO authenticated;
+GRANT ALL ON FUNCTION public.early_clock_out_blocked() TO service_role;
 
 
 --

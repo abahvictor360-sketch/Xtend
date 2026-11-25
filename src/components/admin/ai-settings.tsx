@@ -19,7 +19,7 @@ export interface SavedKey {
   key_hint: string
   updated_at: string
 }
-/** How much each person may use one AI feature (0109), and today's use. */
+/** How much each person may use one AI feature (0110), and today's use. */
 export interface AiLimit {
   feature: AiFeature
   per_hour: number
@@ -68,7 +68,7 @@ export function AiSettings({
   serverAnthropic: boolean
   /** What the AI should know (0104); null before the migration is run. */
   knowledge: { body: string; updatedAt: string | null } | null
-  /** Limits per person (0109); null before the migration is run. */
+  /** Limits per person (0110); null before the migration is run. */
   limits?: AiLimit[] | null
 }) {
   const router = useRouter()
@@ -268,7 +268,7 @@ export function AiSettings({
         note="The most AI answers one person may get, in an hour and in a day (Lagos time). Each answer is paid for by your key, so this keeps a runaway phone or misuse from running up the bill. Past the staff helper's limit, the office answers instead; past Ask Xtend's, the person is told when they can ask again."
       >
         {limits === null ? (
-          <p className="rounded-xl bg-warning/15 p-3 text-sm">Run migration 0109 in Supabase to set limits here.</p>
+          <p className="rounded-xl bg-warning/15 p-3 text-sm">Run migration 0110 in Supabase to set limits here.</p>
         ) : (
           <div className="grid gap-3 md:grid-cols-2">
             {(limits ?? []).map((l) => {

@@ -898,7 +898,7 @@ select assert((select count(*) from public.outlets) = 0, 'rls 0103: nor does a d
 reset role;
 update public.profiles set is_active = true where id = :'ada';
 
--- 0109: AI limits and uses are the server's alone.
+-- 0110: AI limits and uses are the server's alone.
 reset role;
 grant select, insert, update, delete on public.ai_limits, public.ai_usage to authenticated;
 revoke all on public.ai_limits, public.ai_usage from anon, authenticated;
@@ -911,14 +911,14 @@ begin
   perform count(*) from public.ai_usage;
   perform assert(false, 'rls: AI uses are closed');
 exception when insufficient_privilege then
-  perform assert(true, 'rls 0109: nobody reads AI uses or limits from the browser');
+  perform assert(true, 'rls 0110: nobody reads AI uses or limits from the browser');
 end $$;
 do $$
 begin
   perform public.consume_ai_use(auth.uid(), 'admin_assistant');
   perform assert(false, 'rls: only the server counts AI uses');
 exception when insufficient_privilege then
-  perform assert(true, 'rls 0109: only the server counts AI uses');
+  perform assert(true, 'rls 0110: only the server counts AI uses');
 end $$;
 reset role;
 

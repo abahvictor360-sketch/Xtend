@@ -73,8 +73,8 @@ Exports: `AiProvider`, `AiFeature`, `suggestModels`, `aiLimitMessage`, `aiServic
 ## `src/lib/ai/quota.ts`
 
 One more AI answer for this person, if they are within their limits
-(0109, Settings → AI keys). Counted in the database, so it holds across
-restarts and servers. Before 0109 is run (or if the count cannot be
+(0110, Settings → AI keys). Counted in the database, so it holds across
+restarts and servers. Before 0110 is run (or if the count cannot be
 read), it allows the answer: the hourly limit in memory still applies.
 
 Exports: `AiQuota`, `takeAiUse`
@@ -482,6 +482,14 @@ reminder and shift end share one notification, which shows in the
 history as an automatic alert. Never throws.
 
 Exports: `flushClockOutReminders`
+
+## `src/lib/clock-out-time.ts`
+
+No clocking out before it is time (0109). Pure, so
+scripts/check-clock-out-time.ts can test it; the database applies the
+same rule (clock_out_opens_at) and has the last word.
+
+Exports: `CLOCK_OUT_GRACE_MINUTES`, `clockOutOpensAt`, `lagosClock`, `tooEarlyToClockOut`, `tooEarlyWords`, `tooEarlyFromServer`
 
 ## `src/lib/count-sheet.ts`
 
@@ -1012,7 +1020,7 @@ Exports: `WatcherAlert`, `notifyWatchers`, `notifyUsers`
 Off site (0106): the database refused the clock-in or check-in and named
 the store to go to. Passed on with the store, so the app can show the way.
 
-Exports: `offSiteRefusal`
+Exports: `offSiteRefusal`, `tooEarlyRefusal`
 
 ## `src/lib/offline/db.ts`
 
@@ -1633,7 +1641,7 @@ Exports: `NavBadges`, `matchesQuery`, `AdminSidebarNav`, `AdminNav`
 
 ## `src/components/admin/ai-settings.tsx`
 
-How much each person may use one AI feature (0109), and today's use.
+How much each person may use one AI feature (0110), and today's use.
 
 Exports: `SavedKey`, `AiLimit`, `FeatureChoice`, `AiSettings`
 
@@ -2382,6 +2390,14 @@ rules remain in ClockPanel; store check-ins and check-outs are started in
 StoreVisits through `onAction`.
 
 Exports: `TodayFocus`
+
+## `src/components/field/too-early-sheet.tsx`
+
+"It is not time to clock out yet" (0109): pops up when someone taps Clock
+out before their clock-out time. A marketer is offered their store work
+instead: check out of the store they are in, or check in at the next one.
+
+Exports: `TooEarlySheet`
 
 ## `src/components/field/use-dashboard-refresh.ts`
 

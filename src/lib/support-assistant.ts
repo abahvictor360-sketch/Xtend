@@ -192,7 +192,7 @@ export async function respondToSupportThread(
     return finish(admin, thread, staffName, true, "Thanks for your message. I've passed this to the office and someone will follow up with you.")
   }
 
-  // Their daily and hourly allowance (0109): past it, the office answers.
+  // Their daily and hourly allowance (0110): past it, the office answers.
   const quota = await takeAiUse(thread.user_id, 'staff_helper')
   if (!quota.ok) {
     if (thread.status === 'escalated') return { replied: false, escalated: true, reply: null }
