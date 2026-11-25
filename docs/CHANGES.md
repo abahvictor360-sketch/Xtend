@@ -40,7 +40,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0104_ai_knowledge.sql`;
    - `supabase/migrations/0105_clock_out_window.sql`;
    - `supabase/migrations/0106_on_site_only.sql`;
-   - `supabase/migrations/0107_offline_clock_day.sql`.
+   - `supabase/migrations/0107_offline_clock_day.sql`;
+   - `supabase/migrations/0108_pause_on_fake_location.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18;
    0099, 0100, 0101 and 0102 are done: you ran them on 2026-11-24.)
 4. **Turn off self sign-up in Supabase**: Authentication → Sign In /
@@ -72,6 +73,25 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-25
+
+### A fake GPS app locks the person out
+- **What was done:** when a phone reports that its location comes from a
+  fake-GPS app (at clock-in, or from the app's positions during the
+  shift), that merchandiser or marketer is paused at once. They are signed
+  out on every page, their phone stops sending positions, and the login
+  page says **Your account is paused. Contact your supervisor or admin.**
+  They are not told why. The clock-in that showed it is kept, with its
+  photo, and the "fake GPS app in use" flag is on Integrity, so you have
+  the evidence when you question them. You (and their supervisor) get the
+  flag alert. When you are done, open **Staff**: they show **Paused: fake
+  GPS app**; press **Unpause** (admins, or their own supervisor). Lifting
+  it is written to the audit log.
+- **The impact:** nobody can carry on working with a fake location.
+  Detection relies on the Xtend Android app (it reads Android's own
+  fake-location flag); iPhones and browsers cannot report it, so they are
+  not paused this way.
+- **What you need to do:** run `supabase/migrations/0108_pause_on_fake_location.sql`
+  in Supabase and redeploy. No new app build is needed.
 
 ### Can a clock-in happen without its location and photo? Can one be lost?
 - **What was checked:** whether anyone can clock in without the server

@@ -3381,6 +3381,13 @@ begin
       perform assert(exists (select 1 from public.integrity_flags where user_id = femi and kind = 'mock_location_confirmed'
                              and detail->>'source' = 'background'),
         'tracking: a fake-location position is flagged');
+      -- 0108: and it pauses the account at once, ending the tracking token.
+      perform assert((select paused_at is not null and paused_reason = 'fake_location' from public.profiles where id = femi)
+                     and not exists (select 1 from public.tracking_tokens where user_id = femi and revoked_at is null),
+        'pause 0108: a fake-location position pauses the account and ends its tracking');
+      -- Lifted here so the tracking tests below carry on as before.
+      update public.profiles set paused_at = null, paused_reason = null, paused_flag = null where id = femi;
+      update public.tracking_tokens set revoked_at = null where user_id = femi;
       res := public.record_background_pings(tok->>'token', jsonb_build_array(
         jsonb_build_object('lat', 6.7100, 'lng', 3.4100, 'accuracy_m', 9, 'captured_at', now())), now());
       perform assert((res->>'kept')::int = 0, 'tracking: a resend is not stored twice');
@@ -7350,6 +7357,47 @@ begin
     end;
   exception when others then
     if sqlerrm <> 'on-site-0106-done' then raise; end if;
+  end;
+
+  -- 0108: a fake location pauses the account. Rolled back.
+  begin
+    declare
+      fk uuid := gen_random_uuid();
+      sup uuid := gen_random_uuid();
+      boss_id uuid := (select id from public.profiles where role = 'admin' order by created_at limit 1);
+    begin
+      insert into auth.users (id, email) values (fk, 'fake.gps@xpel.ng'), (sup, 'other.sup@xpel.ng');
+      insert into public.profiles (id, full_name, email, role, push_exempt)
+      values (fk, 'Fake Gps', 'fake.gps@xpel.ng', 'merchandiser', true),
+             (sup, 'Other Sup', 'other.sup@xpel.ng', 'supervisor', true);
+      perform act_as(fk);
+      perform assert(public.is_active_staff(), 'pause 0108: (active before)');
+      perform public.flag_own_integrity('mock_location_confirmed', 'high', 'The phone reported a fake-GPS provider', '{}'::jsonb, null);
+      perform assert((select paused_at is not null and paused_reason = 'fake_location' and paused_flag is not null from public.profiles where id = fk),
+        'pause 0108: a fake-GPS clock-in pauses the account');
+      perform assert(not public.is_active_staff(), 'pause 0108: a paused account is not active staff (reads and writes close)');
+      update public.profiles set paused_at = null where id = fk;
+      perform assert((select paused_at is not null from public.profiles where id = fk), 'pause 0108: staff cannot lift their own pause');
+      perform act_as(sup);
+      begin
+        perform public.unpause_staff(fk);
+        perform assert(false, 'pause 0108: another team''s supervisor cannot lift it');
+      exception when raise_exception then
+        perform assert(true, 'pause 0108: another team''s supervisor cannot lift it');
+      end;
+      perform act_as(boss);
+      perform assert(public.unpause_staff(fk), 'pause 0108: (unpaused)');
+      perform assert((select paused_at is null from public.profiles where id = fk)
+                     and exists (select 1 from public.audit_log where action = 'user.unpause' and target_id = fk),
+        'pause 0108: an admin lifts it, and it is in the audit log');
+      -- Office staff are never paused this way.
+      perform act_as(sup);
+      perform public.flag_own_integrity('mock_location_confirmed', 'high', 'x', '{}'::jsonb, null);
+      perform assert((select paused_at is null from public.profiles where id = sup), 'pause 0108: only field staff are paused');
+      raise exception 'pause-0108-done';
+    end;
+  exception when others then
+    if sqlerrm <> 'pause-0108-done' then raise; end if;
   end;
 
   -- 0107: a clock-in saved with no signal keeps the day it was taken. Rolled back.

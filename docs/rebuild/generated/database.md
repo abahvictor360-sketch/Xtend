@@ -652,6 +652,9 @@ Policies:
 | shift_start | time without time zone(time) |  | '08:00:00'::time without time zone |
 | shift_end | time without time zone(time) |  | '18:00:00'::time without time zone |
 | clock_out_from | time without time zone(time) | yes |  |
+| paused_at | timestamp with time zone(timestamptz) | yes |  |
+| paused_reason | text(text) | yes |  |
+| paused_flag | uuid(uuid) | yes |  |
 
 Policies:
 - `profiles_admin_all` ALL to public: using `is_admin()`; check `is_admin()`
@@ -1545,7 +1548,7 @@ Policies:
 - `hmac(bytea, bytea, text)` → bytea
 - `hmac(text, text, text)` → bytea
 - `hr_sees(target uuid)` → boolean · definer · 0072_hr_role.sql
-- `is_active_staff()` → boolean · definer · 0103_close_public_key.sql
+- `is_active_staff()` → boolean · definer · 0108_pause_on_fake_location.sql
 - `is_admin()` → boolean · definer · 0080_zero_trust.sql
 - `is_field_role(r user_role)` → boolean · 0013_harden_triggers.sql
 - `is_hr()` → boolean · definer · 0080_zero_trust.sql
@@ -1605,6 +1608,7 @@ Policies:
 - `outlet_containing(p_lat double precision, p_lng double precision)` → uuid · definer · 0016_visits_without_allocation.sql
 - `outlets_for_user(target uuid)` → TABLE(outlet_id uuid) · definer · 0079_security_fixes.sql
 - `owns_count_request(p_id uuid)` → boolean · definer · 0020_count_requests.sql
+- `pause_for_fake_location()` → trigger · definer · 0108_pause_on_fake_location.sql
 - `person_counts_stock(target uuid)` → boolean · definer · 0046_role_store_counts.sql
 - `pgp_armor_headers(text, OUT key text, OUT value text)` → SETOF record
 - `pgp_key_id(bytea)` → text
@@ -1643,7 +1647,7 @@ Policies:
 - `post_support_message(p_thread uuid, p_body text)` → uuid · definer · 0053_support_notifications.sql
 - `product_key(p_name text)` → text · 0021_counted_product_names.sql
 - `profiles_field_only_reporting()` → trigger · definer · 0079_security_fixes.sql
-- `profiles_self_guard()` → trigger · definer · 0105_clock_out_window.sql
+- `profiles_self_guard()` → trigger · definer · 0108_pause_on_fake_location.sql
 - `profiles_staff_role_sync()` → trigger · definer · 0042_staff_roles.sql
 - `profiles_supervisor_check()` → trigger · definer · 0017_supervisor_manages_staff.sql
 - `punctuality_grace_minutes()` → integer · 0036_supervisor_alerts.sql
@@ -1757,6 +1761,7 @@ Policies:
 - `tracking_coverage(p_user uuid, p_date date)` → jsonb · definer · 0004_tracking_coverage.sql
 - `unflag_photo(p_path text)` → boolean · definer · 0092_photo_flags.sql
 - `unlock_sign_in(p_user uuid)` → boolean · definer · 0077_sign_in_lockout.sql
+- `unpause_staff(p_user uuid)` → boolean · definer · 0108_pause_on_fake_location.sql
 - `unread_messages()` → integer · definer · 0073_messages.sql
 - `visit_place_due()` → trigger · definer · 0045_mandatory_place_naming.sql
 - `visit_reminder_max()` → integer · 0099_store_checkout_reminders.sql
@@ -1817,6 +1822,7 @@ Policies:
 - `attendance`: `trg_attendance_zz_store_check_in` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_store_check_in()
 - `attendance`: `trg_follow_end_at_clock_out` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION follow_end_at_clock_out()
 - `audit_log`: `trg_audit_fill_context` — BEFORE INSERT ON public.audit_log FOR EACH ROW EXECUTE FUNCTION audit_fill_context()
+- `integrity_flags`: `trg_integrity_flags_pause` — AFTER INSERT ON public.integrity_flags FOR EACH ROW EXECUTE FUNCTION pause_for_fake_location()
 - `location_pings`: `trg_ping_alert` — AFTER INSERT ON public.location_pings FOR EACH ROW EXECUTE FUNCTION ping_alert()
 - `location_pings`: `trg_ping_enforce` — BEFORE INSERT ON public.location_pings FOR EACH ROW EXECUTE FUNCTION ping_enforce()
 - `location_pings`: `trg_ping_integrity` — AFTER INSERT ON public.location_pings FOR EACH ROW EXECUTE FUNCTION ping_integrity()

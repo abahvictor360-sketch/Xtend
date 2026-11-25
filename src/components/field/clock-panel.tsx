@@ -399,6 +399,10 @@ export function ClockPanel({
               guess ? `, about ${metres(guess)} from your outlet` : ''
             } is kept on this phone but is NOT recorded yet. It sends itself when you get signal. Do not count it as done until Home says you are ${type === 'opening' ? 'clocked in' : 'clocked out'}; if it is refused, you will be told. To send it sooner: check Mobile data is on and you have data, then move near the door or a window.`,
           })
+        } else if ((result.data as { paused?: boolean }).paused === true) {
+          // 0108: a fake location paused the account: signed out, told to call the office.
+          window.location.href = '/api/auth/paused'
+          return
         } else {
           const signOut = (result.data as { sign_out?: boolean }).sign_out === true
           const record = (

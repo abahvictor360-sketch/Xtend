@@ -15,6 +15,8 @@ const REASONS: Record<string, string> = {
   'new-day': 'A new day has started. Log in again to clock in.',
   'office-time': 'You have been signed in for 12 hours, so please log in again.',
   idle: 'You were away for a while, so you were signed out. Log in again to carry on.',
+  // 0108: a fake location paused the account. The office explains why.
+  paused: 'Your account is paused. Contact your supervisor or admin.',
 }
 
 export default async function LoginPage({

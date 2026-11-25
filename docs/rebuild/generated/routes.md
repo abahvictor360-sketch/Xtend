@@ -2,7 +2,7 @@
 
 # API routes
 
-141 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+142 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
 
 ## `POST /api/activity`
 
@@ -1301,6 +1301,8 @@ const patchSchema = z.object({
   unlock: z.boolean().optional(),
   /** Admin only: remove their authenticator app so they set it up again (0080). */
   reset_mfa: z.boolean().optional(),
+  /** Lift a pause for a fake location (0108): an admin or their supervisor; audited in the database. */
+  unpause: z.boolean().optional(),
   /** Their working hours, wherever they clock in (0100); both together. */
   shift_start: clockTime.optional(),
   shift_end: clockTime.optional(),
@@ -1309,7 +1311,7 @@ const patchSchema = z.object({
 })
 ```
 
-- Database functions: `can_edit_staff`, `unlock_sign_in`, `sign_in_clear`
+- Database functions: `can_edit_staff`, `unpause_staff`, `unlock_sign_in`, `sign_in_clear`
 - Tables and views: `profiles`, `staff_roles`, `audit_log`, `attendance`
 
 ## `POST /api/admin/users/import`
@@ -1390,7 +1392,7 @@ const schema = z.object({
 ```
 
 - Database functions: `flag_own_integrity`
-- Tables and views: `attendance`, `outlets`, `store_visits`
+- Tables and views: `attendance`, `profiles`, `outlets`, `store_visits`
 
 ## `POST /api/auth/biometric/enroll`
 
@@ -1530,6 +1532,16 @@ const schema = z.object({
 })
 ```
 - Tables and views: `profiles`, `sign_in_keys`
+
+## `GET /api/auth/paused`
+
+- File: `src/app/api/auth/paused/route.ts`
+- Who: public / own check
+
+A fake location paused this account (0108): sign them out, everywhere
+they are, and say on the login page to contact their supervisor or admin.
+Only a paused account is signed out here; opening this address otherwise
+changes nothing.
 
 ## `POST /api/auth/reconfirm`
 

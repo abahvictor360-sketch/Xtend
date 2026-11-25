@@ -1591,6 +1591,8 @@ Only their team in the picker and the kept list; the RPCs refuse anyone else.
 
 ## 18. Staff — `/admin/users` (and `/admin/users/import`)
 
+**Paused for a fake location (0108):** a person with `paused_at` shows the destructive badge **Paused: fake GPS app** (title "Paused <time>") next to the sign-in lock badge, and **Unpause** next to Unlock (desktop ghost, mobile outline). It asks `window.confirm("Unpause <name>? Their phone reported a fake-GPS app. Do this only after you have spoken to them. The flag stays on Integrity, and this is written to the audit log.")`, then PATCH `/api/admin/users/<id> { unpause: true }` → RPC `unpause_staff` (403 with the database's words when not their team; "Run migration 0108 in Supabase first." before it) → "<name> can use Xtend again."
+
 Files: `src/app/admin/users/page.tsx`, `src/app/admin/users/import/page.tsx`, `src/components/admin/staff-manager.tsx`, `role-select.tsx`, `csv-importer.tsx`; login sheet `src/lib/staff-logins.ts`; roles `src/lib/staff-roles.ts`; field rules `src/lib/fields.ts`. Title "Staff — Xtend".
 
 ### Query parameters

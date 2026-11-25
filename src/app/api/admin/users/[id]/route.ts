@@ -33,6 +33,8 @@ const patchSchema = z.object({
   unlock: z.boolean().optional(),
   /** Admin only: remove their authenticator app so they set it up again (0080). */
   reset_mfa: z.boolean().optional(),
+  /** Lift a pause for a fake location (0108): an admin or their supervisor; audited in the database. */
+  unpause: z.boolean().optional(),
   /** Their working hours, wherever they clock in (0100); both together. */
   shift_start: clockTime.optional(),
   shift_end: clockTime.optional(),
@@ -188,6 +190,19 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
     }
 
     // A sign-in lock (0077): Postgres checks who may lift it and audits it.
+    if (input.unpause) {
+      const supabase = await createServerSupabase()
+      const { error } = await supabase.rpc('unpause_staff', { p_user: id })
+      if (error) {
+        const missing = error.code === 'PGRST202' || error.code === '42883'
+        return Response.json(
+          { error: missing ? 'Run migration 0108 in Supabase first.' : dbErrorMessage(error) },
+          { status: missing ? 503 : 403 },
+        )
+      }
+      return Response.json({ ok: true })
+    }
+
     if (input.unlock) {
       const supabase = await createServerSupabase()
       const { error } = await supabase.rpc('unlock_sign_in', { p_user: id })

@@ -31,6 +31,9 @@ export interface Profile {
   must_change_password: boolean
   /** Excused by an admin from needing notifications on to clock in (027). */
   push_exempt?: boolean
+  /** Paused because the phone used a fake location (0108); null when not. */
+  paused_at?: string | null
+  paused_reason?: string | null
   /** An admin requires this person to use the phone app, not a browser (0084). */
   app_only?: boolean
   /** When they finished the first-run walkthrough (037); null until then. */
