@@ -49,7 +49,7 @@ conversations are kept in Anthropic's shape (text, tool_use and
 tool_result blocks), so each round is translated there and back: the rest
 of Ask Xtend and the staff helper never need to know which AI answered.
 
-Exports: `AiServiceError`, `outputCap`, `plainSchema`, `Block`, `ConvMessage`, `ToolDef`, `toOpenAiMessages`, `toOpenAiTools`, `compatRound`, `compatToolAnswer`, `compatPing`
+Exports: `AiServiceError`, `outputCap`, `plainSchema`, `Block`, `ConvMessage`, `ToolDef`, `toOpenAiMessages`, `toOpenAiTools`, `compatRound`, `compatToolAnswer`, `listModels`, `compatPing`
 
 ## `src/lib/ai/config.ts`
 
@@ -68,7 +68,7 @@ one each feature uses. Pure, so scripts/check-ai-providers.ts can test it.
 Anthropic is called with its own API; the other four speak the OpenAI
 chat format at their own address (lib/ai/compat.ts).
 
-Exports: `AiProvider`, `AiFeature`, `aiServiceAdvice`, `ProviderInfo`, `PROVIDERS`, `FEATURES`, `PROVIDER_IDS`, `providerInfo`, `keyHint`, `keyProblem`, `ResolvedAi`, `resolveAi`
+Exports: `AiProvider`, `AiFeature`, `suggestModels`, `aiServiceAdvice`, `ProviderInfo`, `PROVIDERS`, `FEATURES`, `PROVIDER_IDS`, `providerInfo`, `keyHint`, `keyProblem`, `ResolvedAi`, `resolveAi`
 
 ## `src/lib/ai/secret-box.ts`
 
