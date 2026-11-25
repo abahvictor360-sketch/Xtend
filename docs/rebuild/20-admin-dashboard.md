@@ -2332,6 +2332,18 @@ Office document rows wrap full filenames and staff details on small screens. Doc
 
 ## Fix today's record (0090)
 
+- **Where is <first>? (0112)** For Clock in, Clock out, Check in and Check
+  out, the form adds three choices: **At <store>** ("The store's pin",
+  default), **Where their phone was** ("At HH:MM today", from the latest
+  `location_pings` row today; greyed "No location from their phone today"),
+  **Pick on the map** (a 280 px `SpotPicker`: the store's circle, the
+  phone's blue dot, tap or drag a pin; plus "Or paste a Google Maps link or
+  6.6019, 3.3516" / **Use this**, read with `readMapLink`; a short link
+  asks for the full one). A line under it: "<n> m from <store>. It will be
+  recorded there, as off site." (warning) or "Inside the store area:
+  recorded as on site." The POST adds `lat, lng, accuracy, place` ("Where
+  their phone was at HH:MM" or "Picked on the map by the office").
+
 **Since 2026-11-18** the card reads: header (wrench tile, "Fix today's record", "Type what to do, or pick it below. …"); then a tinted box **Tell Xtend what to do** (sparkle icon): a text input (≤ 300, placeholder "e.g. Clock <first> out at 5pm, phone died") and **Read it**, example chips that fill the input ("Clock <first> in at 8:05, phone would not open", "Undo the clock-out, tapped by mistake", "Clock out at 5pm, phone died", for marketers "Check in at <first store>, GPS would not lock", "Ask them to clock in again with a clear selfie") and a one-line hint. **Read it** runs `parseCorrectionCommand` then `planCorrection` (Lagos now) and shows a card with a 2 px brand border: "XTEND WILL", the plan title, its lines, the warning in amber, **Do it** / **Cancel**; errors show in a red alert. Below, a 2-column grid (1 on phones) of four group cards, each a bordered rounded-2xl with an icon title — **Clock-in** (Clock them in / Clock them in again (replace); Ask them to clock in again — off: "Not clocked in yet" / "Already clocked out: clock them in yourself"), **Clock-out** (Clock them out / again (replace) — off "Not clocked in yet"; Undo the clock-out (back on shift) and Ask them to clock out again — off "Not clocked out yet"), and for marketers **Store check-in** (Check them in at a store — off "Not clocked in yet" / "Clocked out for the day" / "Still checked in at <store>"; Ask them to check in again — off "No store check-in today") and **Store check-out** (Check them out of <open store> — off "Not checked in at a store now"; Ask them to check out again — off "No store check-out today"). Each option is a 44 px full-width button; a disabled one is at 55 % with its reason under the label. Picking one opens the form below the groups (2 px brand border) with Store, **Which store visit** (for check-in/out redos), Time today and **Why (they see this)**; **Confirm** / **Cancel**.
 
 The original description follows.

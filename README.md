@@ -133,6 +133,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0109_no_early_clock_out.sql             # no clocking out before the person's clock-out time
    supabase/migrations/0110_ai_limits.sql                      # how many AI answers each person may get, per hour and per day
    supabase/migrations/0111_clock_out_hold.sql                 # the office switches each person's clock-out hold on or off
+   supabase/migrations/0112_office_entry_location.sql          # the office records where the person really is (store, phone, or map)
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

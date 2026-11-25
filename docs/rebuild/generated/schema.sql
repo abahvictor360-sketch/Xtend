@@ -1025,6 +1025,45 @@ $$;
 
 
 --
+-- Name: attendance_office_store(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.attendance_office_store() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  store uuid;
+  o record;
+begin
+  begin
+    store := nullif(new.device_info->>'office_store_id', '')::uuid;
+  exception when others then
+    store := null;
+  end;
+  if store is null then
+    return new;
+  end if;
+  select x.id, x.lat, x.lng, x.geofence_radius_m into o from public.outlets x where x.id = store;
+  if o.id is null or o.lat is null then
+    return new;
+  end if;
+  new.outlet_id       := o.id;
+  new.outlet_lat      := o.lat;
+  new.outlet_lng      := o.lng;
+  new.outlet_radius_m := o.geofence_radius_m;
+  new.distance_m      := public.distance_metres(new.lat, new.lng, o.lat, o.lng);
+  new.status := case
+    when new.accuracy_m > 100 then 'flagged'::attendance_status
+    when new.distance_m <= coalesce(new.outlet_radius_m, 150) then 'on_site'::attendance_status
+    else 'off_site'::attendance_status
+  end;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: attendance_office_time(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5243,16 +5282,17 @@ $$;
 
 
 --
--- Name: office_record_clock(uuid, public.attendance_type, uuid, timestamp with time zone, text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: office_record_clock(uuid, public.attendance_type, uuid, timestamp with time zone, text, double precision, double precision, double precision, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.office_record_clock(p_user uuid, p_type public.attendance_type, p_outlet uuid, p_at timestamp with time zone, p_reason text) RETURNS uuid
+CREATE FUNCTION public.office_record_clock(p_user uuid, p_type public.attendance_type, p_outlet uuid, p_at timestamp with time zone, p_reason text, p_lat double precision DEFAULT NULL::double precision, p_lng double precision DEFAULT NULL::double precision, p_accuracy double precision DEFAULT NULL::double precision, p_place text DEFAULT NULL::text) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
 declare
   actor uuid := auth.uid();
   o record;
+  w record;
   at_time timestamptz := coalesce(p_at, now());
   opening timestamptz;
   new_id uuid;
@@ -5280,6 +5320,7 @@ begin
   if o.lat is null or o.lng is null then
     raise exception 'That store has no location yet';
   end if;
+  w := public.office_where(o.lat, o.lng, o.name, o.address, p_lat, p_lng, p_accuracy, p_place);
 
   if p_type = 'closing' then
     select a.created_at into opening from public.attendance a
@@ -5306,8 +5347,9 @@ begin
   perform public.office_act_as(p_user, actor);
   insert into public.attendance (type, lat, lng, accuracy_m, address, place_name, place_source,
                                  selfie_path, device_info, client_captured_at)
-  values (p_type, o.lat, o.lng, 5, o.address, o.name, 'office', '',
-          jsonb_build_object('source', 'office', 'recorded_by', actor, 'reason', btrim(p_reason)),
+  values (p_type, w.lat, w.lng, w.accuracy, w.address, w.place, 'office', '',
+          jsonb_build_object('source', 'office', 'recorded_by', actor, 'reason', btrim(p_reason),
+                             'office_store_id', o.id, 'location_from', w.source),
           at_time)
   returning id into new_id;
   perform public.office_act_done();
@@ -5317,16 +5359,17 @@ $$;
 
 
 --
--- Name: office_record_visit(uuid, text, uuid, text); Type: FUNCTION; Schema: public; Owner: -
+-- Name: office_record_visit(uuid, text, uuid, text, double precision, double precision, double precision, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
-CREATE FUNCTION public.office_record_visit(p_user uuid, p_action text, p_outlet uuid, p_reason text) RETURNS uuid
+CREATE FUNCTION public.office_record_visit(p_user uuid, p_action text, p_outlet uuid, p_reason text, p_lat double precision DEFAULT NULL::double precision, p_lng double precision DEFAULT NULL::double precision, p_accuracy double precision DEFAULT NULL::double precision, p_place text DEFAULT NULL::text) RETURNS uuid
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
 declare
   actor uuid := auth.uid();
   o record;
+  w record;
   v record;
   new_id uuid;
 begin
@@ -5364,11 +5407,13 @@ begin
       raise exception 'That store has no location yet';
     end if;
 
+    w := public.office_where(o.lat, o.lng, o.name, o.address, p_lat, p_lng, p_accuracy, p_place);
     perform public.office_act_as(p_user, actor);
     insert into public.store_visits (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m,
                                      arrived_address, arrived_place_name, device_info, client_captured_at)
-    values (o.id, o.lat, o.lng, 5, o.address, o.name,
-            jsonb_build_object('source', 'office', 'recorded_by', actor, 'reason', btrim(p_reason)), now())
+    values (o.id, w.lat, w.lng, w.accuracy, w.address, w.place,
+            jsonb_build_object('source', 'office', 'recorded_by', actor, 'reason', btrim(p_reason),
+                               'location_from', w.source), now())
     returning id into new_id;
     perform public.office_act_done();
 
@@ -5385,10 +5430,12 @@ begin
     raise exception 'They are not checked in at any store';
   end if;
   select x.lat, x.lng, x.name, x.address into o from public.outlets x where x.id = v.outlet_id;
+  w := public.office_where(coalesce(o.lat, v.arrived_lat), coalesce(o.lng, v.arrived_lng),
+                           coalesce(o.name, v.arrived_place_name), coalesce(o.address, v.arrived_address),
+                           p_lat, p_lng, p_accuracy, p_place);
 
   perform public.office_act_as(p_user, actor);
-  perform public.end_store_visit(v.id, coalesce(o.lat, v.arrived_lat), coalesce(o.lng, v.arrived_lng), 5,
-                                 coalesce(o.name, v.arrived_place_name), coalesce(o.address, v.arrived_address));
+  perform public.end_store_visit(v.id, w.lat, w.lng, w.accuracy, w.place, w.address);
   perform public.office_act_done();
 
   insert into public.field_corrections (user_id, action, reason, requested_by, status, done_at, record_id, new_record_id)
@@ -5522,6 +5569,32 @@ begin
 
   delete from public.attendance where id = closing.id;
   return new_id;
+end;
+$$;
+
+
+--
+-- Name: office_where(double precision, double precision, text, text, double precision, double precision, double precision, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.office_where(p_store_lat double precision, p_store_lng double precision, p_store_name text, p_store_address text, p_lat double precision, p_lng double precision, p_accuracy double precision, p_place text, OUT lat double precision, OUT lng double precision, OUT accuracy double precision, OUT place text, OUT address text, OUT source text) RETURNS record
+    LANGUAGE plpgsql IMMUTABLE
+    AS $$
+begin
+  if p_lat is null and p_lng is null then
+    lat := p_store_lat; lng := p_store_lng; accuracy := 5;
+    place := p_store_name; address := p_store_address; source := 'store';
+    return;
+  end if;
+  if p_lat is null or p_lng is null or p_lat not between -90 and 90 or p_lng not between -180 and 180
+     or (p_lat = 0 and p_lng = 0) then
+    raise exception 'That location is not a real place. Pick it again on the map';
+  end if;
+  lat := p_lat; lng := p_lng;
+  accuracy := least(greatest(coalesce(p_accuracy, 25), 1), 100);
+  place := coalesce(nullif(btrim(coalesce(p_place, '')), ''), 'Picked by the office');
+  address := null;
+  source := 'picked';
 end;
 $$;
 
@@ -14660,6 +14733,13 @@ CREATE TRIGGER trg_attendance_timing_flag AFTER INSERT ON public.attendance FOR 
 
 
 --
+-- Name: attendance trg_attendance_zt_office_store; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_attendance_zt_office_store BEFORE INSERT ON public.attendance FOR EACH ROW WHEN (public.office_entry_on()) EXECUTE FUNCTION public.attendance_office_store();
+
+
+--
 -- Name: attendance trg_attendance_zw_clock_out_time; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -17470,6 +17550,13 @@ REVOKE ALL ON FUNCTION public.attendance_no_early_clock_out() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION attendance_office_store(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.attendance_office_store() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION attendance_office_time(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -18569,21 +18656,21 @@ GRANT ALL ON FUNCTION public.office_name(p uuid) TO service_role;
 
 
 --
--- Name: FUNCTION office_record_clock(p_user uuid, p_type public.attendance_type, p_outlet uuid, p_at timestamp with time zone, p_reason text); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION office_record_clock(p_user uuid, p_type public.attendance_type, p_outlet uuid, p_at timestamp with time zone, p_reason text, p_lat double precision, p_lng double precision, p_accuracy double precision, p_place text); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.office_record_clock(p_user uuid, p_type public.attendance_type, p_outlet uuid, p_at timestamp with time zone, p_reason text) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.office_record_clock(p_user uuid, p_type public.attendance_type, p_outlet uuid, p_at timestamp with time zone, p_reason text) TO authenticated;
-GRANT ALL ON FUNCTION public.office_record_clock(p_user uuid, p_type public.attendance_type, p_outlet uuid, p_at timestamp with time zone, p_reason text) TO service_role;
+REVOKE ALL ON FUNCTION public.office_record_clock(p_user uuid, p_type public.attendance_type, p_outlet uuid, p_at timestamp with time zone, p_reason text, p_lat double precision, p_lng double precision, p_accuracy double precision, p_place text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.office_record_clock(p_user uuid, p_type public.attendance_type, p_outlet uuid, p_at timestamp with time zone, p_reason text, p_lat double precision, p_lng double precision, p_accuracy double precision, p_place text) TO authenticated;
+GRANT ALL ON FUNCTION public.office_record_clock(p_user uuid, p_type public.attendance_type, p_outlet uuid, p_at timestamp with time zone, p_reason text, p_lat double precision, p_lng double precision, p_accuracy double precision, p_place text) TO service_role;
 
 
 --
--- Name: FUNCTION office_record_visit(p_user uuid, p_action text, p_outlet uuid, p_reason text); Type: ACL; Schema: public; Owner: -
+-- Name: FUNCTION office_record_visit(p_user uuid, p_action text, p_outlet uuid, p_reason text, p_lat double precision, p_lng double precision, p_accuracy double precision, p_place text); Type: ACL; Schema: public; Owner: -
 --
 
-REVOKE ALL ON FUNCTION public.office_record_visit(p_user uuid, p_action text, p_outlet uuid, p_reason text) FROM PUBLIC;
-GRANT ALL ON FUNCTION public.office_record_visit(p_user uuid, p_action text, p_outlet uuid, p_reason text) TO authenticated;
-GRANT ALL ON FUNCTION public.office_record_visit(p_user uuid, p_action text, p_outlet uuid, p_reason text) TO service_role;
+REVOKE ALL ON FUNCTION public.office_record_visit(p_user uuid, p_action text, p_outlet uuid, p_reason text, p_lat double precision, p_lng double precision, p_accuracy double precision, p_place text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.office_record_visit(p_user uuid, p_action text, p_outlet uuid, p_reason text, p_lat double precision, p_lng double precision, p_accuracy double precision, p_place text) TO authenticated;
+GRANT ALL ON FUNCTION public.office_record_visit(p_user uuid, p_action text, p_outlet uuid, p_reason text, p_lat double precision, p_lng double precision, p_accuracy double precision, p_place text) TO service_role;
 
 
 --
@@ -18602,6 +18689,13 @@ GRANT ALL ON FUNCTION public.office_request_redo(p_user uuid, p_action text, p_r
 REVOKE ALL ON FUNCTION public.office_reset_clock_out(p_user uuid, p_reason text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.office_reset_clock_out(p_user uuid, p_reason text) TO authenticated;
 GRANT ALL ON FUNCTION public.office_reset_clock_out(p_user uuid, p_reason text) TO service_role;
+
+
+--
+-- Name: FUNCTION office_where(p_store_lat double precision, p_store_lng double precision, p_store_name text, p_store_address text, p_lat double precision, p_lng double precision, p_accuracy double precision, p_place text, OUT lat double precision, OUT lng double precision, OUT accuracy double precision, OUT place text, OUT address text, OUT source text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.office_where(p_store_lat double precision, p_store_lng double precision, p_store_name text, p_store_address text, p_lat double precision, p_lng double precision, p_accuracy double precision, p_place text, OUT lat double precision, OUT lng double precision, OUT accuracy double precision, OUT place text, OUT address text, OUT source text) FROM PUBLIC;
 
 
 --

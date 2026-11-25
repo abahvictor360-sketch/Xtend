@@ -381,7 +381,9 @@ export default async function SupervisorGuidePage() {
                     On <Ui>Attendance</Ui>, tap their name (under <Ui>Not clocked in today</Ui> if they have not clocked in) and use <Ui>Fix today&apos;s record</Ui>: type what to do (“clock him out at 5pm, phone died”) and press{' '}
                     <Ui>Read it</Ui> then <Ui>Do it</Ui>, or pick from the four groups. When you are sure they
                     are at the store (call them), clock them in or out yourself, or check a marketer in or out of a
-                    store. If the app recorded it wrongly, ask them to do it again instead. Give a reason each time: they
+                    store. Under <Ui>Where is …?</Ui> say where they are: at the store, where their phone last was,
+                    or a spot you pick on the map (or a Google Maps link they send you). If the app recorded it
+                    wrongly, ask them to do it again instead. Give a reason each time: they
                     see it, and the old record is kept. Ask Xtend can do this too (“ask Ada to clock in again”).
                   </>
                 ),

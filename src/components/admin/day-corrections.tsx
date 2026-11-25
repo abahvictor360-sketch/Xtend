@@ -1,15 +1,22 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import dynamic from 'next/dynamic'
 import { useRouter } from 'next/navigation'
 import type { LucideIcon } from 'lucide-react'
-import { DoorOpen, LogIn, LogOut, Sparkles, Store, Wrench } from 'lucide-react'
+import { DoorOpen, LogIn, LogOut, MapPin, Smartphone, Sparkles, Store, Wrench } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
-import { cn } from '@/lib/utils'
+import { cn, formatLagos, metres } from '@/lib/utils'
+import { haversineMetres } from '@/lib/geo'
+import { readMapLink, validPoint } from '@/lib/map-link'
+import type { Spot } from '@/components/admin/spot-picker'
+
+// The map loads in the browser only.
+const SpotPicker = dynamic(() => import('@/components/admin/spot-picker').then((m) => m.SpotPicker), { ssr: false })
 import {
   CORRECTION_LABELS,
   parseCorrectionCommand,
@@ -25,7 +32,23 @@ export interface FixVisit {
   storeId?: string | null
 }
 
-type Payload = CorrectionPlan['payload']
+type Payload = CorrectionPlan['payload'] & {
+  lat?: number | null
+  lng?: number | null
+  accuracy?: number | null
+  place?: string | null
+}
+
+export interface FixStore {
+  id: string
+  name: string
+  lat?: number | null
+  lng?: number | null
+  geofence_radius_m?: number | null
+}
+
+/** Where the office says the person is (0112). */
+type Where = 'store' | 'phone' | 'map'
 
 interface Option {
   action: CorrectionAction
@@ -58,6 +81,7 @@ export function DayCorrections({
   stores,
   homeStoreId,
   visits,
+  lastPhone = null,
 }: {
   personId: string
   personName: string
@@ -66,9 +90,11 @@ export function DayCorrections({
   marketer: boolean
   clockedIn: boolean
   clockedOut: boolean
-  stores: { id: string; name: string }[]
+  stores: FixStore[]
   homeStoreId: string | null
   visits: FixVisit[]
+  /** Where their phone last reported today (0112). */
+  lastPhone?: { lat: number; lng: number; accuracy_m: number; at: string } | null
 }) {
   const router = useRouter()
   const first = personName.split(' ')[0]
@@ -86,6 +112,11 @@ export function DayCorrections({
   const [storeId, setStoreId] = useState(homeStoreId && stores.some((s) => s.id === homeStoreId) ? homeStoreId : (stores[0]?.id ?? ''))
   const [time, setTime] = useState('')
   const [reason, setReason] = useState('')
+  // 0112: where they are: the store's pin, their phone's last spot, or one picked.
+  const [where, setWhere] = useState<Where>('store')
+  const [spot, setSpot] = useState<Spot | null>(null)
+  const [pasted, setPasted] = useState('')
+  const [pasteError, setPasteError] = useState<string | null>(null)
 
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -170,6 +201,34 @@ export function DayCorrections({
   const needsStore = action === 'office_clock_in' || action === 'office_clock_out' || action === 'office_check_in'
   const needsTime = action === 'office_clock_in' || action === 'office_clock_out'
   const needsVisit = action === 'redo_check_in' || action === 'redo_check_out'
+  const needsWhere = needsStore || action === 'office_check_out'
+  // The store they are recorded against, for the map and the distance.
+  const whereStore: FixStore | null =
+    action === 'office_check_out'
+      ? (stores.find((s) => s.id === openVisit?.storeId) ?? null)
+      : (stores.find((s) => s.id === storeId) ?? null)
+  const storePoint =
+    whereStore?.lat != null && whereStore.lng != null
+      ? { lat: whereStore.lat, lng: whereStore.lng, name: whereStore.name, radius_m: whereStore.geofence_radius_m }
+      : null
+  const chosen: Spot | null = where === 'phone' && lastPhone ? lastPhone : where === 'map' ? spot : null
+  const away = chosen && storePoint ? haversineMetres(chosen.lat, chosen.lng, storePoint.lat, storePoint.lng) : null
+  const awayOff = away !== null && storePoint ? away > (storePoint.radius_m ?? 150) : false
+
+  function readPasted() {
+    setPasteError(null)
+    const reading = readMapLink(pasted)
+    if (reading.short) {
+      setPasteError('That is a short link. Open it, copy the full address from the browser, or tap the map instead.')
+      return
+    }
+    const p = reading.point ? validPoint(reading.point.lat, reading.point.lng) : null
+    if (!p) {
+      setPasteError('No position found. Paste a Google Maps link or "6.6019, 3.3516", or tap the map.')
+      return
+    }
+    setSpot(p)
+  }
   const visitChoices = action === 'redo_check_in' ? redoInVisits : redoOutVisits
 
   function reset() {
@@ -183,6 +242,10 @@ export function DayCorrections({
     setAction(next)
     setReason('')
     setTime('')
+    setWhere('store')
+    setSpot(null)
+    setPasted('')
+    setPasteError(null)
     const choices = next === 'redo_check_in' ? redoInVisits : redoOutVisits
     setVisitId(choices[choices.length - 1]?.id ?? '')
   }
@@ -229,6 +292,16 @@ export function DayCorrections({
   function submitForm(event: React.FormEvent) {
     event.preventDefault()
     if (!action) return
+    if (needsWhere && where === 'map' && !spot) {
+      setError('Tap the map where they are, or paste a Google Maps link.')
+      return
+    }
+    const place =
+      where === 'phone' && lastPhone
+        ? `Where their phone was at ${formatLagos(lastPhone.at, false)}`
+        : where === 'map'
+          ? 'Picked on the map by the office'
+          : null
     // A time typed as HH:MM is today's, in Lagos (UTC+1, no summer time).
     void send(
       {
@@ -238,6 +311,14 @@ export function DayCorrections({
         outlet_id: needsStore ? storeId : null,
         at: needsTime && time ? `${date}T${time}:00+01:00` : null,
         visit_id: needsVisit ? visitId || null : null,
+        ...(needsWhere && chosen
+          ? {
+              lat: chosen.lat,
+              lng: chosen.lng,
+              accuracy: where === 'phone' && lastPhone ? Math.min(100, Math.max(1, Math.round(lastPhone.accuracy_m))) : 25,
+              place,
+            }
+          : {}),
       },
       CORRECTION_LABELS[action],
     )
@@ -385,6 +466,71 @@ export function DayCorrections({
                 </Select>
               ) : (
                 <p className="text-sm text-destructive">They have no store with a location. Set one on Outlets first.</p>
+              )}
+            </div>
+          )}
+          {needsWhere && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Where is {first}?</p>
+              <div className="grid gap-2 sm:grid-cols-3">
+                {(
+                  [
+                    { id: 'store', icon: Store, label: whereStore ? `At ${whereStore.name}` : 'At the store', note: 'The store\'s pin' },
+                    {
+                      id: 'phone',
+                      icon: Smartphone,
+                      label: 'Where their phone was',
+                      note: lastPhone ? `At ${formatLagos(lastPhone.at, false)} today` : 'No location from their phone today',
+                      off: !lastPhone,
+                    },
+                    { id: 'map', icon: MapPin, label: 'Pick on the map', note: 'Tap the spot, or paste a link' },
+                  ] as { id: Where; icon: LucideIcon; label: string; note: string; off?: boolean }[]
+                ).map((o) => (
+                  <button
+                    key={o.id}
+                    type="button"
+                    disabled={o.off || busy}
+                    onClick={() => setWhere(o.id)}
+                    className={cn(
+                      'flex min-h-11 flex-col items-start rounded-xl border px-3 py-2 text-left text-sm',
+                      where === o.id ? 'border-brand bg-tint font-semibold' : 'border-border hover:border-brand/40',
+                      o.off && 'cursor-not-allowed opacity-55',
+                    )}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      <o.icon className="h-4 w-4 text-brand" /> {o.label}
+                    </span>
+                    <span className="text-xs font-normal text-muted-foreground">{o.note}</span>
+                  </button>
+                ))}
+              </div>
+              {where === 'map' && (
+                <div className="space-y-2">
+                  <SpotPicker
+                    store={storePoint}
+                    phone={lastPhone ? { lat: lastPhone.lat, lng: lastPhone.lng, label: `Their phone at ${formatLagos(lastPhone.at, false)}` } : null}
+                    value={spot}
+                    onPick={setSpot}
+                  />
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Input
+                      value={pasted}
+                      onChange={(e) => setPasted(e.target.value)}
+                      placeholder="Or paste a Google Maps link or 6.6019, 3.3516"
+                      className="flex-1"
+                    />
+                    <Button type="button" variant="outline" onClick={readPasted} disabled={pasted.trim().length < 3}>
+                      Use this
+                    </Button>
+                  </div>
+                  {pasteError && <p className="text-xs text-destructive">{pasteError}</p>}
+                </div>
+              )}
+              {away !== null && (
+                <p className={cn('rounded-xl px-3 py-2 text-xs', awayOff ? 'bg-warning/10 text-warning' : 'bg-tint text-tint-foreground')}>
+                  {metres(away)} from {storePoint?.name}.{' '}
+                  {awayOff ? 'It will be recorded there, as off site.' : 'Inside the store area: recorded as on site.'}
+                </p>
               )}
             </div>
           )}

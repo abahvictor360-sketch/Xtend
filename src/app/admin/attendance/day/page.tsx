@@ -44,6 +44,8 @@ interface CorrectionRow {
   profiles: { full_name: string } | null
 }
 
+type FixStore = { id: string; name: string; lat: number | null; lng: number | null; geofence_radius_m: number | null }
+
 export default async function DayOverview({ searchParams }: { searchParams: Promise<Search> }) {
   const session = await requireSession(['admin', 'supervisor', 'hr'])
   const q = await searchParams
@@ -282,21 +284,32 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
       }>()
     : { data: null }
   const holdState = typeof holdRow?.hold_clock_out === 'boolean' ? holdRow.hold_clock_out : null
+  // Where their phone last reported today (0112): the office can record them there.
+  const { data: lastPing } = canFix
+    ? await supabase
+        .from('location_pings')
+        .select('lat, lng, accuracy_m, created_at')
+        .eq('user_id', id)
+        .gte('created_at', `${date}T00:00:00+01:00`)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle<{ lat: number; lng: number; accuracy_m: number; created_at: string }>()
+    : { data: null }
   const [fixStores, corrections] = canFix
     ? await Promise.all([
         supabase
           .rpc('outlets_for_user', { target: id })
           .then(async ({ data }) => {
             const ids = ((data ?? []) as { outlet_id: string }[]).map((r) => r.outlet_id)
-            if (!ids.length) return [] as { id: string; name: string }[]
+            if (!ids.length) return [] as FixStore[]
             const { data: rows } = await supabase
               .from('outlets')
-              .select('id, name')
+              .select('id, name, lat, lng, geofence_radius_m')
               .in('id', ids)
               .eq('is_active', true)
               .not('lat', 'is', null)
               .order('name')
-            return (rows ?? []) as { id: string; name: string }[]
+            return (rows ?? []) as FixStore[]
           }),
         supabase
           .from('field_corrections')
@@ -419,6 +432,7 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
           clockedIn={Boolean(opening)}
           clockedOut={Boolean(closing)}
           stores={fixStores}
+          lastPhone={lastPing ? { lat: lastPing.lat, lng: lastPing.lng, accuracy_m: lastPing.accuracy_m, at: lastPing.created_at } : null}
           homeStoreId={person.outlet_id}
           visits={visitRows.map((v, i) => ({ id: v.id, name: visitList[i].store, status: v.status, storeId: v.outlet_id ?? null }))}
         />

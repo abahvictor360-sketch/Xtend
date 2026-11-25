@@ -1374,6 +1374,17 @@ label and the store's own point.
   allocated stores all pinned, none within reach: the nearest). Clock-outs
   and check-outs are never refused. The test suite turns the rule off at
   the start and tests it in its own block.
+- **0112, where the office records someone:** `office_record_clock` and
+  `office_record_visit` take optional `p_lat, p_lng, p_accuracy, p_place`
+  (the old signatures are dropped; positional calls still work).
+  `office_where()` returns the store's pin (accuracy 5, store name and
+  address, source 'store') when none is given, else the spot (accuracy
+  1–100, default 25, place or "Picked by the office", no address, source
+  'picked'); 0,0 or out of range: "That location is not a real place. Pick
+  it again on the map". device_info gains `location_from` and, for clock
+  records, `office_store_id`; trigger `trg_attendance_zt_office_store`
+  (office entries only, after enforce) measures the record against that
+  store, so a spot outside it is off site with its distance.
 - **0111, the clock-out hold per person:** `profiles.hold_clock_out boolean
   not null default true` (kept by `profiles_self_guard`);
   `set_clock_out_hold(user, hold)` for `may_correct_field` (admin, HR, own

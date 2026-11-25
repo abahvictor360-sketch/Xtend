@@ -1763,9 +1763,9 @@ Exports: `CsvImporter`
 
 ## `src/components/admin/day-corrections.tsx`
 
-Why it cannot be done now; the button is shown greyed with this.
+Where the office says the person is (0112).
 
-Exports: `FixVisit`, `DayCorrections`
+Exports: `FixVisit`, `FixStore`, `DayCorrections`
 
 ## `src/components/admin/day-photo-gallery.tsx`
 
@@ -1956,6 +1956,14 @@ Exports: `SchedulePerson`, `ScheduleChange`, `WeekToggles`, `ScheduleManager`
 0 to 100, or null when there is nothing to judge it on.
 
 Exports: `ScoreRow`, `ScoreBars`
+
+## `src/components/admin/spot-picker.tsx`
+
+Tap the map to say where the person is (0112): the store and where their
+phone last reported are drawn; the pin can be dragged. Opens on the
+store, or on the phone's last spot.
+
+Exports: `Spot`, `SpotPicker`
 
 ## `src/components/admin/staff-logins-button.tsx`
 
