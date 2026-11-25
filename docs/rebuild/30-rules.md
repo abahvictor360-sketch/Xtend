@@ -1374,6 +1374,12 @@ label and the store's own point.
   allocated stores all pinned, none within reach: the nearest). Clock-outs
   and check-outs are never refused. The test suite turns the rule off at
   the start and tests it in its own block.
+- **0111, the clock-out hold per person:** `profiles.hold_clock_out boolean
+  not null default true` (kept by `profiles_self_guard`);
+  `set_clock_out_hold(user, hold)` for `may_correct_field` (admin, HR, own
+  supervisor; active field staff), else "Not permitted";
+  `attendance_no_early_clock_out` returns early when it is false. An early
+  clock-out made while it is off is still flagged `early_clock_out`.
 - **0109, no clocking out before it is time:** `system_settings.block_early_clock_out`
   (default true; `early_clock_out_blocked()` for the app).
   `clock_out_opens_at(user)`: `clock_out_from`, else `shift_end` minus

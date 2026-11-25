@@ -2316,6 +2316,20 @@ summary notes wrap rather than truncate; below 380px the three figures stack.
 Office document rows wrap full filenames and staff details on small screens. Document downloads, marketer export buttons and activity presets/exports have a minimum 44px height. Document and marketer export links have descriptive accessible names.
 
 
+## Hold clock-out until their time (0111)
+
+- On `/admin/attendance/day` (any date), for an active merchandiser or
+  marketer and a viewer who is an admin, HR or their supervisor, above
+  **Fix today's record**: a card (log-out icon) **Hold clock-out until their
+  time** with a switch (`role="switch"`, brand when on). Text on: "On:
+  <first> cannot clock out before 18:00. Turn it off to let them clock out
+  now."; off: "Off: <first> can clock out now. Turn it on again to hold
+  their clock-out until 18:00." POST `/api/admin/clock-out-hold`
+  `{user_id, hold}` → `set_clock_out_hold`, audited
+  `staff.clock_out_hold_on|off`; turning it off pushes "You can clock out
+  now" / "<office name> has let you clock out before your clock-out time."
+  Hidden before 0111 (the column is missing).
+
 ## Fix today's record (0090)
 
 **Since 2026-11-18** the card reads: header (wrench tile, "Fix today's record", "Type what to do, or pick it below. …"); then a tinted box **Tell Xtend what to do** (sparkle icon): a text input (≤ 300, placeholder "e.g. Clock <first> out at 5pm, phone died") and **Read it**, example chips that fill the input ("Clock <first> in at 8:05, phone would not open", "Undo the clock-out, tapped by mistake", "Clock out at 5pm, phone died", for marketers "Check in at <first store>, GPS would not lock", "Ask them to clock in again with a clear selfie") and a one-line hint. **Read it** runs `parseCorrectionCommand` then `planCorrection` (Lagos now) and shows a card with a 2 px brand border: "XTEND WILL", the plan title, its lines, the warning in amber, **Do it** / **Cancel**; errors show in a red alert. Below, a 2-column grid (1 on phones) of four group cards, each a bordered rounded-2xl with an icon title — **Clock-in** (Clock them in / Clock them in again (replace); Ask them to clock in again — off: "Not clocked in yet" / "Already clocked out: clock them in yourself"), **Clock-out** (Clock them out / again (replace) — off "Not clocked in yet"; Undo the clock-out (back on shift) and Ask them to clock out again — off "Not clocked out yet"), and for marketers **Store check-in** (Check them in at a store — off "Not clocked in yet" / "Clocked out for the day" / "Still checked in at <store>"; Ask them to check in again — off "No store check-in today") and **Store check-out** (Check them out of <open store> — off "Not checked in at a store now"; Ask them to check out again — off "No store check-out today"). Each option is a 44 px full-width button; a disabled one is at 55 % with its reason under the label. Picking one opens the form below the groups (2 px brand border) with Store, **Which store visit** (for check-in/out redos), Time today and **Why (they see this)**; **Confirm** / **Cancel**.

@@ -594,7 +594,7 @@ export function StaffGuide() {
           You cannot clock out before your clock-out time. If you tap <Ui>Clock out</Ui> too early, Xtend says{' '}
           <Ui>Not time to clock out yet</Ui> and the time you can clock out from. Marketers: until then, keep
           checking in and out at your stores. If you must leave early (you are sick, an emergency), call your
-          supervisor: the office can clock you out.
+          supervisor: the office can let you clock out now, or clock you out.
         </p>
         <GuideShot
           src="/guide/staff-progress.png"

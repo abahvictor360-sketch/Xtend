@@ -51,4 +51,12 @@ check(sql.includes('It is not time to clock out yet. You can clock out from %.')
 check(/punctuality_grace_minutes/.test(sql) && CLOCK_OUT_GRACE_MINUTES === 15, 'the database and the app use the same 15 minutes')
 check(/when \(not public\.office_entry_on\(\)\)/.test(sql), 'the office can still clock someone out (0090)')
 
+const hold = readFileSync(join(__dirname, '..', 'supabase', 'migrations', '0111_clock_out_hold.sql'), 'utf8')
+check(/hold_clock_out boolean not null default true/.test(hold), 'the clock-out hold is on for everyone unless the office turns it off (0111)')
+check(/new\.hold_clock_out := old\.hold_clock_out/.test(hold), 'staff cannot turn off their own hold')
+check(/may_correct_field\(p_user\)/.test(hold), 'only an admin, HR or their own supervisor can switch it')
+check(/It is not time to clock out yet\. You can clock out from %\./.test(hold), 'with the hold on, the refusal is unchanged')
+const page = readFileSync(join(__dirname, '..', 'src', 'app', 'field', 'page.tsx'), 'utf8')
+check(/hold_clock_out !== false/.test(page), 'with the hold off, the app lets them clock out too')
+
 console.log(`\nALL ${passed} CLOCK-OUT TIME CHECKS PASSED`)

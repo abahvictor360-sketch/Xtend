@@ -1734,6 +1734,14 @@ Their profile photo (a signed link), for the map; null for initials.
 
 Exports: `TablePerson`, `AttendanceTable`
 
+## `src/components/admin/clock-out-hold-switch.tsx`
+
+"Hold clock-out until their time" (0111), on a person's day: on, they
+cannot clock out before their clock-out time; off, they can clock out
+now. The person is told when it goes off.
+
+Exports: `ClockOutHoldSwitch`
+
 ## `src/components/admin/count-requests.tsx`
 
 The role as shown: an added role's own name, or Merchandiser / Marketer.

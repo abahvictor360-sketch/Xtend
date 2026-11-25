@@ -105,7 +105,7 @@ export default async function FieldPage() {
         userId={session.userId}
         calendar={(calendar ?? []) as CalendarDay[]}
         clockOutFrom={earlyBlocked === true ? (session.profile.clock_out_from ?? null) : undefined}
-        holdEarlyClockOut={earlyBlocked === true}
+        holdEarlyClockOut={earlyBlocked === true && (session.profile as { hold_clock_out?: boolean }).hold_clock_out !== false}
       />
     </>
   )

@@ -674,6 +674,7 @@ Policies:
 | paused_at | timestamp with time zone(timestamptz) | yes |  |
 | paused_reason | text(text) | yes |  |
 | paused_flag | uuid(uuid) | yes |  |
+| hold_clock_out | boolean(bool) |  | true |
 
 Policies:
 - `profiles_admin_all` ALL to public: using `is_admin()`; check `is_admin()`
@@ -1466,7 +1467,7 @@ Policies:
 - `attendance_enforce()` → trigger · definer · 0034_stores_pinned_from_clock_in.sql
 - `attendance_integrity()` → trigger · definer · 0022_integrity_checks.sql
 - `attendance_learn_waiting_store()` → trigger · definer · 0034_stores_pinned_from_clock_in.sql
-- `attendance_no_early_clock_out()` → trigger · definer · 0109_no_early_clock_out.sql
+- `attendance_no_early_clock_out()` → trigger · definer · 0111_clock_out_hold.sql
 - `attendance_office_time()` → trigger · definer · 0090_field_corrections.sql
 - `attendance_on_site_only()` → trigger · definer · 0106_on_site_only.sql
 - `attendance_place_due()` → trigger · definer · 0045_mandatory_place_naming.sql
@@ -1671,7 +1672,7 @@ Policies:
 - `post_support_message(p_thread uuid, p_body text)` → uuid · definer · 0053_support_notifications.sql
 - `product_key(p_name text)` → text · 0021_counted_product_names.sql
 - `profiles_field_only_reporting()` → trigger · definer · 0079_security_fixes.sql
-- `profiles_self_guard()` → trigger · definer · 0108_pause_on_fake_location.sql
+- `profiles_self_guard()` → trigger · definer · 0111_clock_out_hold.sql
 - `profiles_staff_role_sync()` → trigger · definer · 0042_staff_roles.sql
 - `profiles_supervisor_check()` → trigger · definer · 0017_supervisor_manages_staff.sql
 - `punctuality_grace_minutes()` → integer · 0036_supervisor_alerts.sql
@@ -1743,6 +1744,7 @@ Policies:
 - `selfie_retention_status()` → jsonb · definer · 0091_visit_checkout_photo.sql
 - `send_message(p_staff uuid, p_body text, p_attachment jsonb)` → jsonb · definer · 0075_message_attachments.sql
 - `session_aal()` → text · definer · 0080_zero_trust.sql
+- `set_clock_out_hold(p_user uuid, p_hold boolean)` → boolean · definer · 0111_clock_out_hold.sql
 - `set_count_sheet_template(p_path text, p_file_name text)` → uuid · definer · 0035_store_count_sheets.sql
 - `set_my_avatar(p_path text)` → void · definer · 0062_user_activity.sql
 - `set_schedule_override(p_user uuid, p_day date, p_working boolean, p_note text)` → uuid · definer · 0059_schedules_leave.sql
