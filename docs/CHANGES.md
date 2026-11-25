@@ -71,6 +71,20 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-25
 
+### A retired AI model no longer stops Ask Xtend
+- **What was done:** NVIDIA has also retired `openai/gpt-oss-120b`. Now,
+  when the model you chose (or Xtend's default) has been retired, Xtend asks
+  NVIDIA (or any OpenAI-format service) which models it offers today, picks
+  the strongest one that answers, and uses it for that question and the
+  ones after. Settings → AI keys shows the swap under **Now answering**.
+- **The impact:** Ask Xtend and the staff helper keep answering when a
+  service retires a model; you can still choose the model yourself.
+- **What you need to do:** **redeploy** (your screen still shows the old
+  message, so the last fixes are not live yet). Then ask Ask Xtend again.
+  Afterwards, on Settings → AI keys, press **Test** next to the NVIDIA key
+  and type one of the models it lists under **Which AI answers**, so the
+  choice is yours rather than automatic.
+
 ### A Google Maps link now fills in the store's name and address too
 - **What was done:** on Outlets, when you paste a Google Maps link of a
   store into **Or paste a Google Maps link**, Xtend now fills in the

@@ -87,6 +87,9 @@ async function main() {
   check(read('src/app/api/admin/ai/route.ts').includes('listModels(') && read('src/app/api/admin/ai/route.ts').includes('offers now include'),
     'Test lists the models the service offers when the model is unknown or retired')
   check(!read('src/lib/ai/providers.ts').includes("defaultModel: 'meta/llama-3.3-70b-instruct'"), 'the retired NVIDIA model is no longer the default')
+  const compatNow = read('src/lib/ai/compat.ts')
+  check(/err\.status !== 404 && err\.status !== 410/.test(compatNow) && compatNow.includes('suggestModels(await listModels(conn))') && compatNow.includes('replacements.set(key, model)'),
+    'a retired or unknown model is replaced by the best current one the service offers, and remembered')
   const askRoute = read('src/app/api/admin/ask/route.ts')
   check(askRoute.includes('error instanceof AiServiceError') && askRoute.includes('aiServiceAdvice(error)'), 'Ask Xtend says what the AI service said instead of "Something went wrong"')
 

@@ -1,5 +1,6 @@
 import 'server-only'
 import type { AiConnection } from '@/lib/ai/config'
+import { suggestModels } from '@/lib/ai/providers'
 
 /**
  * Talking to OpenAI, Gemini, NVIDIA and OpenRouter, which all take the
@@ -202,7 +203,50 @@ async function post(conn: AiConnection, body: Json, timeoutMs: number): Promise<
  * over a tool shape or the answer length), tries once more with plain tool
  * shapes and a shorter answer before giving up.
  */
+/**
+ * Models a service has retired (404 or 410) and the model Xtend found to
+ * use instead, until the server restarts: "nvidia:openai/gpt-oss-120b" →
+ * "moonshotai/kimi-k2-instruct". The admin's choice on Settings → AI keys
+ * is not changed; Test there says the model is gone.
+ */
+const replacements = new Map<string, string>()
+
+/** The model actually used for a chosen one (its replacement, if retired). */
+export function modelInUse(conn: AiConnection): string {
+  return replacements.get(`${conn.provider}:${conn.model}`) ?? conn.model
+}
+
+/**
+ * Posts with the chosen model; if the service says that model is unknown
+ * or retired, asks it which models it offers now and uses the best that
+ * answers (up to three tried), and remembers it so later questions go
+ * straight there.
+ */
 async function postWithRetry(conn: AiConnection, body: Json, tools: ToolDef[], timeoutMs: number): Promise<Json> {
+  const key = `${conn.provider}:${conn.model}`
+  const known = replacements.get(key)
+  const first = known ? { ...conn, model: known } : conn
+  try {
+    return await postShaped(first, body, tools, timeoutMs)
+  } catch (err) {
+    if (!(err instanceof AiServiceError) || (err.status !== 404 && err.status !== 410)) throw err
+    if (known) replacements.delete(key)
+    const offered = suggestModels(await listModels(conn)).filter((m) => m !== conn.model && m !== known)
+    for (const model of offered.slice(0, 3)) {
+      try {
+        const data = await postShaped({ ...conn, model }, body, tools, timeoutMs)
+        replacements.set(key, model)
+        console.error(`AI model ${conn.provider} ${conn.model} is retired or unknown; using ${model} instead. Choose a model on Settings → AI keys.`)
+        return data
+      } catch (next) {
+        if (!(next instanceof AiServiceError) || next.status === null || next.status >= 500 || next.status === 401 || next.status === 403 || next.status === 429) throw next
+      }
+    }
+    throw err
+  }
+}
+
+async function postShaped(conn: AiConnection, body: Json, tools: ToolDef[], timeoutMs: number): Promise<Json> {
   try {
     return await post(conn, { ...body, ...(tools.length ? { tools: toOpenAiTools(tools, conn.provider === 'nvidia') } : {}) }, timeoutMs)
   } catch (err) {
