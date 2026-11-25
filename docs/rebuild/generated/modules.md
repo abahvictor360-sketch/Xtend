@@ -1693,13 +1693,9 @@ Exports: `AttendanceGrid`, `GridKey`
 
 ## `src/components/admin/attendance-map.tsx`
 
-Pins for every event in the current filter, with each outlet's geofence
-drawn as a circle. Leaflet is fetched from a CDN only when the map tab is
-opened, so the mobile bundle never pays for it. The map itself is made
-once (Google's or OpenStreetMap's, see map-base.tsx); a new filter only
-redraws the pins and fits the view to them.
+Text safe inside the pin's HTML (names come from people, not code).
 
-Exports: `AttendanceMap`
+Exports: `initialsOf`, `personPinHtml`, `AttendanceMap`
 
 ## `src/components/admin/attendance-overview.tsx`
 
@@ -1711,7 +1707,7 @@ Exports: `AttendanceStats`, `TodayItem`, `TodayPanel`, `WorryItem`, `WorthALook`
 
 ## `src/components/admin/attendance-table.tsx`
 
-A clock event that reached the server this long after the phone took it was saved offline.
+Their profile photo (a signed link), for the map; null for initials.
 
 Exports: `TablePerson`, `AttendanceTable`
 

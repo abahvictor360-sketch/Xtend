@@ -310,7 +310,10 @@ export default async function AdminGuidePage() {
             first (latest clock-in at the top), then those who did not; tap a column heading to sort another way. For a report of only some people, tap a <Ui>Show</Ui> button (Everyone, Clocked in, Clocked out, Still on shift, Absent), then <Ui>Export</Ui>: the file has exactly those, in the same order. Add a <Ui>Role</Ui> button (Merchandisers or Marketers) for one kind of staff only. The report carries the Xpel Beauty logo and opens with a written account of the day (who did not clock in, who was late, who clocked in away from their store, who had network trouble, who did not clock out). <Ui>Clock-ins and outs with photos</Ui> gives one row per person per day with both photos. Pick a quick range or dates, then narrow by
             person, store, team, role or kind of day. The four cards and the strip under them add it up (tap{' '}
             <Ui>How attendance is counted</Ui> under the filters for the rules); <Ui>Worth a look</Ui> names
-            repeat absences, lateness, off-site clock-ins and missing clock-outs. The calendar has one
+            repeat absences, lateness, off-site clock-ins and missing clock-outs. <Ui>Map</Ui> (next to{' '}
+            <Ui>Table</Ui>) shows every clock-in and clock-out as the person&apos;s profile photo (initials if they
+            have none) with their name underneath, a green ring when at the store and orange when not, and an{' '}
+            <Ui>IN</Ui> or <Ui>OUT</Ui> badge; tap one for the time and the distance. The calendar has one
             square per person per day; tap one, or open a row, to see the photo, the map, the distance
             from the store and the phone used, with links to Movement and Check an excuse for that day.
             A marketer&apos;s row also says how many stores they visited; open it for every store check-in

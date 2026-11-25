@@ -1,5 +1,6 @@
 import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
+import { avatarUrls } from '@/lib/avatars'
 import { Alert } from '@/components/ui/alert'
 import { AlarmClock, CalendarDays, Grid3X3, ListChecks, UserX, Users } from 'lucide-react'
 import {
@@ -64,10 +65,23 @@ export default async function AttendancePage({ searchParams }: { searchParams: P
     ),
   ).toString()
 
-  const tablePeople: Record<string, TablePerson> = Object.fromEntries(
-    people.map((p) => [p.id, { name: p.name, phone: p.phone, store: p.outletName, team: p.teamName ? `${p.teamName}’s team` : null, role: p.roleLabel }]),
-  )
   const tableRows = shown.slice(0, TABLE_MAX)
+  // Profile photos for the map's pins: only the people in the list, through
+  // the person's own session (storage rules decide whose photos they see).
+  const photos = await avatarUrls(supabase, [...new Set(tableRows.map((r) => r.userId))])
+  const tablePeople: Record<string, TablePerson> = Object.fromEntries(
+    people.map((p) => [
+      p.id,
+      {
+        name: p.name,
+        phone: p.phone,
+        store: p.outletName,
+        team: p.teamName ? `${p.teamName}’s team` : null,
+        role: p.roleLabel,
+        photo: photos.get(p.id) ?? null,
+      },
+    ]),
+  )
 
   // Store check-ins and check-outs (marketers, and anyone who visits
   // stores) for the days in the table, with both photos when a row opens.
