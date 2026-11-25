@@ -28,6 +28,9 @@ language sql as $$
 $$;
 
 select set_config('request.jwt.claims', '{"aal":"aal2"}', false);
+-- Most tests record off-site clock-ins on purpose; 0106 refuses them, so
+-- the rule is off until its own block at the end turns it on.
+update public.system_settings set block_off_site = false;
 
 -- Stands in for the app uploading a photo just now: the object exists in
 -- the signed-in person's folder, so the photo checks (migration 022) pass.
@@ -7239,6 +7242,115 @@ begin
     perform assert(true, 'ai 0104: notes over 20,000 characters are refused');
   end;
   delete from public.ai_knowledge;
+
+  -- 0106: on site only. Rolled back.
+  begin
+    declare
+      mz uuid := gen_random_uuid();
+      mk uuid := gen_random_uuid();
+      shop uuid;
+      far_shop uuid;
+      boss_id uuid := (select id from public.profiles where role = 'admin' order by created_at limit 1);
+      words text;
+      hinted text;
+      said text;
+    begin
+      update public.system_settings set block_off_site = true;
+      perform assert(public.too_far(200, 150, 30) and not public.too_far(170, 150, 30) and not public.too_far(null, 150, 10)
+                     and public.too_far(250, 150, 500) and not public.too_far(150, 150, 0),
+        'on site 0106: beyond the area, allowing up to 50 m of the phone''s accuracy');
+      perform assert(public.distance_words(420.4) = '420 m' and public.distance_words(1349) = '1.3 km', 'on site 0106: distances in words');
+
+      insert into public.outlets (name, address, lat, lng, geofence_radius_m)
+      values ('Onsite Shop', 'Allen Avenue, Ikeja', 6.6000, 3.3500, 150) returning id into shop;
+      insert into public.outlets (name, lat, lng, geofence_radius_m)
+      values ('Faraway Shop', 6.4500, 3.4500, 150) returning id into far_shop;
+      insert into auth.users (id, email) values (mz, 'onsite.mz@xpel.ng'), (mk, 'onsite.mk@xpel.ng');
+      insert into public.profiles (id, full_name, email, role, outlet_id, push_exempt)
+      values (mz, 'Onsite Merch', 'onsite.mz@xpel.ng', 'merchandiser', shop, true),
+             (mk, 'Onsite Marketer', 'onsite.mk@xpel.ng', 'marketer', null, true);
+      perform act_as(boss_id);
+      perform public.set_staff_outlets(mk, array[shop, far_shop]);
+
+      -- A merchandiser 1 km away is refused, told where to go.
+      perform act_as(mz);
+      begin
+        insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name)
+        values ('opening', 6.6090, 3.3500, 10, fresh_photo('selfies', 'mz-far.jpg'), now(), 'Somewhere');
+        perform assert(false, 'on site 0106: a clock-in 1 km away is refused');
+      exception when raise_exception then
+        get stacked diagnostics words = message_text, hinted = pg_exception_hint, said = pg_exception_detail;
+        perform assert(words like 'You are off site: 1.0 km from Onsite Shop. Go to Onsite Shop (Allen Avenue, Ikeja), then clock in there.'
+                       and hinted = 'off_site' and (said::jsonb)->'store'->>'name' = 'Onsite Shop'
+                       and ((said::jsonb)->'store'->>'lat')::numeric = 6.6,
+          'on site 0106: a clock-in 1 km away is refused, naming the store, its address and where it is');
+      end;
+      -- Inside the store it goes through.
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name)
+      values ('opening', 6.6005, 3.3500, 10, fresh_photo('selfies', 'mz-in.jpg'), now(), 'Onsite Shop');
+      perform assert(exists (select 1 from public.attendance where user_id = mz and type = 'opening' and status = 'on_site'),
+        'on site 0106: inside the store the clock-in goes through');
+      -- Clocking out away from the store is not refused.
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name)
+      values ('closing', 6.7000, 3.3500, 10, fresh_photo('selfies', 'mz-out.jpg'), now(), 'Home');
+      perform assert(exists (select 1 from public.attendance where user_id = mz and type = 'closing'),
+        'on site 0106: clocking out is never refused for being away');
+
+      -- A marketer who picked a store but stands at the other one is sent to the one picked.
+      perform act_as(mk);
+      begin
+        insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name, device_info)
+        values ('opening', 6.4500, 3.4500, 10, fresh_photo('selfies', 'mk-far.jpg'), now(), 'Faraway Shop',
+                jsonb_build_object('start_store_id', shop));
+        perform assert(false, 'on site 0106: a marketer away from the store they picked is refused');
+      exception when raise_exception then
+        get stacked diagnostics words = message_text, hinted = pg_exception_hint;
+        perform assert(words like 'You are off site:%from Onsite Shop.%clock in there.' and hinted = 'off_site',
+          'on site 0106: a marketer away from the store they picked is sent to it');
+      end;
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name, device_info)
+      values ('opening', 6.6001, 3.3501, 10, fresh_photo('selfies', 'mk-in.jpg'), now(), 'Onsite Shop',
+              jsonb_build_object('start_store_id', shop));
+      update public.store_visits set status = 'closed', departed_at = now() where user_id = mk and status = 'open';
+
+      -- A check-in at a store picked by hand, from 1 km away: refused.
+      begin
+        insert into public.store_visits (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at, selfie_path, arrived_place_name)
+        values (far_shop, 6.4590, 3.4500, 10, now(), fresh_photo('selfies', 'mk-v1.jpg'), 'Road');
+        perform assert(false, 'on site 0106: a store check-in from 1 km away is refused');
+      exception when raise_exception then
+        get stacked diagnostics words = message_text;
+        perform assert(words like 'You are off site: 1.0 km from Faraway Shop.%check in there.',
+          'on site 0106: a store check-in from 1 km away is refused, with the store');
+      end;
+      -- Not in any of their stores, none picked: sent to the nearest.
+      begin
+        insert into public.store_visits (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at, selfie_path, arrived_place_name)
+        values (6.4400, 3.4500, 10, now(), fresh_photo('selfies', 'mk-v2.jpg'), 'Road');
+        perform assert(false, 'on site 0106: a check-in in none of their stores is refused');
+      exception when raise_exception then
+        get stacked diagnostics words = message_text;
+        perform assert(words like 'You are off site:%from Faraway Shop.%', 'on site 0106: in none of their stores, they are sent to the nearest');
+      end;
+      -- At the store: it goes through.
+      insert into public.store_visits (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at, selfie_path, arrived_place_name)
+      values (far_shop, 6.4501, 3.4500, 10, now(), fresh_photo('selfies', 'mk-v3.jpg'), 'Faraway Shop');
+      perform assert(exists (select 1 from public.store_visits where user_id = mk and outlet_id = far_shop and status = 'open'),
+        'on site 0106: at the store the check-in goes through');
+
+      -- Switched off: off site is recorded, as before.
+      update public.system_settings set block_off_site = false;
+      perform act_as(mz);
+      delete from public.attendance where user_id = mz;
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name)
+      values ('opening', 6.6090, 3.3500, 10, fresh_photo('selfies', 'mz-far2.jpg'), now(), 'Somewhere');
+      perform assert(exists (select 1 from public.attendance where user_id = mz and status = 'off_site'),
+        'on site 0106: switched off, an off-site clock-in is recorded as off site');
+      raise exception 'on-site-0106-done';
+    end;
+  exception when others then
+    if sqlerrm <> 'on-site-0106-done' then raise; end if;
+  end;
 
   raise notice 'ALL RULES PASSED';
 end $$;

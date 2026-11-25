@@ -168,7 +168,12 @@ export default async function SupervisorGuidePage() {
               Days off and approved leave never count as absent. In the calendar a day off shows
               grey “–” and leave soft orange “Lv”.
             </li>
-            <li>Off site means outside the store&apos;s area; flagged means the location was unclear.</li>
+            <li>
+              Off site means outside the store&apos;s area; flagged means the location was unclear. Staff cannot clock in
+              or check in at a store from off site: Xtend tells them which store to go to and shows the way. Someone stuck
+              outside a store whose pin is wrong? You can clock them in yourself (their day page), and ask an admin to
+              fix the store&apos;s location.
+            </li>
             <li>Records cannot be changed by anyone.</li>
           </ul>
           <p>

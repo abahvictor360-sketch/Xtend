@@ -77,6 +77,14 @@ export default async function FieldPage() {
         .map(({ id, name, address, lat, lng, geofence_radius_m }) => ({ id, name, address, lat, lng, geofence_radius_m }))
     : null
 
+  // Their own stores (0106): clock-ins and check-ins from outside them are
+  // stopped before the camera opens. Not while an admin views as a role.
+  const siteStores = acting
+    ? null
+    : ((myStores ?? []) as (StartStore & { is_active: boolean })[])
+        .filter((o) => o.is_active)
+        .map(({ id, name, address, lat, lng, geofence_radius_m }) => ({ id, name, address, lat, lng, geofence_radius_m }))
+
   return (
     <>
       {((unread as number | null) ?? 0) > 0 && <MessagesBanner unread={unread as number} />}
@@ -87,6 +95,7 @@ export default async function FieldPage() {
         outlets={(outlets ?? []) as VisitOutlet[]}
         canVisitStores={showStores}
         startStores={startStores}
+        siteStores={siteStores}
         canFileReport={canFileReport}
         notificationsRequired={!session.profile.push_exempt}
         avatarUrl={photo}

@@ -49,7 +49,15 @@ function uuid() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`
 }
 
-export class PermanentJobError extends Error {}
+export class PermanentJobError extends Error {
+  /** The server's answer, when it said more than words (an off-site refusal names the store, 0106). */
+  constructor(
+    message?: string,
+    readonly body: unknown = null,
+  ) {
+    super(message)
+  }
+}
 
 /** A place is waiting to be named (045): keep the job, send it after. */
 export class NamePlaceFirstError extends Error {}
@@ -126,7 +134,7 @@ async function postJson(url: string, body: unknown) {
     if (res.status === 423) throw new NamePlaceFirstError(data.error ?? 'Add the place first')
     // 4xx means the server will never accept this payload. Do not retry it.
     if (res.status >= 400 && res.status < 500) {
-      throw new PermanentJobError(data.error ?? `Rejected (${res.status})`)
+      throw new PermanentJobError(data.error ?? `Rejected (${res.status})`, data)
     }
     throw new Error(data.error ?? `Request failed (${res.status})`)
   }

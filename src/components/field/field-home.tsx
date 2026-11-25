@@ -15,6 +15,7 @@ import { ShiftTracker } from '@/components/field/shift-tracker'
 import { usePlace } from '@/components/field/use-place'
 import { OutboxBanner } from '@/components/field/outbox-banner'
 import { NetworkNotice } from '@/components/field/network-notice'
+import type { SiteStore } from '@/lib/on-site'
 import { ClockPanel, PICK_START_STORE_EVENT } from '@/components/field/clock-panel'
 import { ClockOutPrompt } from '@/components/field/clock-out-prompt'
 import { ShiftSoonPrompt } from '@/components/field/shift-soon-prompt'
@@ -46,6 +47,7 @@ export function FieldHome({
   outlets,
   canVisitStores,
   startStores = null,
+  siteStores = null,
   canFileReport,
   notificationsRequired = true,
   avatarUrl = null,
@@ -58,6 +60,8 @@ export function FieldHome({
   canVisitStores: boolean
   /** Marketers (0101): their stores, to pick where they start the day. */
   startStores?: StartStore[] | null
+  /** Their own stores (0106): clock-ins and check-ins from outside them are stopped. */
+  siteStores?: SiteStore[] | null
   /** Overrides the day's own answer when an admin views as a role. */
   canFileReport?: boolean
   notificationsRequired?: boolean
@@ -205,6 +209,7 @@ export function FieldHome({
           day={day}
           notificationsRequired={notificationsRequired}
           startStores={startStores}
+          siteStores={siteStores}
           currentFix={gate.fix ? { lat: gate.fix.lat, lng: gate.fix.lng } : null}
         />
       </LocationGate>
@@ -256,6 +261,7 @@ export function FieldHome({
             currentFix={gate.fix ? { lat: gate.fix.lat, lng: gate.fix.lng } : null}
             onShift={onShift}
             ask={visitAsk}
+            siteStores={siteStores}
           />
         </LocationGate>
         </div>

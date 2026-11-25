@@ -978,6 +978,29 @@ $$;
 
 
 --
+-- Name: attendance_on_site_only(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.attendance_on_site_only() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.type <> 'opening' or auth.uid() is null or auth.uid() <> new.user_id or not public.off_site_blocked() then
+    return new;
+  end if;
+  if new.outlet_id is null or new.distance_m is null or new.accuracy_m > 100 then
+    return new;
+  end if;
+  if public.too_far(new.distance_m, new.outlet_radius_m, new.accuracy_m) then
+    perform public.refuse_off_site(new.outlet_id, new.distance_m, new.outlet_radius_m, 'clock in');
+  end if;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: attendance_place_due(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2784,6 +2807,18 @@ CREATE FUNCTION public.distance_metres(lat1 double precision, lng1 double precis
     cos(radians(lat1)) * cos(radians(lat2)) *
     power(sin(radians(lng2 - lng1) / 2), 2)
   ));
+$$;
+
+
+--
+-- Name: distance_words(double precision); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.distance_words(p_m double precision) RETURNS text
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  select case when p_m >= 1000 then to_char(round((p_m / 1000.0)::numeric, 1), 'FM999990.0') || ' km'
+              else round(p_m)::bigint || ' m' end;
 $$;
 
 
@@ -4977,6 +5012,18 @@ $$;
 
 
 --
+-- Name: off_site_blocked(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.off_site_blocked() RETURNS boolean
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select coalesce((select s.block_off_site from public.system_settings s where s.id), true);
+$$;
+
+
+--
 -- Name: office_act_as(uuid, uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -6535,6 +6582,31 @@ CREATE FUNCTION public.record_selfie_sweep(p_result jsonb) RETURNS void
     SET search_path TO 'public'
     AS $$
   update public.job_runs set last_result = p_result where job = 'purge_selfies';
+$$;
+
+
+--
+-- Name: refuse_off_site(uuid, double precision, double precision, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.refuse_off_site(p_store uuid, p_distance double precision, p_radius double precision, p_task text) RETURNS void
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  o record;
+  words text;
+begin
+  select x.id, x.name, x.address, x.lat, x.lng into o from public.outlets x where x.id = p_store;
+  words := format('You are off site: %s from %s. Go to %s%s, then %s there.',
+                  public.distance_words(p_distance), o.name, o.name,
+                  coalesce(' (' || nullif(btrim(o.address), '') || ')', ''), p_task);
+  raise exception '%', words
+    using hint = 'off_site',
+          detail = jsonb_build_object(
+            'store', jsonb_build_object('id', o.id, 'name', o.name, 'address', o.address, 'lat', o.lat, 'lng', o.lng),
+            'distance_m', round(p_distance), 'radius_m', coalesce(p_radius, 150))::text;
+end;
 $$;
 
 
@@ -8813,6 +8885,53 @@ $$;
 
 
 --
+-- Name: store_visit_on_site_only(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.store_visit_on_site_only() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  near record;
+begin
+  if auth.uid() is null or auth.uid() <> new.user_id or not public.off_site_blocked() then
+    return new;
+  end if;
+  if new.arrived_accuracy_m > 100 then
+    return new;
+  end if;
+  if new.outlet_id is not null then
+    if new.arrived_distance_m is not null
+       and public.too_far(new.arrived_distance_m, new.outlet_radius_m, new.arrived_accuracy_m) then
+      perform public.refuse_off_site(new.outlet_id, new.arrived_distance_m, new.outlet_radius_m, 'check in');
+    end if;
+    return new;
+  end if;
+  -- Not in any of their stores: the nearest one, unless one of theirs is
+  -- still waiting for its location (they may be standing in it).
+  if public.has_allocated_stores(new.user_id)
+     and not exists (select 1 from public.outlets x
+                     where x.id in (select f.outlet_id from public.outlets_for_user(new.user_id) f)
+                       and x.is_active and x.lat is null) then
+    select x.id, x.geofence_radius_m,
+           public.distance_metres(new.arrived_lat, new.arrived_lng, x.lat, x.lng) as d
+      into near
+    from public.outlets x
+    where x.id in (select f.outlet_id from public.outlets_for_user(new.user_id) f)
+      and x.is_active and x.lat is not null
+    order by 3
+    limit 1;
+    if near.id is not null and public.too_far(near.d, near.geofence_radius_m, new.arrived_accuracy_m) then
+      perform public.refuse_off_site(near.id, near.d, near.geofence_radius_m, 'check in');
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+
+--
 -- Name: store_visits_today(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9196,6 +9315,18 @@ CREATE FUNCTION public.text_is_clean(p_text text) RETURNS boolean
     p_text !~ '[\x01-\x08\x0b\x0c\x0e-\x1f\x7f]'
     and p_text !~* '(https?://|www\.|\m[a-z0-9-]{2,}\.(com|net|org|ng|io|co|xyz|info|biz|me|link|click|top|site|online|shop|app|ru|cn)\M)'
   );
+$$;
+
+
+--
+-- Name: too_far(double precision, double precision, double precision); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.too_far(p_distance double precision, p_radius double precision, p_accuracy double precision) RETURNS boolean
+    LANGUAGE sql IMMUTABLE
+    AS $$
+  select p_distance is not null
+     and p_distance > coalesce(p_radius, 150) + least(greatest(coalesce(p_accuracy, 0), 0), 50);
 $$;
 
 
@@ -12036,9 +12167,17 @@ CREATE TABLE public.system_settings (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     follow_max_sessions integer DEFAULT 20 NOT NULL,
     mfa_roles public.user_role[] DEFAULT '{admin,hr}'::public.user_role[] NOT NULL,
+    block_off_site boolean DEFAULT true NOT NULL,
     CONSTRAINT system_settings_follow_max_sessions_check CHECK (((follow_max_sessions >= 1) AND (follow_max_sessions <= 200))),
     CONSTRAINT system_settings_id_check CHECK (id)
 );
+
+
+--
+-- Name: COLUMN system_settings.block_off_site; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.system_settings.block_off_site IS 'Refuse clock-ins and store check-ins made outside the store (0106).';
 
 
 --
@@ -14190,6 +14329,13 @@ CREATE TRIGGER trg_attendance_timing_flag AFTER INSERT ON public.attendance FOR 
 
 
 --
+-- Name: attendance trg_attendance_zx_on_site; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_attendance_zx_on_site BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT public.office_entry_on())) EXECUTE FUNCTION public.attendance_on_site_only();
+
+
+--
 -- Name: attendance trg_attendance_zy_office_time; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -14383,6 +14529,13 @@ CREATE TRIGGER trg_store_visit_enforce BEFORE INSERT ON public.store_visits FOR 
 --
 
 CREATE TRIGGER trg_store_visit_no_departure_photo BEFORE INSERT ON public.store_visits FOR EACH ROW EXECUTE FUNCTION public.store_visit_no_departure_photo();
+
+
+--
+-- Name: store_visits trg_store_visit_on_site; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_store_visit_on_site BEFORE INSERT ON public.store_visits FOR EACH ROW WHEN ((NOT public.office_entry_on())) EXECUTE FUNCTION public.store_visit_on_site_only();
 
 
 --
@@ -16937,6 +17090,13 @@ REVOKE ALL ON FUNCTION public.attendance_office_time() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION attendance_on_site_only(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.attendance_on_site_only() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION attendance_place_due(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -17964,6 +18124,15 @@ GRANT ALL ON FUNCTION public.notification_sent_by_me(p_notification uuid) TO ser
 
 
 --
+-- Name: FUNCTION off_site_blocked(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.off_site_blocked() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.off_site_blocked() TO authenticated;
+GRANT ALL ON FUNCTION public.off_site_blocked() TO service_role;
+
+
+--
 -- Name: FUNCTION office_act_as(p_user uuid, p_actor uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -18293,6 +18462,13 @@ GRANT ALL ON FUNCTION public.record_retention_purge(p_result jsonb) TO service_r
 
 REVOKE ALL ON FUNCTION public.record_selfie_sweep(p_result jsonb) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.record_selfie_sweep(p_result jsonb) TO service_role;
+
+
+--
+-- Name: FUNCTION refuse_off_site(p_store uuid, p_distance double precision, p_radius double precision, p_task text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.refuse_off_site(p_store uuid, p_distance double precision, p_radius double precision, p_task text) FROM PUBLIC;
 
 
 --
@@ -18871,6 +19047,13 @@ REVOKE ALL ON FUNCTION public.store_visit_close_stale() FROM PUBLIC;
 --
 
 REVOKE ALL ON FUNCTION public.store_visit_enforce() FROM PUBLIC;
+
+
+--
+-- Name: FUNCTION store_visit_on_site_only(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.store_visit_on_site_only() FROM PUBLIC;
 
 
 --

@@ -881,6 +881,18 @@ export default async function AdminGuidePage() {
             180 days.
           </p>
           <p>
+            <Ui>On site only</Ui>: nobody can clock in, or check in at a store, from outside the store. The phone
+            stops them before the camera opens and shows <Ui>You are off site</Ui> with the store to go to (their
+            nearest store, or the store a marketer picked), how far it is, and directions in Google Maps; the
+            server refuses it anyway. The phone&apos;s accuracy gets up to 50 m of benefit of the doubt. Clocking out
+            and checking out are never refused, nor are stores still waiting for their location or entries the
+            office makes. A store pinned in the wrong place stops everyone there, so check each pin with{' '}
+            <Ui>Check on Google Maps</Ui>; until it is fixed, a supervisor can clock people in from their day page.
+            To switch the rule off, run{' '}
+            <code>update public.system_settings set block_off_site = false;</code> in Supabase (true turns it back
+            on).
+          </p>
+          <p>
             <Ui>Working hours</Ui> belong to each person, not the store: on <Ui>Staff</Ui>, <Ui>Edit details</Ui>{' '}
             sets <Ui>Clock in by</Ui> and <Ui>Day ends at</Ui> (08:00–18:00 unless changed; when this
             changed, everyone kept their home store&apos;s times). A marketer due at 09:00 is late after 09:00

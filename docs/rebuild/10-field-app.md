@@ -1978,6 +1978,24 @@ on the line, move near a door or window or use Wi-Fi, Try again); location
 clock-in's message ends "To send it sooner: check Mobile data is on and you
 have data, then move near the door or a window."
 
+**On site only (0106).** The field page passes `siteStores` (active
+`my_outlets`: id, name, address, lat, lng, radius; null when an admin views
+as a role) to ClockPanel and StoreVisits. After the fix and before the
+camera: a clock-in is measured (`offSite` in `src/lib/on-site.ts`) against
+the marketer's picked start store, else the nearest of their stores (no
+verdict if any is unpinned); a store check-in against the store picked by
+hand, else the nearest of their stores. Too far (beyond the radius plus up
+to 50 m of accuracy) opens `OffSiteSheet`: "You are off site" / "You are
+<d> from <store>. You need to be at the store before you can clock in."; a
+"Go to" card (name, address); steps (go there, tap Directions; go inside;
+tap I am at the store and try again); **Directions** (Google Maps
+`dir/?api=1&destination=lat,lng`, new tab), **I am at the store** (retry:
+the start-store picker for marketers, else clock in again; check-in again
+for visits); "In the store but still see this? Step near the door or a
+window so your phone finds you, then try again. If it keeps happening, call
+your supervisor."; the staff guide link. A server refusal (422 `off_site`)
+opens the same sheet (clock-ins through `PermanentJobError.body`).
+
 ### 11.5 Staff guide (`/field/guide`, public `/guide`)
 
 `StaffGuide` (`src/components/staff-guide.tsx`) inside a sheet "How to use

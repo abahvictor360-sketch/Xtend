@@ -14,6 +14,8 @@ import { deviceInfo } from '@/lib/device'
 import { GeoBlocked, haversineMetres, positionCheck, requireFix, type Fix, type SampledFix } from '@/lib/geo'
 import { currentNetwork, isNetworkError, problemFromGeo, problemFromMessage, type GuideProblem } from '@/lib/field-guide'
 import { GuideSheet } from '@/components/field/guide-sheet'
+import { OffSiteSheet } from '@/components/field/off-site-sheet'
+import { offSite as offSiteFrom, offSiteFromServer, type OffSite, type SiteStore } from '@/lib/on-site'
 import { processSelfie } from '@/lib/image'
 import { supabase } from '@/lib/supabase/client'
 import { checkPhoto } from '@/lib/offline/sync'
@@ -153,8 +155,11 @@ export function StoreVisits({
   currentFix,
   onShift = true,
   ask = null,
+  siteStores = null,
 }: {
   outlets: VisitOutlet[]
+  /** Their own stores (0106): checking in from outside them is stopped before the camera. */
+  siteStores?: SiteStore[] | null
   visits: VisitRow[]
   currentFix: { lat: number; lng: number } | null
   /** Clocked in and not yet clocked out today: checking in at a store needs it. */
@@ -187,6 +192,11 @@ export function StoreVisits({
   // The step-by-step pop-up when the location is in the way (field-guide).
   const [guide, setGuide] = useState<GuideProblem | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  // "You are off site" (0106): the store to go to, and what to retry.
+  const [offSite, setOffSite] = useState<OffSite | null>(null)
+  const [offSiteOutlet, setOffSiteOutlet] = useState<VisitOutlet | null>(null)
+  const sites = useRef<SiteStore[] | null>(siteStores)
+  sites.current = siteStores
 
   // Nearest store first: the one they are standing in should be the easy tap.
   const sorted = useMemo(() => {
@@ -222,6 +232,16 @@ export function StoreVisits({
     try {
       setBusy('Getting your location')
       const fix = await requireFix()
+
+      // 0106: not at the store, no check-in: the one they picked, else the
+      // nearest of their own stores. Said now, before the selfie.
+      const away = outlet ? offSiteFrom(fix, [], outlet) : sites.current?.length ? offSiteFrom(fix, sites.current) : null
+      if (away) {
+        setOffSiteOutlet(outlet)
+        setOffSite(away)
+        setPicking(false)
+        return
+      }
 
       setBusy('Naming the place')
       const place = await namePlace(fix.lat, fix.lng)
@@ -292,6 +312,13 @@ export function StoreVisits({
           if (data.code === 'visit_open' && data.visit) {
             setStuck(data.visit as VisitRow)
             router.refresh()
+          }
+          // 0106: not at the store: where to go, not an error.
+          const away = offSiteFromServer(data)
+          if (away) {
+            setOffSiteOutlet(outlet)
+            setOffSite(away)
+            return
           }
           setError(data.error ?? 'That check-in did not go through.')
           // The server's refusal, explained step by step (field-guide).
@@ -458,6 +485,12 @@ export function StoreVisits({
 
       {error && <Alert variant="destructive">{error}</Alert>}
       {notice && <Alert variant="success">{notice}</Alert>}
+      <OffSiteSheet
+        offSite={offSite}
+        task="check in"
+        onClose={() => setOffSite(null)}
+        onRetry={() => void beginCheckIn(offSiteOutlet)}
+      />
       <GuideSheet
         problem={guide}
         task={open ? 'check out of the store' : 'check in at the store'}

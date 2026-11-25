@@ -15,6 +15,8 @@ import { Alert } from '@/components/ui/alert'
 import { GuideSheet } from '@/components/field/guide-sheet'
 import { currentNetwork, isNetworkError, problemFromGeo, problemFromMessage, type GuideProblem } from '@/lib/field-guide'
 import { StartStoreSheet, type StartStore } from '@/components/field/start-store-sheet'
+import { OffSiteSheet } from '@/components/field/off-site-sheet'
+import { offSite as offSiteFrom, offSiteFromServer, type OffSite, type SiteStore } from '@/lib/on-site'
 import { processSelfie } from '@/lib/image'
 import { deviceInfo } from '@/lib/device'
 import { nativeDeviceSignals } from '@/lib/native'
@@ -130,6 +132,7 @@ export function ClockPanel({
   day,
   notificationsRequired = true,
   startStores = null,
+  siteStores = null,
   currentFix = null,
 }: {
   day: DayState
@@ -140,6 +143,8 @@ export function ClockPanel({
    * store they are at, and checks them in there. Null for everyone else.
    */
   startStores?: StartStore[] | null
+  /** Their own stores (0106): a clock-in from outside them is stopped before the camera. */
+  siteStores?: SiteStore[] | null
   currentFix?: { lat: number; lng: number } | null
 }) {
   const router = useRouter()
@@ -173,6 +178,10 @@ export function ClockPanel({
   const startStore = useRef<StartStore | null>(null)
   const [startStoreName, setStartStoreName] = useState<string | null>(null)
   const [outcome, setOutcome] = useState<Outcome | null>(null)
+  // "You are off site" (0106): the store to go to, until they are there.
+  const [offSite, setOffSite] = useState<OffSite | null>(null)
+  const sites = useRef<SiteStore[] | null>(siteStores)
+  sites.current = siteStores
   // Clock-ins and clock-outs made with no signal that the server then
   // refused: told here, since the saved copy has been deleted by then.
   const [notices, setNotices] = useState<string[]>([])
@@ -227,6 +236,16 @@ export function ClockPanel({
     try {
       const fix = await requireFix()
       if (run !== startRun.current) return
+      // 0106: not at the store, no clock-in. Said now, before the selfie; a
+      // marketer is measured against the store they picked.
+      if (type === 'opening' && sites.current) {
+        const away = offSiteFrom(fix, sites.current, startStore.current)
+        if (away) {
+          setOpening(null)
+          setOffSite(away)
+          return
+        }
+      }
       // Name the place while they frame the photo; it is not needed to shoot.
       const lookup = reverseGeocode(fix.lat, fix.lng)
       placeLookup.current = lookup
@@ -462,6 +481,9 @@ export function ClockPanel({
           setError(err.message)
           setGuide(problemFromGeo(err.reason, currentNetwork()))
           setGuideRetry(type)
+        } else if (err instanceof PermanentJobError && offSiteFromServer(err.body)) {
+          // 0106: the server says they are not at the store: where to go.
+          setOffSite(offSiteFromServer(err.body))
         } else {
           const message = err instanceof Error ? err.message : 'That did not go through. Try again.'
           setError(message)
@@ -502,6 +524,12 @@ export function ClockPanel({
         onClose={() => setGuide(null)}
         onRetry={guideRetry ? () => (guideRetry === 'opening' && startStores ? setPicking(true) : void start(guideRetry)) : undefined}
         onPickStore={startStores ? () => setPicking(true) : undefined}
+      />
+      <OffSiteSheet
+        offSite={offSite}
+        task="clock in"
+        onClose={() => setOffSite(null)}
+        onRetry={() => (startStores ? setPicking(true) : void start('opening'))}
       />
       {picking && startStores && (
         <StartStoreSheet

@@ -1334,6 +1334,19 @@ label and the store's own point.
   unknown or inactive store refuses the whole call and changes nothing.
   Every call writes an `audit_log` row `staff.allocate_outlets` directly
   (supervisors may call it).
+- **0106, on site only:** `system_settings.block_off_site boolean default
+  true`; `off_site_blocked()` (definer). `too_far(d, radius, accuracy)` =
+  d not null and d > coalesce(radius,150) + least(greatest(accuracy,0),50).
+  `distance_words` ("420 m", "1.3 km"). `refuse_off_site(store, d, radius,
+  task)` raises "You are off site: <d> from <name>. Go to <name>[ (<address>)],
+  then <task> there." with hint `off_site` and detail JSON {store {id, name,
+  address, lat, lng}, distance_m, radius_m}. BEFORE INSERT
+  `trg_attendance_zx_on_site` (when not office entry; openings by the person
+  themselves; skipped with no outlet, no distance or accuracy > 100) and
+  `trg_store_visit_on_site` (picked/recognised store too far, or, with
+  allocated stores all pinned, none within reach: the nearest). Clock-outs
+  and check-outs are never refused. The test suite turns the rule off at
+  the start and tests it in its own block.
 - **0105, a clock-out window:** `profiles.clock_out_from time` (null;
   constraint `profiles_clock_out_window`: null, or after `shift_start` and
   ≤ `shift_end`, not valid for old rows). `profiles_self_guard` keeps it

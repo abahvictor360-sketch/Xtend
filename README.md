@@ -127,6 +127,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0103_close_public_key.sql               # the public (anon) key opens nothing; "signed in" rules need active staff
    supabase/migrations/0104_ai_knowledge.sql                   # "What the AI should know": the office's notes for the staff helper and Ask Xtend
    supabase/migrations/0105_clock_out_window.sql               # "Can clock out from": a time from which clocking out is not early
+   supabase/migrations/0106_on_site_only.sql                   # on site only: no clock-in or store check-in from outside the store
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):
