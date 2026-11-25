@@ -769,6 +769,23 @@ your first store is. Only the office can change your hours." With a
 clock-out window (0105, `profiles.clock_out_from`) the line reads "… first
 store is. You can clock out from 18:00. Only the office …"
 
+**No clocking out before it is time (0109).** `src/app/field/page.tsx` asks
+`early_clock_out_blocked()` (missing or false: nothing held back) and passes
+`clockOutFrom` and `holdEarlyClockOut` to `FieldHome`, which works out
+`clockOutOpensAt(shiftEnd, clockOutFrom)` (`src/lib/clock-out-time.ts`:
+the window, else 15 minutes before the end) and hands it to `ClockPanel`.
+Tapping **Clock out** (or the Home prompt) before that time, on today's
+date, opens `TooEarlySheet` before the location and the camera: title "Not
+time to clock out yet", `tooEarlyWords` ("It is not time to clock out yet.
+You can clock out from 18:00." then, for a merchandiser, "Until then, keep
+working at your store."; for a marketer, "Until then, check in and check
+out at your stores." or, checked in, "You are checked in at <store>: check
+out of it when you leave, then check in at your next store."), a tinted box
+"You can clock out from" / the time, and buttons **Check out of <store>** or
+**Check in at a store** (marketers: opens the Stores tab) and **OK**. The
+server's refusal (422 `{code:'too_early', opens_at}`) opens the same sheet.
+The Clock out row reads "From 18:00" until then.
+
 ### 5.2a The guide: "Your next step" and the fix-it pop-up
 
 - **Your next step** (`today-focus.tsx`, rule in `src/lib/next-step.ts`,

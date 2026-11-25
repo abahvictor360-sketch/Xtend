@@ -474,6 +474,14 @@ history as an automatic alert. Never throws.
 
 Exports: `flushClockOutReminders`
 
+## `src/lib/clock-out-time.ts`
+
+No clocking out before it is time (0109). Pure, so
+scripts/check-clock-out-time.ts can test it; the database applies the
+same rule (clock_out_opens_at) and has the last word.
+
+Exports: `CLOCK_OUT_GRACE_MINUTES`, `clockOutOpensAt`, `lagosClock`, `tooEarlyToClockOut`, `tooEarlyWords`, `tooEarlyFromServer`
+
 ## `src/lib/count-sheet.ts`
 
 The Xpel stock count sheet as an Excel file, laid out like Xpel's own
@@ -1003,7 +1011,7 @@ Exports: `WatcherAlert`, `notifyWatchers`, `notifyUsers`
 Off site (0106): the database refused the clock-in or check-in and named
 the store to go to. Passed on with the store, so the app can show the way.
 
-Exports: `offSiteRefusal`
+Exports: `offSiteRefusal`, `tooEarlyRefusal`
 
 ## `src/lib/offline/db.ts`
 
@@ -2373,6 +2381,14 @@ rules remain in ClockPanel; store check-ins and check-outs are started in
 StoreVisits through `onAction`.
 
 Exports: `TodayFocus`
+
+## `src/components/field/too-early-sheet.tsx`
+
+"It is not time to clock out yet" (0109): pops up when someone taps Clock
+out before their clock-out time. A marketer is offered their store work
+instead: check out of the store they are in, or check in at the next one.
+
+Exports: `TooEarlySheet`
 
 ## `src/components/field/use-dashboard-refresh.ts`
 

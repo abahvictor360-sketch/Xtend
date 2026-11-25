@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { offSiteRefusal } from '@/lib/off-site-refusal'
+import { offSiteRefusal, tooEarlyRefusal } from '@/lib/off-site-refusal'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage, PAUSED_MESSAGE } from '@/lib/auth'
 import { notifyWatchers } from '@/lib/notify'
@@ -85,6 +85,8 @@ export async function POST(request: Request) {
       }
       const offSite = offSiteRefusal(error)
       if (offSite) return offSite
+      const tooEarly = tooEarlyRefusal(error)
+      if (tooEarly) return tooEarly
       if (error.message.includes('Invalid capture timestamp')) {
         return Response.json(
           { error: 'That capture is too old or your phone clock is wrong. Try again now.' },

@@ -157,7 +157,8 @@ export default async function SupervisorGuidePage() {
               Late means after the person&apos;s own clock-in time, wherever they clock in. You can change your
               team&apos;s hours on <Ui>Staff</Ui>, <Ui>Edit details</Ui> (<Ui>Clock in by</Ui>,{' '}
               <Ui>Day ends at</Ui> and, if you like, <Ui>Can clock out from</Ui>: clocking out from then is not
-              early).
+              early). Your team cannot clock out before that time; if someone must leave early, clock them out
+              with <Ui>Fix today&apos;s record</Ui> on their day.
             </li>
             <li>
               Xtend reminds your team 5 minutes before their shift starts (if they have not clocked in on

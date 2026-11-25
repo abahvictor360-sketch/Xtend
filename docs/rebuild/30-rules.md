@@ -1363,6 +1363,18 @@ label and the store's own point.
   allocated stores all pinned, none within reach: the nearest). Clock-outs
   and check-outs are never refused. The test suite turns the rule off at
   the start and tests it in its own block.
+- **0109, no clocking out before it is time:** `system_settings.block_early_clock_out`
+  (default true; `early_clock_out_blocked()` for the app).
+  `clock_out_opens_at(user)`: `clock_out_from`, else `shift_end` minus
+  `punctuality_grace_minutes()` (15). BEFORE INSERT trigger
+  `trg_attendance_zw_clock_out_time` (`when (not office_entry_on())`, so
+  office clock-outs, 0090, go through; only the person's own clock-out):
+  a closing whose `least(coalesce(client_captured_at, now()), now())` is
+  before `attendance_date + opens` (Lagos) raises "It is not time to clock
+  out yet. You can clock out from HH:MM." hint `too_early`, detail
+  `{"opens_at":"HH:MM"}`; `/api/attendance` answers 422 `{error, code:
+  'too_early', opens_at}` (`tooEarlyRefusal`). Tests turn it off at the start
+  and test it in their own block.
 - **0105, a clock-out window:** `profiles.clock_out_from time` (null;
   constraint `profiles_clock_out_window`: null, or after `shift_start` and
   ≤ `shift_end`, not valid for old rows). `profiles_self_guard` keeps it
