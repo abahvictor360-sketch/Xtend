@@ -32,6 +32,8 @@ interface Draft {
   /** Their working hours, wherever they clock in (0100). */
   shift_start: string
   shift_end: string
+  /** From when they may clock out without it being early (0105); '' for none. */
+  clock_out_from: string
 }
 
 /** 'all', a built-in role, or "custom:<id>". */
@@ -46,10 +48,17 @@ const EMPTY: Draft = {
   supervisor_id: '',
   shift_start: '08:00',
   shift_end: '18:00',
+  clock_out_from: '',
 }
 
 /** "08:00:00" → "08:00". */
 const hhmm = (t: string | null | undefined, fallback: string) => (t ?? fallback).slice(0, 5)
+
+/** The optional clock-out window falls after the start and no later than the end (0105). */
+function windowProblem(start: string, end: string, from: string): string | null {
+  if (!from) return null
+  return from > start && from <= end ? null : '“Can clock out from” must be after the start of the day and no later than its end.'
+}
 
 export interface SupervisorOption {
   id: string
@@ -130,6 +139,7 @@ export function StaffManager({
     phone: string
     shift_start: string
     shift_end: string
+    clock_out_from: string
   } | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
   // Someone with records: delete them for good after a typed confirmation (0098).
@@ -196,6 +206,11 @@ export function StaffManager({
       setError('The clock-out time must be after the clock-in time.')
       return
     }
+    const draftWindow = windowProblem(draft.shift_start, draft.shift_end, draft.clock_out_from)
+    if (draftWindow) {
+      setError(draftWindow)
+      return
+    }
     setBusy(true)
 
     try {
@@ -211,6 +226,7 @@ export function StaffManager({
           supervisor_id: draft.supervisor_id || null,
           shift_start: draft.shift_start,
           shift_end: draft.shift_end,
+          clock_out_from: draft.clock_out_from || null,
         }),
       })
       const data = await res.json()
@@ -238,6 +254,7 @@ export function StaffManager({
       phone: person.phone ?? '',
       shift_start: hhmm(person.shift_start, '08:00'),
       shift_end: hhmm(person.shift_end, '18:00'),
+      clock_out_from: person.clock_out_from ? person.clock_out_from.slice(0, 5) : '',
     })
   }
 
@@ -257,10 +274,22 @@ export function StaffManager({
       setError('The clock-out time must be after the clock-in time.')
       return
     }
-    if (details.shift_start !== hhmm(person.shift_start, '08:00') || details.shift_end !== hhmm(person.shift_end, '18:00')) {
-      // Both together, so the server can check the day ends after it starts.
+    const detailsWindow = windowProblem(details.shift_start, details.shift_end, details.clock_out_from)
+    if (detailsWindow) {
+      setError(detailsWindow)
+      return
+    }
+    const windowChanged = details.clock_out_from !== (person.clock_out_from ? person.clock_out_from.slice(0, 5) : '')
+    if (
+      windowChanged ||
+      details.shift_start !== hhmm(person.shift_start, '08:00') ||
+      details.shift_end !== hhmm(person.shift_end, '18:00')
+    ) {
+      // Together, so the server can check the day ends after it starts and
+      // the clock-out window falls inside it.
       changes.shift_start = details.shift_start
       changes.shift_end = details.shift_end
+      if (windowChanged) changes.clock_out_from = details.clock_out_from || null
     }
     if (Object.keys(changes).length === 0) {
       setDetails(null)
@@ -429,7 +458,7 @@ export function StaffManager({
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="edit-end">Clock out from</Label>
+                <Label htmlFor="edit-end">Day ends at</Label>
                 <Input
                   id="edit-end"
                   type="time"
@@ -438,9 +467,20 @@ export function StaffManager({
                   onChange={(e) => setDetails({ ...details, shift_end: e.target.value })}
                 />
               </div>
+              <div className="space-y-1">
+                <Label htmlFor="edit-leave">Can clock out from (optional)</Label>
+                <Input
+                  id="edit-leave"
+                  type="time"
+                  value={details.clock_out_from}
+                  onChange={(e) => setDetails({ ...details, clock_out_from: e.target.value })}
+                />
+              </div>
               <p className="text-xs text-muted-foreground sm:col-span-3">
                 Their working hours apply wherever they clock in: a marketer due at 09:00 is late after 09:00 at any
-                store.
+                store. <strong>Can clock out from</strong>: clocking out any time from then is not early (for example
+                18:00 for a day ending 18:30). Leave it empty and clocking out more than 15 minutes before the end is
+                early.
               </p>
               <div className="flex gap-2 sm:col-span-3">
                 <Button type="submit" disabled={busy}>
@@ -602,13 +642,22 @@ export function StaffManager({
                 />
               </div>
               <div className="space-y-1">
-                <Label htmlFor="new-end">Clock out from</Label>
+                <Label htmlFor="new-end">Day ends at</Label>
                 <Input
                   id="new-end"
                   type="time"
                   required
                   value={draft.shift_end}
                   onChange={(e) => setDraft({ ...draft, shift_end: e.target.value })}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="new-leave">Can clock out from (optional)</Label>
+                <Input
+                  id="new-leave"
+                  type="time"
+                  value={draft.clock_out_from}
+                  onChange={(e) => setDraft({ ...draft, clock_out_from: e.target.value })}
                 />
               </div>
               <div className="sm:col-span-2 lg:col-span-5">

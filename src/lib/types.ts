@@ -40,6 +40,8 @@ export interface Profile {
   /** When their working day starts and ends, wherever they clock in (0100). */
   shift_start?: string
   shift_end?: string
+  /** From when they may clock out without it being early (0105); null: none. */
+  clock_out_from?: string | null
   created_at: string
   updated_at: string
 }

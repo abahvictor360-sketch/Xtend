@@ -1334,6 +1334,13 @@ label and the store's own point.
   unknown or inactive store refuses the whole call and changes nothing.
   Every call writes an `audit_log` row `staff.allocate_outlets` directly
   (supervisors may call it).
+- **0105, a clock-out window:** `profiles.clock_out_from time` (null;
+  constraint `profiles_clock_out_window`: null, or after `shift_start` and
+  ≤ `shift_end`, not valid for old rows). `profiles_self_guard` keeps it
+  too. `attendance_punctuality`: a clock-out before `clock_out_from` (by
+  more than 0 whole minutes) is `early_clock_out` "Clocked out <n> early
+  [at <store>] (they may clock out from HH:MM)"; with no window, as 0100
+  (more than 15 minutes before `shift_end`).
 - **0104, what the AI should know:** table `ai_knowledge` (`id boolean
   primary key default true check (id)`, so one row; `body text not null
   default ''` ≤ 20,000 characters; `updated_at`; `updated_by` → profiles set

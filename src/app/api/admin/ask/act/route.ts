@@ -105,7 +105,11 @@ export async function POST(request: Request) {
           const r = await call(
             updateUser as Handler,
             `/api/admin/users/${id}`,
-            { shift_start: action.payload.shift_start, shift_end: action.payload.shift_end },
+            {
+              shift_start: action.payload.shift_start,
+              shift_end: action.payload.shift_end,
+              ...(action.payload.clock_out_from ? { clock_out_from: action.payload.clock_out_from } : {}),
+            },
             { id },
             'PATCH',
           )
@@ -113,7 +117,7 @@ export async function POST(request: Request) {
           else firstError ??= r.error
         }
         result = done
-          ? { ok: true, detail: `Hours ${action.payload.shift_start}–${action.payload.shift_end} set for ${done} ${done === 1 ? 'person' : 'people'}.${firstError ? ` Not all: ${firstError}` : ''}` }
+          ? { ok: true, detail: `Hours ${action.payload.shift_start}–${action.payload.shift_end}${action.payload.clock_out_from ? ` (can clock out from ${action.payload.clock_out_from})` : ''} set for ${done} ${done === 1 ? 'person' : 'people'}.${firstError ? ` Not all: ${firstError}` : ''}` }
           : { ok: false, detail: firstError ?? 'No hours were set.' }
         break
       }

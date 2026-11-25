@@ -37,7 +37,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0097_allocate_from_store.sql`;
    - `supabase/migrations/0098_delete_for_good.sql`;
    - `supabase/migrations/0103_close_public_key.sql`;
-   - `supabase/migrations/0104_ai_knowledge.sql`.
+   - `supabase/migrations/0104_ai_knowledge.sql`;
+   - `supabase/migrations/0105_clock_out_window.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18;
    0099, 0100, 0101 and 0102 are done: you ran them on 2026-11-24.)
 4. **Turn off self sign-up in Supabase**: Authentication → Sign In /
@@ -69,6 +70,22 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-25
+
+### Marketers' hours: 8:30 to 6:30, and they can clock out from 6:00
+- **What was done:** each person can now have a **Can clock out from**
+  time as well as their hours (Staff → Edit details). With hours 08:30 to
+  18:30 and "can clock out from 18:00", clocking out any time from 6:00 pm
+  is fine; before 6:00 pm it is marked as clocking out early. Clocking in
+  after 8:30 is late, as before. Staff see "You can clock out from 18:00"
+  under Your hours. Ask Xtend can set it too.
+- **The impact:** marketers who finish between 6:00 and 6:30 pm are no
+  longer marked as leaving early. People with no "can clock out from" time
+  keep the old rule (more than 15 minutes before the end is early).
+- **What you need to do:** run `supabase/migrations/0105_clock_out_window.sql`
+  in Supabase, redeploy, then set the marketers' hours. Either ask Ask
+  Xtend: "set all marketers to 08:30–18:30, they can clock out from 18:00"
+  and press **Set hours** on the card, or change each person on Staff →
+  Edit details.
 
 ### Ask Xtend works better with NVIDIA, and says what is wrong
 - **What was done:** when Ask Xtend uses NVIDIA (or OpenAI, Gemini or

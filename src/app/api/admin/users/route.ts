@@ -5,7 +5,7 @@ import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 import { auditContext } from '@/lib/audit-context'
 import { deliverCredentials, generateTempPassword } from '@/lib/credentials'
-import { clockTime, emailAddress, hoursProblem, optionalPhone, personName } from '@/lib/fields'
+import { clockTime, emailAddress, hoursProblem, optionalClockTime, optionalPhone, personName } from '@/lib/fields'
 import { rememberTempPassword } from '@/lib/staff-logins'
 import { authAdminError } from '@/lib/auth-admin-errors'
 
@@ -21,6 +21,8 @@ const createUserSchema = z.object({
   /** Their working hours, wherever they clock in (0100). */
   shift_start: clockTime.default('08:00'),
   shift_end: clockTime.default('18:00'),
+  /** From when they may clock out without it being early (0105); empty: none. */
+  clock_out_from: optionalClockTime,
 })
 
 export async function POST(request: Request) {
@@ -34,7 +36,7 @@ export async function POST(request: Request) {
       )
     }
     {
-      const hours = hoursProblem(parsed.data.shift_start, parsed.data.shift_end)
+      const hours = hoursProblem(parsed.data.shift_start, parsed.data.shift_end, parsed.data.clock_out_from)
       if (hours) return Response.json({ error: hours }, { status: 400 })
     }
     const input = parsed.data
@@ -140,13 +142,23 @@ export async function POST(request: Request) {
       supervisor_id,
       shift_start: input.shift_start,
       shift_end: input.shift_end,
+      ...(input.clock_out_from ? { clock_out_from: input.clock_out_from } : {}),
       must_change_password: true,
     }
     let { error: profileError } = await admin.from('profiles').insert(profileRow)
+    // Before migration 0105 there is no clock-out window: create the account
+    // with the hours and without it.
+    const missingColumn = (e: typeof profileError) => Boolean(e && (e.code === 'PGRST204' || e.code === '42703'))
+    if (missingColumn(profileError) && input.clock_out_from) {
+      const { clock_out_from: _w, ...withoutWindow } = profileRow as typeof profileRow & { clock_out_from?: string }
+      void _w
+      ;({ error: profileError } = await admin.from('profiles').insert(withoutWindow))
+    }
     // Before migration 0100 there are no working-hours columns: create the
     // account without them rather than not at all.
     if (profileError && (profileError.code === 'PGRST204' || profileError.code === '42703')) {
-      const { shift_start: _s, shift_end: _e, ...older } = profileRow
+      const { shift_start: _s, shift_end: _e, ...older } = profileRow as typeof profileRow & { clock_out_from?: string }
+      delete older.clock_out_from
       void _s
       void _e
       ;({ error: profileError } = await admin.from('profiles').insert(older))

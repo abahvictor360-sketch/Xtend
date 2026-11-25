@@ -212,7 +212,8 @@ export default async function AdminGuidePage() {
               <>
                 <Ui>Outlets</Ui>: add every store with its address, its map position and its radius (50–100 m
                 for a kiosk or small shop, 150–300 m for a supermarket or mall). Working hours are set on each
-                person (<Ui>Staff</Ui>, <Ui>Clock in by</Ui> and <Ui>Clock out from</Ui>), not on the store. See{' '}
+                person (<Ui>Staff</Ui>, <Ui>Clock in by</Ui>, <Ui>Day ends at</Ui> and, if you like,{' '}
+                <Ui>Can clock out from</Ui>), not on the store. See{' '}
                 <Ui>Outlets, places, audit and activity logs, updates</Ui> below.
               </>,
               <>
@@ -877,10 +878,13 @@ export default async function AdminGuidePage() {
           </p>
           <p>
             <Ui>Working hours</Ui> belong to each person, not the store: on <Ui>Staff</Ui>, <Ui>Edit details</Ui>{' '}
-            sets <Ui>Clock in by</Ui> and <Ui>Clock out from</Ui> (08:00–18:00 unless changed; when this
+            sets <Ui>Clock in by</Ui> and <Ui>Day ends at</Ui> (08:00–18:00 unless changed; when this
             changed, everyone kept their home store&apos;s times). A marketer due at 09:00 is late after 09:00
-            at any store; every store visit after that is recorded with its own check-in and check-out time.
-            Ask Xtend can set hours too (&quot;set all marketers to 09:00–17:00&quot;).
+            at any store; every store visit after that is recorded with its own check-in and check-out time.{' '}
+            <Ui>Can clock out from</Ui> (optional) lets them leave from a set time: with 08:30–18:30 and 18:00,
+            clocking out any time from 18:00 is not early, and before 18:00 it is. Left empty, clocking out more
+            than 15 minutes before the end is early. Staff see it under <Ui>Your hours</Ui>. Ask Xtend can set
+            hours too (&quot;set all marketers to 08:30–18:30, they can clock out from 18:00&quot;).
           </p>
           <p>
             <Ui>Clock-out reminders</Ui>: anyone still clocked in when their own working day ends

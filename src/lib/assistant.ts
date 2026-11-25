@@ -134,7 +134,7 @@ Doing things on the dashboard: when the user asks you to do something rather tha
 - propose_phone_check: check right now whether someone's phone is on and has network.
 - propose_flag_review: mark integrity flags as reviewed, with a note (F… references from integrity_flags).
 - propose_sales_target (admins): set a person's or store's X Metrics sales target for a month.
-- propose_hours: set people's working hours (clock in by, clock out from), by name (P…) or as a group. Hours belong to the person, not the store: they apply wherever the person clocks in, and the clock-in time decides who counts as late. Convert any time the user says to 24-hour HH:MM (9am is 09:00, 6pm is 18:00).
+- propose_hours: set people's working hours (clock in by, day ends at, and optionally from when they may clock out without it being early), by name (P…) or as a group. Hours belong to the person, not the store: they apply wherever the person clocks in, and the clock-in time decides who counts as late. Convert any time the user says to 24-hour HH:MM (9am is 09:00, 6pm is 18:00).
 - propose_schedule: set the weekly work schedule (the days worked) for merchandisers or marketers, by name (P…) or as a group. Days are weekday numbers, Sunday 0 to Saturday 6, so "Monday to Friday" is [1,2,3,4,5] and "Monday to Saturday" is [1,2,3,4,5,6]. Days not listed are days off, when they are not counted absent.
 - propose_xmetrics_store (admins): add a store to X Metrics or take it out.
 - propose_stock_count (admins): record an office stock count for a store, from what the user typed or a document they attached. Read every product with its on-shelf and backroom units (0 for none) and its batch and expiry where given. It counts in X Metrics like a count from the store. Use this for "record/enter the stock for S…", "here is the count sheet", a photo or file of a stock take.
@@ -567,8 +567,13 @@ const tools: Anthropic.Beta.BetaTool[] = [
         people: { ...nameList, description: 'P… references, for group "people". Otherwise empty.' },
         shift_start: { type: 'string', description: 'Clock-in time, 24h HH:MM, e.g. "09:00".' },
         shift_end: { type: 'string', description: 'Clock-out time, 24h HH:MM, e.g. "18:00".' },
+        clock_out_from: {
+          type: 'string',
+          description:
+            'Optional: from when they may clock out without it counting as early, 24h HH:MM, after the start and no later than the end (e.g. "18:00" for a day ending 18:30). Empty string to leave it as it is.',
+        },
       },
-      required: ['group', 'people', 'shift_start', 'shift_end'],
+      required: ['group', 'people', 'shift_start', 'shift_end', 'clock_out_from'],
       additionalProperties: false,
     },
   },

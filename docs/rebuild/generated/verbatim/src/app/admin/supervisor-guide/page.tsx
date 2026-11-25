@@ -155,8 +155,9 @@ export default async function SupervisorGuidePage() {
           <ul className="list-disc space-y-1.5 pl-5">
             <li>
               Late means after the person&apos;s own clock-in time, wherever they clock in. You can change your
-              team&apos;s hours on <Ui>Staff</Ui>, <Ui>Edit details</Ui> (<Ui>Clock in by</Ui> and{' '}
-              <Ui>Clock out from</Ui>).
+              team&apos;s hours on <Ui>Staff</Ui>, <Ui>Edit details</Ui> (<Ui>Clock in by</Ui>,{' '}
+              <Ui>Day ends at</Ui> and, if you like, <Ui>Can clock out from</Ui>: clocking out from then is not
+              early).
             </li>
             <li>
               Xtend reminds your team 5 minutes before their shift starts (if they have not clocked in on

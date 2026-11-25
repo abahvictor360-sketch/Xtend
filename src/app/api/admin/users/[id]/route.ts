@@ -5,7 +5,7 @@ import { apiError, requireApiSession, dbErrorMessage } from '@/lib/auth'
 import { audit } from '@/lib/audit'
 import { auditContext } from '@/lib/audit-context'
 import { generateTempPassword } from '@/lib/credentials'
-import { clockTime, emailAddress, hoursProblem, personName, phoneNumber } from '@/lib/fields'
+import { clockTime, emailAddress, hoursProblem, optionalClockTime, personName, phoneNumber } from '@/lib/fields'
 import { rememberTempPassword } from '@/lib/staff-logins'
 import { authAdminError } from '@/lib/auth-admin-errors'
 import { requireRecentAuth } from '@/lib/reconfirm'
@@ -36,6 +36,8 @@ const patchSchema = z.object({
   /** Their working hours, wherever they clock in (0100); both together. */
   shift_start: clockTime.optional(),
   shift_end: clockTime.optional(),
+  /** From when they may clock out without it being early (0105); null: none. Sent with the hours. */
+  clock_out_from: optionalClockTime,
 })
 
 export async function PATCH(request: Request, ctx: { params: Promise<{ id: string }> }) {
@@ -50,7 +52,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       )
     }
     const input = parsed.data
-    const hours = hoursProblem(input.shift_start, input.shift_end)
+    const hours = hoursProblem(input.shift_start, input.shift_end, input.clock_out_from)
     if (hours) return Response.json({ error: hours }, { status: 400 })
 
     if (id === session.userId && input.is_active === false) {
@@ -206,6 +208,7 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
       'app_only',
       'shift_start',
       'shift_end',
+      'clock_out_from',
     ] as const) {
       if (input[key] !== undefined) changes[key] = input[key]
     }
@@ -278,7 +281,13 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ id: strin
         }
         const duplicate = error.code === '23505'
         return Response.json(
-          { error: duplicate ? 'Somebody already uses that phone number.' : dbErrorMessage(error) },
+          {
+            error: duplicate
+              ? 'Somebody already uses that phone number.'
+              : 'clock_out_from' in changes && (error.code === 'PGRST204' || error.code === '42703')
+                ? 'Run migration 0105 in Supabase to set when people can clock out from.'
+                : dbErrorMessage(error),
+          },
           { status: duplicate ? 409 : 400 },
         )
       }
