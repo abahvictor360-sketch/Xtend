@@ -9,6 +9,25 @@
 export type AiProvider = 'anthropic' | 'openai' | 'gemini' | 'nvidia' | 'openrouter'
 export type AiFeature = 'staff_helper' | 'admin_assistant'
 
+/** Model families that answer well with tools, best first (a hint, not a rule). */
+const STRONG = ['kimi-k2', 'qwen3', 'gpt-oss', 'deepseek-v3', 'llama-4', 'nemotron', 'llama-3.1-405b', 'mistral-large', 'mistral-medium']
+/** Not for chatting: pictures, embeddings, safety filters, speech, code-only. */
+const NOT_CHAT = /embed|rerank|guard|safety|reward|vision-only|clip|whisper|tts|asr|parakeet|retriev|-vl\b|coder|deplot|kosmos|fuyu|paligemma|neva|vila|cosmos|sdxl|flux|stable-diffusion/i
+
+/**
+ * From the models a service lists (GET /models), a few worth trying for
+ * Ask Xtend and the staff helper: chat models, strong tool users first.
+ * Pure, so check-ai-providers tests it.
+ */
+export function suggestModels(ids: string[], max = 8): string[] {
+  const chat = [...new Set(ids)].filter((id) => !NOT_CHAT.test(id))
+  const rank = (id: string) => {
+    const i = STRONG.findIndex((f) => id.toLowerCase().includes(f))
+    return i === -1 ? STRONG.length + (/instruct|chat/i.test(id) ? 0 : 1) : i
+  }
+  return chat.sort((a, b) => rank(a) - rank(b) || a.localeCompare(b)).slice(0, max)
+}
+
 /**
  * What an admin is told when the chosen AI service refuses Ask Xtend: what
  * the service said, and what to try. Pure, so check-ai-providers tests it.
@@ -19,8 +38,8 @@ export function aiServiceAdvice(err: { status: number | null; message: string })
   if (err.status === 401 || err.status === 403) {
     return `The AI service did not accept the key${said ? ` ("${said}")` : ''}. Paste the key again on ${where} and press Test.`
   }
-  if (err.status === 404) {
-    return `The AI service does not know that model${said ? ` ("${said}")` : ''}. On ${where}, under Which AI answers, check the model name for Ask Xtend.`
+  if (err.status === 404 || err.status === 410) {
+    return `${err.status === 410 ? 'That model has been retired by the AI service' : 'The AI service does not know that model'}${said ? ` ("${said}")` : ''}. On ${where}, press Test next to the key to see the models it offers now, then choose one for Ask Xtend under Which AI answers.`
   }
   if (err.status === 429) {
     return `The AI service says you have used your allowance for now${said ? ` ("${said}")` : ''}. Wait a few minutes, or add credit with the service.`
@@ -74,7 +93,8 @@ export const PROVIDERS: ProviderInfo[] = [
     id: 'nvidia',
     label: 'NVIDIA',
     baseUrl: 'https://integrate.api.nvidia.com/v1',
-    defaultModel: 'meta/llama-3.3-70b-instruct',
+    // meta/llama-3.3-70b-instruct was retired by NVIDIA on 2026-08-26.
+    defaultModel: 'openai/gpt-oss-120b',
     keysUrl: 'https://build.nvidia.com/settings/api-keys',
     keyPattern: /^nvapi-[A-Za-z0-9_-]{20,}$/,
   },

@@ -76,8 +76,17 @@ async function main() {
   check(compatSrc.includes("replaceAll(conn.apiKey, '[key]')"), "the service's error words never carry the key")
   const { aiServiceAdvice } = await import('@/lib/ai/providers')
   check(/did not accept the key/.test(aiServiceAdvice({ status: 401, message: 'The AI service answered 401: Unauthorized' })), 'a refused key is named')
-  check(/model name/.test(aiServiceAdvice({ status: 404, message: 'The AI service answered 404: Not found' })), 'an unknown model is named')
+  check(/does not know that model/.test(aiServiceAdvice({ status: 404, message: 'The AI service answered 404: Not found' })), 'an unknown model is named')
   check(/"max_tokens too big"/.test(aiServiceAdvice({ status: 400, message: 'The AI service answered 400: max_tokens too big' })), "a refused question shows the service's own words")
+  check(/retired/.test(aiServiceAdvice({ status: 410, message: 'The AI service answered 410: end of life' })) && /press Test/.test(aiServiceAdvice({ status: 410, message: 'x' })),
+    'a retired model is named, with how to find one that works')
+  const { suggestModels } = await import('@/lib/ai/providers')
+  const picks = suggestModels(['nvidia/nv-embedqa-e5-v5', 'meta/llama-guard-4-12b', 'moonshotai/kimi-k2-instruct', 'meta/llama-3.1-8b-instruct', 'openai/gpt-oss-120b', 'qwen/qwen2.5-coder-32b-instruct'])
+  check(picks[0] === 'moonshotai/kimi-k2-instruct' && picks[1] === 'openai/gpt-oss-120b' && !picks.some((p) => /embed|guard|coder/.test(p)),
+    'Test suggests chat models, strong tool users first, never embeddings or filters')
+  check(read('src/app/api/admin/ai/route.ts').includes('listModels(') && read('src/app/api/admin/ai/route.ts').includes('offers now include'),
+    'Test lists the models the service offers when the model is unknown or retired')
+  check(!read('src/lib/ai/providers.ts').includes("defaultModel: 'meta/llama-3.3-70b-instruct'"), 'the retired NVIDIA model is no longer the default')
   const askRoute = read('src/app/api/admin/ask/route.ts')
   check(askRoute.includes('error instanceof AiServiceError') && askRoute.includes('aiServiceAdvice(error)'), 'Ask Xtend says what the AI service said instead of "Something went wrong"')
 

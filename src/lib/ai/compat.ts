@@ -289,6 +289,22 @@ export async function compatToolAnswer<T extends Json>(
   return { reply: raw.trim() }
 }
 
+/** The models the service offers now (GET /models), or [] if it will not say. */
+export async function listModels(conn: AiConnection): Promise<string[]> {
+  if (!conn.baseUrl) return []
+  try {
+    const res = await fetch(`${conn.baseUrl}/models`, {
+      headers: { Authorization: `Bearer ${conn.apiKey}` },
+      signal: AbortSignal.timeout(15_000),
+    })
+    if (!res.ok) return []
+    const data = (await res.json()) as { data?: { id?: unknown }[] }
+    return (data.data ?? []).map((m) => m.id).filter((id): id is string => typeof id === 'string')
+  } catch {
+    return []
+  }
+}
+
 /** A tiny request to check a key works (Settings → AI, "Test"). */
 export async function compatPing(conn: AiConnection): Promise<void> {
   await post(conn, { messages: [{ role: 'user', content: 'Reply with OK.' }], max_tokens: 5 }, 20_000)

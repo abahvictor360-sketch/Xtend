@@ -71,6 +71,21 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-25
 
+### NVIDIA retired the model Xtend used; Test now shows which ones work
+- **What was done:** NVIDIA switched off `meta/llama-3.3-70b-instruct` on
+  26 August 2026, and it was Xtend's NVIDIA default, so Ask Xtend got
+  "error 410 … end of life". The NVIDIA default is now
+  `openai/gpt-oss-120b`. When a model is unknown or retired, Ask Xtend now
+  says so and tells you to press **Test**; **Test** then lists the models
+  the service offers today, the strongest for Ask Xtend first.
+- **The impact:** a retired model no longer leaves you guessing which name
+  to type.
+- **What you need to do:** redeploy. Then on Settings → AI keys, under
+  **Which AI answers**, change the model for **both** Ask Xtend and the
+  staff helper from `meta/llama-3.3-70b-instruct` to a current one (for
+  example `openai/gpt-oss-120b`), press **Save**, then **Test**. If Test
+  says it is not available, it lists names that are: copy one, Save, Test.
+
 ### Marketers' hours: 8:30 to 6:30, and they can clock out from 6:00
 - **What was done:** each person can now have a **Can clock out from**
   time as well as their hours (Staff → Edit details). With hours 08:30 to

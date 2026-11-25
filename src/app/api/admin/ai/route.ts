@@ -7,8 +7,8 @@ import { requireRecentAuth } from '@/lib/reconfirm'
 import { audit } from '@/lib/audit'
 import { seal, unseal } from '@/lib/ai/secret-box'
 import { forgetAiSettings } from '@/lib/ai/config'
-import { compatPing } from '@/lib/ai/compat'
-import { keyHint, keyProblem, PROVIDER_IDS, providerInfo, type AiProvider } from '@/lib/ai/providers'
+import { AiServiceError, compatPing, listModels } from '@/lib/ai/compat'
+import { keyHint, keyProblem, PROVIDER_IDS, providerInfo, suggestModels, type AiProvider } from '@/lib/ai/providers'
 
 const provider = z.enum(PROVIDER_IDS as [AiProvider, ...AiProvider[]])
 /** The most the office can write for the AI (0104). */
@@ -128,7 +128,15 @@ export async function POST(request: Request) {
       }
     } catch (err) {
       const why = err instanceof Error ? err.message.replace(apiKey, '[key]').slice(0, 240) : 'No answer'
-      return Response.json({ ok: false, message: `${label} did not answer with ${model}: ${why}` })
+      // A model that is unknown or retired: say which ones the service offers now.
+      let offer = ''
+      if (err instanceof AiServiceError && (err.status === 404 || err.status === 410) && input.provider !== 'anthropic') {
+        const names = suggestModels(
+          await listModels({ provider: input.provider, model, apiKey, baseUrl: providerInfo(input.provider)!.baseUrl }),
+        )
+        if (names.length) offer = ` Models ${label} offers now include: ${names.join(', ')}. Type one under Which AI answers, Save, then Test.`
+      }
+      return Response.json({ ok: false, message: `${label} did not answer with ${model}: ${why}${offer}` })
     }
     return Response.json({ ok: true, message: `${label} answered with ${model}. It works.` })
   } catch (error) {

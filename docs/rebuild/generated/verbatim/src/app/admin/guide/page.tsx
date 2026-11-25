@@ -740,7 +740,8 @@ export default async function AdminGuidePage() {
             reading PDF invoices use the Anthropic key. With no key at all, staff messages go straight to the office. If
             Ask Xtend cannot answer, it says what the AI service said (a key it does not accept, a model name it does not
             know, an allowance used up, or a question it refused) and what to change. Ask Xtend needs a model that can
-            use tools; if one keeps refusing, choose another model or service for it.
+            use tools; if one keeps refusing, choose another model or service for it. AI services retire old models: if
+            one is retired, press <Ui>Test</Ui> next to the key and it lists the models the service offers now.
           </p>
           <p>
             The staff helper already knows the whole staff guide, and sees where the person is in their day (clocked in or
