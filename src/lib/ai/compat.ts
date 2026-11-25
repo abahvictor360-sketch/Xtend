@@ -11,6 +11,52 @@ import type { AiConnection } from '@/lib/ai/config'
 
 type Json = Record<string, unknown>
 
+/**
+ * The AI service refused or did not answer. `message` is written for the
+ * admin (the service's own words, never the key) so Ask Xtend can say what
+ * is wrong instead of "Something went wrong".
+ */
+export class AiServiceError extends Error {
+  constructor(
+    message: string,
+    readonly status: number | null,
+    readonly serviceSaid: string | null,
+  ) {
+    super(message)
+    this.name = 'AiServiceError'
+  }
+}
+
+/**
+ * The most each service is asked to write in one answer. NVIDIA's hosted
+ * models refuse requests above about 4,000; the others take more.
+ */
+export function outputCap(provider: string, wanted: number): number {
+  return provider === 'nvidia' ? Math.min(wanted, 4096) : wanted
+}
+
+/**
+ * Tool shapes every OpenAI-format service accepts: only the plain JSON
+ * Schema words (type, properties, items, required, enum, description).
+ * Some servers (NVIDIA's among them) refuse a request over a word they do
+ * not know, such as "additionalProperties" or "format".
+ */
+export function plainSchema(schema: unknown): unknown {
+  if (Array.isArray(schema)) return schema.map(plainSchema)
+  if (!schema || typeof schema !== 'object') return schema
+  const out: Json = {}
+  for (const [k, v] of Object.entries(schema as Json)) {
+    if (k === 'properties' && v && typeof v === 'object') {
+      out.properties = Object.fromEntries(Object.entries(v as Json).map(([name, sub]) => [name, plainSchema(sub)]))
+    } else if (k === 'items' || k === 'anyOf') {
+      out[k] = plainSchema(v)
+    } else if (['type', 'required', 'enum', 'description', 'minimum', 'maximum', 'minItems', 'maxItems', 'nullable'].includes(k)) {
+      out[k] = v
+    }
+  }
+  return out
+}
+
 /** Anthropic-shaped pieces this file reads and writes. */
 export type Block =
   | { type: 'text'; text: string }
@@ -61,7 +107,8 @@ export function toOpenAiMessages(system: string, messages: ConvMessage[]): OaMes
       const calls = m.content
         .filter((b): b is Extract<Block, { type: 'tool_use' }> => b.type === 'tool_use')
         .map((b) => ({ id: b.id, type: 'function' as const, function: { name: b.name, arguments: JSON.stringify(b.input ?? {}) } }))
-      out.push({ role: 'assistant', content: text || null, ...(calls.length ? { tool_calls: calls } : {}) })
+      // An empty string, not null: some servers refuse a null content.
+      out.push({ role: 'assistant', content: text || '', ...(calls.length ? { tool_calls: calls } : {}) })
       continue
     }
     // A user turn: tool results become "tool" messages; the rest one user message.
@@ -89,32 +136,87 @@ export function toOpenAiMessages(system: string, messages: ConvMessage[]): OaMes
   return out
 }
 
-export function toOpenAiTools(tools: ToolDef[]) {
+export function toOpenAiTools(tools: ToolDef[], plain = false) {
   return tools.map((t) => ({
     type: 'function' as const,
-    function: { name: t.name, description: t.description ?? '', parameters: t.input_schema },
+    function: {
+      name: t.name,
+      description: (t.description ?? '').slice(0, 1024),
+      parameters: plain ? (plainSchema(t.input_schema) as Json) : t.input_schema,
+    },
   }))
+}
+
+/** What the service said went wrong, from the usual error shapes. */
+function serviceWords(data: Json | null, raw: string): string | null {
+  const err = data?.error
+  const said =
+    (err && typeof err === 'object' ? (err as Json).message : typeof err === 'string' ? err : null) ??
+    data?.detail ??
+    data?.message ??
+    (raw && !raw.trim().startsWith('<') ? raw : null)
+  return typeof said === 'string' && said.trim() ? said.trim().slice(0, 300) : null
 }
 
 async function post(conn: AiConnection, body: Json, timeoutMs: number): Promise<Json> {
   if (!conn.baseUrl) throw new Error('Not an OpenAI-format provider')
-  const res = await fetch(`${conn.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${conn.apiKey}`,
-      ...(conn.provider === 'openrouter' ? { 'X-Title': 'Xtend' } : {}),
-    },
-    body: JSON.stringify({ model: conn.model, ...body }),
-    signal: AbortSignal.timeout(timeoutMs),
-  })
-  const data = (await res.json().catch(() => null)) as Json | null
+  let res: Response
+  try {
+    res = await fetch(`${conn.baseUrl}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${conn.apiKey}`,
+        ...(conn.provider === 'openrouter' ? { 'X-Title': 'Xtend' } : {}),
+      },
+      body: JSON.stringify({ model: conn.model, ...body }),
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+  } catch (err) {
+    const timedOut = err instanceof Error && (err.name === 'TimeoutError' || err.name === 'AbortError')
+    throw new AiServiceError(
+      timedOut
+        ? `The AI service took longer than ${Math.round(timeoutMs / 1000)} seconds to answer.`
+        : 'The server could not reach the AI service.',
+      null,
+      null,
+    )
+  }
+  const raw = await res.text().catch(() => '')
+  let data: Json | null = null
+  try {
+    data = raw ? (JSON.parse(raw) as Json) : null
+  } catch {
+    data = null
+  }
   if (!res.ok || !data) {
-    const message = (data?.error as Json | undefined)?.message
     // The provider's words, never the key.
-    throw new Error(`The AI service answered ${res.status}${typeof message === 'string' ? `: ${message.slice(0, 200)}` : ''}`)
+    const said = serviceWords(data, raw)?.replaceAll(conn.apiKey, '[key]') ?? null
+    throw new AiServiceError(`The AI service answered ${res.status}${said ? `: ${said}` : ''}`, res.status, said)
   }
   return data
+}
+
+/**
+ * Posts once; if the service refuses the request itself (400 or 422, often
+ * over a tool shape or the answer length), tries once more with plain tool
+ * shapes and a shorter answer before giving up.
+ */
+async function postWithRetry(conn: AiConnection, body: Json, tools: ToolDef[], timeoutMs: number): Promise<Json> {
+  try {
+    return await post(conn, { ...body, ...(tools.length ? { tools: toOpenAiTools(tools, conn.provider === 'nvidia') } : {}) }, timeoutMs)
+  } catch (err) {
+    if (!(err instanceof AiServiceError) || (err.status !== 400 && err.status !== 422)) throw err
+    console.error(`AI service refused a request (${conn.provider} ${conn.model}): ${err.message}`)
+    const shorter = typeof body.max_tokens === 'number' ? Math.min(body.max_tokens, 2048) : 2048
+    // A named tool choice is not supported everywhere: 'auto' instead.
+    const choice = body.tool_choice && typeof body.tool_choice === 'object' ? { tool_choice: 'auto' } : {}
+    return post(
+      conn,
+      { ...body, ...choice, max_tokens: shorter, ...(tools.length ? { tools: toOpenAiTools(tools, true) } : {}) },
+      timeoutMs,
+    )
+  }
 }
 
 /**
@@ -125,13 +227,14 @@ export async function compatRound(
   conn: AiConnection,
   opts: { system: string; messages: ConvMessage[]; tools: ToolDef[]; maxTokens?: number; timeoutMs?: number },
 ): Promise<{ content: Block[]; stop_reason: 'tool_use' | 'end_turn' | 'max_tokens' }> {
-  const data = await post(
+  const data = await postWithRetry(
     conn,
     {
       messages: toOpenAiMessages(opts.system, opts.messages),
-      ...(opts.tools.length ? { tools: toOpenAiTools(opts.tools), tool_choice: 'auto' } : {}),
-      max_tokens: opts.maxTokens ?? 4000,
+      ...(opts.tools.length ? { tool_choice: 'auto' } : {}),
+      max_tokens: outputCap(conn.provider, opts.maxTokens ?? 4000),
     },
+    opts.tools,
     opts.timeoutMs ?? 90_000,
   )
   const choice = ((data.choices as Json[] | undefined) ?? [])[0] ?? {}
@@ -164,14 +267,14 @@ export async function compatToolAnswer<T extends Json>(
   conn: AiConnection,
   opts: { system: string; messages: ConvMessage[]; tool: ToolDef; timeoutMs?: number },
 ): Promise<T | { reply: string }> {
-  const data = await post(
+  const data = await postWithRetry(
     conn,
     {
       messages: toOpenAiMessages(opts.system, opts.messages),
-      tools: toOpenAiTools([opts.tool]),
       tool_choice: { type: 'function', function: { name: opts.tool.name } },
       max_tokens: 1024,
     },
+    [opts.tool],
     opts.timeoutMs ?? 45_000,
   )
   const message = ((((data.choices as Json[] | undefined) ?? [])[0] ?? {}).message as Json | undefined) ?? {}

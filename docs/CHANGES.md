@@ -68,6 +68,22 @@ the live database, so it cannot tell which of these are already done.)
 
 ---
 
+## 2026-11-25
+
+### Ask Xtend works better with NVIDIA, and says what is wrong
+- **What was done:** when Ask Xtend uses NVIDIA (or OpenAI, Gemini or
+  OpenRouter) and the service refuses, Ask Xtend now shows what the service
+  said and what to change, instead of "Something went wrong". Requests to
+  NVIDIA are now shaped the way NVIDIA accepts (a shorter answer limit and
+  simpler tool descriptions), and any refused question is tried once more
+  in a simpler form before giving up.
+- **The impact:** questions that failed with NVIDIA should now go through.
+  If one still fails, the message names the cause: a key not accepted, a
+  model name not known, your allowance used up, or the question refused.
+- **What you need to do:** redeploy, then ask Ask Xtend again. If it still
+  fails, send me the exact message it shows. On Settings → AI keys, press
+  **Test** next to the NVIDIA key to check the key itself works.
+
 ## 2026-11-24
 
 ### Staff are told when the network is the problem

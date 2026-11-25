@@ -60,6 +60,26 @@ async function main() {
   check(oa[2].tool_calls?.[0].function.name === 'lookup' && JSON.parse(oa[2].tool_calls[0].function.arguments).day === 'today', 'a tool call becomes a function call')
   check(oa[3].role === 'tool' && oa[3].tool_call_id === 't1' && String(oa[3].content).includes('Ada'), 'its result becomes a tool message')
   check(toOpenAiTools([{ name: 'x', description: 'd', input_schema: { type: 'object' } }])[0].function.parameters.type === 'object', 'tools become functions')
+  const { plainSchema, outputCap } = await import('@/lib/ai/compat')
+  const plain = plainSchema({
+    type: 'object',
+    additionalProperties: false,
+    properties: { day: { type: 'string', format: 'date', description: 'd' }, who: { type: 'array', items: { type: 'string', pattern: 'x' } } },
+    required: ['day'],
+  }) as { additionalProperties?: unknown; properties: { day: { format?: unknown; type: string }; who: { items: { pattern?: unknown } } }; required: string[] }
+  check(plain.additionalProperties === undefined && plain.properties.day.format === undefined && plain.properties.day.type === 'string'
+    && plain.properties.who.items.pattern === undefined && plain.required[0] === 'day', 'tool shapes are made plain for services that refuse unknown words')
+  check(outputCap('nvidia', 8000) === 4096 && outputCap('openai', 8000) === 8000, 'NVIDIA is never asked for more than about 4,000 words of answer')
+  const compatSrc = read('src/lib/ai/compat.ts')
+  check(compatSrc.includes("content: text || ''") && compatSrc.includes('postWithRetry') && compatSrc.includes("{ tool_choice: 'auto' }"),
+    'a refused request is tried once more, plainer and shorter; no empty assistant content')
+  check(compatSrc.includes("replaceAll(conn.apiKey, '[key]')"), "the service's error words never carry the key")
+  const { aiServiceAdvice } = await import('@/lib/ai/providers')
+  check(/did not accept the key/.test(aiServiceAdvice({ status: 401, message: 'The AI service answered 401: Unauthorized' })), 'a refused key is named')
+  check(/model name/.test(aiServiceAdvice({ status: 404, message: 'The AI service answered 404: Not found' })), 'an unknown model is named')
+  check(/"max_tokens too big"/.test(aiServiceAdvice({ status: 400, message: 'The AI service answered 400: max_tokens too big' })), "a refused question shows the service's own words")
+  const askRoute = read('src/app/api/admin/ask/route.ts')
+  check(askRoute.includes('error instanceof AiServiceError') && askRoute.includes('aiServiceAdvice(error)'), 'Ask Xtend says what the AI service said instead of "Something went wrong"')
 
   // Never sent back.
   const page = read('src/app/admin/ai/page.tsx')
