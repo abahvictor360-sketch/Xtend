@@ -29,6 +29,17 @@ export function suggestModels(ids: string[], max = 8): string[] {
 }
 
 /**
+ * What someone is told when they have used their AI allowance (0110):
+ * which one (this hour or today) and when it comes back. Pure, so
+ * check-ai-limits can test it.
+ */
+export function aiLimitMessage(q: { period: 'hour' | 'day'; limit: number }, what = 'questions'): string {
+  return q.period === 'day'
+    ? `You have used today's ${q.limit} ${what}. It starts again tomorrow (midnight, Lagos time).`
+    : `You have used ${q.limit} ${what} in the last hour, the most allowed. Try again a little later.`
+}
+
+/**
  * What an admin is told when the chosen AI service refuses Ask Xtend: what
  * the service said, and what to try. Pure, so check-ai-providers tests it.
  */

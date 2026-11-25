@@ -3,7 +3,8 @@ import Anthropic from '@anthropic-ai/sdk'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession } from '@/lib/auth'
 import { AiServiceError } from '@/lib/ai/compat'
-import { aiServiceAdvice } from '@/lib/ai/providers'
+import { aiLimitMessage, aiServiceAdvice } from '@/lib/ai/providers'
+import { takeAiUse } from '@/lib/ai/quota'
 import { askAssistant, assistantConfigured } from '@/lib/assistant'
 import { attachmentBlocks, attachmentSchema } from '@/lib/assistant-attachment'
 import { allowAttempt } from '@/lib/rate-limit'
@@ -59,6 +60,10 @@ export async function POST(request: Request) {
     const attachment = parsed.data.attachment
       ? await attachmentBlocks(parsed.data.attachment)
       : []
+
+    // Each person's allowance (0110, Settings → AI keys), kept in the database.
+    const quota = await takeAiUse(session.userId, 'admin_assistant')
+    if (!quota.ok) return Response.json({ error: aiLimitMessage(quota, 'Ask Xtend questions') }, { status: 429 })
 
     const supabase = await createServerSupabase()
     const reply = await askAssistant(

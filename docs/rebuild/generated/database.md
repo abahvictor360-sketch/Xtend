@@ -25,6 +25,16 @@ A readable summary of `schema.sql`. Every table has row-level security unless ma
 | updated_at | timestamp with time zone(timestamptz) |  | now() |
 | updated_by | uuid(uuid) | yes |  |
 
+### `ai_limits`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| feature | text(text) |  |  |
+| per_hour | integer(int4) |  |  |
+| per_day | integer(int4) |  |  |
+| updated_at | timestamp with time zone(timestamptz) |  | now() |
+| updated_by | uuid(uuid) | yes |  |
+
 ### `ai_provider_keys`
 
 | Column | Type | Null | Default |
@@ -34,6 +44,15 @@ A readable summary of `schema.sql`. Every table has row-level security unless ma
 | key_hint | text(text) |  |  |
 | updated_at | timestamp with time zone(timestamptz) |  | now() |
 | updated_by | uuid(uuid) | yes |  |
+
+### `ai_usage`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| id | bigint(int8) |  |  |
+| user_id | uuid(uuid) |  |  |
+| feature | text(text) |  |  |
+| used_at | timestamp with time zone(timestamptz) |  | now() |
 
 ### `app_installs`
 
@@ -1493,6 +1512,7 @@ Policies:
 - `close_abandoned_visits()` → integer · definer · 0010_store_visits.sql
 - `close_count_request(p_request_id uuid)` → void · definer · 0020_count_requests.sql
 - `confirm_recent_auth(p_user uuid)` → void · definer · 0080_zero_trust.sql
+- `consume_ai_use(p_user uuid, p_feature text)` → jsonb · definer · 0110_ai_limits.sql
 - `conversation(p_staff uuid)` → TABLE(id uuid, body text, created_at timestamp with time zone, sender_name text, from_staff boolean, mine boolean, attachment_mime text, attachment_name text, attachment_size_bytes integer, attachment_kind text) · definer · 0075_message_attachments.sql
 - `count_place_lookups(p_sources text[])` → void · definer · 0068_place_lookups.sql
 - `counted_product_names()` → TABLE(name text) · definer · 0021_counted_product_names.sql

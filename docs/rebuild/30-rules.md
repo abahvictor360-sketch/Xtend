@@ -1334,6 +1334,17 @@ label and the store's own point.
   unknown or inactive store refuses the whole call and changes nothing.
   Every call writes an `audit_log` row `staff.allocate_outlets` directly
   (supervisors may call it).
+- **0110, AI limits per person:** `ai_limits` (feature pk staff_helper /
+  admin_assistant, `per_hour` 1–1000, `per_day` 1–10000, `per_day >=
+  per_hour`, defaults 15/40 and 40/200) and `ai_usage` (identity id,
+  user_id → profiles cascade, feature, used_at; index user, feature,
+  used_at desc). RLS on, no grants. `consume_ai_use(p_user, p_feature)`
+  (definer, service role only): advisory lock per person and feature;
+  counts the last hour and since Lagos midnight; over the day → `{ok:false,
+  period:'day', limit, used}`, over the hour → same with 'hour'; else
+  inserts a use, 2 % of calls delete uses older than 3 days, returns
+  `{ok:true, left_hour, left_day}`. Both tables are kept by the test-run
+  reset.
 - **0108, a fake location pauses the account:** `profiles.paused_at`,
   `paused_reason` ('fake_location'), `paused_flag`. AFTER INSERT on
   `integrity_flags` `trg_integrity_flags_pause` → `pause_for_fake_location()`:

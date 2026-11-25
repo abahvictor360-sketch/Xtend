@@ -68,7 +68,16 @@ one each feature uses. Pure, so scripts/check-ai-providers.ts can test it.
 Anthropic is called with its own API; the other four speak the OpenAI
 chat format at their own address (lib/ai/compat.ts).
 
-Exports: `AiProvider`, `AiFeature`, `suggestModels`, `aiServiceAdvice`, `ProviderInfo`, `PROVIDERS`, `FEATURES`, `PROVIDER_IDS`, `providerInfo`, `keyHint`, `keyProblem`, `ResolvedAi`, `resolveAi`
+Exports: `AiProvider`, `AiFeature`, `suggestModels`, `aiLimitMessage`, `aiServiceAdvice`, `ProviderInfo`, `PROVIDERS`, `FEATURES`, `PROVIDER_IDS`, `providerInfo`, `keyHint`, `keyProblem`, `ResolvedAi`, `resolveAi`
+
+## `src/lib/ai/quota.ts`
+
+One more AI answer for this person, if they are within their limits
+(0110, Settings → AI keys). Counted in the database, so it holds across
+restarts and servers. Before 0110 is run (or if the count cannot be
+read), it allows the answer: the hourly limit in memory still applies.
+
+Exports: `AiQuota`, `takeAiUse`
 
 ## `src/lib/ai/secret-box.ts`
 
@@ -1632,9 +1641,9 @@ Exports: `NavBadges`, `matchesQuery`, `AdminSidebarNav`, `AdminNav`
 
 ## `src/components/admin/ai-settings.tsx`
 
-The most the office can write for the AI (0104; the database also caps it).
+How much each person may use one AI feature (0110), and today's use.
 
-Exports: `SavedKey`, `FeatureChoice`, `AiSettings`
+Exports: `SavedKey`, `AiLimit`, `FeatureChoice`, `AiSettings`
 
 ## `src/components/admin/alerts-list.tsx`
 

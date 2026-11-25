@@ -6250,7 +6250,9 @@ begin
                                 -- 0102: the AI keys and settings the admin added.
                                 'ai_provider_keys', 'ai_feature_settings',
                                 -- 0104: what the office told the AI.
-                                'ai_knowledge'];
+                                'ai_knowledge',
+                                -- 0110: AI limits, and recent uses (kept 3 days).
+                                'ai_limits', 'ai_usage'];
     all_keys text[] := public.reset_category_keys();
     k text;
     cats text[];
@@ -7360,6 +7362,47 @@ begin
     end;
   exception when others then
     if sqlerrm <> 'on-site-0106-done' then raise; end if;
+  end;
+
+  -- 0110: how much each person may use the AI. Rolled back.
+  begin
+    declare
+      u uuid := gen_random_uuid();
+      res jsonb;
+      i integer;
+    begin
+      insert into auth.users (id, email) values (u, 'ai.user@xpel.ng');
+      insert into public.profiles (id, full_name, email, role) values (u, 'Ai User', 'ai.user@xpel.ng', 'merchandiser');
+      update public.ai_limits set per_hour = 3, per_day = 5 where feature = 'staff_helper';
+      for i in 1..3 loop
+        res := public.consume_ai_use(u, 'staff_helper');
+        perform assert((res->>'ok')::boolean, 'ai limits 0110: (within the hour)');
+      end loop;
+      perform assert((res->>'left_hour')::int = 0 and (res->>'left_day')::int = 2, 'ai limits 0110: it says how many are left');
+      res := public.consume_ai_use(u, 'staff_helper');
+      perform assert(not (res->>'ok')::boolean and res->>'period' = 'hour' and (res->>'limit')::int = 3,
+        'ai limits 0110: the fourth in an hour is refused, saying which limit');
+      perform assert((select count(*) from public.ai_usage where user_id = u) = 3, 'ai limits 0110: a refused one is not counted');
+      update public.ai_usage set used_at = now() - interval '61 minutes' where user_id = u;
+      if (now() - interval '61 minutes') >= (((now() at time zone 'Africa/Lagos')::date)::timestamp at time zone 'Africa/Lagos') then
+        res := public.consume_ai_use(u, 'staff_helper');
+        res := public.consume_ai_use(u, 'staff_helper');
+        perform assert((res->>'ok')::boolean, 'ai limits 0110: a new hour allows more');
+        res := public.consume_ai_use(u, 'staff_helper');
+        perform assert(not (res->>'ok')::boolean and res->>'period' = 'day' and (res->>'limit')::int = 5,
+          'ai limits 0110: the daily limit holds across hours');
+      end if;
+      perform assert((public.consume_ai_use(u, 'admin_assistant')->>'ok')::boolean, 'ai limits 0110: each feature has its own count');
+      begin
+        update public.ai_limits set per_hour = 10, per_day = 5 where feature = 'staff_helper';
+        perform assert(false, 'ai limits 0110: a day cannot be less than an hour');
+      exception when check_violation then
+        perform assert(true, 'ai limits 0110: a daily limit below the hourly one is refused');
+      end;
+      raise exception 'ai-limits-0110-done';
+    end;
+  exception when others then
+    if sqlerrm <> 'ai-limits-0110-done' then raise; end if;
   end;
 
   -- 0108: a fake location pauses the account. Rolled back.
