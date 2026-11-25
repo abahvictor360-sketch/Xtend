@@ -76,4 +76,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- TECNO, Infinix and itel: Xtend opens Phone Master's Auto-start screen
+         (ShiftTracker.openAutoStart), so it must be able to see that app. -->
+    <queries>
+        <package android:name="com.transsion.phonemaster" />
+    </queries>
 </manifest>

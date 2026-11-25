@@ -1,6 +1,7 @@
 package ng.xpelbeauty.xtend;
 
 import android.Manifest;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -141,6 +142,52 @@ public class ShiftTracker extends Plugin {
         call.resolve(state());
     }
 
+    /**
+     * TECNO, Infinix and itel (Transsion) phones stop apps their own way,
+     * whatever Android's battery setting says: Xtend must be allowed to
+     * Auto-start in Phone Master. Opens that screen, else Phone Master,
+     * else this app's settings page.
+     */
+    @PluginMethod
+    public void openAutoStart(PluginCall call) {
+        Context context = getContext();
+        String[][] screens = new String[][] {
+            { "com.transsion.phonemaster", "com.cyin.himgr.autostart.AutoStartActivity" },
+            { "com.transsion.phonemaster", "com.cyin.himgr.applicationmanager.view.activities.AutoStartActivity" },
+            { "com.transsion.phonemaster", "com.cyin.himgr.widget.activity.MainSettingGpActivity" },
+        };
+        boolean opened = false;
+        for (String[] s : screens) {
+            try {
+                Intent i = new Intent().setComponent(new ComponentName(s[0], s[1]));
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(i);
+                opened = true;
+                break;
+            } catch (Exception e) {
+                // Not this phone's screen: try the next.
+            }
+        }
+        if (!opened) {
+            try {
+                Intent i = context.getPackageManager().getLaunchIntentForPackage("com.transsion.phonemaster");
+                if (i != null) {
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    context.startActivity(i);
+                    opened = true;
+                }
+            } catch (Exception ignored) {}
+        }
+        if (!opened) {
+            try {
+                Intent i = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:" + context.getPackageName()));
+                i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                context.startActivity(i);
+            } catch (Exception ignored) {}
+        }
+        call.resolve(state());
+    }
+
     private boolean hasLocation() {
         return ContextCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
             || ContextCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED;
@@ -159,6 +206,8 @@ public class ShiftTracker extends Plugin {
         o.put("active", ShiftTrackerService.collecting(context));
         // This build stops collecting at clock-out and still sends what was saved.
         o.put("drains", true);
+        // The phone's maker: TECNO, Infinix and itel need extra steps (Auto-start, locked in recent apps).
+        o.put("maker", Build.MANUFACTURER == null ? "" : Build.MANUFACTURER.toLowerCase(java.util.Locale.ROOT));
         o.put("running", p.getBoolean("running", false));
         o.put("location", hasLocation());
         o.put("always", hasBackground());

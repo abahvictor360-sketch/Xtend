@@ -136,6 +136,8 @@ export interface ShiftTrackerState {
    * sends what was saved offline, then the tracker stops by itself.
    */
   drains?: boolean
+  /** Android: the phone's maker, lower case (2026-11-25 builds). */
+  maker?: string
   lastSentAt?: number
   lastError?: string | null
 }
@@ -200,6 +202,20 @@ export async function shiftTrackerState(): Promise<ShiftTrackerState | null> {
 
 export async function askAlwaysLocation() {
   if (hasShiftTracker()) await callNative('ShiftTracker', 'requestBackground').catch(() => {})
+}
+
+/**
+ * TECNO, Infinix and itel: opens Phone Master's Auto-start screen (or Phone
+ * Master, or the app's settings). An older app build opens the battery
+ * settings instead.
+ */
+export async function openAutoStart() {
+  if (!hasShiftTracker()) return
+  try {
+    await callNative('ShiftTracker', 'openAutoStart')
+  } catch {
+    await openBatterySettings()
+  }
 }
 
 export async function openBatterySettings() {

@@ -1319,6 +1319,12 @@ Native classes (`android/app/src/main/java/ng/xpelbeauty/xtend/`):
   `status`; `requestBackground` (Android 11+: opens app settings; Android 10: requests
   `ACCESS_BACKGROUND_LOCATION` with request code 7302); `openBatterySettings`
   (`ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS`, falling back to app details);
+  `openAutoStart` (2026-11-25, TECNO/Infinix/itel): tries Phone Master's
+  `com.transsion.phonemaster/com.cyin.himgr.autostart.AutoStartActivity`, then
+  `…applicationmanager.view.activities.AutoStartActivity`, then
+  `…widget.activity.MainSettingGpActivity`, then Phone Master's launch intent, then the app's
+  details page (the manifest's `<queries>` names `com.transsion.phonemaster`); state adds
+  `maker` (`Build.MANUFACTURER`, lower case);
   `follow({ intervalMs })` (0070): when configured and 2000–60000, stores prefs `fast_ms` and
   `fast_until = now + 60 000` and starts the service again → `{ ok: true }`, else `{ ok: false }`.
   State: `{ platform: 'android', active (collecting), running, location, always, batteryUnrestricted, queued, drains: true, lastSentAt?, lastError }`.

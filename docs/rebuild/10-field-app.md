@@ -695,7 +695,20 @@ Component: `src/components/field/clock-panel.tsx`.
   "Location: Allow all the time" (iPhone "Always") and, on Android, "Battery:
   Unrestricted", each with plain steps (TECNO/Infinix/Xiaomi: also Auto-start
   and "No restrictions") and a button (`askAlwaysLocation`,
-  `openBatterySettings`); a done setting shows a tick; it clears itself. The
+  `openBatterySettings`); a done setting shows a tick; it clears itself.
+  **TECNO, Infinix, itel (2026-11-25):** the tracker's `status` reports
+  `maker` (`Build.MANUFACTURER`, lower case); `strictMaker()` recognises
+  tecno / infinix / itel on Android and `backgroundNeeds` adds `maker`
+  (blocking) until the person confirms on the phone (`localStorage`
+  `xtend-maker-setup-v1`, kept until reinstall; older builds report no
+  maker and are never held). The card adds a Lock row "On your <Maker>
+  phone: Auto-start and lock Xtend" / "<Maker> phones close apps by
+  themselves to save battery. Do both steps once, so Xtend keeps working when
+  your screen is off.", three numbered steps (Open Auto-start and turn on
+  Xtend, or Phone Master → App management/Auto-start; in recent apps pull
+  Xtend down until a lock shows; come back and tap I did both), **Open
+  Auto-start** (`openAutoStart` → plugin `openAutoStart`, an older build
+  opens the battery settings) and **I did both** (`confirmMaker`). The
   "Clock out now" prompt (`CLOCK_OUT_EVENT`) is held back too: `start()`
   refuses while it is shown.
 - Done only when it is recorded: after `POST /api/attendance` answers, the

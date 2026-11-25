@@ -159,7 +159,7 @@ function Gate({ always, battery }: { always: boolean; battery: boolean }) {
       <HomeTop status="Clock in at your store" />
       <BackgroundGate
         state={{ platform: 'android', always: !always, batteryUnrestricted: !battery }}
-        needs={{ always, battery, blocked: always || battery }}
+        needs={{ always, battery, maker: false, blocked: always || battery }}
         action="clock in"
         onDone={() => {}}
       />

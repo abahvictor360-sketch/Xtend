@@ -300,6 +300,12 @@ export function StaffGuide() {
               <Ui>Notifications:</Ui> tap <Ui>Turn on notifications</Ui> on the home screen.
               You cannot clock in until they are on.
             </>,
+            <>
+              <Ui>TECNO, Infinix or itel phone?</Ui> These phones close apps by themselves. Xtend shows{' '}
+              <Ui>Auto-start and lock Xtend</Ui>: tap <Ui>Open Auto-start</Ui> and turn on Xtend, then open your
+              recent apps, pull Xtend down until a lock shows, and tap <Ui>I did both</Ui>. You only do this once
+              on each phone.
+            </>,
           ]}
         />
       </GuideSection>

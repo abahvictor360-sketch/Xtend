@@ -72,6 +72,20 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-25
 
+### TECNO, Infinix and itel phones are walked through Auto-start and the lock
+- **What was done:** the Xtend app now knows when it is on a TECNO, Infinix
+  or itel phone. Before such a phone can clock in, Xtend shows **Auto-start
+  and lock Xtend** with the steps: tap **Open Auto-start** (it opens Phone
+  Master's Auto-start screen) and turn on Xtend, then open recent apps and
+  pull Xtend down until a lock shows, then tap **I did both**. It is asked
+  once per phone (again if the app is reinstalled). Android does not let an
+  app check these two settings, so the person confirms them.
+- **The impact:** on the phones that most often go quiet, staff set them up
+  before they start, without you having to visit each phone.
+- **What you need to do:** this is in the phone app: publish the new
+  Android build and ask staff to install it. Phones on older app versions
+  are not asked.
+
 ### Movement tracking: fixes for phones that went quiet
 - **What was done:** I went through how movement gets from a phone to the
   office and fixed what made it go quiet or lose positions:

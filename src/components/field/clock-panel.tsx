@@ -615,6 +615,7 @@ export function ClockPanel({
           action={nextType === 'opening' ? 'clock in' : 'clock out'}
           onDone={() => void background.recheck()}
           onConfirmBattery={background.confirmBattery}
+          onConfirmMaker={background.confirmMaker}
         />
       ) : needsNotifications ? (
         <NotificationGate push={push} />

@@ -15,6 +15,23 @@ export interface BackgroundState {
   always?: boolean
   /** Android: battery saving will not stop Xtend. Always true on iPhone. */
   batteryUnrestricted?: boolean
+  /** Android: who made the phone ("tecno", "infinix", …), from app builds of 2026-11-25. */
+  maker?: string
+}
+
+/**
+ * Makers whose phones stop apps their own way (Transsion: TECNO, Infinix,
+ * itel), whatever Android's battery setting says: Xtend must be allowed to
+ * Auto-start and be locked in the recent apps. Android cannot tell whether
+ * that is done, so the person confirms it once on the phone.
+ */
+export const STRICT_MAKERS = ['tecno', 'infinix', 'itel']
+
+export function strictMaker(state: BackgroundState | null | undefined): string | null {
+  const maker = (state?.maker ?? '').toLowerCase()
+  if (state?.platform !== 'android' || !maker) return null
+  const hit = STRICT_MAKERS.find((m) => maker.includes(m))
+  return hit ? { tecno: 'TECNO', infinix: 'Infinix', itel: 'itel' }[hit] ?? hit : null
 }
 
 export interface BackgroundNeeds {
@@ -22,6 +39,8 @@ export interface BackgroundNeeds {
   always: boolean
   /** Battery saving must be turned off for Xtend (Android). */
   battery: boolean
+  /** TECNO, Infinix, itel: Auto-start on and Xtend locked in recent apps, not yet confirmed. */
+  maker: boolean
   /** Either: the clock is held back until both are done. */
   blocked: boolean
 }
@@ -34,10 +53,11 @@ export interface BackgroundNeeds {
  */
 export function backgroundNeeds(
   state: BackgroundState | null | undefined,
-  options: { batteryConfirmed?: boolean } = {},
+  options: { batteryConfirmed?: boolean; makerConfirmed?: boolean } = {},
 ): BackgroundNeeds {
-  if (!state) return { always: false, battery: false, blocked: false }
+  if (!state) return { always: false, battery: false, maker: false, blocked: false }
   const always = state.always === false
   const battery = state.platform === 'android' && state.batteryUnrestricted === false && !options.batteryConfirmed
-  return { always, battery, blocked: always || battery }
+  const maker = strictMaker(state) !== null && !options.makerConfirmed
+  return { always, battery, maker, blocked: always || battery || maker }
 }
