@@ -2,6 +2,8 @@ import { z } from 'zod'
 import Anthropic from '@anthropic-ai/sdk'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession } from '@/lib/auth'
+import { AiServiceError } from '@/lib/ai/compat'
+import { aiServiceAdvice } from '@/lib/ai/providers'
 import { askAssistant, assistantConfigured } from '@/lib/assistant'
 import { attachmentBlocks, attachmentSchema } from '@/lib/assistant-attachment'
 import { allowAttempt } from '@/lib/rate-limit'
@@ -83,6 +85,12 @@ export async function POST(request: Request) {
     }
     if (error instanceof Anthropic.APIError) {
       return Response.json({ error: 'The assistant could not answer right now.' }, { status: 502 })
+    }
+    // OpenAI, Gemini, NVIDIA or OpenRouter refused or did not answer: say
+    // what the service said (never the key), and where to change it.
+    if (error instanceof AiServiceError) {
+      console.error('Ask Xtend: AI service error', error.message)
+      return Response.json({ error: aiServiceAdvice(error) }, { status: 502 })
     }
     return apiError(error)
   }

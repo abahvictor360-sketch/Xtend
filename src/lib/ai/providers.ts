@@ -9,6 +9,29 @@
 export type AiProvider = 'anthropic' | 'openai' | 'gemini' | 'nvidia' | 'openrouter'
 export type AiFeature = 'staff_helper' | 'admin_assistant'
 
+/**
+ * What an admin is told when the chosen AI service refuses Ask Xtend: what
+ * the service said, and what to try. Pure, so check-ai-providers tests it.
+ */
+export function aiServiceAdvice(err: { status: number | null; message: string }): string {
+  const said = err.message.replace(/^The AI service answered \d+:?\s*/, '').trim()
+  const where = 'Settings → AI keys'
+  if (err.status === 401 || err.status === 403) {
+    return `The AI service did not accept the key${said ? ` ("${said}")` : ''}. Paste the key again on ${where} and press Test.`
+  }
+  if (err.status === 404) {
+    return `The AI service does not know that model${said ? ` ("${said}")` : ''}. On ${where}, under Which AI answers, check the model name for Ask Xtend.`
+  }
+  if (err.status === 429) {
+    return `The AI service says you have used your allowance for now${said ? ` ("${said}")` : ''}. Wait a few minutes, or add credit with the service.`
+  }
+  if (err.status === 400 || err.status === 422) {
+    return `The AI service refused the question${said ? `: "${said}"` : ''}. Ask Xtend needs a model that can use tools. On ${where}, try another model for Ask Xtend, or another service.`
+  }
+  if (err.status === null) return `${err.message} Try again in a moment.`
+  return `The AI service could not answer (error ${err.status}${said ? `: "${said}"` : ''}). Try again in a moment.`
+}
+
 export interface ProviderInfo {
   id: AiProvider
   label: string

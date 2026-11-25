@@ -736,7 +736,10 @@ export default async function AdminGuidePage() {
             <Ui>Which AI answers</Ui> which service and model answers staff (the helper in Support, which also explains
             why something is not working and what to do) and which answers Ask Xtend. Keys are stored encrypted; only
             their last 4 characters are shown, and saving or removing one asks for your password. Photo checks and
-            reading PDF invoices use the Anthropic key. With no key at all, staff messages go straight to the office.
+            reading PDF invoices use the Anthropic key. With no key at all, staff messages go straight to the office. If
+            Ask Xtend cannot answer, it says what the AI service said (a key it does not accept, a model name it does not
+            know, an allowance used up, or a question it refused) and what to change. Ask Xtend needs a model that can
+            use tools; if one keeps refusing, choose another model or service for it.
           </p>
           <p>
             The staff helper already knows the whole staff guide, and sees where the person is in their day (clocked in or
