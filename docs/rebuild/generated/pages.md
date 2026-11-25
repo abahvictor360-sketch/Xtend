@@ -18,7 +18,7 @@ Everybody's activity in Xtend (migration 062). Admins only.
 - Who: ['admin']
 - Components: `admin/page-kit`, `admin/ai-settings`
 
-Settings → AI (0102): the keys and which AI answers staff and Ask Xtend. Admins only.
+Each feature's limits, with today's answers and how many people asked.
 
 ## `/admin/alerts` — Alerts — Xtend
 

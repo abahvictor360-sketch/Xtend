@@ -41,7 +41,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0105_clock_out_window.sql`;
    - `supabase/migrations/0106_on_site_only.sql`;
    - `supabase/migrations/0107_offline_clock_day.sql`;
-   - `supabase/migrations/0108_pause_on_fake_location.sql`.
+   - `supabase/migrations/0108_pause_on_fake_location.sql`;
+   - `supabase/migrations/0109_ai_limits.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18;
    0099, 0100, 0101 and 0102 are done: you ran them on 2026-11-24.)
 4. **Turn off self sign-up in Supabase**: Authentication → Sign In /
@@ -73,6 +74,21 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-25
+
+### Limits on how much each person can use the AI
+- **What was done:** every AI answer is paid for by your key, so each
+  person now has a limit per hour and per day: 15 an hour and 40 a day for
+  the staff helper, 40 an hour and 200 a day for Ask Xtend, to start. You
+  can change them on **Settings → AI keys → Limits per person**, which also
+  shows how many answers were given today and to how many people. The
+  counts are kept in the database, so they hold even when the server
+  restarts.
+- **The impact:** a phone stuck sending messages, or someone misusing an
+  account, cannot run up your AI bill. Past the staff helper's limit the
+  office answers the message instead; past Ask Xtend's, the person is told
+  when they can ask again.
+- **What you need to do:** run `supabase/migrations/0109_ai_limits.sql` in
+  Supabase and redeploy. Adjust the limits if you like.
 
 ### A fake GPS app locks the person out
 - **What was done:** when a phone reports that its location comes from a

@@ -16,6 +16,12 @@ const KNOWLEDGE_MAX = 20_000
 
 const schema = z.discriminatedUnion('action', [
   z.object({
+    action: z.literal('set_limits'),
+    feature: z.enum(['staff_helper', 'admin_assistant']),
+    per_hour: z.number().int().min(1, 'At least 1 an hour').max(1000, 'At most 1,000 an hour'),
+    per_day: z.number().int().min(1, 'At least 1 a day').max(10000, 'At most 10,000 a day'),
+  }),
+  z.object({
     action: z.literal('set_knowledge'),
     body: z.string().max(KNOWLEDGE_MAX, `Keep it under ${KNOWLEDGE_MAX.toLocaleString('en-GB')} characters`),
   }),
@@ -44,6 +50,21 @@ export async function POST(request: Request) {
     const input = parsed.data
     const admin = createAdminSupabase()
     const supabase = await createServerSupabase()
+
+    // How much each person may use the AI (0109).
+    if (input.action === 'set_limits') {
+      if (input.per_day < input.per_hour) throw new ApiError('The daily limit cannot be less than the hourly one.', 400)
+      const { error } = await admin.from('ai_limits').upsert({
+        feature: input.feature,
+        per_hour: input.per_hour,
+        per_day: input.per_day,
+        updated_at: new Date().toISOString(),
+        updated_by: session.userId,
+      })
+      if (error) throw new ApiError('That could not be saved. Has migration 0109 been run?', 400)
+      await audit(supabase, 'ai.limits_set', 'ai_limits', null, input)
+      return Response.json({ ok: true, message: `Saved: ${input.per_hour} an hour, ${input.per_day} a day for each person.` })
+    }
 
     // What the AI should know (0104): the office's own notes, read by the
     // staff helper and Ask Xtend with every question.

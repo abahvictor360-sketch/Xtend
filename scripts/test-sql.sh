@@ -127,5 +127,6 @@ run supabase/migrations/0105_clock_out_window.sql
 run supabase/migrations/0106_on_site_only.sql
 run supabase/migrations/0107_offline_clock_day.sql
 run supabase/migrations/0108_pause_on_fake_location.sql
+run supabase/migrations/0109_ai_limits.sql
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rules.sql 2>&1 | grep -E 'NOTICE|ERROR' | sed 's/^psql:[^ ]*: //'
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_counts.sql 2>&1 | grep -E 'NOTICE|ERROR|PASSED' | sed 's/^psql:[^ ]*: //'

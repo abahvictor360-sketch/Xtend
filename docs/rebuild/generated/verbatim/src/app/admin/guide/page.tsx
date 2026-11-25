@@ -772,6 +772,12 @@ export default async function AdminGuidePage() {
             <Ui>Test</Ui> next to the key lists the models the service offers now, so you can choose one.
           </p>
           <p>
+            <Ui>Limits per person</Ui>: the most AI answers one person may get in an hour and in a day (Lagos time),
+            set separately for the staff helper (15 an hour, 40 a day to start) and Ask Xtend (40 and 200). Each
+            card shows today&apos;s answers and how many people asked. Past the staff helper&apos;s limit the office
+            answers the message instead; past Ask Xtend&apos;s, the person is told when they can ask again.
+          </p>
+          <p>
             The staff helper already knows the whole staff guide, and sees where the person is in their day (clocked in or
             not, the store they are checked in at, how many stores they have, their hours). Under{' '}
             <Ui>What the AI should know</Ui>, write what the guide does not say: who to call for pay or a broken phone,

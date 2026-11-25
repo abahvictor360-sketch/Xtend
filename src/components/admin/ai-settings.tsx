@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { BookOpen, Bot, CheckCircle2, ExternalLink, KeyRound, Loader2, Trash2 } from 'lucide-react'
+import { BookOpen, Bot, CheckCircle2, ExternalLink, Gauge, KeyRound, Loader2, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -19,6 +19,15 @@ export interface SavedKey {
   key_hint: string
   updated_at: string
 }
+/** How much each person may use one AI feature (0109), and today's use. */
+export interface AiLimit {
+  feature: AiFeature
+  per_hour: number
+  per_day: number
+  used_today: number
+  people_today: number
+}
+
 export interface FeatureChoice {
   feature: AiFeature
   provider: AiProvider
@@ -51,6 +60,7 @@ export function AiSettings({
   using,
   serverAnthropic,
   knowledge,
+  limits = null,
 }: {
   saved: SavedKey[]
   choices: FeatureChoice[]
@@ -58,8 +68,13 @@ export function AiSettings({
   serverAnthropic: boolean
   /** What the AI should know (0104); null before the migration is run. */
   knowledge: { body: string; updatedAt: string | null } | null
+  /** Limits per person (0109); null before the migration is run. */
+  limits?: AiLimit[] | null
 }) {
   const router = useRouter()
+  const [limitDrafts, setLimitDrafts] = useState<Record<string, { per_hour: string; per_day: string }>>(() =>
+    Object.fromEntries((limits ?? []).map((l) => [l.feature, { per_hour: String(l.per_hour), per_day: String(l.per_day) }])),
+  )
   const [notesText, setNotesText] = useState(knowledge?.body ?? '')
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState<string | null>(null)
@@ -245,6 +260,73 @@ export function AiSettings({
             )
           })}
         </div>
+      </Panel>
+
+      <Panel
+        icon={Gauge}
+        title="Limits per person"
+        note="The most AI answers one person may get, in an hour and in a day (Lagos time). Each answer is paid for by your key, so this keeps a runaway phone or misuse from running up the bill. Past the staff helper's limit, the office answers instead; past Ask Xtend's, the person is told when they can ask again."
+      >
+        {limits === null ? (
+          <p className="rounded-xl bg-warning/15 p-3 text-sm">Run migration 0109 in Supabase to set limits here.</p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2">
+            {(limits ?? []).map((l) => {
+              const label = FEATURES.find((f) => f.id === l.feature)?.label ?? l.feature
+              const d = limitDrafts[l.feature] ?? { per_hour: String(l.per_hour), per_day: String(l.per_day) }
+              const id = `limit-${l.feature}`
+              const hour = Number(d.per_hour)
+              const day = Number(d.per_day)
+              const bad = !Number.isInteger(hour) || !Number.isInteger(day) || hour < 1 || day < 1 || hour > 1000 || day > 10000 || day < hour
+              return (
+                <div key={l.feature} className="space-y-3 rounded-2xl border border-border p-4">
+                  <div>
+                    <p className="font-semibold">{label}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Today: {l.used_today} {l.used_today === 1 ? 'answer' : 'answers'} for {l.people_today}{' '}
+                      {l.people_today === 1 ? 'person' : 'people'}
+                    </p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label htmlFor={`${id}-hour`}>Per hour</Label>
+                      <Input
+                        id={`${id}-hour`}
+                        inputMode="numeric"
+                        value={d.per_hour}
+                        onChange={(e) => setLimitDrafts((x) => ({ ...x, [l.feature]: { ...d, per_hour: e.target.value.replace(/\D/g, '') } }))}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`${id}-day`}>Per day</Label>
+                      <Input
+                        id={`${id}-day`}
+                        inputMode="numeric"
+                        value={d.per_day}
+                        onChange={(e) => setLimitDrafts((x) => ({ ...x, [l.feature]: { ...d, per_day: e.target.value.replace(/\D/g, '') } }))}
+                      />
+                    </div>
+                  </div>
+                  {bad && (
+                    <p className="text-xs text-destructive">
+                      Whole numbers: 1–1,000 an hour, 1–10,000 a day, and the day at least the hour.
+                    </p>
+                  )}
+                  <Button
+                    size="sm"
+                    disabled={busy !== null || bad || (hour === l.per_hour && day === l.per_day)}
+                    onClick={() => void run(id, { action: 'set_limits', feature: l.feature, per_hour: hour, per_day: day })}
+                  >
+                    {busy === id ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Save
+                  </Button>
+                  {notes[id] && (
+                    <p className={`text-sm ${notes[id]!.ok ? 'text-success' : 'text-destructive'}`}>{notes[id]!.text}</p>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
       </Panel>
 
       <Panel

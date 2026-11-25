@@ -4,6 +4,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { notifyWatchers } from '@/lib/notify'
 import { supportHelperMode } from '@/lib/usage-limits'
 import { aiFor, aiKnowledge } from '@/lib/ai/config'
+import { takeAiUse } from '@/lib/ai/quota'
 import { STAFF_GUIDE_TEXT } from '@/lib/generated/staff-guide-text'
 import { lagosDateString } from '@/lib/utils'
 import { compatToolAnswer, type ToolDef } from '@/lib/ai/compat'
@@ -189,6 +190,20 @@ export async function respondToSupportThread(
   const ai = await aiFor('staff_helper')
   if (!ai) {
     return finish(admin, thread, staffName, true, "Thanks for your message. I've passed this to the office and someone will follow up with you.")
+  }
+
+  // Their daily and hourly allowance (0109): past it, the office answers.
+  const quota = await takeAiUse(thread.user_id, 'staff_helper')
+  if (!quota.ok) {
+    if (thread.status === 'escalated') return { replied: false, escalated: true, reply: null }
+    return finish(
+      admin,
+      thread,
+      staffName,
+      true,
+      "Thanks for your message. I've passed this to the office and someone will follow up with you.",
+      quota.period === 'day' ? "the helper's daily limit for this person" : "the helper's hourly limit for this person",
+    )
   }
 
   // Map the thread to a Claude conversation: the member and office are the

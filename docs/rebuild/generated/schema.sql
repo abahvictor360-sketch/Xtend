@@ -2465,6 +2465,48 @@ $$;
 
 
 --
+-- Name: consume_ai_use(uuid, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.consume_ai_use(p_user uuid, p_feature text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  lim record;
+  in_hour integer;
+  in_day integer;
+  day_start timestamptz := ((now() at time zone 'Africa/Lagos')::date)::timestamp at time zone 'Africa/Lagos';
+begin
+  select per_hour, per_day into lim from public.ai_limits where feature = p_feature;
+  if lim.per_hour is null then
+    lim := row(case when p_feature = 'staff_helper' then 15 else 40 end,
+               case when p_feature = 'staff_helper' then 40 else 200 end);
+  end if;
+  -- One person at a time, so two quick requests cannot both slip under it.
+  perform pg_advisory_xact_lock(hashtext('ai_usage:' || p_user::text || ':' || p_feature));
+  select count(*) filter (where used_at > now() - interval '1 hour'),
+         count(*) filter (where used_at >= day_start)
+    into in_hour, in_day
+  from public.ai_usage
+  where user_id = p_user and feature = p_feature and used_at > least(day_start, now() - interval '1 hour');
+  if in_day >= lim.per_day then
+    return jsonb_build_object('ok', false, 'period', 'day', 'limit', lim.per_day, 'used', in_day);
+  end if;
+  if in_hour >= lim.per_hour then
+    return jsonb_build_object('ok', false, 'period', 'hour', 'limit', lim.per_hour, 'used', in_hour);
+  end if;
+  insert into public.ai_usage (user_id, feature) values (p_user, p_feature);
+  -- Now and then, forget uses older than 3 days.
+  if random() < 0.02 then
+    delete from public.ai_usage where used_at < now() - interval '3 days';
+  end if;
+  return jsonb_build_object('ok', true, 'left_hour', lim.per_hour - in_hour - 1, 'left_day', lim.per_day - in_day - 1);
+end;
+$$;
+
+
+--
 -- Name: conversation(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -10723,6 +10765,23 @@ CREATE TABLE public.ai_knowledge (
 
 
 --
+-- Name: ai_limits; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ai_limits (
+    feature text NOT NULL,
+    per_hour integer NOT NULL,
+    per_day integer NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_by uuid,
+    CONSTRAINT ai_limits_check CHECK ((per_day >= per_hour)),
+    CONSTRAINT ai_limits_feature_check CHECK ((feature = ANY (ARRAY['staff_helper'::text, 'admin_assistant'::text]))),
+    CONSTRAINT ai_limits_per_day_check CHECK (((per_day >= 1) AND (per_day <= 10000))),
+    CONSTRAINT ai_limits_per_hour_check CHECK (((per_hour >= 1) AND (per_hour <= 1000)))
+);
+
+
+--
 -- Name: ai_provider_keys; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -10735,6 +10794,33 @@ CREATE TABLE public.ai_provider_keys (
     CONSTRAINT ai_provider_keys_key_cipher_check CHECK (((length(key_cipher) >= 20) AND (length(key_cipher) <= 4000))),
     CONSTRAINT ai_provider_keys_key_hint_check CHECK ((length(key_hint) <= 8)),
     CONSTRAINT ai_provider_keys_provider_check CHECK ((provider = ANY (ARRAY['anthropic'::text, 'openai'::text, 'gemini'::text, 'nvidia'::text, 'openrouter'::text])))
+);
+
+
+--
+-- Name: ai_usage; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ai_usage (
+    id bigint NOT NULL,
+    user_id uuid NOT NULL,
+    feature text NOT NULL,
+    used_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT ai_usage_feature_check CHECK ((feature = ANY (ARRAY['staff_helper'::text, 'admin_assistant'::text])))
+);
+
+
+--
+-- Name: ai_usage_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.ai_usage ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.ai_usage_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
 );
 
 
@@ -12904,11 +12990,27 @@ ALTER TABLE ONLY public.ai_knowledge
 
 
 --
+-- Name: ai_limits ai_limits_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_limits
+    ADD CONSTRAINT ai_limits_pkey PRIMARY KEY (feature);
+
+
+--
 -- Name: ai_provider_keys ai_provider_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.ai_provider_keys
     ADD CONSTRAINT ai_provider_keys_pkey PRIMARY KEY (provider);
+
+
+--
+-- Name: ai_usage ai_usage_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_usage
+    ADD CONSTRAINT ai_usage_pkey PRIMARY KEY (id);
 
 
 --
@@ -13717,6 +13819,13 @@ ALTER TABLE ONLY public.xm_supply_imports
 
 ALTER TABLE ONLY public.xm_targets
     ADD CONSTRAINT xm_targets_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: ai_usage_user_feature_time; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ai_usage_user_feature_time ON public.ai_usage USING btree (user_id, feature, used_at DESC);
 
 
 --
@@ -14793,11 +14902,27 @@ ALTER TABLE ONLY public.ai_knowledge
 
 
 --
+-- Name: ai_limits ai_limits_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_limits
+    ADD CONSTRAINT ai_limits_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
 -- Name: ai_provider_keys ai_provider_keys_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.ai_provider_keys
     ADD CONSTRAINT ai_provider_keys_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.profiles(id) ON DELETE SET NULL;
+
+
+--
+-- Name: ai_usage ai_usage_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_usage
+    ADD CONSTRAINT ai_usage_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 
 
 --
@@ -15845,10 +15970,22 @@ ALTER TABLE public.ai_feature_settings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.ai_knowledge ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: ai_limits; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.ai_limits ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: ai_provider_keys; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
 ALTER TABLE public.ai_provider_keys ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: ai_usage; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.ai_usage ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: location_alerts alerts_admin; Type: POLICY; Schema: public; Owner: -
@@ -17569,6 +17706,14 @@ GRANT ALL ON FUNCTION public.close_count_request(p_request_id uuid) TO service_r
 
 REVOKE ALL ON FUNCTION public.confirm_recent_auth(p_user uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.confirm_recent_auth(p_user uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION consume_ai_use(p_user uuid, p_feature text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.consume_ai_use(p_user uuid, p_feature text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.consume_ai_use(p_user uuid, p_feature text) TO service_role;
 
 
 --

@@ -169,6 +169,8 @@ export const KEPT_TABLES: { table: string; what: string }[] = [
   { table: 'ai_provider_keys', what: 'AI keys you added (Settings → AI)' },
   { table: 'ai_feature_settings', what: 'Which AI answers staff and Ask Xtend' },
   { table: 'ai_knowledge', what: 'What the AI should know (Settings → AI keys)' },
+  { table: 'ai_limits', what: 'How much each person may use the AI' },
+  { table: 'ai_usage', what: 'Recent AI uses (kept 3 days, for the limits)' },
   { table: 'place_addresses', what: 'Street addresses Google gave for spots with no shop' },
   { table: 'place_lookup_stats', what: 'Counts of place lookups (Google use)' },
   { table: 'sign_in_lockouts', what: 'Sign-in pauses after wrong passwords (they lift by themselves)' },

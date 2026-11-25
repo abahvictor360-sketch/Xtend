@@ -41,6 +41,12 @@ The most the office can write for the AI (0104).
 ```ts
 const schema = z.discriminatedUnion('action', [
   z.object({
+    action: z.literal('set_limits'),
+    feature: z.enum(['staff_helper', 'admin_assistant']),
+    per_hour: z.number().int().min(1, 'At least 1 an hour').max(1000, 'At most 1,000 an hour'),
+    per_day: z.number().int().min(1, 'At least 1 a day').max(10000, 'At most 10,000 a day'),
+  }),
+  z.object({
     action: z.literal('set_knowledge'),
     body: z.string().max(KNOWLEDGE_MAX, `Keep it under ${KNOWLEDGE_MAX.toLocaleString('en-GB')} characters`),
   }),
@@ -55,7 +61,7 @@ const schema = z.discriminatedUnion('action', [
   }),
 ])
 ```
-- Tables and views: `ai_knowledge`, `ai_provider_keys`, `ai_feature_settings`
+- Tables and views: `ai_limits`, `ai_knowledge`, `ai_provider_keys`, `ai_feature_settings`
 
 ## `POST /api/admin/alerts/[id]`
 
