@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { lagosDateString } from '@/lib/utils'
-import { BatteryWarning, CheckCircle2, Lock, MapPin, ShieldAlert } from 'lucide-react'
+import { BatteryWarning, CheckCircle2, Lock, MapPin, PlayCircle, ShieldAlert } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { askAlwaysLocation, hasShiftTracker, openAutoStart, openBatterySettings, shiftTrackerState } from '@/lib/native'
 import { backgroundNeeds, strictMaker, type BackgroundNeeds, type BackgroundState } from '@/lib/background-gate'
+import { TECNO_VIDEO } from '@/lib/tecno-video'
 
 const CONFIRM_KEY = 'xtend-battery-confirmed'
 /** TECNO, Infinix, itel: Auto-start and the lock confirmed on this phone (kept until the app is reinstalled). */
@@ -105,6 +106,8 @@ export function BackgroundGate({
 }) {
   const ios = state?.platform === 'ios'
   const maker = strictMaker(state)
+  // The 1½-minute video of the TECNO / Infinix / itel steps, opened here.
+  const [watching, setWatching] = useState(false)
   return (
     <Card className="animate-fade-up border border-warning/40">
       <CardContent className="space-y-4 pt-5">
@@ -207,6 +210,21 @@ export function BackgroundGate({
                     Come back here and tap <span className="font-semibold text-foreground">I did both</span>.
                   </li>
                 </ol>
+                {watching ? (
+                  <video
+                    src={TECNO_VIDEO.src}
+                    poster={TECNO_VIDEO.poster}
+                    controls
+                    autoPlay
+                    playsInline
+                    preload="metadata"
+                    className="mx-auto w-full max-w-[260px] rounded-2xl bg-black"
+                  />
+                ) : (
+                  <Button size="sm" variant="ghost" className="px-0 text-brand" onClick={() => setWatching(true)}>
+                    <PlayCircle className="h-4 w-4" /> Watch how ({Math.round(TECNO_VIDEO.seconds / 30) / 2} min)
+                  </Button>
+                )}
                 <div className="flex flex-wrap gap-2 pt-1">
                   <Button size="sm" variant="outline" onClick={() => void openAutoStart().then(onDone)}>
                     Open Auto-start

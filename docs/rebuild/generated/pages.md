@@ -496,7 +496,7 @@ The staff guide: public, so it can be shared before anyone signs in.
 
 - File: `src/app/guide/video-scenes/page.tsx`
 - Who: public / own check
-- Components: `video/staff-video-scenes`
+- Components: `video/staff-video-scenes`, `video/tecno-video-scenes`
 
 One scene of the staff video guide, for scripts/make-staff-video.ts to
 photograph (?s=<scene id>), or the list of scenes (?list=1). Only in

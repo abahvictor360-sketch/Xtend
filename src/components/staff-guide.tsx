@@ -27,6 +27,7 @@ import {
   type GuideTopic,
 } from '@/components/guide'
 import { StaffVideo } from '@/components/staff-video'
+import { TECNO_VIDEO } from '@/lib/tecno-video'
 import { GUIDE_PROBLEMS, guideFor } from '@/lib/field-guide'
 
 export const STAFF_TOPICS = {
@@ -308,6 +309,19 @@ export function StaffGuide() {
             </>,
           ]}
         />
+        <figure className="mx-auto max-w-[260px] space-y-2">
+          <video
+            src={TECNO_VIDEO.src}
+            poster={TECNO_VIDEO.poster}
+            controls
+            playsInline
+            preload="none"
+            className="w-full rounded-2xl bg-black"
+          />
+          <figcaption className="text-center text-xs text-muted-foreground">
+            TECNO, Infinix or itel phone: watch the two steps ({Math.round(TECNO_VIDEO.seconds / 30) / 2} min).
+          </figcaption>
+        </figure>
       </GuideSection>
 
       <GuideSection topic={T.photo} intro="New to Xtend? The welcome steps ask for your photo first.">

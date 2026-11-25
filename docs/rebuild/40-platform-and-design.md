@@ -154,6 +154,16 @@ server (`src/lib/ai/secret-box.ts`: AES-256-GCM, key = SHA-256 of
 stored where only the service role can read them; only the last 4
 characters are ever sent to a browser.
 
+**The TECNO, Infinix and itel video (2026-11-25).** `scripts/make-staff-video.ts`
+with `VIDEO=tecno` makes `public/guide/xtend-tecno-setup.mp4` (1080×1920,
+voice-over, about 1½ min) and `src/lib/tecno-video.ts` from
+`src/components/video/tecno-video-scenes.tsx` (14 scenes in three steps:
+Turn on Auto-start, Lock Xtend in recent apps, Tell Xtend you are done;
+plain drawings of Phone Master's Auto-start list and the recent apps, and
+Xtend's own setup card), through the same scene page (`?video=tecno`).
+`SceneFrame` and `SceneView` take the video's chapters, icons and tagline
+(`VideoSet`); the pieces of screen are exported for it.
+
 **The AI answers from the staff guide (0104).** `scripts/make-guide-knowledge.ts`
 turns the staff guide into `src/lib/generated/staff-guide-text.ts` (run it
 after any guide change; `scripts/check-guide-knowledge.ts` fails if it is
