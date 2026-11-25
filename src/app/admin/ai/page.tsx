@@ -2,7 +2,8 @@ import { requireSession } from '@/lib/auth'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { PageHeader } from '@/components/admin/page-kit'
 import { AiSettings, type SavedKey, type FeatureChoice } from '@/components/admin/ai-settings'
-import { aiFor } from '@/lib/ai/config'
+import { aiFor, type AiConnection } from '@/lib/ai/config'
+import { modelInUse } from '@/lib/ai/compat'
 import type { AiFeature } from '@/lib/ai/providers'
 
 export const dynamic = 'force-dynamic'
@@ -20,9 +21,14 @@ export default async function AiPage() {
     aiFor('staff_helper'),
     aiFor('admin_assistant'),
   ])
+  // A retired model shows the one Xtend switched to (lib/ai/compat.ts).
+  const shown = (c: AiConnection) => {
+    const now = c.provider === 'anthropic' ? c.model : modelInUse(c)
+    return now === c.model ? c.model : `${now} (${c.model} is retired: choose a current model)`
+  }
   const using: Record<AiFeature, { provider: string; model: string } | null> = {
-    staff_helper: staff ? { provider: staff.provider, model: staff.model } : null,
-    admin_assistant: office ? { provider: office.provider, model: office.model } : null,
+    staff_helper: staff ? { provider: staff.provider, model: shown(staff) } : null,
+    admin_assistant: office ? { provider: office.provider, model: shown(office) } : null,
   }
 
   return (

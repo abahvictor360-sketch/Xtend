@@ -49,7 +49,7 @@ conversations are kept in Anthropic's shape (text, tool_use and
 tool_result blocks), so each round is translated there and back: the rest
 of Ask Xtend and the staff helper never need to know which AI answered.
 
-Exports: `AiServiceError`, `outputCap`, `plainSchema`, `Block`, `ConvMessage`, `ToolDef`, `toOpenAiMessages`, `toOpenAiTools`, `compatRound`, `compatToolAnswer`, `listModels`, `compatPing`
+Exports: `AiServiceError`, `outputCap`, `plainSchema`, `Block`, `ConvMessage`, `ToolDef`, `toOpenAiMessages`, `toOpenAiTools`, `modelInUse`, `compatRound`, `compatToolAnswer`, `listModels`, `compatPing`
 
 ## `src/lib/ai/config.ts`
 
