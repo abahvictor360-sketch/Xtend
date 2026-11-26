@@ -14,7 +14,7 @@ export default async function ChangePasswordPage() {
     <main className="flex min-h-dvh flex-col">
       <div className="bg-brand px-6 pb-20 pt-14 text-white safe-top">
         <div className="mx-auto w-full max-w-sm">
-          <h1 className="text-[26px] font-extrabold leading-tight">
+          <h1 className="text-[1.625rem] font-extrabold leading-tight">
             {forced ? 'Set your password' : 'Change your password'}
           </h1>
           <p className="mt-2 text-sm text-white/80">

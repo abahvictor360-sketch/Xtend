@@ -4,6 +4,7 @@ import { ServiceWorker } from '@/components/service-worker'
 import { SplashScreen } from '@/components/splash-screen'
 import { UpdateManager } from '@/components/update-manager'
 import { EARLY_RECOVERY_SCRIPT } from '@/lib/app-error'
+import { TEXT_SIZE_SCRIPT } from '@/lib/text-size'
 
 export const metadata: Metadata = {
   title: 'Xtend — Xpel Beauty field attendance',
@@ -40,6 +41,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {/* Before the app loads: a phone holding pages from before an update
             reloads onto the new version instead of a blank error (app-error.ts). */}
         <script dangerouslySetInnerHTML={{ __html: EARLY_RECOVERY_SCRIPT }} />
+        {/* Text follows the iPhone's text-size setting (text-size.ts). */}
+        <script dangerouslySetInnerHTML={{ __html: TEXT_SIZE_SCRIPT }} />
       </head>
       <body className="min-h-dvh">
         <SplashScreen />

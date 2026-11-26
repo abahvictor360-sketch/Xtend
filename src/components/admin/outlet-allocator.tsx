@@ -174,7 +174,7 @@ export function OutletAllocator({
             aria-selected={category === c.value}
             onClick={() => setCategory(c.value)}
             className={cn(
-              'flex-1 whitespace-nowrap rounded-xl px-2 py-2 text-[13px] font-semibold transition-colors sm:flex-none sm:px-4 sm:text-sm',
+              'flex-1 whitespace-nowrap rounded-xl px-2 py-2 text-[0.8125rem] font-semibold transition-colors sm:flex-none sm:px-4 sm:text-sm',
               category === c.value
                 ? 'bg-card text-foreground shadow-soft'
                 : 'text-muted-foreground hover:text-foreground',

@@ -37,7 +37,7 @@ export default async function LoginPage({
       <div className="bg-brand px-6 pb-20 pt-16 text-white safe-top">
         <div className="mx-auto w-full max-w-sm">
           <XpelTile />
-          <h1 className="mt-6 text-[30px] font-extrabold leading-tight">Xtend</h1>
+          <h1 className="mt-6 text-[1.875rem] font-extrabold leading-tight">Xtend</h1>
           <p className="mt-1 text-sm text-white/80">
             Field attendance for Xpel Beauty. Clock in, report, go.
           </p>

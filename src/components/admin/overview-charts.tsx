@@ -58,7 +58,7 @@ export function AttendanceChart({ days }: { days: DayCount[] }) {
         </div>
       )}
       <div className="relative flex h-64 gap-3">
-      <div className="flex w-7 flex-col justify-between pb-7 text-right text-[11px] tabular-nums text-muted-foreground">
+      <div className="flex w-7 flex-col justify-between pb-7 text-right text-[0.6875rem] tabular-nums text-muted-foreground">
         {ticks.map((t) => (
           <span key={t} className="-translate-y-1/2 leading-none first:translate-y-0 last:translate-y-0">
             {Number.isInteger(t) ? t : t.toFixed(1)}

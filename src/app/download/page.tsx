@@ -66,10 +66,10 @@ export default async function DownloadPage() {
       <div className="bg-brand px-6 pb-24 pt-14 text-white safe-top">
         <div className="mx-auto w-full max-w-3xl">
           <XpelTile />
-          <h1 className="mt-6 text-[32px] font-extrabold leading-tight tracking-tight sm:text-[40px]">
+          <h1 className="mt-6 text-[2rem] font-extrabold leading-tight tracking-tight sm:text-[2.5rem]">
             Get the Xtend app
           </h1>
-          <p className="mt-2 max-w-md text-[15px] leading-relaxed text-white/85">
+          <p className="mt-2 max-w-md text-[0.9375rem] leading-relaxed text-white/85">
             Clock in, check in at your stores and send your counts from an app on your phone. Same
             account, same sign-in.
           </p>
@@ -207,7 +207,7 @@ function PlatformCard({
           </div>
         </div>
         {highlighted && (
-          <span className="rounded-full bg-tint px-2.5 py-1 text-[11px] font-bold text-tint-foreground">
+          <span className="rounded-full bg-tint px-2.5 py-1 text-[0.6875rem] font-bold text-tint-foreground">
             Your phone
           </span>
         )}
@@ -228,7 +228,7 @@ function PlatformCard({
         {href ? (
           <a
             href={href}
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-brand px-5 text-[15px] font-bold text-white shadow-lift transition-colors hover:bg-brand-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
+            className="flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-brand px-5 text-[0.9375rem] font-bold text-white shadow-lift transition-colors hover:bg-brand-deep focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2"
             {...(platform === 'android' ? { download: true } : { target: '_blank', rel: 'noreferrer' })}
           >
             <Download className="h-5 w-5" />
@@ -238,7 +238,7 @@ function PlatformCard({
           <>
             <span
               aria-disabled="true"
-              className="flex h-12 w-full cursor-not-allowed items-center justify-center rounded-2xl bg-muted px-5 text-[15px] font-bold text-muted-foreground"
+              className="flex h-12 w-full cursor-not-allowed items-center justify-center rounded-2xl bg-muted px-5 text-[0.9375rem] font-bold text-muted-foreground"
             >
               Coming soon
             </span>

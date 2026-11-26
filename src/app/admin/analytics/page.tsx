@@ -331,11 +331,11 @@ function Figure({ label, value, was, d, unit, note }: { label: string; value: st
     <div className="surface p-4">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className="mt-1 text-xl font-extrabold tabular-nums">{value}</p>
-      <p className="mt-0.5 text-[11px] leading-tight">
+      <p className="mt-0.5 text-[0.6875rem] leading-tight">
         <Change d={d} unit={unit} />
         <span className="text-muted-foreground"> · was {was}</span>
       </p>
-      {note && <p className="text-[11px] leading-tight text-muted-foreground">{note}</p>}
+      {note && <p className="text-[0.6875rem] leading-tight text-muted-foreground">{note}</p>}
     </div>
   )
 }

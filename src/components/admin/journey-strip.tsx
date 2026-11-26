@@ -93,7 +93,7 @@ export function JourneyStrip({ date, legs }: { date: string; legs: Leg[] }) {
             );
           })}
         </div>
-        <div className="relative mt-0.5 h-3.5 text-[10px] text-muted-foreground">
+        <div className="relative mt-0.5 h-3.5 text-[0.6875rem] text-muted-foreground">
           {ticks.map((t, i) => (
             <span
               key={t}

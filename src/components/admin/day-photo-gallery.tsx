@@ -228,7 +228,7 @@ function PhotoCard({ photo, canFlag }: { photo: DayPhoto; canFlag: boolean }) {
                 Cancel
               </Button>
             </div>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-[0.6875rem] text-muted-foreground">
               It goes to Integrity with the other flags. The person is not told.
             </p>
           </form>

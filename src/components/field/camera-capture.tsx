@@ -207,7 +207,7 @@ export function CameraCapture({
         <div className="min-w-0 px-2 text-center">
           <p id="camera-capture-title" className="truncate text-sm font-semibold">{title}</p>
           {subtitle && (
-            <p className="flex items-center justify-center gap-1 truncate text-[11px] text-white/70">
+            <p className="flex items-center justify-center gap-1 truncate text-[0.6875rem] text-white/70">
               <MapPin className="h-3 w-3 shrink-0" />
               {subtitle}
             </p>
@@ -276,7 +276,7 @@ export function CameraCapture({
             : 'Finding your location. The button turns on as soon as it is found.'}
         </p>
       ) : (
-        <p className="safe-bottom bg-black pb-4 text-center text-[11px] text-white/60">
+        <p className="safe-bottom bg-black pb-4 text-center text-[0.6875rem] text-white/60">
           Take the photo live here. Photos from your gallery, a screen or a printed photo are not accepted.
         </p>
       )}

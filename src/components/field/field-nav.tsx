@@ -43,7 +43,7 @@ export function FieldNav({
               aria-label={label}
               aria-current={active ? 'page' : undefined}
               className={cn(
-                'flex min-w-0 flex-1 h-14 flex-col items-center justify-center gap-1 rounded-2xl text-[11px] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand',
+                'flex min-w-0 flex-1 h-14 flex-col items-center justify-center gap-1 rounded-2xl text-[0.6875rem] font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand',
                 active
                   ? 'bg-white text-foreground'
                   : 'bg-white/10 text-white/90 hover:bg-white/15 hover:text-white',

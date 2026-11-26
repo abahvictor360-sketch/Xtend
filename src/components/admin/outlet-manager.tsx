@@ -473,7 +473,7 @@ export function OutletManager({
                           <span className="min-w-0">
                             <span className="block font-medium">{p.name ?? p.address ?? 'Unnamed place'}</span>
                             {p.name && p.address && <span className="block truncate text-xs text-muted-foreground">{p.address}</span>}
-                            <span className="block text-[11px] text-muted-foreground">
+                            <span className="block text-[0.6875rem] text-muted-foreground">
                               {p.lat.toFixed(5)}, {p.lng.toFixed(5)} · {p.source === 'osm' ? 'OpenStreetMap' : 'Google Maps'}
                             </span>
                           </span>
@@ -714,7 +714,7 @@ function Fact({ icon: Icon, label, value }: { icon: LucideIcon; label: string; v
     <div className="flex min-w-0 items-start gap-2 rounded-xl bg-muted/50 px-2.5 py-2">
       <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0 text-brand" />
       <div className="min-w-0">
-        <dt className="text-[11px] text-muted-foreground">{label}</dt>
+        <dt className="text-[0.6875rem] text-muted-foreground">{label}</dt>
         <dd className="truncate font-semibold">{value}</dd>
       </div>
     </div>

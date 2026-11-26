@@ -168,7 +168,7 @@ export function TeamManager({
             aria-selected={category === c.value}
             onClick={() => chooseCategory(c.value)}
             className={cn(
-              'flex-1 whitespace-nowrap rounded-xl px-2 py-2 text-[13px] font-semibold transition-colors sm:flex-none sm:px-4 sm:text-sm',
+              'flex-1 whitespace-nowrap rounded-xl px-2 py-2 text-[0.8125rem] font-semibold transition-colors sm:flex-none sm:px-4 sm:text-sm',
               category === c.value
                 ? 'bg-card text-foreground shadow-soft'
                 : 'text-muted-foreground hover:text-foreground',
@@ -268,7 +268,7 @@ export function TeamManager({
                   <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                     <span
                       className={cn(
-                        'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                        'rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold',
                         m.role === 'merchandiser'
                           ? 'bg-tint text-tint-foreground'
                           : 'bg-muted text-foreground',

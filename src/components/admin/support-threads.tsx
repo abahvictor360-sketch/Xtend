@@ -206,7 +206,7 @@ export function SupportThreadPanel({
                     : 'bg-brand text-white',
               )}
             >
-              <span className="mb-0.5 flex items-center gap-1 text-[11px] font-semibold opacity-80">
+              <span className="mb-0.5 flex items-center gap-1 text-[0.6875rem] font-semibold opacity-80">
                 {m.sender_role === 'staff' ? (
                   thread.staff_name
                 ) : m.sender_role === 'ai' ? (
@@ -318,7 +318,7 @@ export function SupportThreadPanel({
             maxLength={4000}
             rows={4}
           />
-          <p className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+          <p className="flex items-center gap-1.5 text-[0.6875rem] text-muted-foreground">
             {notificationsOn === false ? (
               <>
                 <BellOff className="h-3.5 w-3.5 text-warning" />
@@ -358,7 +358,7 @@ export function SupportThreadPanel({
               <Button size="sm" variant="ghost" onClick={() => setSaving(false)}>
                 Cancel
               </Button>
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-[0.6875rem] text-muted-foreground">
                 {first}&rsquo;s name is saved as {'{name}'} and filled in for whoever you reply to.
               </span>
             </div>

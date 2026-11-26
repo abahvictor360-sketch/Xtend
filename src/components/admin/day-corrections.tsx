@@ -387,7 +387,7 @@ export function DayCorrections({
             </button>
           ))}
         </div>
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-[0.6875rem] text-muted-foreground">
           Say clock in, clock out, check in or check out; add a store, a time (8:05, 5pm) and why after a comma or
           &ldquo;because&rdquo;. &ldquo;Ask them to …&rdquo; asks them to do it again; &ldquo;undo the clock-out&rdquo; puts them back on shift.
         </p>

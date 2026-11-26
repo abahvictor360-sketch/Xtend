@@ -59,7 +59,7 @@ export function AttendanceGrid({
                   className="w-6 min-w-6 text-center font-medium tabular-nums text-muted-foreground"
                   title={d}
                 >
-                  <span className="block text-[10px] leading-3">{'SMTWTFS'[weekday(d)]}</span>
+                  <span className="block text-[0.6875rem] leading-3">{'SMTWTFS'[weekday(d)]}</span>
                   {Number(d.slice(8, 10))}
                 </th>
               ))}
@@ -79,7 +79,7 @@ export function AttendanceGrid({
                         href={dayHref(person.id, days[i])}
                         title={cellTitle(c, person.name)}
                         aria-label={cellTitle(c, person.name)}
-                        className="relative flex h-6 w-6 items-center justify-center rounded-[5px] text-[10px] font-bold hover:ring-2 hover:ring-brand/60"
+                        className="relative flex h-6 w-6 items-center justify-center rounded-[5px] text-[0.6875rem] font-bold hover:ring-2 hover:ring-brand/60"
                         style={STYLE[c.status]}
                       >
                         {MARK[c.status]}

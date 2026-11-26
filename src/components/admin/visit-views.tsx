@@ -47,7 +47,7 @@ export function DayStrip({
 }) {
   const item = (label: string, value: string) => (
     <span key={label} className="flex flex-col">
-      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</span>
+      <span className="text-[0.6875rem] uppercase tracking-wider text-muted-foreground">{label}</span>
       <span className="text-sm font-semibold tabular-nums">{value}</span>
     </span>
   )
@@ -62,7 +62,7 @@ export function DayStrip({
       )}
       {day?.still_in_store && (
         <span className="flex flex-col">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Now in</span>
+          <span className="text-[0.6875rem] uppercase tracking-wider text-muted-foreground">Now in</span>
           <Badge variant="brand">{day.still_in_store}</Badge>
         </span>
       )}

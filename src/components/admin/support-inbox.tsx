@@ -36,7 +36,7 @@ export function Figure({ label, value, note, warn }: { label: string; value: str
     <div className="surface p-4">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className={cn('mt-1 text-xl font-extrabold tabular-nums', warn && 'text-destructive')}>{value}</p>
-      {note && <p className="text-[11px] text-muted-foreground">{note}</p>}
+      {note && <p className="text-[0.6875rem] text-muted-foreground">{note}</p>}
     </div>
   )
 }
@@ -84,7 +84,7 @@ export function ThreadRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-baseline justify-between gap-2">
             <span className="truncate text-sm font-semibold">{t.staff_name}</span>
-            <span className="shrink-0 text-[11px] tabular-nums text-muted-foreground">
+            <span className="shrink-0 text-[0.6875rem] tabular-nums text-muted-foreground">
               {formatLagos(t.last_message_at, !sameDay)}
             </span>
           </div>

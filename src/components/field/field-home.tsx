@@ -247,7 +247,7 @@ export function FieldHome({
               <span className="ml-1 font-semibold">(your assigned store)</span>
             )}
             {gate.fix && (
-              <span className="block text-[11px] opacity-80">
+              <span className="block text-[0.6875rem] opacity-80">
                 {gate.fix.lat.toFixed(5)}, {gate.fix.lng.toFixed(5)} · accurate to ±
                 {Math.round(gate.fix.accuracy_m)} m
                 {liveDistance !== null && ` · ${metres(liveDistance)} from your outlet`}
@@ -508,7 +508,7 @@ function WeekRow({ today, calendar }: { today: string; calendar: CalendarDay[] }
               >
                 {dayOfMonth(date)}
               </span>
-              <span className={cn('h-3 text-[10px] leading-3', WORD_CLASS[mark])}>
+              <span className={cn('h-3 text-[0.6875rem] leading-3', WORD_CLASS[mark])}>
                 {word || (mark === 'worked' ? '•' : '')}
               </span>
             </Link>
@@ -592,7 +592,7 @@ function DayCard({
                   )}
                 />
               </span>
-              <span className="text-[10px] font-semibold text-white/85">{SHORT[step.label] ?? step.label}</span>
+              <span className="text-[0.6875rem] font-semibold text-white/85">{SHORT[step.label] ?? step.label}</span>
             </div>
           ))}
         </div>
@@ -641,7 +641,7 @@ function RingRow({
             />
           )}
         </svg>
-        <span className="text-[11px] font-bold italic">{done ? 'Done' : 'Due'}</span>
+        <span className="text-[0.6875rem] font-bold italic">{done ? 'Done' : 'Due'}</span>
       </span>
     </div>
   )

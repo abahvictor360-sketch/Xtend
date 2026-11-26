@@ -27,7 +27,7 @@ export function Figure({
     <div className={cn('surface p-4', className)}>
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className={cn('mt-1 text-xl font-extrabold tabular-nums', warn && 'text-destructive')}>{value}</p>
-      {note && <p className="text-[11px] text-muted-foreground">{note}</p>}
+      {note && <p className="text-[0.6875rem] text-muted-foreground">{note}</p>}
     </div>
   )
 }

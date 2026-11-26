@@ -49,7 +49,7 @@ export function ReportVisits({ visits, today }: { visits: SourceVisit[]; today: 
             </span>
             <span>Total time in stores: {minutesText(totals.minutes)}</span>
           </div>
-          <p className="text-[11px] text-muted-foreground">These are added to your report when you save it.</p>
+          <p className="text-[0.6875rem] text-muted-foreground">These are added to your report when you save it.</p>
         </>
       )}
     </section>

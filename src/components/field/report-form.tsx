@@ -224,7 +224,7 @@ export function ReportForm({
       <div>
         <div className="mb-2 flex items-center justify-between">
           <Label className="field-label">Section</Label>
-          <span className="text-[11px] font-semibold text-muted-foreground">
+          <span className="text-[0.6875rem] font-semibold text-muted-foreground">
             {filled}/{SECTIONS.length} filled
           </span>
         </div>
@@ -331,7 +331,7 @@ export function ReportForm({
         {busy ? 'Saving…' : existing ? 'Update report' : 'Submit report'}
       </Button>
 
-      <p className="pb-2 text-center text-[11px] text-muted-foreground">
+      <p className="pb-2 text-center text-[0.6875rem] text-muted-foreground">
         One report for the whole day and one for each store you checked in at. Editable until midnight, not after.
       </p>
     </form>

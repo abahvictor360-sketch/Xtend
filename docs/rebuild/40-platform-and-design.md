@@ -1535,10 +1535,10 @@ again." (an unsigned-secrets debug APK is signed with a new key each build, so i
 | `--accent` | `26 100% 96%` | |
 | `--accent-foreground` | `18 55% 34%` | |
 | `--muted` | `28 16% 95%` | skeletons, subtle fills |
-| `--muted-foreground` | `25 8% 46%` | secondary text |
-| `--success` | `152 58% 34%` | |
+| `--muted-foreground` | `25 8% 40%` | secondary text (2026-11-26: 5.0:1 on the staff app's grey page) |
+| `--success` | `152 60% 30%` | (2026-11-26: 5.3:1 on white) |
 | `--success-foreground` | `0 0% 100%` | |
-| `--warning` | `36 94% 42%` | |
+| `--warning` | `35 100% 30%` | (2026-11-26: 5.5:1 on white) |
 | `--warning-foreground` | `0 0% 100%` | |
 | `--destructive` | `4 74% 48%` | |
 | `--destructive-foreground` | `0 0% 100%` | |
@@ -1565,7 +1565,11 @@ Base layer: `* { @apply border-border }`, `html { -webkit-text-size-adjust: 100%
 - Font stack (body): `ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif`. No web fonts.
 - Sizes in use: page titles admin `text-xl font-semibold`; card titles `text-base font-bold leading-tight tracking-tight`;
   section headers `text-base font-bold tracking-tight`; body `text-sm`; form inputs `text-base` (16 px, stops iOS zoom);
-  labels `text-sm font-semibold`; meta `text-xs text-muted-foreground`; badges `text-[11px] font-semibold`;
+  labels `text-sm font-semibold`; meta `text-xs text-muted-foreground`; badges `text-[0.6875rem] font-semibold`
+  (design floor, 2026-11-26: every text size in rem, none below 11 px, so text follows the phone's text size;
+  iPhone: `TEXT_SIZE_SCRIPT` in `src/lib/text-size.ts`, run in `<head>`, sets the root size to 16 px × the
+  `-apple-system-body` size / 17, 100%–200% (never smaller: inputs stay 16 px), WebKit only; Android: `MainActivity.followTextSize()` sets the WebView's
+  text zoom from `fontScale`, 85%–200%, on create and resume; `scripts/check-design-floor.ts`);
   figures `text-xl font-extrabold tabular-nums`; `.stat-value` `text-2xl font-semibold tabular-nums`;
   `.stat-label` and `.field-label` `text-xs font-semibold|medium uppercase tracking-wide text-muted-foreground`;
   brand wordmark `text-xl font-extrabold tracking-tight`.
@@ -1653,7 +1657,7 @@ All use `cn()` = `twMerge(clsx(...))` from `src/lib/utils.ts`.
 
 `buttonVariants` is exported for links styled as buttons. `forwardRef`, `displayName = 'Button'`.
 
-**Badge** (`badge.tsx`). Base `inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold leading-none`.
+**Badge** (`badge.tsx`). Base `inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[0.6875rem] font-semibold leading-none`.
 Variants: `default` `bg-tint text-tint-foreground`; `brand` `bg-brand text-primary-foreground`;
 `success` `bg-success/12 text-success`; `warning` `bg-warning/15 text-warning`;
 `destructive` `bg-destructive/12 text-destructive`; `outline` `border border-border text-muted-foreground`;
@@ -1724,7 +1728,7 @@ sign out and the menu as a drop-down. Content `main.w-full px-4 py-6 pb-24 lg:px
 
 **Figure cards** (repeated per page, e.g. `Figure` in `admin/attendance/page.tsx`, `visit-views.tsx`):
 `surface p-4`; label `text-xs font-medium text-muted-foreground`; value `mt-1 text-xl font-extrabold tabular-nums`
-(`text-destructive` when `warn`); optional note `text-[11px]|text-xs text-muted-foreground`; linked variant adds
+(`text-destructive` when `warn`); optional note `text-[0.6875rem]|text-xs text-muted-foreground`; linked variant adds
 `hover:ring-1 hover:ring-brand/40` and "Show them →" in `text-xs font-semibold text-brand`.
 
 **Filter forms** (`attendance-filters.tsx`, `visit-filters.tsx`): a plain `<form method="get">` so the URL holds the whole

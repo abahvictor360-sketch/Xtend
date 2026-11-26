@@ -196,8 +196,8 @@ export function CountSheetPanel({
                   <FileText className="h-4 w-4 shrink-0 text-brand" />
                   <div className="min-w-0 flex-1">
                     <p className="line-clamp-2 text-sm font-semibold [overflow-wrap:anywhere]">{s.file_name}</p>
-                    <p className="text-[11px] text-muted-foreground">{s.outlet_name}</p>
-                    {s.status && <p className="text-[11px] text-muted-foreground">{s.status}</p>}
+                    <p className="text-[0.6875rem] text-muted-foreground">{s.outlet_name}</p>
+                    {s.status && <p className="text-[0.6875rem] text-muted-foreground">{s.status}</p>}
                   </div>
                 </li>
               ))}

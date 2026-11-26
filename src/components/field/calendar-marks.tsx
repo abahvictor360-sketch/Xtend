@@ -49,7 +49,7 @@ export function byDay(calendar: CalendarDay[]) {
 export function CalendarLegend({ className }: { className?: string }) {
   const items: CalendarMark[] = ['worked', 'missed', 'off', 'leave']
   return (
-    <div className={cn('flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground', className)}>
+    <div className={cn('flex flex-wrap gap-x-3 gap-y-1 text-[0.6875rem] text-muted-foreground', className)}>
       {items.map((m) => (
         <span key={m} className="flex items-center gap-1.5">
           <span className={cn('h-3 w-3 rounded-full', MARK_CLASS[m])} />
@@ -119,7 +119,7 @@ export function MonthCalendar({
         )}
       </div>
 
-      <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-semibold text-muted-foreground">
+      <div className="grid grid-cols-7 gap-1 text-center text-[0.6875rem] font-semibold text-muted-foreground">
         {WEEKDAYS.map((w) => (
           <span key={w.dow}>{w.short.slice(0, 2)}</span>
         ))}
@@ -150,7 +150,7 @@ export function MonthCalendar({
                   )}
                 >
                   <span className="leading-none">{Number(date.slice(8, 10))}</span>
-                  <span className={cn('mt-0.5 text-[10px] leading-none', WORD_CLASS[mark])}>
+                  <span className={cn('mt-0.5 text-[0.6875rem] leading-none', WORD_CLASS[mark])}>
                     {MARK_WORD[mark] || (mark === 'worked' ? '•' : isToday ? 'Today' : '')}
                   </span>
                 </Link>

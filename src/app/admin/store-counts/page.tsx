@@ -390,7 +390,7 @@ export default async function StoreCountsPage({
                     <TableCell>
                       {r.product}
                       {r.barcode && (
-                        <span className="block font-mono text-[11px] text-muted-foreground">{r.barcode}</span>
+                        <span className="block font-mono text-[0.6875rem] text-muted-foreground">{r.barcode}</span>
                       )}
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{r.back_store ?? '—'}</TableCell>

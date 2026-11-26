@@ -130,7 +130,7 @@ export function ExcuseTimeline({
         <span />
         <div className="relative h-5">
           {ticks.map((t) => (
-            <span key={t} className="absolute -translate-x-1/2 whitespace-nowrap text-[10px] text-muted-foreground" style={{ left: `${((t - start) / span) * 100}%` }}>
+            <span key={t} className="absolute -translate-x-1/2 whitespace-nowrap text-[0.6875rem] text-muted-foreground" style={{ left: `${((t - start) / span) * 100}%` }}>
               {hours > 24 ? formatLagos(new Date(t), true).replace(/:00$/, '') : formatLagos(new Date(t), false)}
             </span>
           ))}
@@ -195,7 +195,7 @@ function BatteryLine({ points, x }: { points: { at: string; pct: number }[]; x: 
           title={`${formatLagos(p.at, true)}: battery ${p.pct}%`}
         />
       ))}
-      <span className="absolute right-0 top-0 text-[10px] font-semibold text-muted-foreground">{last.pct}%</span>
+      <span className="absolute right-0 top-0 text-[0.6875rem] font-semibold text-muted-foreground">{last.pct}%</span>
     </>
   )
 }

@@ -226,7 +226,7 @@ export default async function AccountPage() {
                   meta={
                     <>
                       {message.body}
-                      <span className="mt-0.5 block text-[11px]">
+                      <span className="mt-0.5 block text-[0.6875rem]">
                         {message.sender_name ?? 'Office'} · {formatLagos(message.sent_at)}
                       </span>
                     </>
@@ -269,7 +269,7 @@ export default async function AccountPage() {
 
         <div className="flex flex-col items-center gap-2 pb-2">
           <XpelLockup width={120} className="opacity-80" />
-          <p className="text-center text-[11px] text-muted-foreground">
+          <p className="text-center text-[0.6875rem] text-muted-foreground">
             Xtend · field attendance
           </p>
         </div>

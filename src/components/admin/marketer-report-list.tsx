@@ -79,7 +79,7 @@ export function MarketerReportList({ rows: shown, kind, periodKey: key }: { rows
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl bg-tint/60 px-2 py-1.5">
-      <dt className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dt className="text-[0.6875rem] font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
       <dd className="whitespace-nowrap font-semibold tabular-nums">{value}</dd>
     </div>
   )

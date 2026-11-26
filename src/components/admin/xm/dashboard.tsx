@@ -14,12 +14,12 @@ import type { Activity, CategoryShare, Kpi, MonthBar, StoreBar } from '@/lib/met
 const KPI_ICONS = [ShoppingBag, Truck, ClipboardCheck, Timer]
 
 function ChangePill({ kpi, onDeep }: { kpi: Kpi; onDeep?: boolean }) {
-  if (!kpi.change) return <span className={cn('text-[11px]', onDeep ? 'text-white/60' : 'text-muted-foreground')}>No change</span>
+  if (!kpi.change) return <span className={cn('text-[0.6875rem]', onDeep ? 'text-white/60' : 'text-muted-foreground')}>No change</span>
   const Icon = kpi.tone === 'down' ? ArrowDownRight : ArrowUpRight
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[11px] font-bold',
+        'inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[0.6875rem] font-bold',
         kpi.tone === 'down' ? 'bg-[#efe6e1] text-[#52281a]' : kpi.tone === 'up' ? 'bg-[#fde1cc] text-[#8a3a12]' : 'bg-muted text-muted-foreground',
       )}
     >
@@ -56,7 +56,7 @@ export function KpiCards({ kpis }: { kpis: Kpi[] }) {
             </div>
             <div className="mt-4 flex items-center justify-between gap-2">
               <ChangePill kpi={k} onDeep={deep} />
-              <span className={cn('text-right text-[11px] leading-tight', deep ? 'text-white/85' : 'text-muted-foreground')}>{k.note}</span>
+              <span className={cn('text-right text-[0.6875rem] leading-tight', deep ? 'text-white/85' : 'text-muted-foreground')}>{k.note}</span>
             </div>
           </div>
         )
@@ -115,7 +115,7 @@ export function SalesOverviewChart({
       </div>
 
       <div className="relative flex h-64 gap-3">
-        <div className="flex w-10 flex-col justify-between pb-6 text-right text-[11px] tabular-nums text-muted-foreground">
+        <div className="flex w-10 flex-col justify-between pb-6 text-right text-[0.6875rem] tabular-nums text-muted-foreground">
           {ticks.map((t) => (
             <span key={t} className="-translate-y-1/2 leading-none first:translate-y-0 last:translate-y-0">
               {fmt(Math.round(t))}
@@ -158,7 +158,7 @@ export function SalesOverviewChart({
                   </div>
                   <span
                     className={cn(
-                      'mt-1.5 h-[18px] text-[11px]',
+                      'mt-1.5 h-[18px] text-[0.6875rem]',
                       on ? 'font-semibold text-foreground' : 'text-muted-foreground',
                       // Every other month on a phone, so the names do not run together.
                       !on && i % 2 === 1 && 'invisible sm:visible',
@@ -299,7 +299,7 @@ export function StockRings({
               </span>
               <span className="flex-1 truncate font-medium">{c.name}</span>
               <span className="tabular-nums">{c.units.toLocaleString('en-GB')}</span>
-              <span className="w-14 rounded-full bg-[#fde1cc] py-0.5 text-center text-[11px] font-bold text-[#8a3a12]">{c.share}%</span>
+              <span className="w-14 rounded-full bg-[#fde1cc] py-0.5 text-center text-[0.6875rem] font-bold text-[#8a3a12]">{c.share}%</span>
             </div>
           ))
         )}
@@ -382,7 +382,7 @@ export function TopStores({ stores }: { stores: StoreBar[] }) {
             <Link href={`/admin/metrics/stores/${s.id}`} className="block space-y-1.5 hover:opacity-90">
               <div className="flex items-baseline justify-between gap-2 text-sm">
                 <span className="flex min-w-0 items-center gap-2">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#fdf0e7] text-[11px] font-bold text-[#9b3517]">{i + 1}</span>
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#fdf0e7] text-[0.6875rem] font-bold text-[#9b3517]">{i + 1}</span>
                   <span className="truncate font-medium">{s.name}</span>
                 </span>
                 <span className="shrink-0 text-xs tabular-nums text-muted-foreground">

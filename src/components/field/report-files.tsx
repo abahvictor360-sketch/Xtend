@@ -72,7 +72,7 @@ function Row({
         ) : (
           <p className="line-clamp-2 text-sm font-semibold [overflow-wrap:anywhere]">{name}</p>
         )}
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-[0.6875rem] text-muted-foreground">
           {reportFileLabel(mime)} · {fileSizeLabel(size)} · {note}
         </p>
       </div>

@@ -79,7 +79,7 @@ export function RouteError({
           Go back
         </Link>
       </div>
-      <p className="text-[11px] text-muted-foreground">Code {info.code}</p>
+      <p className="text-[0.6875rem] text-muted-foreground">Code {info.code}</p>
     </main>
   )
 }

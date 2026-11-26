@@ -181,7 +181,7 @@ export function Conversation({
           groups.map((group) => (
             <Fragment key={group.date}>
               <div className="flex justify-center py-2">
-                <span className="rounded-full bg-card px-3 py-1 text-[11px] font-semibold text-muted-foreground shadow-soft">
+                <span className="rounded-full bg-card px-3 py-1 text-[0.6875rem] font-semibold text-muted-foreground shadow-soft">
                   {group.label}
                 </span>
               </div>
@@ -197,7 +197,7 @@ export function Conversation({
                   >
                     {!m.mine &&
                       (endsRun ? (
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-tint text-[10px] font-bold text-tint-foreground">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-tint text-[0.6875rem] font-bold text-tint-foreground">
                           {initials(m.sender_name)}
                         </span>
                       ) : (
@@ -206,7 +206,7 @@ export function Conversation({
 
                     <div className={cn('max-w-[80%] sm:max-w-[72%]', m.mine ? 'items-end' : 'items-start')}>
                       {!m.mine && startsRun && (
-                        <p className="mb-0.5 pl-1 text-[11px] font-semibold text-muted-foreground">{m.sender_name}</p>
+                        <p className="mb-0.5 pl-1 text-[0.6875rem] font-semibold text-muted-foreground">{m.sender_name}</p>
                       )}
                       <div
                         className={cn(
@@ -248,7 +248,7 @@ export function Conversation({
                               <span className="line-clamp-1 [overflow-wrap:anywhere]">
                                 {m.attachment_name ?? 'Document.pdf'}
                               </span>
-                              <span className={cn('text-[11px]', m.mine ? 'text-white/75' : 'text-muted-foreground')}>
+                              <span className={cn('text-[0.6875rem]', m.mine ? 'text-white/75' : 'text-muted-foreground')}>
                                 PDF · {fileSizeLabel(m.attachment_size_bytes)}
                               </span>
                             </span>
@@ -259,7 +259,7 @@ export function Conversation({
                       {endsRun && (
                         <p
                           className={cn(
-                            'mt-1 flex items-center gap-1 px-1 text-[10px] text-muted-foreground',
+                            'mt-1 flex items-center gap-1 px-1 text-[0.6875rem] text-muted-foreground',
                             m.mine ? 'justify-end' : 'justify-start',
                           )}
                         >
@@ -290,7 +290,7 @@ export function Conversation({
           </span>
           <div className="min-w-0 flex-1">
             <p className="line-clamp-1 text-sm font-semibold [overflow-wrap:anywhere]">{file.name}</p>
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-[0.6875rem] text-muted-foreground">
               {messageAttachmentType(file) === 'application/pdf' ? 'PDF' : 'Picture'} · {fileSizeLabel(file.size)}
             </p>
           </div>

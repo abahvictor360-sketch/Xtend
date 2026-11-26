@@ -73,7 +73,7 @@ export default async function HistoryPage({
       </header>
 
       <div className="flex items-center justify-between gap-3">
-        <h1 className="text-[26px] font-extrabold tracking-tight">{monthLabel(selected)}</h1>
+        <h1 className="text-[1.625rem] font-extrabold tracking-tight">{monthLabel(selected)}</h1>
         {selected !== today && (
           <Link href="/field/history" className={buttonVariants({ size: 'pill', variant: 'secondary' })}>
             Today
