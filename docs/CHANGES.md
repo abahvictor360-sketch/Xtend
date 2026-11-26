@@ -48,7 +48,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0112_office_entry_location.sql`;
    - `supabase/migrations/0113_force_app_update.sql`;
    - `supabase/migrations/0114_store_google_check.sql`;
-   - `supabase/migrations/0115_location_off.sql`.
+   - `supabase/migrations/0115_location_off.sql`;
+   - `supabase/migrations/0116_clock_in_photo_checks_in.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18;
    0099, 0100, 0101 and 0102 are done: you ran them on 2026-11-24.)
 4. **Turn off self sign-up in Supabase**: Authentication → Sign In /
@@ -80,6 +81,18 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-26
+
+### The clock-in photo is the store check-in photo too (migration 0116)
+- **What was done:** when a marketer clocks in at a store, Xtend also checks
+  them in there, but that check-in showed no photo. Now the clock-in selfie
+  is saved as the check-in photo as well, so it shows on the clock-in and
+  on the store check-in (Attendance, the person's day, Store visits). Check-
+  ins already made this way get their clock-in photo when the migration
+  runs. The same photo still cannot be used for any other check-in.
+- **The impact:** every store visit that started with a clock-in has its
+  photo; nothing to take twice.
+- **What you need to do:** run `supabase/migrations/0116_clock_in_photo_checks_in.sql`
+  in Supabase (after 0115). No new app build, nothing to redeploy for this.
 
 ### The phone rings when a marketer leaves a store without checking out (new app build, no migration)
 - **What was done:** while a marketer is checked in at a store, the Xtend

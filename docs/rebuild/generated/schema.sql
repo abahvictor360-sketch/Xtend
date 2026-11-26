@@ -1401,13 +1401,15 @@ begin
     return null;
   end if;
 
+  -- 0116: the clock-in selfie is the check-in photo too.
+  perform set_config('xtend.clock_in_photo', coalesce(new.selfie_path, ''), true);
   begin
     insert into public.store_visits
       (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m,
-       arrived_address, arrived_place_name, device_info, client_captured_at)
+       arrived_address, arrived_place_name, selfie_path, thumb_path, device_info, client_captured_at)
     values
       (store, new.lat, new.lng, new.accuracy_m,
-       new.address, new.place_name,
+       new.address, new.place_name, new.selfie_path, new.thumb_path,
        coalesce(new.device_info, '{}'::jsonb)
          || jsonb_build_object('source', 'clock_in', 'attendance_id', new.id),
        new.client_captured_at);
@@ -1415,6 +1417,7 @@ begin
     -- No automatic check-in; the clock-in stands.
     null;
   end;
+  perform set_config('xtend.clock_in_photo', '', true);
   return null;
 end;
 $$;
@@ -8428,6 +8431,13 @@ CREATE FUNCTION public.selfie_check() RETURNS trigger
     AS $$
 begin
   if auth.uid() is null then
+    return new;
+  end if;
+
+  -- 0116: the store check-in a marketer's clock-in makes carries the
+  -- clock-in's own selfie, already checked as the clock-in's.
+  if tg_table_name = 'store_visits' and new.selfie_path is not null
+     and new.selfie_path = nullif(current_setting('xtend.clock_in_photo', true), '') then
     return new;
   end if;
 

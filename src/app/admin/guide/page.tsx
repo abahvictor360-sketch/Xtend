@@ -423,8 +423,8 @@ export default async function AdminGuidePage() {
             their phone ring like an alarm, <Ui>Check out before you leave</Ui>, until they open it; still outside
             two minutes later, it rings again (on iPhone, every minute). Checking out or going back in stops it.
             It needs the newest phone app. A marketer who clocks in
-            inside one of their own stores is checked in there at the same time; that visit has no
-            photo of its own (the clock-in&apos;s selfie is on Attendance).
+            inside one of their own stores is checked in there at the same time; the clock-in
+            selfie is that check-in&apos;s photo too, so it shows on both.
           </p>
           <p className="font-semibold">How location is recorded (not shown to staff)</p>
           <ul className="list-disc space-y-1.5 pl-5">

@@ -1307,8 +1307,14 @@ A marketer's clock-in can open a visit too (0087, AFTER INSERT trigger
 `has_allocated_stores()`, accuracy ≤ 100 m, `client_captured_at` within 30
 minutes, inside the fence of the nearest active store in
 `outlets_for_user(user)`, with no visit open today → insert a visit at
-that store (no selfie; `device_info` gets `source: 'clock_in'` and
-`attendance_id`). Errors are swallowed so the clock-in always stands.
+that store (0116: with the clock-in's `selfie_path` and `thumb_path`;
+`device_info` gets `source: 'clock_in'` and `attendance_id`). Errors are
+swallowed so the clock-in always stands. 0116: the trigger sets the
+transaction setting `xtend.clock_in_photo` to the selfie path around the
+insert, and `selfie_check()` returns early for a `store_visits` row whose
+`selfie_path` equals it (otherwise "already been used"); the migration
+fills in the photo of earlier visits with `source = 'clock_in'` from their
+`attendance_id`.
 
 ### 5.4 Store labels (`store_visit_detail`, 0016, 0052)
 

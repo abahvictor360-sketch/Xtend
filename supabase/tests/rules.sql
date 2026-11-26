@@ -583,6 +583,20 @@ begin
       and (select device_info ->> 'source' from public.store_visits where user_id = mia) = 'clock_in',
       'clock-in 0087: on site, marked as made by the clock-in');
     perform assert(
+      (select v.selfie_path from public.store_visits v where v.user_id = mia)
+        = (select a.selfie_path from public.attendance a where a.user_id = mia and a.type = 'opening')
+      and (select v.selfie_path from public.store_visits v where v.user_id = mia) is not null,
+      'clock-in photo 0116: the clock-in selfie is the check-in photo too');
+    begin
+      update public.store_visits set status = 'closed', departed_at = now() where user_id = mia and status = 'open';
+      insert into public.store_visits (outlet_id, arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at, selfie_path)
+      values (kiosk_id, 6.5, 3.3, 10, now(), (select a.selfie_path from public.attendance a where a.user_id = mia and a.type = 'opening'));
+      perform assert(false, 'clock-in photo 0116: the clock-in selfie cannot be used again for another check-in');
+    exception when raise_exception then
+      perform assert(sqlerrm = 'That selfie has already been used',
+        'clock-in photo 0116: the clock-in selfie cannot be used again for another check-in');
+    end;
+    perform assert(
       exists (select 1 from public.my_store_visits() where status = 'open'),
       'clock-in 0087: Home shows the check-in, ready to check out');
 
