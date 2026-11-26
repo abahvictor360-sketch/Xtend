@@ -859,6 +859,25 @@ $$;
 
 
 --
+-- Name: attendance_end_location_off(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.attendance_end_location_off() RETURNS trigger
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if new.type = 'closing' then
+    update public.location_off_spells
+       set ended_at = greatest(new.created_at, started_at)
+     where user_id = new.user_id and ended_at is null;
+  end if;
+  return null;
+end;
+$$;
+
+
+--
 -- Name: attendance_enforce(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -2244,6 +2263,36 @@ CREATE FUNCTION public.claim_flag_alerts(p_limit integer DEFAULT 50) RETURNS TAB
   join public.profiles p on p.id = t.user_id
   left join public.outlets o on o.id = t.outlet_id
   order by t.created_at;
+$$;
+
+
+--
+-- Name: claim_location_off_alerts(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.claim_location_off_alerts() RETURNS TABLE(spell_id uuid, user_id uuid, started_at timestamp with time zone, last_lat double precision, last_lng double precision, last_place text, last_fix_at timestamp with time zone)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+#variable_conflict use_column
+declare
+  minutes integer := coalesce((select s.location_off_alert_minutes from public.system_settings s where s.id), 15);
+begin
+  if minutes <= 0 then
+    return;
+  end if;
+  return query
+  update public.location_off_spells l
+     set alerted_at = now()
+   where l.ended_at is null
+     and l.alerted_at is null
+     and l.started_at <= now() - make_interval(mins => minutes)
+     and exists (select 1 from public.attendance a
+                 where a.user_id = l.user_id and a.attendance_date = public.business_date() and a.type = 'opening')
+     and not exists (select 1 from public.attendance a
+                     where a.user_id = l.user_id and a.attendance_date = public.business_date() and a.type = 'closing')
+  returning l.id, l.user_id, l.started_at, l.last_lat, l.last_lng, l.last_place, l.last_fix_at;
+end;
 $$;
 
 
@@ -6808,6 +6857,68 @@ $$;
 
 
 --
+-- Name: record_location_state(text, timestamp with time zone, timestamp with time zone, timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.record_location_state(p_token text, p_off_since timestamp with time zone, p_on_at timestamp with time zone, p_sent_at timestamp with time zone) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  t record;
+  skew interval := coalesce(p_sent_at - now(), interval '0');
+  opened timestamptz;
+  closed timestamptz;
+  since timestamptz;
+  ended timestamptz;
+  last record;
+begin
+  select * into t from public.tracking_tokens
+  where token_hash = encode(sha256(convert_to(coalesce(p_token, ''), 'utf8')), 'hex');
+  if t.id is null or not exists (select 1 from public.profiles where id = t.user_id and is_active) then
+    return jsonb_build_object('ok', false);
+  end if;
+
+  select min(a.created_at) filter (where a.type = 'opening'), min(a.created_at) filter (where a.type = 'closing')
+    into opened, closed
+  from public.attendance a
+  where a.user_id = t.user_id and a.attendance_date = public.business_date();
+
+  if p_off_since is not null then
+    since := least(p_off_since - skew, now());
+    if opened is null or closed is not null then
+      return jsonb_build_object('ok', true, 'open', false);
+    end if;
+    since := greatest(since, opened);
+    if exists (select 1 from public.location_off_spells where user_id = t.user_id and ended_at is null) then
+      return jsonb_build_object('ok', true, 'open', true);
+    end if;
+    -- The last position Xtend had before it went off.
+    select p.lat, p.lng, p.accuracy_m, p.created_at, p.place_name into last
+    from public.location_pings p
+    where p.user_id = t.user_id and p.created_at <= since and p.created_at >= opened
+    order by p.created_at desc limit 1;
+    if last.lat is null then
+      select a.lat, a.lng, a.accuracy_m, a.created_at, a.place_name into last
+      from public.attendance a
+      where a.user_id = t.user_id and a.attendance_date = public.business_date() and a.type = 'opening';
+    end if;
+    insert into public.location_off_spells (user_id, started_at, last_lat, last_lng, last_accuracy_m, last_fix_at, last_place)
+    values (t.user_id, since, last.lat, last.lng, last.accuracy_m, last.created_at, last.place_name)
+    on conflict do nothing;
+    return jsonb_build_object('ok', true, 'open', true);
+  end if;
+
+  ended := least(coalesce(p_on_at - skew, now()), now());
+  update public.location_off_spells
+     set ended_at = greatest(ended, started_at)
+   where user_id = t.user_id and ended_at is null;
+  return jsonb_build_object('ok', true, 'open', false);
+end;
+$$;
+
+
+--
 -- Name: record_offline_pings(jsonb, timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -7570,7 +7681,7 @@ CREATE FUNCTION public.reset_category_tables() RETURNS TABLE(category text, tabl
     'stock_counts:count_request_targets', 'stock_counts:count_requests', 'reports:report_files',
     'reports:report_photos', 'reports:reports', 'visits_places:place_naming_due',
     'visits_places:visit_checkout_reminders', 'visits_places:store_visits', 'clock_ins:follow_sessions',
-    'clock_ins:location_alerts',
+    'clock_ins:location_off_spells', 'clock_ins:location_alerts',
     'clock_ins:location_pings', 'clock_ins:excuse_checks', 'clock_ins:phone_checks',
     'clock_ins:photo_checks', 'clock_ins:device_beacons', 'clock_ins:clock_out_reminders',
     'clock_ins:tracking_tokens', 'clock_ins:integrity_flags', 'clock_ins:field_corrections',
@@ -8560,6 +8671,26 @@ begin
   update public.system_settings
      set force_old_app = p_on, force_app_after_hours = p_hours, updated_at = now()
    where id;
+end;
+$$;
+
+
+--
+-- Name: set_location_off_alert_minutes(integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_location_off_alert_minutes(p_minutes integer) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if not public.is_admin() then
+    raise exception 'Only an admin can change this';
+  end if;
+  if p_minutes is null or p_minutes < 0 or p_minutes > 600 then
+    raise exception 'Give the minutes as a number from 0 to 600';
+  end if;
+  update public.system_settings set location_off_alert_minutes = p_minutes, updated_at = now() where id;
 end;
 $$;
 
@@ -11309,9 +11440,11 @@ CREATE TABLE public.system_settings (
     block_early_clock_out boolean DEFAULT true NOT NULL,
     force_old_app boolean DEFAULT true NOT NULL,
     force_app_after_hours integer DEFAULT 24 NOT NULL,
+    location_off_alert_minutes integer DEFAULT 15 NOT NULL,
     CONSTRAINT system_settings_follow_max_sessions_check CHECK (((follow_max_sessions >= 1) AND (follow_max_sessions <= 200))),
     CONSTRAINT system_settings_force_app_after_hours_check CHECK (((force_app_after_hours >= 0) AND (force_app_after_hours <= 720))),
-    CONSTRAINT system_settings_id_check CHECK (id)
+    CONSTRAINT system_settings_id_check CHECK (id),
+    CONSTRAINT system_settings_location_off_alert_minutes_check CHECK (((location_off_alert_minutes >= 0) AND (location_off_alert_minutes <= 600)))
 );
 
 
@@ -11341,6 +11474,13 @@ COMMENT ON COLUMN public.system_settings.force_old_app IS 'On: after the third "
 --
 
 COMMENT ON COLUMN public.system_settings.force_app_after_hours IS 'Hours after the third update reminder before the old app stops (0113).';
+
+
+--
+-- Name: COLUMN system_settings.location_off_alert_minutes; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.system_settings.location_off_alert_minutes IS 'Minutes a phone''s location may stay off during a shift before the supervisor is told (0115); 0 never.';
 
 
 --
@@ -11952,6 +12092,26 @@ CREATE VIEW public.leave_request_detail WITH (security_invoker='true') AS
      JOIN public.profiles p ON ((p.id = l.user_id)))
      LEFT JOIN public.outlets o ON ((o.id = p.outlet_id)))
      LEFT JOIN public.profiles d ON ((d.id = l.decided_by)));
+
+
+--
+-- Name: location_off_spells; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.location_off_spells (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    started_at timestamp with time zone NOT NULL,
+    ended_at timestamp with time zone,
+    last_lat double precision,
+    last_lng double precision,
+    last_accuracy_m double precision,
+    last_fix_at timestamp with time zone,
+    last_place text,
+    alerted_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT location_off_spells_check CHECK (((ended_at IS NULL) OR (ended_at >= started_at)))
+);
 
 
 --
@@ -13602,6 +13762,14 @@ ALTER TABLE ONLY public.location_alerts
 
 
 --
+-- Name: location_off_spells location_off_spells_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.location_off_spells
+    ADD CONSTRAINT location_off_spells_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: location_pings location_pings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -14432,6 +14600,20 @@ CREATE INDEX location_alerts_is_resolved_created_at_idx ON public.location_alert
 
 
 --
+-- Name: location_off_spells_by_person; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX location_off_spells_by_person ON public.location_off_spells USING btree (user_id, started_at DESC);
+
+
+--
+-- Name: location_off_spells_one_open; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX location_off_spells_one_open ON public.location_off_spells USING btree (user_id) WHERE (ended_at IS NULL);
+
+
+--
 -- Name: location_pings_user_id_created_at_idx; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -14912,6 +15094,13 @@ CREATE TRIGGER trg_attendance_alert AFTER INSERT ON public.attendance FOR EACH R
 --
 
 CREATE TRIGGER trg_attendance_claim_pings AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION public.attendance_claim_pings();
+
+
+--
+-- Name: attendance trg_attendance_end_location_off; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_attendance_end_location_off AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION public.attendance_end_location_off();
 
 
 --
@@ -15589,6 +15778,14 @@ ALTER TABLE ONLY public.location_alerts
 
 ALTER TABLE ONLY public.location_alerts
     ADD CONSTRAINT location_alerts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
+
+
+--
+-- Name: location_off_spells location_off_spells_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.location_off_spells
+    ADD CONSTRAINT location_off_spells_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.profiles(id) ON DELETE CASCADE;
 
 
 --
@@ -16750,6 +16947,19 @@ CREATE POLICY leave_requests_read ON public.leave_requests FOR SELECT TO authent
 ALTER TABLE public.location_alerts ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: location_off_spells; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.location_off_spells ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: location_off_spells location_off_spells_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY location_off_spells_read ON public.location_off_spells FOR SELECT TO authenticated USING ((public.is_admin() OR public.supervises_user(user_id)));
+
+
+--
 -- Name: location_pings; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -17795,6 +18005,13 @@ REVOKE ALL ON FUNCTION public.attendance_correction_done() FROM PUBLIC;
 
 
 --
+-- Name: FUNCTION attendance_end_location_off(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.attendance_end_location_off() FROM PUBLIC;
+
+
+--
 -- Name: FUNCTION attendance_enforce(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -18111,6 +18328,14 @@ GRANT ALL ON FUNCTION public.claim_due_notifications(p_limit integer) TO service
 
 REVOKE ALL ON FUNCTION public.claim_flag_alerts(p_limit integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.claim_flag_alerts(p_limit integer) TO service_role;
+
+
+--
+-- Name: FUNCTION claim_location_off_alerts(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.claim_location_off_alerts() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.claim_location_off_alerts() TO service_role;
 
 
 --
@@ -19257,6 +19482,14 @@ GRANT ALL ON FUNCTION public.record_excuse_check(p_user uuid, p_claim text, p_fr
 
 
 --
+-- Name: FUNCTION record_location_state(p_token text, p_off_since timestamp with time zone, p_on_at timestamp with time zone, p_sent_at timestamp with time zone); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.record_location_state(p_token text, p_off_since timestamp with time zone, p_on_at timestamp with time zone, p_sent_at timestamp with time zone) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.record_location_state(p_token text, p_off_since timestamp with time zone, p_on_at timestamp with time zone, p_sent_at timestamp with time zone) TO service_role;
+
+
+--
 -- Name: FUNCTION record_offline_pings(p_points jsonb, p_sent_at timestamp with time zone); Type: ACL; Schema: public; Owner: -
 --
 
@@ -19696,6 +19929,14 @@ GRANT ALL ON FUNCTION public.set_count_sheet_template(p_path text, p_file_name t
 
 REVOKE ALL ON FUNCTION public.set_force_app_update(p_on boolean, p_hours integer) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.set_force_app_update(p_on boolean, p_hours integer) TO authenticated;
+
+
+--
+-- Name: FUNCTION set_location_off_alert_minutes(p_minutes integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.set_location_off_alert_minutes(p_minutes integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.set_location_off_alert_minutes(p_minutes integer) TO authenticated;
 
 
 --
@@ -20418,6 +20659,13 @@ GRANT SELECT ON TABLE public.leave_requests TO authenticated;
 --
 
 GRANT SELECT ON TABLE public.leave_request_detail TO authenticated;
+
+
+--
+-- Name: TABLE location_off_spells; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT ON TABLE public.location_off_spells TO authenticated;
 
 
 --

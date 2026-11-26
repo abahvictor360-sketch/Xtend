@@ -47,7 +47,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0111_clock_out_hold.sql`;
    - `supabase/migrations/0112_office_entry_location.sql`;
    - `supabase/migrations/0113_force_app_update.sql`;
-   - `supabase/migrations/0114_store_google_check.sql`.
+   - `supabase/migrations/0114_store_google_check.sql`;
+   - `supabase/migrations/0115_location_off.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18;
    0099, 0100, 0101 and 0102 are done: you ran them on 2026-11-24.)
 4. **Turn off self sign-up in Supabase**: Authentication → Sign In /
@@ -79,6 +80,29 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-26
+
+### Location turned off during a shift is noticed (migration 0115, new app build)
+- **What was done:** no app can see where a phone is while its location is
+  switched off. So Xtend now notices when it happens instead. If someone
+  turns location off while clocked in, the Xtend app on their phone shows
+  **"Turn your location back on"** (tapping it opens the location settings
+  on Android), and asks again every ten minutes until it is back on. Xtend
+  records when it went off, when it came back, and the last place it had
+  before. On **Movement** they show **Location off since 10:42** in the
+  on-shift list, and their day lists each time under **Worth a look**
+  ("Location turned off 10:42 to 11:15 (33 min). Last seen at …"). If it
+  stays off for 15 minutes, their supervisor and the admins get a
+  notification **"<name>'s location is off"** with where they were last
+  seen. Clocking out ends it. Admins change the 15 minutes (0 for never)
+  on **Movement**, under the on-shift list.
+- **The impact:** going "dark" on purpose during work is no longer silent:
+  the person is asked to fix it straight away, the supervisor knows within
+  15 minutes, and the record shows exactly how long it was off. Staff are
+  only told to turn it back on, not who is told.
+- **What you need to do:** run `supabase/migrations/0115_location_off.sql`
+  in Supabase (after 0114), redeploy, and **publish the new Android and
+  iPhone app builds** (the phone part is in the app). Add "location stays
+  on during working hours" to the staff's terms of work.
 
 ### Xtend checks the store with Google before saying "You are off site" (migration 0114)
 - **What was done:** when a store's pin says someone is off site, Xtend now

@@ -6,6 +6,7 @@ import { runMetricsSweep } from '@/lib/metrics/server'
 import { flushScheduledNotifications } from '@/lib/notification-send'
 import { flushAppUpdateNotices } from '@/lib/app-update-notices'
 import { flushVisitCheckoutReminders } from '@/lib/visit-reminders'
+import { flushLocationOffAlerts } from '@/lib/location-off'
 
 export const maxDuration = 60
 
@@ -19,7 +20,8 @@ export const maxDuration = 60
  * starts and ends (migration 0069; it only sends inside those five minutes,
  * so it depends on this job running on time), and tells anyone on an older
  * phone app that a new one is out (0082), and reminds anyone still checked
- * in at a store to check out before they leave, every 25 minutes (0099). It runs every five minutes from
+ * in at a store to check out before they leave, every 25 minutes (0099), and
+ * tells the supervisor when someone's location has been off on shift (0115). It runs every five minutes from
  * .github/workflows/alerts-cron.yml, or from a server's crontab:
  *
  *   0-59/5 * * * *  curl -s -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/alerts
@@ -42,5 +44,7 @@ export async function GET(request: Request) {
   const store_check_out_reminders = await flushVisitCheckoutReminders()
   // "A new Xtend app is ready" for anyone on an older phone app (0082).
   const app_updates = await flushAppUpdateNotices()
-  return Response.json({ sent, metrics, scheduled, shift_heads_ups, clock_out_reminders, store_check_out_reminders, app_updates, ran_at: new Date().toISOString() })
+  // "<name>'s location is off" to their supervisor, after 15 minutes off on shift (0115).
+  const location_off = await flushLocationOffAlerts()
+  return Response.json({ sent, metrics, scheduled, shift_heads_ups, clock_out_reminders, store_check_out_reminders, app_updates, location_off, ran_at: new Date().toISOString() })
 }

@@ -817,6 +817,22 @@ map (and the phone app) never pay for it.
 
 Exports: `loadLeaflet`, `hasGoogleMapsKey`, `onGoogleAuthFailure`, `loadGoogleMutant`
 
+## `src/lib/location-off-words.ts`
+
+Words for location turned off during a shift (migration 0115). Pure, so
+scripts/check-location-off.ts can test them.
+
+Exports: `locationOffAlert`, `TURN_LOCATION_ON`
+
+## `src/lib/location-off.ts`
+
+The five-minute job's part for location turned off during a shift
+(migration 0115): anyone whose phone has had location off for the
+office's minutes (15 unless changed) while still clocked in. Their
+supervisor and the admins are told once per spell. Never throws.
+
+Exports: `flushLocationOffAlerts`
+
 ## `src/lib/login-destination.ts`
 
 Accept only a local page after sign-in, never a protocol-relative or external URL.
@@ -1856,6 +1872,12 @@ Exports: `LiveAlertFeed`
 Signed link to their profile photo (037), when they have one.
 
 Exports: `LiveLocation`, `LiveLocations`
+
+## `src/components/admin/location-off-setting.tsx`
+
+"Tell the supervisor after N minutes with location off" (migration 0115).
+
+Exports: `LocationOffSetting`
 
 ## `src/components/admin/map-base.tsx`
 

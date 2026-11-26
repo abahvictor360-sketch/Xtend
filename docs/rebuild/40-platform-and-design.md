@@ -1341,6 +1341,12 @@ Native classes (`android/app/src/main/java/ng/xpelbeauty/xtend/`):
   `start` also clears `draining`; `stop` calls `ShiftTrackerService.finish` (2026-11-25): with points
   queued and a token, sets prefs `draining = true` (and clears fast mode) and starts the service to send
   them; otherwise `clear`.
+- **Location off (0115)** in `ShiftTrackerService`: `checkLocationState()` on every tick and on
+  `onProviderDisabled/Enabled` (posted to the handler); prefs `loc_off_since`, `loc_on_at`, `loc_nag_at`
+  (cleared by `clear()`); notification channel `xtend_location_off` "Location is off" (IMPORTANCE_HIGH),
+  id 7302, `CATEGORY_REMINDER`, auto-cancel, tap → `Settings.ACTION_LOCATION_SOURCE_SETTINGS`, repeated
+  every `LOCATION_NAG_MS = 600 000`; `send()` adds `location {off_since}` while off, or `{off_since: null,
+  on_at}` until a 2xx answer.
 - **`ShiftTrackerService`** (foreground, notification channel `xtend_on_shift` "On shift", importance LOW,
   notification id 7301, ongoing, title/text from prefs, tap opens `MainActivity`).
   Constants: `EVERY_MS = 150_000` (a point at least every 2.5 min), `MOVED_M = 100` (or sooner after

@@ -2,7 +2,7 @@
 
 # API routes
 
-144 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+145 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
 
 ## `POST /api/activity`
 
@@ -484,6 +484,19 @@ const schema = z.object({
 ```
 
 - Database functions: `decide_leave`
+
+## `PATCH /api/admin/location-off`
+
+- File: `src/app/api/admin/location-off/route.ts`
+- Who: ['admin']
+
+How long location may stay off on shift before the supervisor is told (0115; 0 never).
+
+```ts
+const schema = z.object({ minutes: z.number().int().min(0).max(600) })
+```
+
+- Database functions: `set_location_off_alert_minutes`
 
 ## `POST /api/admin/metrics/count`
 
@@ -1700,7 +1713,8 @@ and asks anyone still clocked in after their shift end to clock out
 starts and ends (migration 0069; it only sends inside those five minutes,
 so it depends on this job running on time), and tells anyone on an older
 phone app that a new one is out (0082), and reminds anyone still checked
-in at a store to check out before they leave, every 25 minutes (0099). It runs every five minutes from
+in at a store to check out before they leave, every 25 minutes (0099), and
+tells the supervisor when someone's location has been off on shift (0115). It runs every five minutes from
 .github/workflows/alerts-cron.yml, or from a server's crontab:
 
   0-59/5 * * * *  curl -s -H "Authorization: Bearer $CRON_SECRET" https://<host>/api/cron/alerts
@@ -2327,10 +2341,20 @@ const schema = z.object({
       is_mock: z.boolean().optional(),
     })
     .optional(),
+  /**
+   * Location switched off on the phone (0115): off_since while it is off;
+   * when it comes back, off_since null and on_at when it did.
+   */
+  location: z
+    .object({
+      off_since: z.string().datetime({ offset: true }).nullable(),
+      on_at: z.string().datetime({ offset: true }).nullable().optional(),
+    })
+    .optional(),
 })
 ```
 
-- Database functions: `record_background_pings`
+- Database functions: `record_background_pings`, `record_location_state`
 - Tables and views: `profiles`, `location_pings`
 
 ## `POST /api/track/stop`

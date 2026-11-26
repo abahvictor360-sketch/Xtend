@@ -2360,6 +2360,19 @@ reached from the home week row, History ("Your month") and You.
   - Start failure: small red text with the error (default "Location could
     not be started").
 
+- **Location off (0115).** On shift, the native tracker notices location
+  being switched off (Android: `LocationManagerCompat.isLocationEnabled` on
+  each tick and `onProviderDisabled/Enabled`; iPhone: `authorizationStatus`
+  .denied/.restricted, `didFailWithError .denied`). It shows "Turn your
+  location back on" / "Xtend needs your location on while you are at work.
+  Tap to turn it on." (Android: channel `xtend_location_off`, importance
+  high, id 7302, opens the location settings; iPhone: local notification
+  `xtend-location-off`, body "… Open Settings to turn it on."), again every
+  10 minutes, and sends `location: { off_since }` with every request to
+  `/api/track/device`; when it is back on, `location: { off_since: null,
+  on_at }` once. Cleared at the end of the shift. Staff guide: "It says
+  “Turn your location back on”".
+
 ### 13.5 Update manager (mention only)
 
 `src/components/update-manager.tsx`, mounted in the root layout: checks the

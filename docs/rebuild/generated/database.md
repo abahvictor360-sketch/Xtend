@@ -411,6 +411,25 @@ Policies:
 - `alerts_admin` ALL to public: using `is_admin()`; check `is_admin()`
 - `alerts_supervisor_select` SELECT to public: using `supervises_user(user_id)`
 
+### `location_off_spells`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| id | uuid(uuid) |  | gen_random_uuid() |
+| user_id | uuid(uuid) |  |  |
+| started_at | timestamp with time zone(timestamptz) |  |  |
+| ended_at | timestamp with time zone(timestamptz) | yes |  |
+| last_lat | double precision(float8) | yes |  |
+| last_lng | double precision(float8) | yes |  |
+| last_accuracy_m | double precision(float8) | yes |  |
+| last_fix_at | timestamp with time zone(timestamptz) | yes |  |
+| last_place | text(text) | yes |  |
+| alerted_at | timestamp with time zone(timestamptz) | yes |  |
+| created_at | timestamp with time zone(timestamptz) |  | now() |
+
+Policies:
+- `location_off_spells_read` SELECT to authenticated: using `(is_admin() OR supervises_user(user_id))`
+
 ### `location_pings`
 
 | Column | Type | Null | Default |
@@ -1083,6 +1102,7 @@ Policies:
 | block_early_clock_out | boolean(bool) |  | true |
 | force_old_app | boolean(bool) |  | true |
 | force_app_after_hours | integer(int4) |  | 24 |
+| location_off_alert_minutes | integer(int4) |  | 15 |
 
 Policies:
 - `system_settings_admin_read` SELECT to authenticated: using `is_admin()`
@@ -1487,6 +1507,7 @@ Policies:
 - `attendance_capture_day()` → trigger · definer · 0107_offline_clock_day.sql
 - `attendance_claim_pings()` → trigger · definer · 0096_every_synced_position_kept.sql
 - `attendance_correction_done()` → trigger · definer · 0090_field_corrections.sql
+- `attendance_end_location_off()` → trigger · definer · 0115_location_off.sql
 - `attendance_enforce()` → trigger · definer · 0034_stores_pinned_from_clock_in.sql
 - `attendance_integrity()` → trigger · definer · 0022_integrity_checks.sql
 - `attendance_learn_waiting_store()` → trigger · definer · 0034_stores_pinned_from_clock_in.sql
@@ -1527,6 +1548,7 @@ Policies:
 - `claim_clock_out_reminders(p_now timestamp with time zone)` → TABLE(user_id uuid, reminder_date date, stage smallint, shift_end text) · definer · 0069_shift_soon_reminders.sql
 - `claim_due_notifications(p_limit integer)` → SETOF scheduled_notifications · definer · 0053_support_notifications.sql
 - `claim_flag_alerts(p_limit integer)` → TABLE(id uuid, user_id uuid, staff_name text, kind text, severity text, summary text, outlet_name text, created_at timestamp with time zone) · definer · 0036_supervisor_alerts.sql
+- `claim_location_off_alerts()` → TABLE(spell_id uuid, user_id uuid, started_at timestamp with time zone, last_lat double precision, last_lng double precision, last_place text, last_fix_at timestamp with time zone) · definer · 0115_location_off.sql
 - `claim_pin_check_notice(p_outlet uuid)` → boolean · definer · 0114_store_google_check.sql
 - `claim_scheduled_notification(p_id uuid)` → SETOF scheduled_notifications · definer · 0053_support_notifications.sql
 - `claim_selfie_sweep(p_min_minutes integer)` → boolean · definer · 0012_selfie_retention_24h.sql
@@ -1717,6 +1739,7 @@ Policies:
 - `record_background_pings(p_token text, p_points jsonb, p_sent_at timestamp with time zone)` → jsonb · definer · 0096_every_synced_position_kept.sql
 - `record_beacon(p jsonb)` → jsonb · definer · 0026_phone_evidence.sql
 - `record_excuse_check(p_user uuid, p_claim text, p_from timestamp with time zone, p_to timestamp with time zone, p_verdict text, p_headline text, p_note text)` → uuid · definer · 0048_excuse_check_advanced.sql
+- `record_location_state(p_token text, p_off_since timestamp with time zone, p_on_at timestamp with time zone, p_sent_at timestamp with time zone)` → jsonb · definer · 0115_location_off.sql
 - `record_offline_pings(p_points jsonb, p_sent_at timestamp with time zone)` → integer · definer · 0096_every_synced_position_kept.sql
 - `record_retention_purge(p_result jsonb)` → void · definer · 0067_report_photos_offline.sql
 - `record_selfie_sweep(p_result jsonb)` → void · definer · 0012_selfie_retention_24h.sql
@@ -1746,7 +1769,7 @@ Policies:
 - `request_phone_check(p_user uuid)` → uuid · definer · 0026_phone_evidence.sql
 - `request_store_count(p_user_ids uuid[], p_due_date date, p_note text)` → uuid · definer · 0046_role_store_counts.sql
 - `reset_category_keys()` → text[] · 0066_test_mode_reset.sql
-- `reset_category_tables()` → TABLE(category text, table_name text, step integer) · 0099_store_checkout_reminders.sql
+- `reset_category_tables()` → TABLE(category text, table_name text, step integer) · 0115_location_off.sql
 - `reset_files_done(p_bucket text, p_names text[])` → integer · definer · 0066_test_mode_reset.sql
 - `reset_files_next(p_limit integer)` → TABLE(bucket text, name text) · definer · 0066_test_mode_reset.sql
 - `reset_files_pending()` → integer · definer · 0066_test_mode_reset.sql
@@ -1777,6 +1800,7 @@ Policies:
 - `set_clock_out_hold(p_user uuid, p_hold boolean)` → boolean · definer · 0111_clock_out_hold.sql
 - `set_count_sheet_template(p_path text, p_file_name text)` → uuid · definer · 0035_store_count_sheets.sql
 - `set_force_app_update(p_on boolean, p_hours integer)` → void · definer · 0113_force_app_update.sql
+- `set_location_off_alert_minutes(p_minutes integer)` → void · definer · 0115_location_off.sql
 - `set_my_avatar(p_path text)` → void · definer · 0062_user_activity.sql
 - `set_schedule_override(p_user uuid, p_day date, p_working boolean, p_note text)` → uuid · definer · 0059_schedules_leave.sql
 - `set_staff_outlets(p_user_id uuid, p_outlet_ids uuid[])` → SETOF uuid · definer · 0011_store_allocation.sql
@@ -1862,6 +1886,7 @@ Policies:
 - `attendance`: `realtime_broadcast` — AFTER INSERT OR DELETE OR UPDATE ON public.attendance FOR EACH ROW EXECUTE FUNCTION realtime_notify_field_owner()
 - `attendance`: `trg_attendance_alert` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_alert()
 - `attendance`: `trg_attendance_claim_pings` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_claim_pings()
+- `attendance`: `trg_attendance_end_location_off` — AFTER INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_end_location_off()
 - `attendance`: `trg_attendance_enforce` — BEFORE INSERT ON public.attendance FOR EACH ROW EXECUTE FUNCTION attendance_enforce()
 - `attendance`: `trg_attendance_enforce_day` — BEFORE INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_capture_day()
 - `attendance`: `trg_attendance_integrity` — AFTER INSERT ON public.attendance FOR EACH ROW WHEN ((NOT office_entry_on())) EXECUTE FUNCTION attendance_integrity()

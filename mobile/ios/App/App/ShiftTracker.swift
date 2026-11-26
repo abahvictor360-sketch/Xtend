@@ -2,6 +2,7 @@ import Capacitor
 import CoreLocation
 import Foundation
 import UIKit
+import UserNotifications
 
 /// Location for the length of a shift, with or without the app.
 ///
@@ -29,6 +30,12 @@ import UIKit
 /// without a distance filter (still saved at most every 2½ minutes, or after
 /// 100 m). At clock-out nothing new is collected; what was saved offline is
 /// still sent ("draining") and never thrown away.
+///
+/// Location off (migration 0115): when location is switched off (or Xtend's
+/// permission taken away) during the shift, iOS tells the tracker; it asks
+/// the person to turn it back on ("Turn your location back on", again every
+/// ten minutes) and sends off_since with each request until it is back on,
+/// then on_at once.
 final class ShiftTrackerCore: NSObject, CLLocationManagerDelegate {
     static let shared = ShiftTrackerCore()
 
@@ -170,6 +177,10 @@ final class ShiftTrackerCore: NSObject, CLLocationManagerDelegate {
         defaults.removeObject(forKey: "xtend.tracker.endpoint")
         defaults.removeObject(forKey: "xtend.tracker.expires")
         defaults.removeObject(forKey: "xtend.tracker.draining")
+        defaults.removeObject(forKey: "xtend.tracker.offSince")
+        defaults.removeObject(forKey: "xtend.tracker.onAt")
+        defaults.removeObject(forKey: "xtend.tracker.nagAt")
+        UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ["xtend-location-off"])
         DispatchQueue.main.async {
             self.manager.stopUpdatingLocation()
             self.manager.stopMonitoringSignificantLocationChanges()
@@ -199,10 +210,57 @@ final class ShiftTrackerCore: NSObject, CLLocationManagerDelegate {
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         defaults.set("location: \(error.localizedDescription)", forKey: "xtend.tracker.error")
+        if (error as? CLError)?.code == .denied { checkLocationState() }
     }
 
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        checkLocationState()
         if configured { resume() }
+    }
+
+    // Location switched off during the shift (0115).
+
+    private var locationOn: Bool {
+        switch manager.authorizationStatus {
+        case .denied, .restricted: return false
+        default: return true
+        }
+    }
+
+    /// Off: remembers since when, asks to turn it back on, tells the server.
+    /// Back on: says so once and clears the request.
+    func checkLocationState() {
+        guard configured, !draining else { return }
+        let now = Date().timeIntervalSince1970
+        let since = defaults.double(forKey: "xtend.tracker.offSince")
+        if !locationOn {
+            if since == 0 {
+                defaults.set(now, forKey: "xtend.tracker.offSince")
+                defaults.removeObject(forKey: "xtend.tracker.onAt")
+                askToTurnOn()
+                lastCheck = nil
+                flush()
+            } else if now - defaults.double(forKey: "xtend.tracker.nagAt") >= 600 {
+                askToTurnOn()
+            }
+        } else if since != 0 {
+            defaults.removeObject(forKey: "xtend.tracker.offSince")
+            defaults.removeObject(forKey: "xtend.tracker.nagAt")
+            defaults.set(now, forKey: "xtend.tracker.onAt")
+            UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ["xtend-location-off"])
+            lastCheck = nil
+            flush()
+        }
+    }
+
+    private func askToTurnOn() {
+        defaults.set(Date().timeIntervalSince1970, forKey: "xtend.tracker.nagAt")
+        let content = UNMutableNotificationContent()
+        content.title = "Turn your location back on"
+        content.body = "Xtend needs your location on while you are at work. Open Settings to turn it on."
+        content.sound = .default
+        let request = UNNotificationRequest(identifier: "xtend-location-off", content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(request, withCompletionHandler: nil)
     }
 
     private func keep(_ l: CLLocation) {
@@ -257,6 +315,14 @@ final class ShiftTrackerCore: NSObject, CLLocationManagerDelegate {
         guard !queue.isEmpty || live != nil || checkDue else { return }
         let batch = Array(queue.prefix(500))
         var payload: [String: Any] = ["sent_at": f.string(from: Date()), "points": batch]
+        // Location switched off, or back on (0115).
+        let offSince = defaults.double(forKey: "xtend.tracker.offSince")
+        let onAt = defaults.double(forKey: "xtend.tracker.onAt")
+        if offSince > 0 {
+            payload["location"] = ["off_since": f.string(from: Date(timeIntervalSince1970: offSince))]
+        } else if onAt > 0 {
+            payload["location"] = ["off_since": NSNull(), "on_at": f.string(from: Date(timeIntervalSince1970: onAt))]
+        }
         if let live = live {
             payload["live"] = live
             lastLiveAt = Date()
@@ -302,6 +368,9 @@ final class ShiftTrackerCore: NSObject, CLLocationManagerDelegate {
             self.defaults.set(Date().timeIntervalSince1970 * 1000, forKey: "xtend.tracker.sent")
             self.defaults.removeObject(forKey: "xtend.tracker.error")
             self.lastFailure = nil
+            if onAt > 0 && self.defaults.double(forKey: "xtend.tracker.onAt") == onAt {
+                self.defaults.removeObject(forKey: "xtend.tracker.onAt")
+            }
             let answer = (data.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]) ?? [:]
             // Follow live: faster while the server asks, normal otherwise.
             self.setFast((answer["interval_ms"] as? NSNumber)?.doubleValue ?? 0)

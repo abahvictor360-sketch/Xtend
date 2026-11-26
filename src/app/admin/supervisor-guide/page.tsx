@@ -192,6 +192,13 @@ export default async function SupervisorGuidePage() {
             <Ui> Worth a look</Ui> points out what needs a question.
           </p>
           <p>
+            <Ui>Location off</Ui>: if someone on your team turns their phone&apos;s location off while clocked in, their
+            phone asks them to turn it back on, and on <Ui>Movement</Ui> they show <Ui>Location off since …</Ui>. If it
+            stays off for 15 minutes (the admin can change this) you get a notification with where they were last
+            seen: call them. Their day on <Ui>Movement</Ui> lists every time it was off under <Ui>Worth a look</Ui>.
+            Nobody can see where a phone is while its location is off.
+          </p>
+          <p>
             <Ui>Follow live</Ui> (next to each name under <Ui>On shift now</Ui>, or at the top of their
             journey) shows one person on your team moving on the map a few seconds behind, like a delivery
             app. You can only follow someone who is clocked in. It lasts 30 minutes (press{' '}

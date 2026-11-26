@@ -332,11 +332,11 @@ On screen: Put merchandisers and marketers on a supervisor&apos;s team. A superv
 
 - File: `src/app/admin/tracking/page.tsx`
 - Who: ['admin', 'supervisor']
-- Components: `admin/page-kit`, `ui/alert`, `ui/button`, `ui/input`, `ui/label`, `ui/select`, `admin/movement-map`, `admin/journey-strip`, `admin/live-locations`
+- Components: `admin/page-kit`, `ui/alert`, `ui/button`, `ui/input`, `ui/label`, `ui/select`, `admin/movement-map`, `admin/location-off-setting`, `admin/journey-strip`, `admin/live-locations`
 
 A compact figure for a person's journey: eight of them, four a row.
 
-On screen: Nothing heard for
+On screen: When someone turns location off on shift, the phone asks them to turn it back on, and it shows here.
 
 ## `/admin/updates` — Updates — Xtend
 
