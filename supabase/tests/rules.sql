@@ -7654,5 +7654,57 @@ begin
     if sqlerrm <> 'where-0112-done' then raise; end if;
   end;
 
+  -- After three reminders and the grace time, the old app must update (0113).
+  begin
+    declare
+      r record;
+    begin
+      perform set_config('request.jwt.claim.sub', '', false);
+      delete from public.app_update_notices;
+      update public.system_settings set force_old_app = true, force_app_after_hours = 24;
+      insert into public.app_update_notices (user_id, platform, build, times, last_at) values
+        (ada, 'android', 200, 2, now() - interval '3 days'),
+        (bala, 'android', 200, 3, now() - interval '2 hours'),
+        (grace, 'ios', 9, 3, now() - interval '30 hours');
+      perform act_as(ada);
+      select * into r from public.my_required_app_builds();
+      perform assert(r.android is null and r.ios is null, 'force app 0113: two reminders are not enough');
+      perform act_as(bala);
+      select * into r from public.my_required_app_builds();
+      perform assert(r.android is null, 'force app 0113: not before the grace time is over');
+      perform act_as(grace);
+      select * into r from public.my_required_app_builds();
+      perform assert(r.ios = 9 and r.android is null, 'force app 0113: three reminders and a day later, the old app must update');
+
+      perform act_as(boss);
+      perform assert((select count(*) from public.app_forced_builds) = 1, 'force app 0113: an admin sees who must update');
+      perform public.set_force_app_update(true, 1);
+      perform assert((select count(*) from public.app_forced_builds) = 2, 'force app 0113: a shorter grace time forces sooner');
+      perform public.set_force_app_update(false, 1);
+      perform act_as(grace);
+      select * into r from public.my_required_app_builds();
+      perform assert(r.ios is null, 'force app 0113: switched off, nobody is forced');
+      begin
+        perform public.set_force_app_update(true, 24);
+        perform assert(false, 'force app 0113: staff cannot change the switch');
+      exception when raise_exception then
+        perform assert(sqlerrm = 'Only an admin can change this', 'force app 0113: staff cannot change the switch');
+      end;
+      perform act_as(boss);
+      begin
+        perform public.set_force_app_update(true, 1000);
+        perform assert(false, 'force app 0113: hours over 720 are refused');
+      exception when raise_exception then
+        perform assert(sqlerrm like 'Give the hours%', 'force app 0113: hours over 720 are refused');
+      end;
+      perform public.set_force_app_update(true, 24);
+      perform assert(not has_function_privilege('anon', 'public.my_required_app_builds()', 'execute'),
+        'force app 0113: not for signed-out callers');
+      raise exception 'force-0113-done';
+    end;
+  exception when others then
+    if sqlerrm <> 'force-0113-done' then raise; end if;
+  end;
+
   raise notice 'ALL RULES PASSED';
 end $$;

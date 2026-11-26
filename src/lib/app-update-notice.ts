@@ -17,14 +17,23 @@ export function noticeHour(at: Date = new Date()) {
   return h >= NOTICE_HOURS.from && h < NOTICE_HOURS.to
 }
 
+/**
+ * The third reminder is the last (the same three as migration 0082); after
+ * it and the grace time the old app stops until it is updated (0113).
+ */
+export const LAST_REMINDER = 3
+
 export function updateNoticeMessage(platform: 'android' | 'ios', version: string | null, times: number) {
   const name = version ? `Xtend ${version}` : 'A new Xtend app'
   const where =
     platform === 'android'
       ? 'Open Xtend and tap Get it, or download it from the Xtend download page.'
       : 'Open TestFlight and tap Update.'
+  const last = times >= LAST_REMINDER
   return {
-    title: times > 1 ? 'Please update Xtend' : 'A new Xtend app is ready',
-    body: `${name} is ready to install. ${where} Your account and anything waiting to send are kept.`,
+    title: last ? 'Last reminder: update Xtend now' : times > 1 ? 'Please update Xtend' : 'A new Xtend app is ready',
+    body: last
+      ? `${name} is ready to install. ${where} Soon the old app will stop working until you install the new one. Your account and anything waiting to send are kept.`
+      : `${name} is ready to install. ${where} Your account and anything waiting to send are kept.`,
   }
 }

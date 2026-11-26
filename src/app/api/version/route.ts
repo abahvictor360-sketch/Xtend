@@ -1,6 +1,6 @@
 import { createServerSupabase } from '@/lib/supabase/server'
 import { publishedAndroidApk } from '@/lib/app-release'
-import type { ReleaseNote, VersionInfo } from '@/lib/app-update'
+import { lowestAllowed, type ReleaseNote, type VersionInfo } from '@/lib/app-update'
 import { namedCache } from '@/lib/ttl-cache'
 
 export const dynamic = 'force-dynamic'
@@ -19,13 +19,24 @@ interface Shared {
 // Shared through Redis when it is set up, so every app container reads once.
 const shared = namedCache<Shared>('version-shared', 2, { shared: true })
 const roles = namedCache<string>('version-roles', 2000, { shared: true })
+// The builds one person must install (0113): reminded three times and the
+// grace time is over. Read every few minutes, not on every check.
+interface Forced {
+  android: number | null
+  ios: number | null
+  ok: boolean
+}
+const forcedBuilds = namedCache<Forced>('version-forced', 2000, { shared: true })
+const FORCED_TTL_MS = 5 * 60_000
 const SHARED_TTL_MS = 60_000
 const ROLE_TTL_MS = 5 * 60_000
 
 /**
  * What is live now, for UpdateManager: this deploy's build id, the newest
  * phone apps and the lowest builds still allowed, and (signed in) the
- * newest "What's new" for this person. Public: a signed-out page still
+ * newest "What's new" for this person. A person who had all three update
+ * reminders (0082) and let the grace time pass gets the newest build they
+ * were told about as their lowest allowed (0113). Public: a signed-out page still
  * needs to know it is out of date.
  */
 export async function GET() {
@@ -56,7 +67,7 @@ export async function GET() {
       data: { user },
     } = await supabase.auth.getUser()
     if (user) {
-      const [role, rows] = await Promise.all([
+      const [role, rows, forced] = await Promise.all([
         roles.remember(
           user.id,
           (r) => (r ? ROLE_TTL_MS : 0),
@@ -85,10 +96,20 @@ export async function GET() {
             }
           },
         ),
+        forcedBuilds.remember(
+          user.id,
+          (v) => (v.ok ? FORCED_TTL_MS : 0),
+          async () => {
+            const { data, error } = await supabase.rpc('my_required_app_builds')
+            const row = (Array.isArray(data) ? data[0] : data) as { android?: number | null; ios?: number | null } | null
+            return { android: row?.android ?? null, ios: row?.ios ?? null, ok: !error }
+          },
+        ),
       ])
       const field = FIELD.has(role)
-      info.android.minimum = rows.minimum?.android ?? null
-      info.ios.minimum = rows.minimum?.ios ?? null
+      // Below this build the app cannot be used until the new one is installed.
+      info.android.minimum = lowestAllowed(rows.minimum?.android ?? null, forced.android)
+      info.ios.minimum = lowestAllowed(rows.minimum?.ios ?? null, forced.ios)
       const mine = rows.releases.find(
         (r) => r.audience === 'everyone' || (r.audience === 'field') === field,
       )

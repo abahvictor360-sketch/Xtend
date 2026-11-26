@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Bell, Megaphone } from 'lucide-react'
+import { Bell, Lock, Megaphone } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -161,6 +161,83 @@ export function RemindToUpdate({ userIds }: { userIds: string[] }) {
         {state === 'sending' ? 'Sending…' : `Remind ${userIds.length} to update`}
       </Button>
       {state !== 'ready' && state !== 'sending' && <span className="text-xs text-muted-foreground">{state}</span>}
+    </div>
+  )
+}
+
+/**
+ * "The old app must update after three reminders" (migration 0113): on or
+ * off, and how many hours after the third reminder the old app stops.
+ */
+export function ForceUpdateSetting({ on, hours }: { on: boolean | null; hours: number }) {
+  const router = useRouter()
+  const [enabled, setEnabled] = useState(on ?? true)
+  const [wait, setWait] = useState(String(hours))
+  const [busy, setBusy] = useState(false)
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
+
+  if (on === null) {
+    return <p className="text-sm text-muted-foreground">Run migration 0113 in Supabase to use this.</p>
+  }
+
+  async function save(nextOn: boolean) {
+    const n = Number(wait)
+    if (!Number.isInteger(n) || n < 0 || n > 720) {
+      setMessage({ ok: false, text: 'Give the hours as a number from 0 to 720.' })
+      return
+    }
+    setBusy(true)
+    setMessage(null)
+    try {
+      const res = await fetch('/api/admin/updates', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ force_old_app: nextOn, force_app_after_hours: n }),
+      })
+      const json = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) throw new Error(json.error ?? 'It could not be saved.')
+      setEnabled(nextOn)
+      setMessage({ ok: true, text: nextOn ? 'Saved. Old apps stop after the last reminder.' : 'Saved. Old apps keep working; people are only reminded.' })
+      router.refresh()
+    } catch (error) {
+      setMessage({ ok: false, text: error instanceof Error ? error.message : 'It could not be saved.' })
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3 text-sm">
+      <label className="flex items-start gap-2">
+        <input
+          type="checkbox"
+          checked={enabled}
+          disabled={busy}
+          onChange={(e) => void save(e.target.checked)}
+          className="mt-0.5 h-4 w-4 accent-[hsl(var(--brand))]"
+        />
+        <span>
+          <span className="font-medium">Stop the old app after the last reminder.</span> Xtend reminds people three times
+          about a new phone app (once when it comes out, then every two days). After the third, the old app shows only
+          &ldquo;Install the new Xtend app&rdquo; until they install it.
+        </span>
+      </label>
+      <div className="flex flex-wrap items-end gap-2">
+        <div className="space-y-1.5">
+          <label htmlFor="force-hours" className="text-xs font-medium">Hours after the last reminder</label>
+          <input
+            id="force-hours"
+            inputMode="numeric"
+            value={wait}
+            onChange={(e) => setWait(e.target.value.replace(/\D/g, '').slice(0, 3))}
+            className="h-10 w-28 rounded-lg border border-border bg-background px-3"
+          />
+        </div>
+        <Button type="button" variant="secondary" className="h-10" disabled={busy} onClick={() => void save(enabled)}>
+          <Lock className="h-4 w-4" /> {busy ? 'Saving…' : 'Save'}
+        </Button>
+      </div>
+      {message && <p className={message.ok ? 'text-success' : 'text-destructive'}>{message.text}</p>}
     </div>
   )
 }

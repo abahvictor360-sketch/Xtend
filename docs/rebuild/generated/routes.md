@@ -1277,7 +1277,7 @@ delivery log, audit).
 const schema = z.object({ user_ids: z.array(z.string().guid()).min(1).max(500) })
 ```
 
-## `POST /api/admin/updates`
+## `POST, PATCH /api/admin/updates`
 
 - File: `src/app/api/admin/updates/route.ts`
 - Who: ['admin']
@@ -1295,7 +1295,15 @@ const schema = z.object({
   /** Also send it to their phones as a notification. */
   notify: z.boolean(),
 })
+
+const forceSchema = z.object({
+  /** After the third update reminder and the grace time, the old app stops (0113). */
+  force_old_app: z.boolean(),
+  force_app_after_hours: z.number().int().min(0).max(720),
+})
 ```
+
+- Database functions: `set_force_app_update`
 - Tables and views: `app_releases`
 
 ## `PATCH, DELETE /api/admin/users/[id]`
@@ -2337,8 +2345,12 @@ const schema = z.object({ platform: z.enum(['android', 'ios']) })
 
 What is live now, for UpdateManager: this deploy's build id, the newest
 phone apps and the lowest builds still allowed, and (signed in) the
-newest "What's new" for this person. Public: a signed-out page still
+newest "What's new" for this person. A person who had all three update
+reminders (0082) and let the grace time pass gets the newest build they
+were told about as their lowest allowed (0113). Public: a signed-out page still
 needs to know it is out of date.
+
+- Database functions: `my_required_app_builds`
 - Tables and views: `profiles`, `app_minimum_builds`, `app_releases`
 
 ## `POST /api/version/seen`

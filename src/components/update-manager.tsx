@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { usePathname } from 'next/navigation'
 import { Download, RefreshCw, Sparkles, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { callNative, hasPlugin, nativePlatform } from '@/lib/native'
@@ -61,7 +62,9 @@ async function applySiteUpdate() {
  *
  * The phone app: inside the Android or iPhone app, compares the installed
  * build with the newest and offers the download; below the lowest build an
- * admin allows, it must be installed before carrying on.
+ * admin allows, or once they have had all three update reminders and the
+ * grace time is over (0113), it must be installed before carrying on. The
+ * download page itself is never covered, so the new app can be fetched.
  *
  * "Later" only hides the bar until Xtend next opens or returns to the
  * screen (15 minutes at most); the five-minute job also sends a phone
@@ -75,6 +78,8 @@ export function UpdateManager() {
   // When "Later" was tapped, this sitting only (never kept across opens).
   const [snoozed, setSnoozed] = useState<{ site: number; app: number }>({ site: 0, app: 0 })
   const lastCheck = useRef(0)
+  // The download page is where the new app comes from: never cover it.
+  const onDownloadPage = (usePathname() ?? '').startsWith('/download')
   const reported = useRef<string | null>(null)
 
   const check = useCallback(async () => {
@@ -153,7 +158,7 @@ export function UpdateManager() {
     }
   }, [check])
 
-  if (!state) return null
+  if (!state || onDownloadPage) return null
   const now = Date.now()
 
   // Must update before carrying on.

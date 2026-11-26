@@ -806,6 +806,16 @@ export function StaffGuide() {
               a: <>Ask your supervisor or admin to reset it. You will choose a new one when you sign in.</>,
             },
             {
+              q: 'It says “Install the new Xtend app”',
+              a: (
+                <>
+                  A new Xtend app came out and you were reminded three times. Tap <b>Get the new app</b> and install
+                  it; Xtend opens again straight away. Your account and anything waiting to send are kept. Update when
+                  the first reminder comes, so this never stops your work.
+                </>
+              ),
+            },
+            {
               q: 'It says “Your account is paused”',
               a: <>Contact your supervisor or admin. They will tell you what to do next.</>,
             },

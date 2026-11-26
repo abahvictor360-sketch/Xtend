@@ -2360,7 +2360,11 @@ reached from the home week row, History ("Your month") and You.
 build every **10 minutes** and on every return to the screen; **Later** hides
 the update bar only until Xtend is opened again or comes back to the screen
 (15 minutes at most); a new phone app is also announced by phone notification
-(0082, "A new Xtend app is ready"); prompts such as "Update Xtend to carry on" and "Install
+(0082, "A new Xtend app is ready"; the third and last reminder "Last reminder:
+update Xtend now"). Once someone has had all three for a build and the grace
+time (24 hours, set on Updates) has passed, `/api/version` gives that build as
+their lowest allowed (0113), so the app shows "Install the new Xtend app" until
+it is installed. The `/download` page is never covered. Prompts such as "Update Xtend to carry on" and "Install
 the new Xtend app" ("This version of the app is too old to keep using.
 Install the new one; your account and anything waiting to upload are
 kept."). Full spec belongs to the platform file.

@@ -51,6 +51,7 @@ Every exported UPPER_CASE constant in `src/lib`, with the comment above it. Thes
 ## `src/lib/app-update-notice.ts`
 
 - `NOTICE_HOURS` = `{ from: 7, to: 20 }` — The phone notification that tells someone a new Xtend app is out (migration 0082). Pure: shared by the alerts job and scripts/check-updates.ts. / Lagos hours (inclusive start, exclusive end) when it may be sent: not at night.
+- `LAST_REMINDER` = `3` — The hour in Lagos (UTC+1, no daylight saving). export function lagosHour(at: Date = new Date()) { return (at.getUTCHours() + 1) % 24 } export function noticeHour(at: Date = new Date()) { const h = lagosHour(at) return h >= NOTICE_HOURS.from && h < NOTICE_HOURS.to } The third reminder is the last (the same three as migration 0082); after it and the grace time the old app stops until it is updated (0113). /
 
 ## `src/lib/app-update.ts`
 

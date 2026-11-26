@@ -1062,6 +1062,8 @@ Policies:
 | mfa_roles | ARRAY(_user_role) |  | '{admin,hr}'::user_role[] |
 | block_off_site | boolean(bool) |  | true |
 | block_early_clock_out | boolean(bool) |  | true |
+| force_old_app | boolean(bool) |  | true |
+| force_app_after_hours | integer(int4) |  | 24 |
 
 Policies:
 - `system_settings_admin_read` SELECT to authenticated: using `is_admin()`
@@ -1404,6 +1406,7 @@ Policies:
 ## Views
 
 - `alert_detail`
+- `app_forced_builds`
 - `app_minimum_builds`
 - `attendance_detail`
 - `audit_log_detail`
@@ -1455,6 +1458,7 @@ Policies:
 - `address_at(p_lat double precision, p_lng double precision)` → text · definer · 0068_place_lookups.sql
 - `admin_overview()` → jsonb · definer · 0100_shift_times_per_person.sql
 - `alert_watchers(p_user uuid)` → TABLE(user_id uuid, full_name text, role user_role) · definer · 0036_supervisor_alerts.sql
+- `app_update_reminders()` → integer · 0113_force_app_update.sql
 - `apply_leave(p_kind text, p_from date, p_to date, p_reason text)` → uuid · definer · 0059_schedules_leave.sql
 - `armor(bytea)` → text
 - `armor(bytea, text[], text[])` → text
@@ -1607,6 +1611,7 @@ Policies:
 - `my_open_store_visits()` → SETOF store_visit_detail · definer · 0086_close_stale_visit_on_check_in.sql
 - `my_outlets()` → SETOF outlets · definer · 0011_store_allocation.sql
 - `my_place_due()` → TABLE(id uuid, lat double precision, lng double precision, source_kind text, created_at timestamp with time zone) · definer · 0045_mandatory_place_naming.sql
+- `my_required_app_builds()` → TABLE(android integer, ios integer) · definer · 0113_force_app_update.sql
 - `my_sign_in_keys()` → TABLE(id uuid, kind text, label text, created_at timestamp with time zone, last_used_at timestamp with time zone) · definer · 0089_quick_sign_in.sql
 - `my_staff()` → SETOF profiles · definer · 0072_hr_role.sql
 - `my_store_visits()` → SETOF store_visit_detail · definer · 0016_visits_without_allocation.sql
@@ -1748,6 +1753,7 @@ Policies:
 - `session_aal()` → text · definer · 0080_zero_trust.sql
 - `set_clock_out_hold(p_user uuid, p_hold boolean)` → boolean · definer · 0111_clock_out_hold.sql
 - `set_count_sheet_template(p_path text, p_file_name text)` → uuid · definer · 0035_store_count_sheets.sql
+- `set_force_app_update(p_on boolean, p_hours integer)` → void · definer · 0113_force_app_update.sql
 - `set_my_avatar(p_path text)` → void · definer · 0062_user_activity.sql
 - `set_schedule_override(p_user uuid, p_day date, p_working boolean, p_note text)` → uuid · definer · 0059_schedules_leave.sql
 - `set_staff_outlets(p_user_id uuid, p_outlet_ids uuid[])` → SETOF uuid · definer · 0011_store_allocation.sql

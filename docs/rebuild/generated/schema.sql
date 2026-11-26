@@ -648,6 +648,15 @@ $$;
 
 
 --
+-- Name: app_update_reminders(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.app_update_reminders() RETURNS integer
+    LANGUAGE sql IMMUTABLE
+    AS $$ select 3 $$;
+
+
+--
 -- Name: apply_leave(text, date, date, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -4885,6 +4894,21 @@ $$;
 
 
 --
+-- Name: my_required_app_builds(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.my_required_app_builds() RETURNS TABLE(android integer, ios integer)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select max(f.build) filter (where f.platform = 'android'),
+         max(f.build) filter (where f.platform = 'ios')
+  from public.app_forced_builds f
+  where f.user_id = auth.uid();
+$$;
+
+
+--
 -- Name: my_sign_in_keys(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -8439,6 +8463,28 @@ $$;
 
 
 --
+-- Name: set_force_app_update(boolean, integer); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.set_force_app_update(p_on boolean, p_hours integer) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if not public.is_admin() then
+    raise exception 'Only an admin can change this';
+  end if;
+  if p_on is null or p_hours is null or p_hours < 0 or p_hours > 720 then
+    raise exception 'Give the hours as a number from 0 to 720';
+  end if;
+  update public.system_settings
+     set force_old_app = p_on, force_app_after_hours = p_hours, updated_at = now()
+   where id;
+end;
+$$;
+
+
+--
 -- Name: set_my_avatar(text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -11091,6 +11137,91 @@ CREATE VIEW public.alert_detail WITH (security_invoker='true') AS
 
 
 --
+-- Name: app_update_notices; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.app_update_notices (
+    user_id uuid NOT NULL,
+    platform text NOT NULL,
+    build integer NOT NULL,
+    times integer DEFAULT 1 NOT NULL,
+    first_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT app_update_notices_build_check CHECK ((build >= 0)),
+    CONSTRAINT app_update_notices_platform_check CHECK ((platform = ANY (ARRAY['android'::text, 'ios'::text]))),
+    CONSTRAINT app_update_notices_times_check CHECK (((times >= 1) AND (times <= 10)))
+);
+
+
+--
+-- Name: system_settings; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.system_settings (
+    id boolean DEFAULT true NOT NULL,
+    test_mode boolean DEFAULT true NOT NULL,
+    went_live_at timestamp with time zone,
+    went_live_by uuid,
+    last_reset_at timestamp with time zone,
+    last_reset_by uuid,
+    last_reset jsonb,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    follow_max_sessions integer DEFAULT 20 NOT NULL,
+    mfa_roles public.user_role[] DEFAULT '{admin,hr}'::public.user_role[] NOT NULL,
+    block_off_site boolean DEFAULT true NOT NULL,
+    block_early_clock_out boolean DEFAULT true NOT NULL,
+    force_old_app boolean DEFAULT true NOT NULL,
+    force_app_after_hours integer DEFAULT 24 NOT NULL,
+    CONSTRAINT system_settings_follow_max_sessions_check CHECK (((follow_max_sessions >= 1) AND (follow_max_sessions <= 200))),
+    CONSTRAINT system_settings_force_app_after_hours_check CHECK (((force_app_after_hours >= 0) AND (force_app_after_hours <= 720))),
+    CONSTRAINT system_settings_id_check CHECK (id)
+);
+
+
+--
+-- Name: COLUMN system_settings.block_off_site; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.system_settings.block_off_site IS 'Refuse clock-ins and store check-ins made outside the store (0106).';
+
+
+--
+-- Name: COLUMN system_settings.block_early_clock_out; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.system_settings.block_early_clock_out IS 'Refuse clock-outs before the person''s clock-out time (0109).';
+
+
+--
+-- Name: COLUMN system_settings.force_old_app; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.system_settings.force_old_app IS 'On: after the third "Please update Xtend" (0082) and the grace time, the old app must be replaced (0113).';
+
+
+--
+-- Name: COLUMN system_settings.force_app_after_hours; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.system_settings.force_app_after_hours IS 'Hours after the third update reminder before the old app stops (0113).';
+
+
+--
+-- Name: app_forced_builds; Type: VIEW; Schema: public; Owner: -
+--
+
+CREATE VIEW public.app_forced_builds WITH (security_invoker='true') AS
+ SELECT n.user_id,
+    n.platform,
+    max(n.build) AS build,
+    min(n.last_at) AS last_reminded_at
+   FROM (public.app_update_notices n
+     CROSS JOIN public.system_settings s)
+  WHERE (s.id AND s.force_old_app AND (n.times >= public.app_update_reminders()) AND (n.last_at <= (now() - make_interval(hours => s.force_app_after_hours))))
+  GROUP BY n.user_id, n.platform;
+
+
+--
 -- Name: app_installs; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -11140,23 +11271,6 @@ CREATE VIEW public.app_minimum_builds WITH (security_invoker='true') AS
     max(min_ios_build) AS ios
    FROM public.app_releases
   WHERE (withdrawn_at IS NULL);
-
-
---
--- Name: app_update_notices; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.app_update_notices (
-    user_id uuid NOT NULL,
-    platform text NOT NULL,
-    build integer NOT NULL,
-    times integer DEFAULT 1 NOT NULL,
-    first_at timestamp with time zone DEFAULT now() NOT NULL,
-    last_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT app_update_notices_build_check CHECK ((build >= 0)),
-    CONSTRAINT app_update_notices_platform_check CHECK ((platform = ANY (ARRAY['android'::text, 'ios'::text]))),
-    CONSTRAINT app_update_notices_times_check CHECK (((times >= 1) AND (times <= 10)))
-);
 
 
 --
@@ -12516,42 +12630,6 @@ CREATE TABLE public.system_reset_files (
     name text NOT NULL,
     queued_at timestamp with time zone DEFAULT now() NOT NULL
 );
-
-
---
--- Name: system_settings; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.system_settings (
-    id boolean DEFAULT true NOT NULL,
-    test_mode boolean DEFAULT true NOT NULL,
-    went_live_at timestamp with time zone,
-    went_live_by uuid,
-    last_reset_at timestamp with time zone,
-    last_reset_by uuid,
-    last_reset jsonb,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    follow_max_sessions integer DEFAULT 20 NOT NULL,
-    mfa_roles public.user_role[] DEFAULT '{admin,hr}'::public.user_role[] NOT NULL,
-    block_off_site boolean DEFAULT true NOT NULL,
-    block_early_clock_out boolean DEFAULT true NOT NULL,
-    CONSTRAINT system_settings_follow_max_sessions_check CHECK (((follow_max_sessions >= 1) AND (follow_max_sessions <= 200))),
-    CONSTRAINT system_settings_id_check CHECK (id)
-);
-
-
---
--- Name: COLUMN system_settings.block_off_site; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.system_settings.block_off_site IS 'Refuse clock-ins and store check-ins made outside the store (0106).';
-
-
---
--- Name: COLUMN system_settings.block_early_clock_out; Type: COMMENT; Schema: public; Owner: -
---
-
-COMMENT ON COLUMN public.system_settings.block_early_clock_out IS 'Refuse clock-outs before the person''s clock-out time (0109).';
 
 
 --
@@ -18511,6 +18589,14 @@ GRANT ALL ON FUNCTION public.my_place_due() TO service_role;
 
 
 --
+-- Name: FUNCTION my_required_app_builds(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.my_required_app_builds() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.my_required_app_builds() TO authenticated;
+
+
+--
 -- Name: FUNCTION my_sign_in_keys(); Type: ACL; Schema: public; Owner: -
 --
 
@@ -19380,6 +19466,14 @@ GRANT ALL ON FUNCTION public.set_count_sheet_template(p_path text, p_file_name t
 
 
 --
+-- Name: FUNCTION set_force_app_update(p_on boolean, p_hours integer); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.set_force_app_update(p_on boolean, p_hours integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.set_force_app_update(p_on boolean, p_hours integer) TO authenticated;
+
+
+--
 -- Name: FUNCTION set_my_avatar(p_path text); Type: ACL; Schema: public; Owner: -
 --
 
@@ -19988,6 +20082,20 @@ GRANT ALL ON FUNCTION public.xm_void(p_kind text, p_id uuid, p_reason text) TO s
 
 
 --
+-- Name: TABLE app_update_notices; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT ON TABLE public.app_update_notices TO authenticated;
+
+
+--
+-- Name: TABLE app_forced_builds; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT ON TABLE public.app_forced_builds TO authenticated;
+
+
+--
 -- Name: TABLE app_installs; Type: ACL; Schema: public; Owner: -
 --
 
@@ -20006,13 +20114,6 @@ GRANT SELECT,INSERT,UPDATE ON TABLE public.app_releases TO authenticated;
 --
 
 GRANT SELECT ON TABLE public.app_minimum_builds TO authenticated;
-
-
---
--- Name: TABLE app_update_notices; Type: ACL; Schema: public; Owner: -
---
-
-GRANT SELECT ON TABLE public.app_update_notices TO authenticated;
 
 
 --

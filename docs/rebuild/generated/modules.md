@@ -155,14 +155,16 @@ The phone notification that tells someone a new Xtend app is out
 (migration 0082). Pure: shared by the alerts job and
 scripts/check-updates.ts.
 
-Exports: `NOTICE_HOURS`, `lagosHour`, `noticeHour`, `updateNoticeMessage`
+Exports: `NOTICE_HOURS`, `lagosHour`, `noticeHour`, `LAST_REMINDER`, `updateNoticeMessage`
 
 ## `src/lib/app-update-notices.ts`
 
 The five-minute job's part for new phone apps (migration 0082): everyone
 active whose app is older than the newest is sent "A new Xtend app is
 ready" once, then "Please update Xtend" every two days while they stay
-behind, three times in all per build. Only in the day (Lagos). Never
+behind, three times in all per build; the third says it is the last,
+and after it the old app stops until updated (0113). Only in the day
+(Lagos). Never
 throws.
 
 Exports: `flushAppUpdateNotices`
@@ -181,7 +183,7 @@ Two kinds of update:
     installing. Only needed when something native changed, such as the
     shift tracker. An admin can set the lowest build still allowed.
 
-Exports: `ReleaseNote`, `VersionInfo`, `UpdateLevel`, `UpdateState`, `buildNumber`, `decideUpdate`, `NOTES_FRESH_DAYS`, `shouldShowNotes`, `InstallStatus`, `installStatus`
+Exports: `ReleaseNote`, `VersionInfo`, `UpdateLevel`, `UpdateState`, `buildNumber`, `decideUpdate`, `NOTES_FRESH_DAYS`, `shouldShowNotes`, `lowestAllowed`, `InstallStatus`, `installStatus`
 
 ## `src/lib/assistant-action-types.ts`
 
@@ -2024,7 +2026,7 @@ Exports: `TeamMember`, `TeamSupervisor`, `TeamManager`
 
 Publishing "What's new", with an optional required update or lowest app build.
 
-Exports: `PublishUpdate`, `WithdrawRelease`, `RemindToUpdate`
+Exports: `PublishUpdate`, `WithdrawRelease`, `RemindToUpdate`, `ForceUpdateSetting`
 
 ## `src/components/admin/visit-filters.tsx`
 

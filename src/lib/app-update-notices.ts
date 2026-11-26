@@ -2,7 +2,7 @@ import 'server-only'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { notifyUsers } from '@/lib/notify'
 import { publishedAndroidApk } from '@/lib/app-release'
-import { noticeHour, updateNoticeMessage } from '@/lib/app-update-notice'
+import { LAST_REMINDER, noticeHour, updateNoticeMessage } from '@/lib/app-update-notice'
 
 interface Claimed {
   user_id: string
@@ -15,7 +15,9 @@ interface Claimed {
  * The five-minute job's part for new phone apps (migration 0082): everyone
  * active whose app is older than the newest is sent "A new Xtend app is
  * ready" once, then "Please update Xtend" every two days while they stay
- * behind, three times in all per build. Only in the day (Lagos). Never
+ * behind, three times in all per build; the third says it is the last,
+ * and after it the old app stops until updated (0113). Only in the day
+ * (Lagos). Never
  * throws.
  */
 export async function flushAppUpdateNotices(at: Date = new Date()): Promise<{ claimed: number; delivered: number }> {
@@ -47,7 +49,8 @@ export async function flushAppUpdateNotices(at: Date = new Date()): Promise<{ cl
     const rows = (data ?? []) as Claimed[]
     const groups = new Map<string, Claimed[]>()
     for (const row of rows) {
-      const key = `${row.platform}|${row.build}|${row.times > 1 ? 'again' : 'first'}`
+      // The first, the reminders and the last reminder say different things.
+      const key = `${row.platform}|${row.build}|${row.times >= LAST_REMINDER ? 'last' : row.times > 1 ? 'again' : 'first'}`
       groups.set(key, [...(groups.get(key) ?? []), row])
     }
     let delivered = 0

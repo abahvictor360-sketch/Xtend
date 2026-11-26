@@ -2192,6 +2192,10 @@ Card "**Publish what's new**" / "Shown once to each person, the next time Xtend 
 
 Card "**Published**" / "The newest live one is what people see." (30 newest): title, audience badge, **Required** (red), **Android ≥ N** / **iPhone ≥ N** (warning), **Withdrawn** (outline; row faded), notes (3 lines), time, and **Withdraw** (confirm "Withdraw this? Its notes stop showing and any lowest app build it set no longer applies." → DELETE `/api/admin/updates/<id>`). Empty "Nothing published yet."
 
+### Make people update (0113)
+
+Card "**Make people update**" / "For a new phone app. Anyone still on the old app after the last reminder must install the new one to keep using Xtend. Installing it opens Xtend again at once; their account and anything waiting to send are kept." Checkbox **Stop the old app after the last reminder.** (saves at once) with "Xtend reminds people three times about a new phone app (once when it comes out, then every two days). After the third, the old app shows only “Install the new Xtend app” until they install it."; **Hours after the last reminder** (digits, 0–720, default 24) and **Save** → `PATCH /api/admin/updates`. Before 0113: "Run migration 0113 in Supabase to use this." People in `app_forced_builds` whose app build is below their forced build show **Must update**; the list description ends "N must update (below the lowest app allowed, or past their last reminder)."
+
 ### Who is on which version
 
 Card with the sentence "Recorded each time someone opens Xtend. a up to date, b not reloaded onto the newest site yet (it happens by itself next time they open it), c on an older app, d below the lowest app allowed." Chips **Everyone (N)** and **On an older app (N)** (`?show=behind`), and **Remind N to update** (bell) → POST `/api/admin/updates/remind` `{user_ids}`; "Sent to N phone(s)." or the error.
