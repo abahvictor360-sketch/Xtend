@@ -418,7 +418,11 @@ export default async function AdminGuidePage() {
             them (<Ui>Allocate staff</Ui> under the store, or <Ui>Store allocation</Ui>) and pin new stores with
             the link (<Ui>Or paste a Google Maps link</Ui>). When location or a phone setting stops them, a
             pop-up gives them the steps to fix it. A visit nobody checked out of by the end of the day shows as abandoned; it is
-            closed overnight, or as soon as that person checks in at a store again. A marketer who clocks in
+            closed overnight, or as soon as that person checks in at a store again. In the
+            phone app, a marketer who walks out of the store they are checked in at without checking out hears
+            their phone ring like an alarm, <Ui>Check out before you leave</Ui>, until they open it; still outside
+            two minutes later, it rings again (on iPhone, every minute). Checking out or going back in stops it.
+            It needs the newest phone app. A marketer who clocks in
             inside one of their own stores is checked in there at the same time; that visit has no
             photo of its own (the clock-in&apos;s selfie is on Attendance).
           </p>

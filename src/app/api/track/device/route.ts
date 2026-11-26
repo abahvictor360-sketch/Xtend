@@ -4,6 +4,7 @@ import { notifyWatchers } from '@/lib/notify'
 import { resolvePlace } from '@/lib/geocode'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
 import { liveInterval, sendLivePosition } from '@/lib/follow-live-server'
+import { openVisitForPhone, type OpenVisitRow } from '@/lib/visit-leave'
 
 export const maxDuration = 30
 
@@ -149,7 +150,23 @@ export async function POST(request: Request) {
         : await liveInterval(admin, got.user_id)
     }
 
+    // The store visit they are checked in at, for the phone's "check out
+    // before you leave" alarm: its spot and area (2026-11-26). Null when none.
+    let visit: { id: string; name: string; lat: number; lng: number; radius_m: number } | null = null
+    if (got.user_id && got.shift_open) {
+      const { data: open } = await admin
+        .from('store_visits')
+        .select('id, outlet_lat, outlet_lng, outlet_radius_m, arrived_lat, arrived_lng, arrived_place_name, outlets(name)')
+        .eq('user_id', got.user_id)
+        .eq('status', 'open')
+        .order('arrived_at', { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      visit = openVisitForPhone(open as OpenVisitRow | null)
+    }
+
     return Response.json({
+      visit,
       kept: got.kept ?? 0,
       shift_open: got.shift_open ?? false,
       // After the shift the phone is told to stop, except after a full batch

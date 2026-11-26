@@ -124,6 +124,16 @@ const FAQ: { q: string; a: React.ReactNode }[] = [
     ),
   },
   {
+    q: 'My phone is ringing “Check out before you leave”',
+    a: (
+      <>
+        You walked out of the store without checking out. Go back to the store, open Xtend and tap{' '}
+        <Ui>Check out</Ui>; the ringing stops. Always check out before you step out of a store, when you are done
+        there.
+      </>
+    ),
+  },
+  {
     q: 'I forgot to check out of a store',
     a: (
       <>

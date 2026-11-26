@@ -102,6 +102,25 @@ public class ShiftTracker extends Plugin {
         call.resolve(o);
     }
 
+    /**
+     * A store check-in or check-out just happened (2026-11-26): the tracker
+     * asks the server now which visit is open, for "Check out before you
+     * leave". closed: the visit was checked out, so any alarm stops at once.
+     */
+    @PluginMethod
+    public void visitChanged(PluginCall call) {
+        Context context = getContext();
+        if (Boolean.TRUE.equals(call.getBoolean("closed", false))) ShiftTrackerService.setVisit(context, null);
+        JSObject o = new JSObject();
+        if (ShiftTrackerService.collecting(context)) {
+            try {
+                ShiftTrackerService.start(context);
+            } catch (Exception ignored) {}
+        }
+        o.put("ok", true);
+        call.resolve(o);
+    }
+
     /** "Allow all the time", so tracking also comes back after a restart. */
     @PluginMethod
     public void requestBackground(PluginCall call) {

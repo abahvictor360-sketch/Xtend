@@ -1341,6 +1341,13 @@ Native classes (`android/app/src/main/java/ng/xpelbeauty/xtend/`):
   `start` also clears `draining`; `stop` calls `ShiftTrackerService.finish` (2026-11-25): with points
   queued and a token, sets prefs `draining = true` (and clears fast mode) and starts the service to send
   them; otherwise `clear`.
+- **Leave alarm (2026-11-26)** in `ShiftTrackerService`: `setVisit(context, JSONObject|null)` (prefs
+  `visit_id`, `visit_name`, `visit_lat`, `visit_lng` as strings, `visit_radius` float; from the server's
+  `visit` and plugin `visitChanged({closed})`); `checkLeaving(l)` at the top of `keep()`; positions every
+  `VISIT_EVERY_MS = 20 000` while a visit is open; channel `xtend_leave_alarm` "Check out before you
+  leave" (IMPORTANCE_HIGH, `TYPE_ALARM` sound with `USAGE_ALARM`, vibration 0/800/400/800/400/800),
+  id 7303, `CATEGORY_ALARM`, `PRIORITY_MAX`, `FLAG_INSISTENT`, auto-cancel, tap opens `MainActivity`;
+  `LEAVE_RING_AGAIN_MS = 120 000` when dismissed and still outside; `clear()` calls `setVisit(null)`.
 - **Location off (0115)** in `ShiftTrackerService`: `checkLocationState()` on every tick and on
   `onProviderDisabled/Enabled` (posted to the handler); prefs `loc_off_since`, `loc_on_at`, `loc_nag_at`
   (cleared by `clear()`); notification channel `xtend_location_off` "Location is off" (IMPORTANCE_HIGH),

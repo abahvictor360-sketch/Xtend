@@ -23,7 +23,7 @@ import { matchStartStore, nearestStore } from '@/lib/start-store-match'
 import { offSite as offSiteFrom, offSiteFromServer, type OffSite, type SiteStore } from '@/lib/on-site'
 import { processSelfie } from '@/lib/image'
 import { deviceInfo } from '@/lib/device'
-import { nativeDeviceSignals } from '@/lib/native'
+import { nativeDeviceSignals, visitChanged } from '@/lib/native'
 import {
   requireFix,
   probeLocation,
@@ -487,6 +487,10 @@ export function ClockPanel({
           selfie: full,
           thumb,
         })
+
+        // A marketer's clock-in also checked them in at the store: the phone
+        // now watches it for "Check out before you leave".
+        if (!result.queued && type === 'opening' && startStore.current) void visitChanged()
 
         if (result.queued) {
           const guess =

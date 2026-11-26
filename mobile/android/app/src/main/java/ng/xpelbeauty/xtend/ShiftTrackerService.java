@@ -12,6 +12,10 @@ import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
+import android.media.AudioAttributes;
+import android.media.RingtoneManager;
+import android.net.Uri;
+import android.service.notification.StatusBarNotification;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
@@ -75,6 +79,14 @@ import org.json.JSONObject;
  * the person to turn it back on ("Turn your location back on", again every
  * ten minutes, opening the location settings), and sends off_since with
  * every request until it is back on; then on_at once.
+ *
+ * Leaving a store (2026-11-26): the server's answer names the store visit
+ * they are checked in at (its spot and area). While one is open, positions
+ * come every 20 seconds, and stepping outside the area without checking
+ * out rings "Check out before you leave" like an alarm (alarm sound,
+ * repeating, vibrating) until it is opened; still outside two minutes
+ * later, it rings again. Back inside, checking out, or the shift ending
+ * stops it.
  */
 public class ShiftTrackerService extends Service implements LocationListener {
 
@@ -86,6 +98,13 @@ public class ShiftTrackerService extends Service implements LocationListener {
     private static final int LOCATION_NOTIFICATION_ID = 7302;
     /** While location stays off, the request is repeated this often. */
     private static final long LOCATION_NAG_MS = 10 * 60_000;
+    /** "Check out before you leave": an alarm channel, ringing until acted on. */
+    private static final String LEAVE_CHANNEL = "xtend_leave_alarm";
+    private static final int LEAVE_NOTIFICATION_ID = 7303;
+    /** Opened but still outside and not checked out: rings again after this. */
+    private static final long LEAVE_RING_AGAIN_MS = 2 * 60_000;
+    /** While checked in at a store, positions this often, to notice leaving. */
+    private static final long VISIT_EVERY_MS = 20_000;
 
     /** A position at least this often while standing still… */
     private static final long EVERY_MS = 150_000;
@@ -224,6 +243,7 @@ public class ShiftTrackerService extends Service implements LocationListener {
     static void clear(Context context) {
         prefs(context).edit().remove("token").remove("endpoint").remove("expires_at").remove("fast_ms").remove("fast_until").remove("draining")
             .remove("loc_off_since").remove("loc_on_at").remove("loc_nag_at").putBoolean("running", false).apply();
+        setVisit(context, null);
         NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
         if (nm != null) nm.cancel(LOCATION_NOTIFICATION_ID);
         cancelTick(context);
@@ -400,7 +420,7 @@ public class ShiftTrackerService extends Service implements LocationListener {
             return;
         }
         long fast = fastMs(this);
-        long want = fast > 0 ? fast : 60_000;
+        long want = fast > 0 ? fast : prefs(this).getString("visit_id", null) != null ? VISIT_EVERY_MS : 60_000;
         if (want != appliedMinTime) {
             try {
                 locations.removeUpdates(this);
@@ -544,10 +564,126 @@ public class ShiftTrackerService extends Service implements LocationListener {
         }
     }
 
+    // ------------------------------------------------------------------
+    // "Check out before you leave" (2026-11-26): while checked in at a store,
+    // stepping outside its area without checking out rings an alarm.
+    // ------------------------------------------------------------------
+
+    /** The open store visit (id, name, lat, lng, radius_m), or null: none, and any alarm stops. */
+    static void setVisit(Context context, JSONObject visit) {
+        SharedPreferences p = prefs(context);
+        String id = visit == null ? null : visit.optString("id", null);
+        if (id == null || id.isEmpty() || !visit.has("lat") || !visit.has("lng")) {
+            p.edit().remove("visit_id").remove("visit_name").remove("visit_lat").remove("visit_lng").remove("visit_radius")
+                .remove("leave_alarm_at").apply();
+            stopLeaveAlarm(context);
+            return;
+        }
+        boolean changed = !id.equals(p.getString("visit_id", null));
+        p.edit().putString("visit_id", id)
+            .putString("visit_name", visit.optString("name", "the store"))
+            .putString("visit_lat", String.valueOf(visit.optDouble("lat")))
+            .putString("visit_lng", String.valueOf(visit.optDouble("lng")))
+            .putFloat("visit_radius", (float) visit.optDouble("radius_m", 150))
+            .apply();
+        if (changed) stopLeaveAlarm(context);
+    }
+
+    static void stopLeaveAlarm(Context context) {
+        NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm != null) nm.cancel(LEAVE_NOTIFICATION_ID);
+        prefs(context).edit().remove("leave_alarm_on").apply();
+    }
+
+    /** Outside the visit's area (radius plus up to 50 m of accuracy): ring; back inside: stop. */
+    private void checkLeaving(Location l) {
+        SharedPreferences p = prefs(this);
+        if (p.getString("visit_id", null) == null) return;
+        float acc = l.hasAccuracy() ? l.getAccuracy() : 999f;
+        if (acc > 100f) return;
+        double lat;
+        double lng;
+        try {
+            lat = Double.parseDouble(p.getString("visit_lat", ""));
+            lng = Double.parseDouble(p.getString("visit_lng", ""));
+        } catch (Exception e) {
+            return;
+        }
+        float[] d = new float[1];
+        Location.distanceBetween(l.getLatitude(), l.getLongitude(), lat, lng, d);
+        float radius = p.getFloat("visit_radius", 150f);
+        boolean ringing = p.getBoolean("leave_alarm_on", false);
+        if (d[0] > radius + Math.min(acc, 50f)) {
+            long now = System.currentTimeMillis();
+            if (!ringing || (!leaveAlarmShowing() && now - p.getLong("leave_alarm_at", 0) >= LEAVE_RING_AGAIN_MS)) {
+                ringLeaveAlarm(p.getString("visit_name", "the store"));
+            }
+        } else if (ringing && d[0] <= radius) {
+            stopLeaveAlarm(this);
+        }
+    }
+
+    private boolean leaveAlarmShowing() {
+        NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm == null) return false;
+        try {
+            for (StatusBarNotification n : nm.getActiveNotifications()) {
+                if (n.getId() == LEAVE_NOTIFICATION_ID) return true;
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
+    /** Rings like an alarm (alarm sound, repeating, vibrating) until opened or they check out. */
+    private void ringLeaveAlarm(String store) {
+        prefs(this).edit().putBoolean("leave_alarm_on", true).putLong("leave_alarm_at", System.currentTimeMillis()).apply();
+        try {
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm == null) return;
+            Uri sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+            if (sound == null) sound = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+            long[] buzz = new long[] { 0, 800, 400, 800, 400, 800 };
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && nm.getNotificationChannel(LEAVE_CHANNEL) == null) {
+                NotificationChannel ch = new NotificationChannel(LEAVE_CHANNEL, "Check out before you leave", NotificationManager.IMPORTANCE_HIGH);
+                ch.setDescription("Rings when you leave a store without checking out");
+                ch.setSound(sound, new AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ALARM)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                    .build());
+                ch.enableVibration(true);
+                ch.setVibrationPattern(buzz);
+                nm.createNotificationChannel(ch);
+            }
+            Intent open = new Intent(this, MainActivity.class);
+            open.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            PendingIntent tap = PendingIntent.getActivity(this, 2, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+            String body = "You are leaving " + store + " without checking out. Go back and check out there.";
+            Notification n = new NotificationCompat.Builder(this, LEAVE_CHANNEL)
+                .setSmallIcon(R.drawable.ic_stat_xtend)
+                .setColor(ContextCompat.getColor(this, R.color.xtend_orange))
+                .setContentTitle("Check out before you leave")
+                .setContentText(body)
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(body))
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setSound(sound, android.media.AudioManager.STREAM_ALARM)
+                .setVibrate(buzz)
+                .setAutoCancel(true)
+                .setContentIntent(tap)
+                .build();
+            // Keeps ringing until the notification is opened or cancelled.
+            n.flags |= Notification.FLAG_INSISTENT;
+            nm.notify(LEAVE_NOTIFICATION_ID, n);
+        } catch (Exception ignored) {
+            // Notifications turned off: the five-minute reminders still come.
+        }
+    }
+
     /** Keeps a position on the phone if it is due, then tries to send. */
     private synchronized void keep(Location l, boolean forced) {
         // Never after the shift (clocked out, or the token ran out).
         if (!collecting(this)) return;
+        checkLeaving(l);
         SharedPreferences p = prefs(this);
         long now = System.currentTimeMillis();
         long lastAt = p.getLong("last_saved_at", 0);
@@ -694,6 +830,14 @@ public class ShiftTrackerService extends Service implements LocationListener {
             // Follow live: faster while the server asks, normal otherwise.
             long before = fastMs(this);
             setFast(this, answer.optLong("interval_ms", 0));
+            // The store visit they are checked in at, if any (for the leave alarm).
+            if (answer.has("visit")) {
+                boolean had = p.getString("visit_id", null) != null;
+                setVisit(this, answer.optJSONObject("visit"));
+                if (had != (p.getString("visit_id", null) != null) && handler != null) {
+                    handler.post(this::applyMode);
+                }
+            }
             if (fastMs(this) != before && handler != null) handler.post(this::applyMode);
             if (count == 500 && queued(this) > 0) {
                 send();

@@ -36,6 +36,11 @@ import UserNotifications
 /// the person to turn it back on ("Turn your location back on", again every
 /// ten minutes) and sends off_since with each request until it is back on,
 /// then on_at once.
+///
+/// Leaving a store (2026-11-26): the server's answer names the store visit
+/// they are checked in at (its spot and area). Stepping outside the area
+/// without checking out rings "Check out before you leave", again every
+/// minute, until they check out or go back in.
 final class ShiftTrackerCore: NSObject, CLLocationManagerDelegate {
     static let shared = ShiftTrackerCore()
 
@@ -181,6 +186,7 @@ final class ShiftTrackerCore: NSObject, CLLocationManagerDelegate {
         defaults.removeObject(forKey: "xtend.tracker.onAt")
         defaults.removeObject(forKey: "xtend.tracker.nagAt")
         UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: ["xtend-location-off"])
+        setVisit(nil)
         DispatchQueue.main.async {
             self.manager.stopUpdatingLocation()
             self.manager.stopMonitoringSignificantLocationChanges()
@@ -202,7 +208,10 @@ final class ShiftTrackerCore: NSObject, CLLocationManagerDelegate {
             flush()
             return
         }
-        for l in locations { keep(l) }
+        for l in locations {
+            checkLeaving(l)
+            keep(l)
+        }
         if (fastInterval != nil) != appliedFast { applyAccuracy() }
         if fastInterval != nil, let last = locations.last { liveLocation = last }
         flush()
@@ -253,6 +262,64 @@ final class ShiftTrackerCore: NSObject, CLLocationManagerDelegate {
         }
     }
 
+    // "Check out before you leave" (2026-11-26).
+
+    private let leaveIds = ["xtend-leave-alarm", "xtend-leave-alarm-again"]
+
+    /// The open store visit (id, name, lat, lng, radius_m), or nil: none, and any alarm stops.
+    func setVisit(_ visit: [String: Any]?) {
+        guard let v = visit, let id = v["id"] as? String,
+              let lat = (v["lat"] as? NSNumber)?.doubleValue, let lng = (v["lng"] as? NSNumber)?.doubleValue else {
+            for k in ["visitId", "visitName", "visitLat", "visitLng", "visitRadius"] {
+                defaults.removeObject(forKey: "xtend.tracker.\(k)")
+            }
+            stopLeaveAlarm()
+            return
+        }
+        if defaults.string(forKey: "xtend.tracker.visitId") != id { stopLeaveAlarm() }
+        defaults.set(id, forKey: "xtend.tracker.visitId")
+        defaults.set((v["name"] as? String) ?? "the store", forKey: "xtend.tracker.visitName")
+        defaults.set(lat, forKey: "xtend.tracker.visitLat")
+        defaults.set(lng, forKey: "xtend.tracker.visitLng")
+        defaults.set((v["radius_m"] as? NSNumber)?.doubleValue ?? 150, forKey: "xtend.tracker.visitRadius")
+    }
+
+    func stopLeaveAlarm() {
+        defaults.removeObject(forKey: "xtend.tracker.leaveRinging")
+        let center = UNUserNotificationCenter.current()
+        center.removePendingNotificationRequests(withIdentifiers: leaveIds)
+        center.removeDeliveredNotifications(withIdentifiers: leaveIds)
+    }
+
+    /// Outside the visit's area (radius plus up to 50 m of accuracy): ring; back inside: stop.
+    private func checkLeaving(_ l: CLLocation) {
+        guard defaults.string(forKey: "xtend.tracker.visitId") != nil,
+              l.horizontalAccuracy >= 0, l.horizontalAccuracy <= 100 else { return }
+        let store = CLLocation(latitude: defaults.double(forKey: "xtend.tracker.visitLat"),
+                               longitude: defaults.double(forKey: "xtend.tracker.visitLng"))
+        let radius = defaults.double(forKey: "xtend.tracker.visitRadius")
+        let d = l.distance(from: store)
+        let ringing = defaults.bool(forKey: "xtend.tracker.leaveRinging")
+        if d > radius + min(l.horizontalAccuracy, 50) {
+            if !ringing { ringLeaveAlarm(defaults.string(forKey: "xtend.tracker.visitName") ?? "the store") }
+        } else if ringing && d <= radius {
+            stopLeaveAlarm()
+        }
+    }
+
+    /// Now, then again every minute until they check out or go back in.
+    private func ringLeaveAlarm(_ store: String) {
+        defaults.set(true, forKey: "xtend.tracker.leaveRinging")
+        let content = UNMutableNotificationContent()
+        content.title = "Check out before you leave"
+        content.body = "You are leaving \(store) without checking out. Go back and check out there."
+        content.sound = .default
+        let center = UNUserNotificationCenter.current()
+        center.add(UNNotificationRequest(identifier: leaveIds[0], content: content, trigger: nil), withCompletionHandler: nil)
+        let again = UNTimeIntervalNotificationTrigger(timeInterval: 60, repeats: true)
+        center.add(UNNotificationRequest(identifier: leaveIds[1], content: content, trigger: again), withCompletionHandler: nil)
+    }
+
     private func askToTurnOn() {
         defaults.set(Date().timeIntervalSince1970, forKey: "xtend.tracker.nagAt")
         let content = UNMutableNotificationContent()
@@ -286,6 +353,13 @@ final class ShiftTrackerCore: NSObject, CLLocationManagerDelegate {
         defaults.set(now.timeIntervalSince1970, forKey: "xtend.tracker.lastAt")
         defaults.set(l.coordinate.latitude, forKey: "xtend.tracker.lastLat")
         defaults.set(l.coordinate.longitude, forKey: "xtend.tracker.lastLng")
+    }
+
+    /// Sends now even with nothing waiting, so the server's answer comes at once.
+    func askNow() {
+        lastCheck = nil
+        lastFailure = nil
+        flush()
     }
 
     /// Sends what is waiting. iOS gives a woken app about 30 seconds.
@@ -374,6 +448,8 @@ final class ShiftTrackerCore: NSObject, CLLocationManagerDelegate {
             let answer = (data.flatMap { try? JSONSerialization.jsonObject(with: $0) } as? [String: Any]) ?? [:]
             // Follow live: faster while the server asks, normal otherwise.
             self.setFast((answer["interval_ms"] as? NSNumber)?.doubleValue ?? 0)
+            // The store visit they are checked in at, if any (for the leave alarm).
+            if answer.keys.contains("visit") { self.setVisit(answer["visit"] as? [String: Any]) }
             let left = (self.defaults.array(forKey: self.queueKey) ?? []).count
             if batch.count == 500 && left > 0 {
                 DispatchQueue.main.async { self.flush() }
@@ -396,6 +472,7 @@ public class ShiftTracker: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "requestBackground", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "openBatterySettings", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "follow", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "visitChanged", returnType: CAPPluginReturnPromise),
     ]
 
     @objc func start(_ call: CAPPluginCall) {
@@ -435,6 +512,15 @@ public class ShiftTracker: CAPPlugin, CAPBridgedPlugin {
         }
         core.setFast(ms)
         core.flush()
+        call.resolve(["ok": true])
+    }
+
+    /// A store check-in or check-out just happened: ask the server now which
+    /// visit is open. closed: checked out, so any alarm stops at once.
+    @objc func visitChanged(_ call: CAPPluginCall) {
+        let core = ShiftTrackerCore.shared
+        if call.getBool("closed") ?? false { core.setVisit(nil) }
+        core.askNow()
         call.resolve(["ok": true])
     }
 
