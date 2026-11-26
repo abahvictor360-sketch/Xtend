@@ -1425,6 +1425,17 @@ The staff video guide, its length and where each chapter starts (seconds).
 
 Exports: `STAFF_VIDEO`
 
+## `src/lib/start-store-match.ts`
+
+A marketer clocking in (2026-11-26): the store they are standing in,
+matched from their own stores by where the phone is. The nearest store
+whose area (radius, plus up to 50 m of the phone's accuracy, the same
+rule as "on site") holds them; null when none does, and then they pick.
+Stores still waiting for their location cannot be matched. Pure, so
+scripts/check-start-store.ts can test it.
+
+Exports: `matchStartStore`, `nearestStore`
+
 ## `src/lib/stockists-july.ts`
 
 The July customer list, as supplied. Names and regions only — there are
@@ -2429,10 +2440,11 @@ Exports: `ShiftTracker`
 
 ## `src/components/field/start-store-sheet.tsx`
 
-A marketer starts the day at a store (0101): before the clock-in camera
-opens, they pick the store they are at, from their own stores. Clocking
-in there checks them in there too. With no stores yet, it says what to
-send the office instead.
+A marketer starts the day at a store (0101). Clock in first matches the
+store from where they stand (src/lib/start-store-match.ts); this list is
+shown only when no store of theirs matched (noMatch), to pick the one
+they are at. Clocking in there checks them in there too. With no stores
+allocated, it tells them to ask the admin for one: no clock-in until then.
 
 Exports: `StartStore`, `StartStoreSheet`
 

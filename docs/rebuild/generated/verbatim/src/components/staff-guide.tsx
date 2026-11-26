@@ -55,11 +55,13 @@ const TASK = 'clock in or check in'
 
 const FAQ: { q: string; a: React.ReactNode }[] = [
   {
-    q: 'Why must I pick a store when I clock in? (marketers)',
+    q: 'How does Xtend know which store I am clocking in at? (marketers)',
     a: (
       <>
-        Your day starts at your first store. Picking it and taking your selfie clocks you in and checks you in there at
-        the same time, so there is only one selfie. If you do not clock in at one of your stores, today does not count.
+        Your day starts at your first store. Go inside the store and tap <Ui>Clock in</Ui>: Xtend finds the store
+        from where you are and opens the camera. Your selfie clocks you in and checks you in there at the same time.
+        If Xtend cannot tell which store you are in, it shows your stores: pick the one you are at. If you do not
+        clock in at one of your stores, today does not count.
       </>
     ),
   },
@@ -74,11 +76,12 @@ const FAQ: { q: string; a: React.ReactNode }[] = [
     ),
   },
   {
-    q: 'It says no stores are allocated to me',
+    q: 'It says no store is allocated to me',
     a: (
       <>
-        The office has not added your stores yet. Go to <Ui>You</Ui>, then <Ui>Messages</Ui>, and send the list of
-        stores you visit with each one&apos;s Google Maps link. Clock in once they are added.
+        You cannot clock in until your admin allocates a store to you. Go to <Ui>You</Ui>, then <Ui>Messages</Ui>, and
+        ask them to; send the stores you visit with each one&apos;s Google Maps link. Clock in once a store is
+        allocated.
       </>
     ),
   },

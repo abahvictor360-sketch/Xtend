@@ -410,9 +410,11 @@ export default async function AdminGuidePage() {
             in at a store, <Ui>Your next step</Ui> on their Home says what to do next, and while they are checked
             in it reminds them every 20 minutes to check out before they leave (a notification on the phone, sent
             by the five-minute alerts job, at most 16 per visit). A marketer starts the day at a store, never at
-            home: they pick the store they are at (one of theirs: home or allocated), and the clock-in selfie also
-            checks them in there; a clock-in with no store picked is refused. A marketer with no stores cannot
-            clock in and is told to message you their stores with each store&apos;s Google Maps link: allocate
+            home. When they tap Clock in, Xtend finds which of their stores (home or allocated) they are standing
+            in from their location and opens the camera at once; only when it cannot match one do they pick the
+            store they are at. The clock-in selfie also checks them in there; a clock-in with no store is
+            refused. A marketer with no store allocated cannot clock in and is told to ask you to allocate one,
+            and to message you their stores with each store&apos;s Google Maps link: allocate
             them (<Ui>Allocate staff</Ui> under the store, or <Ui>Store allocation</Ui>) and pin new stores with
             the link (<Ui>Or paste a Google Maps link</Ui>). When location or a phone setting stops them, a
             pop-up gives them the steps to fix it. A visit nobody checked out of by the end of the day shows as abandoned; it is
