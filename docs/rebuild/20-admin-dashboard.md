@@ -560,6 +560,10 @@ Files: `src/app/admin/tracking/page.tsx`, `src/components/admin/movement-map.tsx
 
 Heading **"Movement"** (2xl, extra bold); intro: "Where staff are and where they have been since clocking in. While someone is on shift, the app sends their position every 5 minutes (with no network, the phone keeps it and sends it when the connection is back); Xtend also records every clock-in, store check-in and check-out. Pick a person to see their journey over up to 7 days: where they stayed, how they travelled and when nothing was heard." + " Updates every minute." when the range ends today.
 
+### Location off (0115)
+
+Loads open `location_off_spells`; an on-shift row with one shows "Location off since <hh:mm>" (destructive) in place of In store / away. For a person, their spells in the dates shown are listed first under **Worth a look**: "**Location turned off** <from> to <to> (<duration>)." or ", still off", plus " Last seen at <place> at <hh:mm>." Admins see, under the on-shift list, "When someone turns location off on shift, the phone asks them to turn it back on, and it shows here." and **Tell their supervisor after this many minutes (0: never)** with **Save** (`PATCH /api/admin/location-off {minutes}`, audited `location_off.minutes`).
+
 ### Query parameters
 
 | Param | Meaning | Rules |

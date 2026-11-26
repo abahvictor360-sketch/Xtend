@@ -22,9 +22,11 @@ import android.os.HandlerThread;
 import android.os.IBinder;
 import android.os.PowerManager;
 import android.os.SystemClock;
+import android.provider.Settings;
 import androidx.annotation.NonNull;
 import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
+import androidx.core.location.LocationManagerCompat;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -67,12 +69,23 @@ import org.json.JSONObject;
  * one. After clock-out the tracker only sends what it saved offline
  * ("draining"): it never collects new positions after the shift, and what it
  * saved is never thrown away.
+ *
+ * Location off (migration 0115): if location is switched off during the
+ * shift, the tracker notices (Android says so, and every tick checks), asks
+ * the person to turn it back on ("Turn your location back on", again every
+ * ten minutes, opening the location settings), and sends off_since with
+ * every request until it is back on; then on_at once.
  */
 public class ShiftTrackerService extends Service implements LocationListener {
 
     static final String PREFS = "xtend_shift_tracker";
     private static final String CHANNEL = "xtend_on_shift";
     private static final int NOTIFICATION_ID = 7301;
+    /** "Turn your location back on" (0115): its own channel, so it is heard. */
+    private static final String LOCATION_CHANNEL = "xtend_location_off";
+    private static final int LOCATION_NOTIFICATION_ID = 7302;
+    /** While location stays off, the request is repeated this often. */
+    private static final long LOCATION_NAG_MS = 10 * 60_000;
 
     /** A position at least this often while standing still… */
     private static final long EVERY_MS = 150_000;
@@ -209,7 +222,10 @@ public class ShiftTrackerService extends Service implements LocationListener {
 
     /** Forgets the token (positions not yet sent are kept until a new shift sends them). */
     static void clear(Context context) {
-        prefs(context).edit().remove("token").remove("endpoint").remove("expires_at").remove("fast_ms").remove("fast_until").remove("draining").putBoolean("running", false).apply();
+        prefs(context).edit().remove("token").remove("endpoint").remove("expires_at").remove("fast_ms").remove("fast_until").remove("draining")
+            .remove("loc_off_since").remove("loc_on_at").remove("loc_nag_at").putBoolean("running", false).apply();
+        NotificationManager nm = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+        if (nm != null) nm.cancel(LOCATION_NOTIFICATION_ID);
         cancelTick(context);
         context.stopService(new Intent(context, ShiftTrackerService.class));
     }
@@ -305,6 +321,7 @@ public class ShiftTrackerService extends Service implements LocationListener {
             stopSelf();
             return false;
         }
+        checkLocationState();
         long last = prefs(this).getLong("last_saved_at", 0);
         if (System.currentTimeMillis() - last >= EVERY_MS) {
             Location best = bestLastKnown();
@@ -450,10 +467,82 @@ public class ShiftTrackerService extends Service implements LocationListener {
     public void onStatusChanged(String provider, int status, Bundle extras) {}
 
     @Override
-    public void onProviderEnabled(@NonNull String provider) {}
+    public void onProviderEnabled(@NonNull String provider) {
+        if (handler != null) handler.post(this::checkLocationState);
+    }
 
     @Override
-    public void onProviderDisabled(@NonNull String provider) {}
+    public void onProviderDisabled(@NonNull String provider) {
+        if (handler != null) handler.post(this::checkLocationState);
+    }
+
+    // ------------------------------------------------------------------
+    // Location switched off during the shift (migration 0115).
+    // ------------------------------------------------------------------
+
+    private boolean locationOn() {
+        try {
+            return locations == null || LocationManagerCompat.isLocationEnabled(locations);
+        } catch (Exception e) {
+            return true;
+        }
+    }
+
+    /**
+     * Notices location being switched off or back on. Off: remembers since
+     * when, asks the person to turn it back on (again every ten minutes) and
+     * tells the server; on again: says so once and clears the request.
+     */
+    private void checkLocationState() {
+        if (!collecting(this)) return;
+        SharedPreferences p = prefs(this);
+        long now = System.currentTimeMillis();
+        long since = p.getLong("loc_off_since", 0);
+        if (!locationOn()) {
+            if (since == 0) {
+                p.edit().putLong("loc_off_since", now).remove("loc_on_at").apply();
+                askToTurnOn();
+                flush();
+            } else if (now - p.getLong("loc_nag_at", 0) >= LOCATION_NAG_MS) {
+                askToTurnOn();
+            }
+        } else if (since != 0) {
+            p.edit().remove("loc_off_since").remove("loc_nag_at").putLong("loc_on_at", now).apply();
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm != null) nm.cancel(LOCATION_NOTIFICATION_ID);
+            flush();
+        }
+    }
+
+    /** "Turn your location back on": tapping it opens the phone's location settings. */
+    private void askToTurnOn() {
+        prefs(this).edit().putLong("loc_nag_at", System.currentTimeMillis()).apply();
+        try {
+            NotificationManager nm = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+            if (nm == null) return;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && nm.getNotificationChannel(LOCATION_CHANNEL) == null) {
+                NotificationChannel ch = new NotificationChannel(LOCATION_CHANNEL, "Location is off", NotificationManager.IMPORTANCE_HIGH);
+                ch.setDescription("Asks you to turn your location back on during a shift");
+                nm.createNotificationChannel(ch);
+            }
+            Intent settings = new Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            PendingIntent tap = PendingIntent.getActivity(this, 1, settings, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+            Notification n = new NotificationCompat.Builder(this, LOCATION_CHANNEL)
+                .setSmallIcon(R.drawable.ic_stat_xtend)
+                .setColor(ContextCompat.getColor(this, R.color.xtend_orange))
+                .setContentTitle("Turn your location back on")
+                .setContentText("Xtend needs your location on while you are at work. Tap to turn it on.")
+                .setStyle(new NotificationCompat.BigTextStyle().bigText("Xtend needs your location on while you are at work. Tap to turn it on."))
+                .setPriority(NotificationCompat.PRIORITY_HIGH)
+                .setCategory(NotificationCompat.CATEGORY_REMINDER)
+                .setAutoCancel(true)
+                .setContentIntent(tap)
+                .build();
+            nm.notify(LOCATION_NOTIFICATION_ID, n);
+        } catch (Exception ignored) {
+            // Notifications turned off: the server still hears about it.
+        }
+    }
 
     /** Keeps a position on the phone if it is due, then tries to send. */
     private synchronized void keep(Location l, boolean forced) {
@@ -529,6 +618,19 @@ public class ShiftTrackerService extends Service implements LocationListener {
             JSONObject body = new JSONObject();
             body.put("sent_at", iso(System.currentTimeMillis()));
             body.put("points", batch);
+            // Location switched off, or back on (0115).
+            long offSince = p.getLong("loc_off_since", 0);
+            long onAt = p.getLong("loc_on_at", 0);
+            if (offSince > 0) {
+                JSONObject loc = new JSONObject();
+                loc.put("off_since", iso(offSince));
+                body.put("location", loc);
+            } else if (onAt > 0) {
+                JSONObject loc = new JSONObject();
+                loc.put("off_since", JSONObject.NULL);
+                loc.put("on_at", iso(onAt));
+                body.put("location", loc);
+            }
             // Follow live: the latest position, shown to the follower only.
             Location live = liveLoc;
             long liveNow = System.currentTimeMillis();
@@ -587,6 +689,8 @@ public class ShiftTrackerService extends Service implements LocationListener {
                     .apply();
             }
             lastFailureAt = 0;
+            // Back on, and the server has heard it.
+            if (onAt > 0 && p.getLong("loc_on_at", 0) == onAt) p.edit().remove("loc_on_at").apply();
             // Follow live: faster while the server asks, normal otherwise.
             long before = fastMs(this);
             setFast(this, answer.optLong("interval_ms", 0));

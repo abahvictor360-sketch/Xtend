@@ -806,6 +806,15 @@ export function StaffGuide() {
               a: <>Ask your supervisor or admin to reset it. You will choose a new one when you sign in.</>,
             },
             {
+              q: 'It says “Turn your location back on”',
+              a: (
+                <>
+                  Your location was switched off. Tap the message (or open your phone&apos;s settings) and turn{' '}
+                  <b>Location</b> on. Keep it on from when you clock in until you clock out.
+                </>
+              ),
+            },
+            {
               q: 'It says “Install the new Xtend app”',
               a: (
                 <>

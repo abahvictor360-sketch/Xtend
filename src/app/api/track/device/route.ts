@@ -36,6 +36,16 @@ const schema = z.object({
       is_mock: z.boolean().optional(),
     })
     .optional(),
+  /**
+   * Location switched off on the phone (0115): off_since while it is off;
+   * when it comes back, off_since null and on_at when it did.
+   */
+  location: z
+    .object({
+      off_since: z.string().datetime({ offset: true }).nullable(),
+      on_at: z.string().datetime({ offset: true }).nullable().optional(),
+    })
+    .optional(),
 })
 
 interface Recorded {
@@ -76,6 +86,22 @@ export async function POST(request: Request) {
     }
     const got = data as Recorded
     if (!got.ok) return Response.json({ error: 'This tracking token has ended', stop: true }, { status: 401 })
+
+    // Location switched off, or back on (0115). Before 0115: ignored.
+    const state = parsed.data.location
+    if (state) {
+      await admin
+        .rpc('record_location_state', {
+          p_token: token,
+          p_off_since: state.off_since,
+          p_on_at: state.on_at ?? null,
+          p_sent_at: parsed.data.sent_at,
+        })
+        .then(
+          () => undefined,
+          () => undefined,
+        )
+    }
 
     // "Left the store": tell their supervisor and admins, as the web
     // heartbeat does.

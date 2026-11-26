@@ -6269,6 +6269,7 @@ begin
     perform set_config('request.jwt.claim.sub', '', false);
     -- Rows for the two tables the earlier tests leave empty.
     insert into public.assistant_conversations (user_id, title) values (boss, 'Test run questions');
+    insert into public.location_off_spells (user_id, started_at, ended_at) values (ada, now() - interval '1 hour', now());
     insert into public.follow_sessions (watcher_id, subject_id, expires_at, ended_at, end_reason)
     values (boss, ada, now(), now(), 'stopped');
     insert into public.field_corrections (user_id, action, reason, requested_by, status, done_at)
@@ -7810,6 +7811,95 @@ begin
     end;
   exception when others then
     if sqlerrm <> 'gspot-0114-done' then raise; end if;
+  end;
+
+  -- 0115: location turned off during a shift. Rolled back.
+  begin
+    declare
+      lo uuid := gen_random_uuid();
+      sup uuid := gen_random_uuid();
+      boss_id uuid := (select id from public.profiles where role = 'admin' order by created_at limit 1);
+      tok jsonb;
+      res jsonb;
+      r record;
+      n integer;
+    begin
+      update public.system_settings set block_off_site = false, location_off_alert_minutes = 15;
+      insert into auth.users (id, email) values (lo, 'locoff@xpel.ng'), (sup, 'locoff.sup@xpel.ng');
+      insert into public.profiles (id, full_name, email, role) values (sup, 'Loc Sup', 'locoff.sup@xpel.ng', 'supervisor');
+      insert into public.profiles (id, full_name, email, role, supervisor_id, push_exempt)
+      values (lo, 'Loc Off', 'locoff@xpel.ng', 'merchandiser', sup, true);
+      perform act_as(lo);
+      tok := public.issue_tracking_token('android');
+      perform set_config('request.jwt.claim.sub', '', false);
+
+      -- Before clocking in: nothing is recorded.
+      res := public.record_location_state(tok->>'token', now() - interval '5 minutes', null, now());
+      perform assert((res->>'ok')::boolean and not (res->>'open')::boolean
+                     and not exists (select 1 from public.location_off_spells where user_id = lo),
+        'location off 0115: before clocking in, nothing is recorded');
+
+      perform act_as(lo);
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name)
+      values ('opening', 6.5, 3.3, 10, fresh_photo('selfies', 'lo-in.jpg'), now(), 'Shop');
+      update public.attendance set created_at = now() - interval '2 hours' where user_id = lo and type = 'opening';
+      insert into public.location_pings (user_id, lat, lng, accuracy_m, created_at, place_name)
+      values (lo, 6.51, 3.31, 12, now() - interval '50 minutes', 'Last seen here');
+      update public.location_pings set created_at = now() - interval '50 minutes' where user_id = lo;
+      perform set_config('request.jwt.claim.sub', '', false);
+
+      -- Off for 40 minutes, the phone's clock 10 minutes fast.
+      res := public.record_location_state(tok->>'token', now() - interval '30 minutes', null, now() + interval '10 minutes');
+      select * into r from public.location_off_spells where user_id = lo and ended_at is null;
+      perform assert((res->>'open')::boolean and r.started_at between now() - interval '41 minutes' and now() - interval '39 minutes'
+                     and r.last_lat = 6.51 and r.last_place = 'Last seen here',
+        'location off 0115: a spell opens from when it went off (clock corrected), with the last position');
+      perform public.record_location_state(tok->>'token', now() - interval '1 minute', null, now());
+      perform assert((select count(*) from public.location_off_spells where user_id = lo) = 1,
+        'location off 0115: reported again while off, still one spell');
+      perform count(*) from public.claim_location_off_alerts();
+      select count(*) into n from public.location_off_spells where user_id = lo and alerted_at is not null;
+      perform assert(n = 1, 'location off 0115: after 15 minutes the supervisor is told');
+      select count(*) into n from public.claim_location_off_alerts() c where c.user_id = lo;
+      perform assert(n = 0, 'location off 0115: told once');
+
+      -- Back on.
+      res := public.record_location_state(tok->>'token', null, now() - interval '2 minutes', now());
+      select * into r from public.location_off_spells where user_id = lo;
+      perform assert(r.ended_at between now() - interval '3 minutes' and now() - interval '1 minute',
+        'location off 0115: turning it back on ends the spell');
+
+      -- Off again, then the clock-out ends it.
+      perform public.record_location_state(tok->>'token', now(), null, now());
+      perform act_as(lo);
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name)
+      values ('closing', 6.5, 3.3, 10, fresh_photo('selfies', 'lo-out.jpg'), now(), 'Shop');
+      perform assert(not exists (select 1 from public.location_off_spells where user_id = lo and ended_at is null),
+        'location off 0115: a clock-out ends an open spell');
+      perform set_config('request.jwt.claim.sub', '', false);
+      res := public.record_location_state(tok->>'token', now(), null, now());
+      perform assert(not (res->>'open')::boolean and not exists (select 1 from public.location_off_spells where user_id = lo and ended_at is null),
+        'location off 0115: after clocking out, nothing new is recorded');
+      res := public.record_location_state(repeat('0', 64), now(), null, now());
+      perform assert(not (res->>'ok')::boolean, 'location off 0115: an unknown token records nothing');
+
+      -- The office's setting.
+      perform act_as(lo);
+      begin
+        perform public.set_location_off_alert_minutes(5);
+        perform assert(false, 'location off 0115: staff cannot change the minutes');
+      exception when raise_exception then
+        perform assert(sqlerrm = 'Only an admin can change this', 'location off 0115: staff cannot change the minutes');
+      end;
+      perform act_as(boss_id);
+      perform public.set_location_off_alert_minutes(0);
+      perform assert((select location_off_alert_minutes from public.system_settings) = 0, 'location off 0115: an admin sets the minutes (0: never)');
+      perform assert(not has_function_privilege('authenticated', 'public.record_location_state(text, timestamp with time zone, timestamp with time zone, timestamp with time zone)', 'execute'),
+        'location off 0115: only the server records the phone''s state');
+      raise exception 'locoff-0115-done';
+    end;
+  exception when others then
+    if sqlerrm <> 'locoff-0115-done' then raise; end if;
   end;
 
   raise notice 'ALL RULES PASSED';

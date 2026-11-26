@@ -350,6 +350,15 @@ export default async function AdminGuidePage() {
 
         <GuideSection topic={T.movement} intro="Where staff are during their shift.">
           <p>
+            <Ui>Location off</Ui>: a phone&apos;s location cannot be read while it is switched off, by Xtend or any
+            app. Instead, if someone switches it off while clocked in, the Xtend app asks them to turn it back on
+            (again every ten minutes) and Xtend records when it went off, with the last place it had. On{' '}
+            <Ui>Movement</Ui> they show <Ui>Location off since …</Ui>, and each time is listed in their day under{' '}
+            <Ui>Worth a look</Ui>. After 15 minutes off their supervisor and the admins get a notification; change
+            the minutes (0 for never) under the on-shift list on <Ui>Movement</Ui>. It needs the newest phone app.
+            Make keeping location on during work a written rule for staff.
+          </p>
+          <p>
             <Ui>Movement</Ui> opens on a live map of the whole of Nigeria with everyone on shift shown as
             their profile photo, and how many are in a store, away from it, or not heard from in 15 minutes.
             The map cannot be dragged or zoomed out beyond Nigeria; zoom in with + to look at a city or a

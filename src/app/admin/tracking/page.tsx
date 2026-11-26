@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
 import { AutoRefresh, LiveMap, TrailMap } from '@/components/admin/movement-map'
+import { LocationOffSetting } from '@/components/admin/location-off-setting'
 import { JourneyKey, JourneyStrip, LEG_COLOUR, legTitle } from '@/components/admin/journey-strip'
 import type { LiveLocation } from '@/components/admin/live-locations'
 import { avatarUrls, withAvatars } from '@/lib/avatars'
@@ -31,6 +32,13 @@ import { addDays, cn, formatLagos, lagosDateString, longDate, metres } from '@/l
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Movement — Xtend' }
 
+interface OffSpell {
+  started_at: string
+  ended_at: string | null
+  last_place: string | null
+  last_fix_at: string | null
+}
+
 interface Search {
   person?: string
   date?: string
@@ -38,7 +46,8 @@ interface Search {
 }
 
 export default async function TrackingPage({ searchParams }: { searchParams: Promise<Search> }) {
-  await requireSession(['admin', 'supervisor'])
+  const session = await requireSession(['admin', 'supervisor'])
+  const isAdmin = session.profile.role === 'admin'
   const search = await searchParams
   const supabase = await createServerSupabase()
   const today = lagosDateString()
@@ -62,6 +71,17 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
     supabase.rpc('live_locations'),
   ])
   const onShift = await withAvatars(supabase, (live ?? []) as LiveLocation[])
+  // Location switched off on the phone during the shift (0115): open now,
+  // and every time it was off for the person and days shown.
+  const { data: offNow } = await supabase.from('location_off_spells').select('user_id, started_at').is('ended_at', null)
+  const offMinutes = isAdmin
+    ? await supabase
+        .from('system_settings')
+        .select('location_off_alert_minutes')
+        .maybeSingle()
+        .then(({ data, error }) => (error ? null : ((data as { location_off_alert_minutes?: number } | null)?.location_off_alert_minutes ?? null)))
+    : null
+  const offSince = new Map(((offNow ?? []) as { user_id: string; started_at: string }[]).map((o) => [o.user_id, o.started_at]))
   const person = (people ?? []).find((p) => p.id === search.person) ?? null
   const personPhoto = person ? ((await avatarUrls(supabase, [person.id])).get(person.id) ?? null) : null
 
@@ -73,6 +93,17 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
     problem = got.error
     trails = got.trails
     if (!problem) trail = mergeTrails(trails)
+  }
+  let offSpells: OffSpell[] = []
+  if (person) {
+    const { data: spells } = await supabase
+      .from('location_off_spells')
+      .select('started_at, ended_at, last_place, last_fix_at')
+      .eq('user_id', person.id)
+      .gte('started_at', `${date}T00:00:00+01:00`)
+      .lt('started_at', `${addDays(until, 1)}T00:00:00+01:00`)
+      .order('started_at')
+    offSpells = (spells ?? []) as OffSpell[]
   }
   const summary = trail ? summarise(trail) : null
   const trip = trail ? journey(trail) : null
@@ -240,7 +271,9 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
                           </span>
                         </span>
                         <span className="shrink-0 text-xs font-semibold">
-                          {r.inside_geofence === false
+                          {offSince.has(r.user_id) ? (
+                            <span className="text-destructive">Location off since {formatLagos(offSince.get(r.user_id)!, false)}</span>
+                          ) : r.inside_geofence === false
                             ? `${metres(r.distance_from_outlet_m)} away`
                             : r.inside_geofence
                               ? 'In store'
@@ -259,6 +292,14 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
                   )
                 })}
               </ul>
+            )}
+            {isAdmin && (
+              <div className="border-t border-border pt-3">
+                <p className="mb-2 text-xs text-muted-foreground">
+                  When someone turns location off on shift, the phone asks them to turn it back on, and it shows here.
+                </p>
+                <LocationOffSetting minutes={offMinutes} />
+              </div>
             )}
           </div>
         </div>
@@ -321,7 +362,7 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
             <Figure label="Stops" value={`${stops.length}${trip.stores.length ? ` · ${trip.stores.length} store${trip.stores.length === 1 ? '' : 's'}` : ''}`} />
           </div>
 
-          {(trip.jumps.length > 0 || longSilences.length > 0 || trip.totals.elsewhereMinutes >= 60) && (
+          {(trip.jumps.length > 0 || longSilences.length > 0 || offSpells.length > 0 || trip.totals.elsewhereMinutes >= 60) && (
             <section className="surface border-l-4 border-l-destructive p-4 sm:p-5">
               <div className="flex items-center gap-2">
                 <CircleAlert className="h-5 w-5 text-destructive" />
@@ -336,6 +377,17 @@ export default async function TrackingPage({ searchParams }: { searchParams: Pro
                     {JUMP_KMH} km/h. A fake-location app, or a borrowed phone, can do this; a person cannot.
                   </li>
                 ))}
+                {offSpells.map((o, i) => {
+                  const end = o.ended_at ?? new Date().toISOString()
+                  const mins = Math.max(1, Math.round((Date.parse(end) - Date.parse(o.started_at)) / 60000))
+                  return (
+                    <li key={`o${i}`} className="rounded-xl bg-muted/40 px-3 py-2.5">
+                      <span className="font-semibold">Location turned off</span> {formatLagos(o.started_at, days.length > 1)}
+                      {o.ended_at ? ` to ${formatLagos(o.ended_at, days.length > 1)}` : ', still off'} ({duration(mins)}).
+                      {o.last_fix_at && ` Last seen${o.last_place ? ` at ${o.last_place}` : ''} at ${formatLagos(o.last_fix_at, false)}.`}
+                    </li>
+                  )
+                })}
                 {longSilences.map((g, i) => (
                   <li key={`g${i}`} className="rounded-xl bg-muted/40 px-3 py-2.5">
                     Nothing heard for {duration(g.minutes)} from {formatLagos(g.from, days.length > 1)}.{' '}
