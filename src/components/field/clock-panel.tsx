@@ -18,6 +18,7 @@ import { StartStoreSheet, type StartStore } from '@/components/field/start-store
 import { OffSiteSheet } from '@/components/field/off-site-sheet'
 import { TooEarlySheet } from '@/components/field/too-early-sheet'
 import { tooEarlyFromServer, tooEarlyToClockOut } from '@/lib/clock-out-time'
+import { googleSaysAtStore } from '@/lib/site-check'
 import { offSite as offSiteFrom, offSiteFromServer, type OffSite, type SiteStore } from '@/lib/on-site'
 import { processSelfie } from '@/lib/image'
 import { deviceInfo } from '@/lib/device'
@@ -264,11 +265,14 @@ export function ClockPanel({
       // marketer is measured against the store they picked.
       if (type === 'opening' && sites.current) {
         const away = offSiteFrom(fix, sites.current, startStore.current)
-        if (away) {
+        // The pin may be wrong: Google is asked where the store is first (0114).
+        if (away && !(await googleSaysAtStore(away.store.id, fix))) {
+          if (run !== startRun.current) return
           setOpening(null)
           setOffSite(away)
           return
         }
+        if (run !== startRun.current) return
       }
       // Name the place while they frame the photo; it is not needed to shoot.
       const lookup = reverseGeocode(fix.lat, fix.lng)

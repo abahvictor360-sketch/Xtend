@@ -1097,14 +1097,29 @@ CREATE FUNCTION public.attendance_on_site_only() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
+declare
+  g double precision;
 begin
   if new.type <> 'opening' or auth.uid() is null or auth.uid() <> new.user_id or not public.off_site_blocked() then
     return new;
   end if;
+  -- Only the database says Google confirmed it.
+  new.device_info := coalesce(new.device_info, '{}'::jsonb) - 'site_confirmed_by' - 'pin_distance_m' - 'google_distance_m';
   if new.outlet_id is null or new.distance_m is null or new.accuracy_m > 100 then
     return new;
   end if;
   if public.too_far(new.distance_m, new.outlet_radius_m, new.accuracy_m) then
+    g := public.google_spot_distance(new.outlet_id, new.lat, new.lng);
+    if g is not null and not public.too_far(g, new.outlet_radius_m, new.accuracy_m) then
+      new.device_info := new.device_info || jsonb_build_object(
+        'site_confirmed_by', 'google', 'pin_distance_m', round(new.distance_m), 'google_distance_m', round(g));
+      new.distance_m := g;
+      if new.status is distinct from 'flagged' then
+        new.status := 'on_site';
+      end if;
+      perform public.note_google_spot_used(new.outlet_id);
+      return new;
+    end if;
     perform public.refuse_off_site(new.outlet_id, new.distance_m, new.outlet_radius_m, 'clock in');
   end if;
   return new;
@@ -1121,7 +1136,7 @@ CREATE FUNCTION public.attendance_place_due() RETURNS trigger
     SET search_path TO 'public'
     AS $$
 begin
-  if new.type = 'opening' then
+  if new.type = 'opening' and new.device_info->>'site_confirmed_by' is distinct from 'google' then
     perform public.raise_place_due(new.user_id, new.lat, new.lng, new.accuracy_m, 'clock_in', new.id,
                                    new.device_info->'position');
   end if;
@@ -2229,6 +2244,22 @@ CREATE FUNCTION public.claim_flag_alerts(p_limit integer DEFAULT 50) RETURNS TAB
   join public.profiles p on p.id = t.user_id
   left join public.outlets o on o.id = t.outlet_id
   order by t.created_at;
+$$;
+
+
+--
+-- Name: claim_pin_check_notice(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.claim_pin_check_notice(p_outlet uuid) RETURNS boolean
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  update public.store_google_spots set notified_at = now()
+   where outlet_id = p_outlet and (notified_at is null or notified_at < now() - interval '1 day');
+  return found;
+end;
 $$;
 
 
@@ -3825,6 +3856,18 @@ $$;
 
 
 --
+-- Name: google_spot_distance(uuid, double precision, double precision); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.google_spot_distance(p_outlet uuid, p_lat double precision, p_lng double precision) RETURNS double precision
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select public.distance_metres(p_lat, p_lng, g.lat, g.lng) from public.store_google_spot(p_outlet) g;
+$$;
+
+
+--
 -- Name: has_allocated_stores(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -5162,6 +5205,18 @@ CREATE FUNCTION public.no_show_already_reported(p_user uuid) RETURNS boolean
       and n.audience_detail ->> 'subject_id' = p_user::text
       and (n.created_at at time zone 'Africa/Lagos')::date = public.business_date()
   );
+$$;
+
+
+--
+-- Name: note_google_spot_used(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.note_google_spot_used(p_outlet uuid) RETURNS void
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  update public.store_google_spots set used_count = used_count + 1, last_used_at = now() where outlet_id = p_outlet;
 $$;
 
 
@@ -8167,6 +8222,31 @@ $$;
 
 
 --
+-- Name: save_store_google_spot(uuid, text, text, double precision, double precision, boolean, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.save_store_google_spot(p_outlet uuid, p_name text, p_address text, p_lat double precision, p_lng double precision, p_confirmed boolean, p_detail jsonb DEFAULT '{}'::jsonb) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  insert into public.store_google_spots as s (outlet_id, name_used, address_used, lat, lng, confirmed, detail, looked_up_at)
+  values (p_outlet, p_name, coalesce(btrim(p_address), ''), p_lat, p_lng,
+          coalesce(p_confirmed, false) and p_lat is not null and p_lng is not null,
+          coalesce(p_detail, '{}'::jsonb), now())
+  on conflict (outlet_id) do update
+    set lat = excluded.lat, lng = excluded.lng, confirmed = excluded.confirmed, detail = excluded.detail,
+        looked_up_at = now(),
+        used_count = case when s.name_used = excluded.name_used and s.address_used = excluded.address_used
+                          then s.used_count else 0 end,
+        last_used_at = case when s.name_used = excluded.name_used and s.address_used = excluded.address_used
+                            then s.last_used_at end,
+        name_used = excluded.name_used, address_used = excluded.address_used;
+end;
+$$;
+
+
+--
 -- Name: schedule_guard(uuid); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9075,6 +9155,25 @@ $$;
 
 
 --
+-- Name: store_google_spot(uuid); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.store_google_spot(p_outlet uuid) RETURNS TABLE(lat double precision, lng double precision)
+    LANGUAGE sql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+  select s.lat, s.lng
+  from public.store_google_spots s
+  join public.outlets o on o.id = s.outlet_id
+  where s.outlet_id = p_outlet
+    and s.confirmed
+    and s.name_used = o.name
+    and s.address_used = coalesce(btrim(o.address), '')
+    and s.looked_up_at > now() - interval '90 days';
+$$;
+
+
+--
 -- Name: store_visit_alert(); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -9235,26 +9334,64 @@ CREATE FUNCTION public.store_visit_on_site_only() RETURNS trigger
     AS $$
 declare
   near record;
+  g double precision;
+  o record;
 begin
   if auth.uid() is null or auth.uid() <> new.user_id or not public.off_site_blocked() then
     return new;
   end if;
+  new.device_info := coalesce(new.device_info, '{}'::jsonb) - 'site_confirmed_by' - 'pin_distance_m' - 'google_distance_m';
   if new.arrived_accuracy_m > 100 then
     return new;
   end if;
   if new.outlet_id is not null then
     if new.arrived_distance_m is not null
        and public.too_far(new.arrived_distance_m, new.outlet_radius_m, new.arrived_accuracy_m) then
+      g := public.google_spot_distance(new.outlet_id, new.arrived_lat, new.arrived_lng);
+      if g is not null and not public.too_far(g, new.outlet_radius_m, new.arrived_accuracy_m) then
+        new.device_info := new.device_info || jsonb_build_object(
+          'site_confirmed_by', 'google', 'pin_distance_m', round(new.arrived_distance_m), 'google_distance_m', round(g));
+        new.arrived_distance_m := g;
+        if new.arrived_status is distinct from 'flagged' then
+          new.arrived_status := 'on_site';
+        end if;
+        perform public.note_google_spot_used(new.outlet_id);
+        return new;
+      end if;
       perform public.refuse_off_site(new.outlet_id, new.arrived_distance_m, new.outlet_radius_m, 'check in');
     end if;
     return new;
   end if;
-  -- Not in any of their stores: the nearest one, unless one of theirs is
-  -- still waiting for its location (they may be standing in it).
   if public.has_allocated_stores(new.user_id)
      and not exists (select 1 from public.outlets x
                      where x.id in (select f.outlet_id from public.outlets_for_user(new.user_id) f)
                        and x.is_active and x.lat is null) then
+    -- One of their stores by Google's spot: checked in there.
+    select x.id, x.lat, x.lng, x.geofence_radius_m,
+           public.google_spot_distance(x.id, new.arrived_lat, new.arrived_lng) as d
+      into o
+    from public.outlets x
+    where x.id in (select f.outlet_id from public.outlets_for_user(new.user_id) f)
+      and x.is_active
+      and public.google_spot_distance(x.id, new.arrived_lat, new.arrived_lng) is not null
+    order by 5
+    limit 1;
+    if o.id is not null and not public.too_far(o.d, o.geofence_radius_m, new.arrived_accuracy_m) then
+      new.outlet_id := o.id;
+      new.outlet_lat := o.lat;
+      new.outlet_lng := o.lng;
+      new.outlet_radius_m := o.geofence_radius_m;
+      new.device_info := new.device_info || jsonb_build_object(
+        'site_confirmed_by', 'google',
+        'pin_distance_m', round(public.distance_metres(new.arrived_lat, new.arrived_lng, o.lat, o.lng)),
+        'google_distance_m', round(o.d));
+      new.arrived_distance_m := o.d;
+      if new.arrived_status is distinct from 'flagged' then
+        new.arrived_status := 'on_site';
+      end if;
+      perform public.note_google_spot_used(o.id);
+      return new;
+    end if;
     select x.id, x.geofence_radius_m,
            public.distance_metres(new.arrived_lat, new.arrived_lng, x.lat, x.lng) as d
       into near
@@ -12494,6 +12631,35 @@ CREATE VIEW public.store_coverage WITH (security_invoker='true') AS
 
 
 --
+-- Name: store_google_spots; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.store_google_spots (
+    outlet_id uuid NOT NULL,
+    name_used text NOT NULL,
+    address_used text DEFAULT ''::text NOT NULL,
+    lat double precision,
+    lng double precision,
+    confirmed boolean DEFAULT false NOT NULL,
+    detail jsonb DEFAULT '{}'::jsonb NOT NULL,
+    looked_up_at timestamp with time zone DEFAULT now() NOT NULL,
+    used_count integer DEFAULT 0 NOT NULL,
+    last_used_at timestamp with time zone,
+    notified_at timestamp with time zone,
+    CONSTRAINT store_google_spots_check CHECK (((NOT confirmed) OR ((lat IS NOT NULL) AND (lng IS NOT NULL)))),
+    CONSTRAINT store_google_spots_lat_check CHECK (((lat IS NULL) OR ((lat >= ('-90'::integer)::double precision) AND (lat <= (90)::double precision)))),
+    CONSTRAINT store_google_spots_lng_check CHECK (((lng IS NULL) OR ((lng >= ('-180'::integer)::double precision) AND (lng <= (180)::double precision))))
+);
+
+
+--
+-- Name: TABLE store_google_spots; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON TABLE public.store_google_spots IS 'Where Google puts each store (0114): used when the pin says off site.';
+
+
+--
 -- Name: support_messages; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -13809,6 +13975,14 @@ ALTER TABLE ONLY public.store_counts
 
 ALTER TABLE ONLY public.store_counts
     ADD CONSTRAINT store_counts_user_id_outlet_id_product_id_count_date_key UNIQUE (user_id, outlet_id, product_id, count_date);
+
+
+--
+-- Name: store_google_spots store_google_spots_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.store_google_spots
+    ADD CONSTRAINT store_google_spots_pkey PRIMARY KEY (outlet_id);
 
 
 --
@@ -15786,6 +15960,14 @@ ALTER TABLE ONLY public.store_counts
 
 
 --
+-- Name: store_google_spots store_google_spots_outlet_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.store_google_spots
+    ADD CONSTRAINT store_google_spots_outlet_id_fkey FOREIGN KEY (outlet_id) REFERENCES public.outlets(id) ON DELETE CASCADE;
+
+
+--
 -- Name: store_visits store_visits_outlet_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -17105,6 +17287,19 @@ CREATE POLICY store_counts_select ON public.store_counts FOR SELECT USING (((use
 
 
 --
+-- Name: store_google_spots; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.store_google_spots ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: store_google_spots store_google_spots_admin_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY store_google_spots_admin_read ON public.store_google_spots FOR SELECT TO authenticated USING (public.is_admin());
+
+
+--
 -- Name: store_visits; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -17919,6 +18114,14 @@ GRANT ALL ON FUNCTION public.claim_flag_alerts(p_limit integer) TO service_role;
 
 
 --
+-- Name: FUNCTION claim_pin_check_notice(p_outlet uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.claim_pin_check_notice(p_outlet uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.claim_pin_check_notice(p_outlet uuid) TO service_role;
+
+
+--
 -- Name: FUNCTION claim_scheduled_notification(p_id uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -18295,6 +18498,13 @@ GRANT ALL ON FUNCTION public.forget_selfie_paths(p_paths text[]) TO service_role
 
 REVOKE ALL ON FUNCTION public.google_calls_this_month() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.google_calls_this_month() TO service_role;
+
+
+--
+-- Name: FUNCTION google_spot_distance(p_outlet uuid, p_lat double precision, p_lng double precision); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.google_spot_distance(p_outlet uuid, p_lat double precision, p_lng double precision) FROM PUBLIC;
 
 
 --
@@ -18681,6 +18891,13 @@ GRANT ALL ON FUNCTION public.nearest_outlet_for_user(target uuid, p_lat double p
 
 REVOKE ALL ON FUNCTION public.no_show_already_reported(p_user uuid) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.no_show_already_reported(p_user uuid) TO service_role;
+
+
+--
+-- Name: FUNCTION note_google_spot_used(p_outlet uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.note_google_spot_used(p_outlet uuid) FROM PUBLIC;
 
 
 --
@@ -19399,6 +19616,14 @@ GRANT ALL ON FUNCTION public.revoke_tracking_tokens() TO authenticated;
 
 
 --
+-- Name: FUNCTION save_store_google_spot(p_outlet uuid, p_name text, p_address text, p_lat double precision, p_lng double precision, p_confirmed boolean, p_detail jsonb); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.save_store_google_spot(p_outlet uuid, p_name text, p_address text, p_lat double precision, p_lng double precision, p_confirmed boolean, p_detail jsonb) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.save_store_google_spot(p_outlet uuid, p_name text, p_address text, p_lat double precision, p_lng double precision, p_confirmed boolean, p_detail jsonb) TO service_role;
+
+
+--
 -- Name: FUNCTION schedule_guard(p_user uuid); Type: ACL; Schema: public; Owner: -
 --
 
@@ -19643,6 +19868,14 @@ GRANT ALL ON FUNCTION public.start_store_of(p_device jsonb) TO service_role;
 REVOKE ALL ON FUNCTION public.store_count_status() FROM PUBLIC;
 GRANT ALL ON FUNCTION public.store_count_status() TO authenticated;
 GRANT ALL ON FUNCTION public.store_count_status() TO service_role;
+
+
+--
+-- Name: FUNCTION store_google_spot(p_outlet uuid); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.store_google_spot(p_outlet uuid) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.store_google_spot(p_outlet uuid) TO service_role;
 
 
 --
@@ -20290,6 +20523,13 @@ GRANT SELECT ON TABLE public.store_count_sheet_detail TO authenticated;
 --
 
 GRANT SELECT ON TABLE public.store_coverage TO authenticated;
+
+
+--
+-- Name: TABLE store_google_spots; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT ON TABLE public.store_google_spots TO authenticated;
 
 
 --

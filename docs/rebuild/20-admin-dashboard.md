@@ -1902,6 +1902,10 @@ Heading **"Outlets"**. Admin intro: "The geofence radius is per outlet: a mall k
 
 Loads `outlets` (id, name, address, lat, lng, geofence_radius_m, shift_start, shift_end, is_active, created_at) by name — RLS narrows what a supervisor sees — and active profiles' `outlet_id` to count staff per store.
 
+### Pins to check (0114, admins)
+
+Also loads `store_google_spots`. A store whose confirmed Google spot is farther from its pin than its area gets a **Pins to check** stat card (warning, "Google puts the store elsewhere") and, on its card, a warning box "**Check the pin.** Google puts this store <d> from its pin. <n> clock-ins or check-ins went through at Google's spot." with **Use Google's spot** (`PATCH /api/admin/outlets/<id> {lat, lng}`, audited `outlet.update`) and **See it on the map** (Google Maps search link). Admins also get the phone notification "Check the pin for <store>" ("Someone clocked in at <store> where Google puts the store, far from its pin. Open Outlets and use Google's spot if the pin is wrong.", `/admin/outlets`), at most once a day per store.
+
 ### Add / edit (admins)
 
 **Add outlet** (plus icon; becomes **Cancel**). Form (4 columns on `lg`):

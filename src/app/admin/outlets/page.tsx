@@ -3,10 +3,12 @@ import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { buttonVariants } from '@/components/ui/button'
 import { OutletManager } from '@/components/admin/outlet-manager'
-import { MapPinOff, Store, Upload, UserX, Users } from 'lucide-react'
+import { MapPinned, MapPinOff, Store, Upload, UserX, Users } from 'lucide-react'
+import { haversineMetres } from '@/lib/geo'
 import { PageHeader, StatCard, StatGrid } from '@/components/admin/page-kit'
 import type { Outlet } from '@/lib/types'
 import type { StoreStaffPerson } from '@/components/admin/store-staff'
+import type { PinCheck } from '@/components/admin/outlet-manager'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Outlets — Xtend' }
@@ -16,7 +18,7 @@ export default async function OutletsPage() {
   const readOnly = session.profile.role === 'supervisor'
   const supabase = await createServerSupabase()
 
-  const [{ data: outlets }, { data: counts }, { data: staff }] = await Promise.all([
+  const [{ data: outlets }, { data: counts }, { data: staff }, { data: spots }] = await Promise.all([
     supabase
       .from('outlets')
       .select('id, name, address, lat, lng, geofence_radius_m, shift_start, shift_end, is_active, created_at')
@@ -25,6 +27,8 @@ export default async function OutletsPage() {
     // Who can be allocated from a store: everyone for an admin, their own
     // team for a supervisor (RLS on profiles narrows the view).
     supabase.from('staff_allocation').select('*').order('staff_name'),
+    // Where Google puts each store (0114; admins only, through RLS).
+    supabase.from('store_google_spots').select('outlet_id, lat, lng, confirmed, used_count, last_used_at'),
   ])
 
   const staffPerOutlet = new Map<string, number>()
@@ -41,6 +45,18 @@ export default async function OutletsPage() {
   }
 
   const list = (outlets ?? []) as Outlet[]
+  // A pin far from where Google confirms the store: worth checking (0114).
+  const byId = new Map(list.map((o) => [o.id, o]))
+  const pinChecks: Record<string, PinCheck> = {}
+  for (const g of (spots ?? []) as { outlet_id: string; lat: number | null; lng: number | null; confirmed: boolean; used_count: number; last_used_at: string | null }[]) {
+    const o = byId.get(g.outlet_id)
+    if (!o || !g.confirmed || g.lat == null || g.lng == null || o.lat == null || o.lng == null) continue
+    const gap = haversineMetres(o.lat, o.lng, g.lat, g.lng)
+    if (gap > (o.geofence_radius_m ?? 150)) {
+      pinChecks[o.id] = { lat: g.lat, lng: g.lng, gap_m: Math.round(gap), used: g.used_count, last_used_at: g.last_used_at }
+    }
+  }
+  const toCheck = Object.keys(pinChecks).length
   const active = list.filter((o) => o.is_active)
   const unpinned = active.filter((o) => o.lat === null)
   const placed = ((counts ?? []) as { outlet_id: string | null }[]).filter((r) => r.outlet_id).length
@@ -74,6 +90,9 @@ export default async function OutletsPage() {
           note={unpinned.length ? 'Pinned from the first clock-in' : 'Every active store is pinned'}
           href={!readOnly && unpinned.length ? '/admin/places' : undefined}
         />
+        {!readOnly && toCheck > 0 && (
+          <StatCard icon={MapPinned} label="Pins to check" value={String(toCheck)} tone="warn" note="Google puts the store elsewhere" />
+        )}
         <StatCard icon={Users} label="Staff placed" value={String(placed)} tone="good" note="Active staff with a store" />
         <StatCard
           icon={UserX}
@@ -91,6 +110,7 @@ export default async function OutletsPage() {
         readOnly={readOnly}
         staff={people}
         canAllocate
+        pinChecks={readOnly ? {} : pinChecks}
       />
     </div>
   )

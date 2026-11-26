@@ -9,6 +9,7 @@ import { evaluateLocationIntegrity } from '@/lib/integrity-signals'
 import { mapText } from '@/lib/fields'
 import { isOwnStoragePath } from '@/lib/storage-path'
 import { placeForEvent } from '@/lib/geocode'
+import { tellOfficeToCheckPin, worthAskingGoogle } from '@/lib/store-google'
 
 /**
  * The client sends what it observed. distance_m, status, user_id and
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
     // Sent with no place (made offline, or the lookup timed out): name and
     // save it now, so the next clock-in there is named from Xtend's own list.
     const found = await placeForEvent(supabase, input.lat, input.lng, input)
-    const { data, error } = await supabase
+    const insert = () => supabase
       .from('attendance')
       .insert({
         type: input.type,
@@ -70,6 +71,17 @@ export async function POST(request: Request) {
         'id, type, status, distance_m, address, accuracy_m, created_at, outlet_radius_m, outlet_id',
       )
       .single()
+    let { data, error } = await insert()
+    // Off site by the store's pin: ask Google where the store is before
+    // refusing (0114). Inside its area there, the same clock-in goes again
+    // and the database lets it through; the office is told to check the pin.
+    if (error && input.type === 'opening') {
+      const store = await worthAskingGoogle(error, input)
+      if (store) {
+        ;({ data, error } = await insert())
+        if (!error) await tellOfficeToCheckPin(store)
+      }
+    }
 
     if (error) {
       if (error.code === '23505') {
@@ -95,6 +107,8 @@ export async function POST(request: Request) {
       }
       return Response.json({ error: dbErrorMessage(error) }, { status: 400 })
     }
+
+    if (!data) return Response.json({ error: 'It could not be saved. Try again.' }, { status: 500 })
 
     // An off-site or flagged clock event is worth interrupting someone
     // for, so the office hears about it now rather than when they next open

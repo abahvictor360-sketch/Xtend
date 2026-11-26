@@ -920,8 +920,12 @@ export default async function AdminGuidePage() {
             nearest store, or the store a marketer picked), how far it is, and directions in Google Maps; the
             server refuses it anyway. The phone&apos;s accuracy gets up to 50 m of benefit of the doubt. Clocking out
             and checking out are never refused, nor are stores still waiting for their location or entries the
-            office makes. A store pinned in the wrong place stops everyone there, so check each pin with{' '}
-            <Ui>Check on Google Maps</Ui>; until it is fixed, a supervisor can clock people in from their day page.
+            office makes. Before refusing, Xtend asks Google where the store is (its name with its address, needing{' '}
+            <code>GOOGLE_MAPS_API_KEY</code>): if Google puts the store where the person stands, it goes through as on
+            site, and you get <Ui>Check the pin for …</Ui>. On <Ui>Outlets</Ui> such a store shows{' '}
+            <Ui>Check the pin</Ui> with <Ui>Use Google&apos;s spot</Ui> to move the pin there. Google only checks
+            stores with an address, so fill addresses in. You can still check a pin yourself with{' '}
+            <Ui>Check on Google Maps</Ui>; meanwhile a supervisor can clock people in from their day page.
             To switch the rule off, run{' '}
             <code>update public.system_settings set block_off_site = false;</code> in Supabase (true turns it back
             on).

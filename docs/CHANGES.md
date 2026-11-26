@@ -46,7 +46,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0110_ai_limits.sql`;
    - `supabase/migrations/0111_clock_out_hold.sql`;
    - `supabase/migrations/0112_office_entry_location.sql`;
-   - `supabase/migrations/0113_force_app_update.sql`.
+   - `supabase/migrations/0113_force_app_update.sql`;
+   - `supabase/migrations/0114_store_google_check.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18;
    0099, 0100, 0101 and 0102 are done: you ran them on 2026-11-24.)
 4. **Turn off self sign-up in Supabase**: Authentication → Sign In /
@@ -78,6 +79,29 @@ the live database, so it cannot tell which of these are already done.)
 ---
 
 ## 2026-11-26
+
+### Xtend checks the store with Google before saying "You are off site" (migration 0114)
+- **What was done:** when a store's pin says someone is off site, Xtend now
+  asks Google where that store really is (its name with its address, checked
+  against the address on its own, so a branch of the same chain elsewhere
+  does not count). If Google puts the store where the person is standing,
+  the clock-in or store check-in goes through as on site, instead of "You
+  are off site". Google's answer is saved per store and asked again only
+  when you change the store's name or address, or after 90 days, so it
+  costs very little.
+- **The impact:** a wrong pin (a wrong Google Maps link, a pin on the wrong
+  street) no longer stops people who are really in the store, like the
+  person 849 m from Roban store Agbani road. Someone really away from the
+  store is still refused. You get a notification **"Check the pin for …"**
+  (at most once a day per store), and on **Outlets** the store shows
+  **Check the pin** with how far Google puts it from the pin, and a button
+  **Use Google's spot** that moves the pin there. A **Pins to check** count
+  shows at the top. Staff see nothing new: it just works.
+- **What you need to do:** run `supabase/migrations/0114_store_google_check.sql`
+  in Supabase (after 0113) and redeploy. It needs `GOOGLE_MAPS_API_KEY`
+  set with **Places API (New)** and **Geocoding API** turned on (the same
+  key the place names use). A store needs its address filled in for Google
+  to check it. No new app build needed.
 
 ### Old phone apps must update after the last reminder (migration 0113)
 - **What was done:** when a new Xtend phone app comes out, everyone on the

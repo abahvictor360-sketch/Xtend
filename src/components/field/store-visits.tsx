@@ -15,6 +15,7 @@ import { GeoBlocked, haversineMetres, positionCheck, requireFix, type Fix, type 
 import { currentNetwork, isNetworkError, problemFromGeo, problemFromMessage, type GuideProblem } from '@/lib/field-guide'
 import { GuideSheet } from '@/components/field/guide-sheet'
 import { OffSiteSheet } from '@/components/field/off-site-sheet'
+import { googleSaysAtStore } from '@/lib/site-check'
 import { offSite as offSiteFrom, offSiteFromServer, type OffSite, type SiteStore } from '@/lib/on-site'
 import { processSelfie } from '@/lib/image'
 import { supabase } from '@/lib/supabase/client'
@@ -236,7 +237,8 @@ export function StoreVisits({
       // 0106: not at the store, no check-in: the one they picked, else the
       // nearest of their own stores. Said now, before the selfie.
       const away = outlet ? offSiteFrom(fix, [], outlet) : sites.current?.length ? offSiteFrom(fix, sites.current) : null
-      if (away) {
+      // The pin may be wrong: Google is asked where the store is first (0114).
+      if (away && !(await googleSaysAtStore(away.store.id, fix))) {
         setOffSiteOutlet(outlet)
         setOffSite(away)
         setPicking(false)

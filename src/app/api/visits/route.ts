@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { offSiteRefusal } from '@/lib/off-site-refusal'
+import { tellOfficeToCheckPin, worthAskingGoogle } from '@/lib/store-google'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage, dbErrorResponse } from '@/lib/auth'
 import { notifyWatchers } from '@/lib/notify'
@@ -72,7 +73,7 @@ export async function POST(request: Request) {
 
     // The phone could not name the spot: name and save it here.
     const found = await placeForEvent(supabase, input.lat, input.lng, input)
-    const { data, error } = await supabase
+    const insert = () => supabase
       .from('store_visits')
       .insert({
         // Null lets the trigger attribute it to a known store if they are
@@ -97,6 +98,15 @@ export async function POST(request: Request) {
         arrived_distance_m: number | null
         outlet_radius_m: number | null
       }>()
+    let { data, error } = await insert()
+    // Off site by the store's pin: ask Google before refusing (0114).
+    if (error) {
+      const store = await worthAskingGoogle(error, input)
+      if (store) {
+        ;({ data, error } = await insert())
+        if (!error) await tellOfficeToCheckPin(store)
+      }
+    }
 
     if (error) {
       if (error.code === '23505') {
@@ -135,6 +145,8 @@ export async function POST(request: Request) {
       }
       return dbErrorResponse(error)
     }
+
+    if (!data) return Response.json({ error: 'It could not be saved. Try again.' }, { status: 500 })
 
     // The store is whatever the row ended up with: a known outlet if they
     // were standing in one, otherwise the name the map gave the building.

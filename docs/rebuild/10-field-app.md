@@ -2037,6 +2037,12 @@ for visits); "In the store but still see this? Step near the door or a
 window so your phone finds you, then try again. If it keeps happening, call
 your supervisor."; the staff guide link. A server refusal (422 `off_site`)
 opens the same sheet (clock-ins through `PermanentJobError.body`).
+Before the sheet opens (0114), the phone asks `POST /api/site-check
+{store_id, lat, lng, accuracy_m}` → `{at_store}` (`googleSaysAtStore` in
+`src/lib/site-check.ts`, 8 s timeout; offline or no answer: false); when
+Google's confirmed spot for that store has them inside its area, it carries
+on to the camera instead. The server does the same on a 422 `off_site` from
+the database and sends the insert once more. Staff are never told about it.
 
 **Paused account (0108).** `requireSession` sends a session whose profile has
 `paused_at` to `/api/auth/paused` (signs out, records `sign_out` with reason
