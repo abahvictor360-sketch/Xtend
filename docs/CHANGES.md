@@ -82,6 +82,27 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-26
 
+### Ask Xtend can add a store from a Google Maps link, and the link gives the right address (no migration)
+- **What was done:** (1) Ask Xtend had no way to add a store, so when you
+  asked it to add one from a Google Maps link and allocate it, nothing was
+  added even though it said it was done. Now it can: say "add this store and
+  allocate it to Kemi: <link>" and it shows a card with the store's name,
+  address, location and who it goes to; press **Add and allocate** and the
+  store is added to Outlets and allocated. If a store with that name, or
+  one within 50 m, is already there, the card says so. (2) Ask Xtend can no
+  longer claim something is done when nothing was changed: if it says so
+  without a card, its answer ends with "Note: this answer did not change
+  anything…". (3) A pasted Google Maps link now fills in the address Google
+  Maps shows for that place. Before, when the link had only the shop's name,
+  the address came from the nearest street (or a store already in Xtend
+  near the pin), so it could differ.
+- **The impact:** stores added from links have the right address, and Ask
+  Xtend's answers never say a change was made when it was not.
+- **What you need to do:** redeploy. The right address needs
+  `GOOGLE_MAPS_API_KEY` with **Places API (New)** turned on. Add the store
+  you asked about again (on Outlets, or through Ask Xtend and press the
+  card's button). No migration.
+
 ### The clock-in photo is the store check-in photo too (migration 0116)
 - **What was done:** when a marketer clocks in at a store, Xtend also checks
   them in there, but that check-in showed no photo. Now the clock-in selfie

@@ -237,6 +237,16 @@ Two things are reused, both only on the same server and only briefly:
 
 Exports: `CACHEABLE_TOOLS`, `ANSWER_TTL_MS`, `LOOKUP_TODAY_TTL_MS`, `LOOKUP_PAST_TTL_MS`, `stableJson`, `lookupTtlMs`, `lookupKey`, `normalizeQuestion`, `answerKey`, `answerWorthSaving`
 
+## `src/lib/assistant-claims.ts`
+
+Ask Xtend only proposes changes; a card's button makes them. A model can
+still write "Done, I have added the store" with no card behind it
+(2026-11-26: a store "added and allocated" that never was). When an answer
+claims a change and this turn proposed nothing, the user is told plainly.
+Pure, so scripts/check-assistant-actions.ts can test it.
+
+Exports: `claimsChange`, `NOTHING_CHANGED`, `guardClaims`
+
 ## `src/lib/assistant-conversations.ts`
 
 Ask Xtend conversations kept for later (assistant_conversations, 054).
@@ -744,7 +754,7 @@ src/lib/place-resolve.ts):
     business within 80 m. Free and needs no key, but Nigerian POI
     coverage is thin, so it often names the street rather than the shop.
 
-Exports: `resolvePlace`, `placeForEvent`, `LocatedPlace`, `askGoogleAboutStore`, `locateAddress`, `searchPlaces`, `openShortMapLink`
+Exports: `resolvePlace`, `placeForEvent`, `LocatedPlace`, `placeFromLink`, `askGoogleAboutStore`, `locateAddress`, `searchPlaces`, `openShortMapLink`
 
 ## `src/lib/health.ts`
 
@@ -847,6 +857,12 @@ OpenStreetMap or Apple Maps link, or plain "6.6019, 3.3516". Pure, so
 scripts/check-map-link.ts can test it.
 
 Exports: `LinkPoint`, `LinkReading`, `placeWords`, `validPoint`, `SHORT_LINK_HOSTS`, `MAP_HOSTS`, `isShortMapLink`, `readMapLink`, `mapsLink`
+
+## `src/lib/map-place.ts`
+
+The position the link gives (the place's pin before the map's centre).
+
+Exports: `LinkPlace`, `placeFromMapLink`
 
 ## `src/lib/marketer-report-server.ts`
 

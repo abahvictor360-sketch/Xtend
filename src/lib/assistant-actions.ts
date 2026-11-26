@@ -4,6 +4,7 @@ import type { AllocationContext } from '@/lib/assistant-allocate'
 import { PAGES, type PageLink, type PageName, type ProposedAction } from '@/lib/assistant-action-types'
 import { TZ, addDays, lagosDateString, longDate, monthLabel } from '@/lib/utils'
 import { CORRECTION_ACTIONS, planCorrection, type CorrectionAction, type CorrectionDay } from '@/lib/field-corrections'
+import { placeFromMapLink } from '@/lib/map-place'
 
 /**
  * Turns what the model proposes (with P…, S…, F…, R… references) into an
@@ -535,6 +536,74 @@ export class ActionBuilder {
       warning: plan.warning,
       verb: action.startsWith('redo_') ? 'Ask them' : 'Record it',
       payload: plan.payload,
+    }
+  }
+
+  /**
+   * A new store from a Google Maps link (or a name, address and position the
+   * user gave), optionally allocated to people (2026-11-26). The link is read
+   * as the outlet form reads it: the place's pin, and its name and address as
+   * Google Maps shows them. Admins only, as on Outlets.
+   */
+  async newStore(input: Input): Promise<ProposedAction> {
+    this.adminOnly('add a store')
+    const link = str(input.link, 2000)
+    let name = str(input.name, 160) || null
+    let address = str(input.address, 300) || null
+    let point: { lat: number; lng: number } | null = null
+    if (link) {
+      const found = await placeFromMapLink(link)
+      if (!found.point && found.places.length === 1) {
+        point = { lat: found.places[0].lat, lng: found.places[0].lng }
+        name ??= found.places[0].name
+        address ??= found.places[0].address
+      } else if (found.point) {
+        point = found.point
+        // The user's own words win; the link fills in the rest.
+        name ??= found.name
+        address ??= found.address
+      } else {
+        throw new Error(
+          found.short
+            ? 'That shared link could not be opened. Ask for the link from the address bar in Google Maps, or the numbers (like 6.6019, 3.3516).'
+            : 'No position in that link. Ask for the Google Maps link of the place itself, or its numbers (like 6.6019, 3.3516).',
+        )
+      }
+    } else if (typeof input.lat === 'number' && typeof input.lng === 'number') {
+      point = { lat: input.lat, lng: input.lng }
+    }
+    if (!point || Math.abs(point.lat) > 90 || Math.abs(point.lng) > 180 || (point.lat === 0 && point.lng === 0)) {
+      throw new Error('A new store needs its Google Maps link (or its position).')
+    }
+    if (!name) throw new Error('Say the store\'s name: the link does not give one.')
+    const radius = typeof input.radius === 'number' && input.radius >= 25 && input.radius <= 2000 ? Math.round(input.radius) : 150
+    const refs = Array.isArray(input.people) ? input.people : []
+    const people = []
+    for (const ref of refs.slice(0, 50)) people.push(await this.person(ref))
+
+    // Already on the list? Same name, or a store within 50 m.
+    await this.people.load()
+    const { data: near } = await this.supabase.from('outlets').select('name, lat, lng').eq('is_active', true).limit(5000)
+    const close = ((near ?? []) as { name: string; lat: number | null; lng: number | null }[]).find(
+      (o) =>
+        o.name.trim().toLowerCase() === name!.trim().toLowerCase() ||
+        (o.lat != null && o.lng != null && Math.hypot((o.lat - point!.lat) * 111_000, (o.lng - point!.lng) * 111_000) < 50),
+    )
+    return {
+      key: key('store'),
+      kind: 'new_store',
+      title: `Add the store ${name}${people.length ? ` and allocate it to ${names(people.map((p) => p.name), 3)}` : ''}`,
+      lines: [
+        `Name: ${name}`,
+        `Address: ${address ?? 'none given'}`,
+        `Location: ${point.lat.toFixed(5)}, ${point.lng.toFixed(5)} (area ${radius} m)`,
+        people.length ? `Allocate to: ${names(people.map((p) => p.name))}` : 'Not allocated to anyone yet.',
+      ],
+      warning: close
+        ? `${close.name} is already on Outlets${close.name.trim().toLowerCase() === name.trim().toLowerCase() ? '' : ' within 50 m of this spot'}. Check it is not the same store.`
+        : 'Check the address and the spot on Outlets after adding it.',
+      verb: people.length ? 'Add and allocate' : 'Add store',
+      payload: { name, address, lat: point.lat, lng: point.lng, geofence_radius_m: radius, user_ids: people.map((p) => p.id) },
     }
   }
 
