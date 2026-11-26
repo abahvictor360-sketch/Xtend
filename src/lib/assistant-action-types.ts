@@ -24,6 +24,7 @@ export const ACTION_KINDS = [
   'xm_supply',
   'deactivate',
   'field_correction',
+  'new_store',
 ] as const
 export type ActionKind = (typeof ACTION_KINDS)[number]
 
@@ -152,6 +153,18 @@ export const actionSchema = z.discriminatedUnion('kind', [
       outlet_id: uuid.nullable(),
       at: z.string().datetime({ offset: true }).nullable(),
       visit_id: uuid.nullable(),
+    }),
+  }),
+  z.object({
+    kind: z.literal('new_store'),
+    payload: z.object({
+      name: z.string().trim().min(1).max(160),
+      address: z.string().trim().max(300).nullable(),
+      lat: z.number().min(-90).max(90),
+      lng: z.number().min(-180).max(180),
+      geofence_radius_m: z.number().int().min(25).max(2000),
+      /** People to allocate the new store to (as well as their other stores). */
+      user_ids: z.array(uuid).max(50),
     }),
   }),
 ])

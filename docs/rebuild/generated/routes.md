@@ -122,6 +122,9 @@ uses, in this same request (so with this person's session): the same
 checks on who may do what, the same pushes, the same audit rows. Nothing
 here decides a permission.
 
+- Database functions: `set_staff_outlets`
+- Tables and views: `staff_allocation`
+
 ## `POST /api/admin/ask/apply`
 
 - File: `src/app/api/admin/ask/apply/route.ts`

@@ -31,6 +31,7 @@ import { REPORT_KINDS, reportSpecSchema, type ReportSpec } from '@/lib/assistant
 import { readXmFeatures } from '@/lib/metrics/features-server'
 import { xmAssistantNote, xmAssistantToolOn, type XmFeatures } from '@/lib/metrics/features'
 import { namedCache } from '@/lib/ttl-cache'
+import { guardClaims } from '@/lib/assistant-claims'
 import {
   ANSWER_TTL_MS,
   CACHEABLE_TOOLS,
@@ -141,9 +142,10 @@ Doing things on the dashboard: when the user asks you to do something rather tha
 - propose_supply (admins): log a delivery to a store, from what the user typed or a document they attached, with the date and each product's units (and batch and expiry where given). Use this for "we delivered…", "log the supply", a delivery note or invoice.
 - When a user attaches a count sheet, stock take, delivery note or invoice, read it and fill the lines yourself; ask only if a product, a number or the store is missing or unclear. Give the product names exactly as written; the dashboard matches them.
 - propose_deactivate: stop someone signing in (their records are kept).
+- propose_new_store (admins): add a new store to Outlets from its Google Maps link (or a name and position the user gives), and allocate it to people (P… from match_names) in the same step. Use it whenever the store is not already on the list (match_names finds no S… for it); for a store already on the list, use propose_changes to allocate it. Pass the link exactly as pasted; give the name only if the user said one.
 - propose_field_correction: fix a merchandiser's or marketer's day, today only, when the app would not let them clock in, clock out, or check in or out of a store, or recorded it wrongly. Either record it for them (office_clock_in, office_clock_out, office_check_in, office_check_out; only once the user is sure they are at the store) or ask them to do it again (redo_clock_in, redo_clock_out, redo_check_in, redo_check_out), or undo a clock-out made by mistake so they are back on shift and clock out again later (reset_clock_out; "she clocked out by mistake", "reset his clock-out"). Give the store (S…) when the user names one, and a time (HH:MM, 24-hour) only when they give one for a clock-in or clock-out; otherwise null. A reason is always needed and the person sees it: use the user's words, and ask for one if they gave none. Check attendance_on_day for today first when you are unsure what they have done.
 - open_page: give the user a button to a dashboard page, filtered to the person and dates (for "show me", "take me to", "open"). Opening a page changes nothing, so no Apply is needed.
-People and stores always come from match_names first (P… and S… references); never guess one. If a name is ambiguous, ask which one. If the request is unclear (no date, no message), ask rather than invent it; for a notification, you may write the title and message yourself from what the user said, keeping their meaning. Propose each action once. After proposing, reply in one or two sentences: what the card will do and that nothing happens until they press its button. Only admins can do the admin-marked ones; say so to a supervisor. Things you cannot do (delete records, change passwords, change roles, change a store's name, location or geofence): say so and give an open_page button to where they can.
+People and stores always come from match_names first (P… and S… references); never guess one. If a name is ambiguous, ask which one. If the request is unclear (no date, no message), ask rather than invent it; for a notification, you may write the title and message yourself from what the user said, keeping their meaning. Propose each action once. After proposing, reply in one or two sentences: what the card will do and that nothing happens until they press its button. Only admins can do the admin-marked ones; say so to a supervisor. Things you cannot do (delete records, change passwords, change roles, change an existing store's name, location or geofence): say so and give an open_page button to where they can.
 
 More you can read: integrity_risk (who to look at first among the integrity flags, and why, in one sentence each), location_alerts (someone left their store on shift, clocked in away from it, or switched location off), support_threads (issues staff raised in the app; "escalated" ones are waiting for an office reply), notifications_sent (what the office sent and how many phones it reached), x_metrics (a month's units sold against target per enrolled store and person, stock counts that did not add up, and open expiry alerts) and store_coverage (which allocated stores each person visited in a range, and which no one visited). For "who should I worry about" or "who is cheating", start with integrity_risk and give each person's reason. When an answer names a person and a day, offer an open_page button to their movement or the excuse check when it would help.
 
@@ -662,6 +664,24 @@ const tools: Anthropic.Beta.BetaTool[] = [
     },
   },
   {
+    name: 'propose_new_store',
+    description:
+      'Proposes adding a new store to Outlets from a Google Maps link (its pin, and its name and address as Google Maps shows them), and allocating it to people. Admins only. Nothing is added until the user presses the button.',
+    strict: true,
+    input_schema: {
+      type: 'object',
+      properties: {
+        link: { type: ['string', 'null'], description: 'The Google Maps link (or "lat, lng") exactly as the user pasted it.' },
+        name: { type: ['string', 'null'], description: 'The store name if the user said one, else null (taken from the link).' },
+        address: { type: ['string', 'null'], description: 'Only if the user gave one, else null.' },
+        people: { type: 'array', items: { type: 'string' }, description: 'P… references to allocate the store to; [] for none.' },
+        radius: { type: ['number', 'null'], description: 'The store area in metres if the user gave one, else null (150).' },
+      },
+      required: ['link', 'name', 'address', 'people', 'radius'],
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'propose_deactivate',
     description: 'Proposes deactivating a person (P…): they can no longer sign in; their records are kept.',
     strict: true,
@@ -747,6 +767,7 @@ const PROPOSE: Record<string, keyof ActionBuilder> = {
   propose_stock_count: 'stockCount',
   propose_supply: 'supply',
   propose_deactivate: 'deactivate',
+  propose_new_store: 'newStore',
   propose_field_correction: 'fieldCorrection',
 }
 
@@ -1015,7 +1036,7 @@ export async function askAssistant(
         .trim()
       const reply: AssistantReply = {
         answer:
-          text ||
+          guardClaims(text, plans.length + actions.length > 0) ||
           (plans.length || actions.length
             ? 'Check the card below and press its button to go ahead.'
             : reports.length

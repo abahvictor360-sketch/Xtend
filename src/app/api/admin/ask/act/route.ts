@@ -1,4 +1,4 @@
-import { apiError, requireApiSession } from '@/lib/auth'
+import { apiError, dbErrorMessage, requireApiSession } from '@/lib/auth'
 import { actionSchema, type ActionResult } from '@/lib/assistant-action-types'
 import { POST as sendNotification } from '@/app/api/admin/notifications/route'
 import { POST as requestCount } from '@/app/api/admin/count-requests/route'
@@ -12,6 +12,9 @@ import { POST as setSchedule } from '@/app/api/admin/schedules/route'
 import { POST as officeCount } from '@/app/api/admin/metrics/count/route'
 import { POST as logSupply } from '@/app/api/admin/metrics/supplies/route'
 import { POST as fixDay } from '@/app/api/admin/field-corrections/route'
+import { POST as createOutlet } from '@/app/api/admin/outlets/route'
+import { createServerSupabase } from '@/lib/supabase/server'
+import { audit } from '@/lib/audit'
 import { CORRECTION_LABELS } from '@/lib/field-corrections'
 
 export const maxDuration = 60
@@ -172,6 +175,37 @@ export async function POST(request: Request) {
         result = r.ok
           ? { ok: true, detail: `${CORRECTION_LABELS[action.payload.action]}. They have been told.` }
           : { ok: false, detail: r.error }
+        break
+      }
+      case 'new_store': {
+        // The same route as Add outlet on Outlets (admins, audited), then the
+        // same allocation as Store allocation (set_staff_outlets decides who may).
+        const { user_ids, ...store } = action.payload
+        const r = await call(createOutlet as Handler, '/api/admin/outlets', store)
+        if (!r.ok) {
+          result = { ok: false, detail: r.error }
+          break
+        }
+        const outletId = String(r.json.outlet_id)
+        const supabase = await createServerSupabase()
+        const { data: people } = user_ids.length
+          ? await supabase.from('staff_allocation').select('user_id, staff_name, outlet_ids').in('user_id', user_ids)
+          : { data: [] }
+        const done: string[] = []
+        const failed: string[] = []
+        for (const p of (people ?? []) as { user_id: string; staff_name: string; outlet_ids: string[] | null }[]) {
+          const { error } = await supabase.rpc('set_staff_outlets', {
+            p_user_id: p.user_id,
+            p_outlet_ids: [...new Set([...(p.outlet_ids ?? []), outletId])],
+          })
+          if (error) failed.push(`${p.staff_name} (${dbErrorMessage(error, 'could not be allocated')})`)
+          else done.push(p.staff_name)
+        }
+        if (done.length) await audit(supabase, 'outlet.allocate', 'outlets', outletId, { user_ids, via: 'ask_xtend' })
+        result = {
+          ok: failed.length === 0,
+          detail: `${store.name} added to Outlets.${done.length ? ` Allocated to ${done.join(', ')}.` : ''}${failed.length ? ` Not allocated: ${failed.join('; ')}.` : ''}`,
+        }
         break
       }
     }

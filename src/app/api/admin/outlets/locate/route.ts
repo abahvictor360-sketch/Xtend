@@ -2,8 +2,8 @@ import { z } from 'zod'
 import { apiError, requireApiSession } from '@/lib/auth'
 import { allowAttempt } from '@/lib/rate-limit'
 import { GEOCODE_LOOKUPS_PER_HOUR, HOUR_MS } from '@/lib/usage-limits'
-import { openShortMapLink, resolvePlace, searchPlaces, type LocatedPlace } from '@/lib/geocode'
-import { readMapLink } from '@/lib/map-link'
+import { searchPlaces, type LocatedPlace } from '@/lib/geocode'
+import { placeFromMapLink } from '@/lib/map-place'
 
 export const maxDuration = 30
 
@@ -49,41 +49,16 @@ export async function POST(request: Request) {
       } satisfies LocateAnswer)
     }
 
-    let reading = readMapLink(parsed.data.link)
-    if (reading.short) {
-      const url = parsed.data.link.match(/https?:\/\/\S+/i)?.[0] ?? ''
-      const opened = await openShortMapLink(url)
-      reading = opened ? readMapLink(opened) : { point: null, query: null, short: true }
+    const found = await placeFromMapLink(parsed.data.link)
+    if (found.point) {
+      return Response.json({ point: found.point, name: found.name, address: found.address, places: [] } satisfies LocateAnswer)
     }
-    if (reading.point) {
-      // The link gives the position; the name and address come from the link
-      // too when it carries them, else from the map at that point.
-      let name = reading.name ?? null
-      let address = reading.address ?? null
-      if (!name || !address) {
-        try {
-          const there = await resolvePlace(reading.point.lat, reading.point.lng)
-          name ??= there.name
-          address ??= there.address
-        } catch {
-          // No map answered: the position alone still helps.
-        }
-      }
-      return Response.json({ point: reading.point, name, address, places: [] } satisfies LocateAnswer)
-    }
-    if (reading.query) {
-      const places = await searchPlaces(reading.query)
-      if (places.length) {
-        // The link named the place: its own name wins over the map's.
-        const named = places.map((p) => ({ ...p, name: reading.name ?? p.name, address: p.address ?? reading.address ?? null }))
-        return Response.json({ point: null, places: named } satisfies LocateAnswer)
-      }
-    }
+    if (found.places.length) return Response.json({ point: null, places: found.places } satisfies LocateAnswer)
     return Response.json(
       {
         point: null,
         places: [],
-        error: reading.short
+        error: found.short
           ? 'Could not open that shared link. In Google Maps, open the place, then copy the link from the address bar, or copy the numbers (like 6.6019, 3.3516).'
           : 'No position in that link. In Google Maps, press and hold the store to drop a pin, then copy the numbers or share the link.',
       } satisfies LocateAnswer,

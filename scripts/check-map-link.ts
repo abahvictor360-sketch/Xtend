@@ -94,8 +94,17 @@ check(mapsLink(6.6, 3.35) === 'https://www.google.com/maps/search/?api=1&query=6
   const form = read('src/components/admin/outlet-manager.tsx')
   check(/fillFromLink\(/.test(form) && /Use these/.test(form) && /name, address, latitude and longitude/.test(form),
     'the form fills empty name and address boxes from the link, and offers the link’s words for typed ones')
-  check(/resolvePlace\(reading\.point\.lat, reading\.point\.lng\)/.test(read('src/app/api/admin/outlets/locate/route.ts')),
-    'a link with only a position gets its name and address from the map there')
+  // 2026-11-26: the address Google Maps shows for the place, not the street at the pin.
+  const mp = read('src/lib/map-place.ts')
+  check(/placeFromMapLink/.test(read('src/app/api/admin/outlets/locate/route.ts')) && /placeFromMapLink/.test(read('src/lib/assistant-actions.ts')),
+    'the outlet form and Ask Xtend read links the same way')
+  check(/const google = await placeFromLink\(name, reading\.point\.lat, reading\.point\.lng\)/.test(mp)
+    && mp.indexOf('placeFromLink(name') < mp.indexOf('resolvePlace('),
+    'a link with no address asks Google for that place by name near the pin first; the map at the pin only without Google')
+  const geo2 = read('src/lib/geocode.ts')
+  check(/textQuery: name\.trim\(\)/.test(geo2) && /locationBias: \{ circle: \{ center: \{ latitude: lat, longitude: lng \}, radius: 500 \} \}/.test(geo2)
+    && /if \(d > 300 \|\| \(best && best\.d <= d\)\) continue/.test(geo2),
+    'Google is asked for the name near the pin, and only a match within 300 m of the pin is taken')
 }
 
 if (failed) {

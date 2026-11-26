@@ -287,7 +287,7 @@ export default async function AdminGuidePage() {
             week&apos;s attendance report”). Attach a list or a photo of a sheet and it prepares store
             allocations or team changes. Ask it to do something (“remind everyone who has not clocked in
             to clock in now”, “ask all merchandisers for a stock count by Friday”, “check Ada&apos;s
-            phone”, “set Ikeja Mall&apos;s target to 500 units for October”, “deactivate Bala”, “clock Ada in at Ikeja Mall at 8:05, her phone would not open”, “show me
+            phone”, “set Ikeja Mall&apos;s target to 500 units for October”, “deactivate Bala”, “clock Ada in at Ikeja Mall at 8:05, her phone would not open”, “add this store and allocate it to Kemi”, pasting its Google Maps link, “show me
             Ada&apos;s movement yesterday”) and it shows a card saying exactly what will happen and to
             whom. Nothing happens until you press the card&apos;s button, and it is recorded in the audit
             log. Chats are kept under <Ui>Earlier chats</Ui>, for you alone.
@@ -698,8 +698,9 @@ export default async function AdminGuidePage() {
                 places to pick from. Or paste a Google Maps link of the store into{' '}
                 <Ui>Or paste a Google Maps link</Ui> (open the store in Google Maps, or press and hold to
                 drop a pin, tap <Ui>Share</Ui> and copy the link; the two numbers like 6.6019, 3.3516 work
-                too). Xtend fills in the store&apos;s name, address, latitude and longitude from the link (from
-                the map at that spot when the link has no name). Boxes you already typed in are kept; if the link
+                too). Xtend fills in the store&apos;s name, address, latitude and longitude from the link: the name
+                and address are the ones Google Maps shows for that place (with a Google key; without one, the
+                street address at the pin). Boxes you already typed in are kept; if the link
                 says something else, click <Ui>Use these</Ui> to take its words. Or, standing inside the store, click <Ui>I am standing here</Ui>.
               </>,
               <>

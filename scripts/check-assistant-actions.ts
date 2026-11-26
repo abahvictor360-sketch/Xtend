@@ -9,6 +9,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { ActionBuilder } from '@/lib/assistant-actions'
 import { actionSchema } from '@/lib/assistant-action-types'
 import type { AllocationContext } from '@/lib/assistant-allocate'
+import { NOTHING_CHANGED, claimsChange, guardClaims } from '@/lib/assistant-claims'
 
 let failed = 0
 function check(ok: boolean, label: string, got?: unknown) {
@@ -61,6 +62,14 @@ const supabase = {
           ],
     error: null,
   }),
+  // The stores already on Outlets, for "already there?" on a new store.
+  from: () => {
+    const rows = { data: [{ name: 'Ikeja City Mall', lat: 6.6019, lng: 3.3516 }], error: null }
+    const chain: Record<string, unknown> = {}
+    for (const m of ['select', 'eq', 'limit']) chain[m] = () => chain
+    chain.then = (ok: (v: typeof rows) => unknown) => Promise.resolve(rows).then(ok)
+    return chain
+  },
 } as unknown as SupabaseClient
 
 async function main() {
@@ -93,6 +102,38 @@ async function main() {
   const a = await admin.link({ page: 'attendance', person: 'P1', from: '2026-10-08', to: null, label: 'Today' })
   check(a.href === `/admin/attendance?user_id=${ADA}&from=2026-10-08`, 'an attendance link', a)
   await throws(admin.link({ page: 'settings' }), /Unknown page/, 'only known pages')
+
+  // A new store from a Google Maps link, allocated in the same step (2026-11-26).
+  await throws(supervisor.newStore({ link: '6.5, 3.3', name: 'X', address: null, people: [], radius: null }), /Only an admin/, 'a supervisor cannot add a store')
+  const ns = await admin.newStore({ link: '6.5244, 3.3792', name: 'Roban Store Agbani Road', address: '50 Agbani Rd, Enugu', people: ['P3'], radius: null })
+  check(ns.kind === 'new_store' && 'geofence_radius_m' in ns.payload && ns.payload.lat === 6.5244 && ns.payload.geofence_radius_m === 150
+    && ns.payload.user_ids[0] === KEMI && ns.verb === 'Add and allocate' && /Allocate to: Kemi Ade/.test(ns.lines.join('\n')),
+    'a new store from a link, allocated to the marketer, shown before anything is added', ns)
+  check(actionSchema.safeParse({ kind: ns.kind, payload: ns.payload }).success, 'what the new-store card sends back is what Apply accepts')
+  await throws(admin.newStore({ link: '6.5244, 3.3792', name: null, address: null, people: [], radius: null }), /store's name/,
+    'a position with no name asks for the name')
+  await throws(admin.newStore({ link: null, name: 'Shop', address: null, people: [], radius: null }), /Google Maps link/, 'no link and no position: asks for the link')
+  const dup = await admin.newStore({ link: '6.60195, 3.35162', name: 'Another Shop', address: null, people: [], radius: 80 })
+  check(/Ikeja City Mall is already on Outlets within 50 m/.test(dup.warning ?? '') && 'geofence_radius_m' in dup.payload && dup.payload.geofence_radius_m === 80,
+    'a store already within 50 m is pointed out', dup.warning)
+
+  // "Done" with nothing behind it.
+  check(claimsChange('Done! I have added the store and allocated it to Kemi.') && claimsChange('The outlet has been created.')
+    && !claimsChange('Ada clocked in at 08:05 at Ikeja City Mall.'), 'a claimed change is noticed; a plain answer is not')
+  check(guardClaims('Done, the store has been added.', false).endsWith(NOTHING_CHANGED) && guardClaims('Done.', true) === 'Done.'
+    && guardClaims('Ada is on leave today.', false) === 'Ada is on leave today.',
+    'with no card, a claimed change gets the note; with a card, or no claim, the answer is left alone')
+  {
+    const fs = require('node:fs') as typeof import('node:fs')
+    const path = require('node:path') as typeof import('node:path')
+    const read = (p: string) => fs.readFileSync(path.join(__dirname, '..', p), 'utf8')
+    const act = read('src/app/api/admin/ask/act/route.ts')
+    check(/case 'new_store'/.test(act) && /call\(createOutlet as Handler, '\/api\/admin\/outlets', store\)/.test(act)
+      && /rpc\('set_staff_outlets'/.test(act), 'Apply adds the store through Outlets\' own route, then allocates it')
+    const asst = read('src/lib/assistant.ts')
+    check(/name: 'propose_new_store'/.test(asst) && /propose_new_store: 'newStore'/.test(asst) && /guardClaims\(text, plans\.length \+ actions\.length > 0\)/.test(asst),
+      'Ask Xtend has the tool, and its answers are guarded')
+  }
 
   check(!actionSchema.safeParse({ kind: 'delete_everything', payload: {} }).success, 'Apply refuses an unknown action')
   check(!actionSchema.safeParse({ kind: 'deactivate', payload: { user_id: 'Ada' } }).success, 'Apply refuses a non-id')

@@ -564,6 +564,65 @@ async function locateWithGoogle(query: string): Promise<LocatedPlace | null> {
 }
 
 /**
+ * The place a Google Maps link points at, as Google Maps shows it: its name
+ * and the address on its page (2026-11-26). The link gives the pin and
+ * usually the name; the address is not in it, and the street address at the
+ * pin (or a store Xtend already has nearby) is often a different one. So
+ * Google Places is asked for that name near the pin, and the match nearest
+ * the pin (within 300 m) is taken. Without a name, the nearest business at
+ * the pin. Null with no Google key, over the month's limit, or no match.
+ */
+export async function placeFromLink(
+  name: string | null,
+  lat: number,
+  lng: number,
+): Promise<{ name: string | null; address: string | null; lat: number; lng: number } | null> {
+  const key = process.env.GOOGLE_MAPS_API_KEY
+  if (!key || !(await googleAllowed())) return null
+  if (name?.trim()) {
+    try {
+      const search = await getJson<GoogleTextSearch>('https://places.googleapis.com/v1/places:searchText', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': key,
+          'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location',
+        },
+        body: JSON.stringify({
+          textQuery: name.trim(),
+          maxResultCount: 5,
+          regionCode: 'NG',
+          locationBias: { circle: { center: { latitude: lat, longitude: lng }, radius: 500 } },
+        }),
+      })
+      let best: { d: number; name: string | null; address: string | null; lat: number; lng: number } | null = null
+      for (const p of search?.places ?? []) {
+        const pLat = p.location?.latitude
+        const pLng = p.location?.longitude
+        if (typeof pLat !== 'number' || typeof pLng !== 'number') continue
+        const d = metresApart(lat, lng, pLat, pLng)
+        if (d > 300 || (best && best.d <= d)) continue
+        best = { d, name: p.displayName?.text ?? null, address: p.formattedAddress ?? null, lat: pLat, lng: pLng }
+      }
+      if (best) return { name: best.name, address: best.address, lat: best.lat, lng: best.lng }
+    } finally {
+      countLookups(['call_text_search'])
+    }
+  }
+  const { place, calls } = await askGoogle(lat, lng)
+  countLookups(calls)
+  return place ? { name: place.name, address: place.address, lat, lng } : null
+}
+
+function metresApart(aLat: number, aLng: number, bLat: number, bLng: number) {
+  const rad = Math.PI / 180
+  const dLat = (bLat - aLat) * rad
+  const dLng = (bLng - aLng) * rad
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(aLat * rad) * Math.cos(bLat * rad) * Math.sin(dLng / 2) ** 2
+  return 2 * 6371000 * Math.asin(Math.sqrt(h))
+}
+
+/**
  * Where Google puts a store, asked two ways (migration 0114): Places for its
  * name with its address, Geocoding for the address alone. Null when there is
  * no Google key or this month's limit is reached. Counted like any lookup.
