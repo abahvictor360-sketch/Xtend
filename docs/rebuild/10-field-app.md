@@ -2382,6 +2382,20 @@ reached from the home week row, History ("Your month") and You.
   on_at }` once. Cleared at the end of the shift. Staff guide: "It says
   “Turn your location back on”".
 
+- **"Check out before you leave" (2026-11-26).** `/api/track/device`
+  answers `visit` (the open store visit: id, name, lat, lng, radius_m, or
+  null). While one is open the native tracker watches every position
+  (Android every 20 s): outside radius + min(accuracy, 50) m (readings over
+  100 m ignored) it rings "Check out before you leave" / "You are leaving
+  <store> without checking out. Go back and check out there." Android:
+  channel `xtend_leave_alarm`, alarm sound and vibration, `FLAG_INSISTENT`,
+  again after 2 min if dismissed while still outside; iPhone: now and every
+  60 s. Back inside (within the radius), a check-out or the end of the shift
+  stops it. After a check-in, a check-out (`closed`) and a marketer's
+  clock-in the page calls `ShiftTracker.visitChanged` (`visitChanged()` in
+  `src/lib/native.ts`) so the tracker asks the server at once. Staff guide:
+  "My phone is ringing “Check out before you leave”".
+
 ### 13.5 Update manager (mention only)
 
 `src/components/update-manager.tsx`, mounted in the root layout: checks the

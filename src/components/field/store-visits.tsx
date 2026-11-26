@@ -1,5 +1,6 @@
 'use client'
 
+import { visitChanged } from '@/lib/native'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Camera, CheckCircle2, Clock3, LogOut, MapPin, Store } from 'lucide-react'
@@ -337,6 +338,8 @@ export function StoreVisits({
           return
         }
 
+        // The phone now watches this store for "Check out before you leave".
+        void visitChanged()
         const distance = data.visit?.arrived_distance_m
         const nearest = data.visit?.outlet_name ?? outlet?.name ?? 'your store'
         const label = data.visit?.store_label ?? nearest
@@ -441,6 +444,8 @@ export function StoreVisits({
         return
       }
 
+      // Checked out: the "Check out before you leave" alarm stops.
+      void visitChanged(true)
       setNotice(
         `Checked out of ${open.store_label ?? open.outlet_name} after ${data.visit?.minutes ?? open.minutes} minutes.`,
       )

@@ -195,6 +195,17 @@ export async function followFast(intervalMs: number): Promise<boolean> {
   }
 }
 
+/**
+ * A store check-in or check-out just happened (2026-11-26): the native
+ * tracker asks the server at once which visit is open, so "Check out before
+ * you leave" watches the right store; closed stops any alarm straight away.
+ * Nothing in a browser or an older app.
+ */
+export async function visitChanged(closed = false): Promise<void> {
+  if (!hasShiftTracker()) return
+  await callNative('ShiftTracker', 'visitChanged', { closed }).catch(() => {})
+}
+
 export async function shiftTrackerState(): Promise<ShiftTrackerState | null> {
   if (!hasShiftTracker()) return null
   return await callNative<ShiftTrackerState>('ShiftTracker', 'status').catch(() => null)

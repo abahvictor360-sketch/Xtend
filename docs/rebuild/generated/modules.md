@@ -981,7 +981,7 @@ location while the screen is off or the app is in the background, and
 native push. In an ordinary browser none of this exists and every helper
 here is a no-op, so the site behaves exactly as before.
 
-Exports: `NativePlatform`, `nativePlatform`, `isNativeApp`, `hasPlugin`, `callNative`, `listenNative`, `NativeLocation`, `watchBackgroundLocation`, `ShiftTrackerState`, `hasShiftTracker`, `startShiftTracker`, `stopShiftTracker`, `followFast`, `shiftTrackerState`, `askAlwaysLocation`, `openAutoStart`, `openBatterySettings`, `nativePostJson`, `NativePushPermission`, `nativePushPermission`, `registerNativePush`, `NativeFix`, `getNativeFix`, `nativeDeviceSignals`
+Exports: `NativePlatform`, `nativePlatform`, `isNativeApp`, `hasPlugin`, `callNative`, `listenNative`, `NativeLocation`, `watchBackgroundLocation`, `ShiftTrackerState`, `hasShiftTracker`, `startShiftTracker`, `stopShiftTracker`, `followFast`, `visitChanged`, `shiftTrackerState`, `askAlwaysLocation`, `openAutoStart`, `openBatterySettings`, `nativePostJson`, `NativePushPermission`, `nativePushPermission`, `registerNativePush`, `NativeFix`, `getNativeFix`, `nativeDeviceSignals`
 
 ## `src/lib/new-device-alert.ts`
 
@@ -1625,6 +1625,16 @@ Exports: `HOUR_MS`, `PHOTO_CHECKS_PER_HOUR`, `GEOCODE_LOOKUPS_PER_HOUR`, `SUPPOR
 Africa/Lagos is the timezone of record for every human-facing timestamp.
 
 Exports: `cn`, `TZ`, `formatLagos`, `lagosDateString`, `metres`, `addDays`, `dayOfMonth`, `weekdayShort`, `monthLabel`, `longDate`
+
+## `src/lib/visit-leave.ts`
+
+"Check out before you leave" (2026-11-26): the phone's tracker is told
+which store visit is open, with where it is and how big its area is, and
+rings an alarm when the person steps outside it without checking out.
+Pure, so scripts/check-visit-leave.ts can test it; the phones use the
+same rule (ShiftTrackerService.java, ShiftTracker.swift).
+
+Exports: `OpenVisitRow`, `PLACE_RADIUS_M`, `openVisitForPhone`, `leftTheStore`, `LEAVE_ALARM`, `leaveAlarmBody`
 
 ## `src/lib/visit-reminder.ts`
 

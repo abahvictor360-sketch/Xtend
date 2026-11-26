@@ -2355,7 +2355,7 @@ const schema = z.object({
 ```
 
 - Database functions: `record_background_pings`, `record_location_state`
-- Tables and views: `profiles`, `location_pings`
+- Tables and views: `profiles`, `location_pings`, `store_visits`
 
 ## `POST /api/track/stop`
 

@@ -71,6 +71,16 @@ const sheet = read('src/components/field/start-store-sheet.tsx')
 check(/today does not count/.test(sheet) && /Google Maps link/.test(sheet) && /Message the admin/.test(sheet), 'the picker says the day only counts from a store, and what to do with no stores')
 check(/my_outlets/.test(read('src/app/field/page.tsx')), 'the picker lists their own stores (home and allocated)')
 
+// 0116: the clock-in selfie is the check-in photo too.
+{
+  const m = read('supabase/migrations/0116_clock_in_photo_checks_in.sql')
+  check(/new\.selfie_path, new\.thumb_path,/.test(m) && /set_config\('xtend\.clock_in_photo'/.test(m),
+    'the check-in a clock-in makes carries its selfie')
+  check(/tg_table_name = 'store_visits'[\s\S]{0,120}current_setting\('xtend\.clock_in_photo', true\)/.test(m),
+    'only that check-in may reuse the clock-in selfie')
+  check(/v\.device_info->>'source' = 'clock_in'[\s\S]{0,80}v\.selfie_path is null/.test(m), 'earlier ones get their clock-in photo')
+}
+
 if (failed) {
   console.log(`\n${failed} check(s) FAILED`)
   process.exit(1)

@@ -1520,7 +1520,7 @@ Policies:
 - `attendance_push_check()` → trigger · definer · 0027_notifications_required.sql
 - `attendance_replace_for_correction()` → trigger · definer · 0090_field_corrections.sql
 - `attendance_start_store()` → trigger · definer · 0101_start_day_at_a_store.sql
-- `attendance_store_check_in()` → trigger · definer · 0107_offline_clock_day.sql
+- `attendance_store_check_in()` → trigger · definer · 0116_clock_in_photo_checks_in.sql
 - `attendance_timing()` → trigger · definer · 0026_phone_evidence.sql
 - `attendance_timing_flag()` → trigger · definer · 0026_phone_evidence.sql
 - `audit_context_columns(p jsonb)` → TABLE(ip text, user_agent text, device jsonb, lat double precision, lng double precision, accuracy_m double precision, location_source text, place text, country text, vpn boolean) · definer · 0049_audit_context.sql
@@ -1793,7 +1793,7 @@ Policies:
 - `save_store_google_spot(p_outlet uuid, p_name text, p_address text, p_lat double precision, p_lng double precision, p_confirmed boolean, p_detail jsonb)` → void · definer · 0114_store_google_check.sql
 - `schedule_guard(p_user uuid)` → void · definer · 0072_hr_role.sql
 - `schedule_notification(p_title text, p_body text, p_url text, p_audience notification_audience, p_detail jsonb, p_send_at timestamp with time zone)` → uuid · definer · 0053_support_notifications.sql
-- `selfie_check()` → trigger · definer · 0023_photo_checks.sql
+- `selfie_check()` → trigger · definer · 0116_clock_in_photo_checks_in.sql
 - `selfie_retention_status()` → jsonb · definer · 0091_visit_checkout_photo.sql
 - `send_message(p_staff uuid, p_body text, p_attachment jsonb)` → jsonb · definer · 0075_message_attachments.sql
 - `session_aal()` → text · definer · 0080_zero_trust.sql
