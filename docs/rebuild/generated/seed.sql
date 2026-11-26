@@ -592,6 +592,12 @@ INSERT INTO public.role_store_counts VALUES ('marketer', true, '2026-01-01 00:00
 
 
 --
+-- Data for Name: store_google_spots; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
 -- Data for Name: store_visits; Type: TABLE DATA; Schema: public; Owner: -
 --
 

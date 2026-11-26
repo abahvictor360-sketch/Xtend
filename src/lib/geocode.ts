@@ -4,6 +4,7 @@ import { after } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { MAP_HOSTS } from '@/lib/map-link'
+import type { GoogleStoreAnswer } from '@/lib/store-check'
 import {
   join,
   parseLimit,
@@ -485,7 +486,7 @@ interface GoogleTextSearch {
 interface GoogleForwardGeocode {
   results?: {
     formatted_address?: string
-    geometry?: { location?: { lat?: number; lng?: number } }
+    geometry?: { location?: { lat?: number; lng?: number }; location_type?: string }
   }[]
 }
 
@@ -557,6 +558,51 @@ async function locateWithGoogle(query: string): Promise<LocatedPlace | null> {
     }
 
     return null
+  } finally {
+    countLookups(calls)
+  }
+}
+
+/**
+ * Where Google puts a store, asked two ways (migration 0114): Places for its
+ * name with its address, Geocoding for the address alone. Null when there is
+ * no Google key or this month's limit is reached. Counted like any lookup.
+ */
+export async function askGoogleAboutStore(name: string, address: string): Promise<GoogleStoreAnswer | null> {
+  const key = process.env.GOOGLE_MAPS_API_KEY
+  if (!key || !address.trim() || !(await googleAllowed())) return null
+  const calls: GoogleCall[] = ['call_text_search', 'call_forward_geocode']
+  try {
+    const [search, geocode] = await Promise.all([
+      getJson<GoogleTextSearch>('https://places.googleapis.com/v1/places:searchText', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Goog-Api-Key': key,
+          'X-Goog-FieldMask': 'places.displayName,places.formattedAddress,places.location',
+        },
+        body: JSON.stringify({ textQuery: `${name}, ${address}`, maxResultCount: 1, regionCode: 'NG' }),
+      }),
+      getJson<GoogleForwardGeocode>(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(address)}&region=ng&key=${key}`,
+      ),
+    ])
+    const place = search?.places?.[0]
+    const first = geocode?.results?.[0]
+    const pLat = place?.location?.latitude
+    const pLng = place?.location?.longitude
+    const gLat = first?.geometry?.location?.lat
+    const gLng = first?.geometry?.location?.lng
+    return {
+      places:
+        typeof pLat === 'number' && typeof pLng === 'number'
+          ? { lat: pLat, lng: pLng, name: place?.displayName?.text ?? null, address: place?.formattedAddress ?? null }
+          : null,
+      geocode:
+        typeof gLat === 'number' && typeof gLng === 'number'
+          ? { lat: gLat, lng: gLng, type: first?.geometry?.location_type ?? null, address: first?.formatted_address ?? null }
+          : null,
+    }
   } finally {
     countLookups(calls)
   }

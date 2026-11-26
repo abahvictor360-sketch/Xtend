@@ -2,7 +2,7 @@
 
 # API routes
 
-143 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
+144 route files. Roles are what `requireApiSession` admits; the database then decides what each caller may actually do. Bodies are the zod schemas, verbatim.
 
 ## `POST /api/activity`
 
@@ -2162,6 +2162,26 @@ const schema = z.object({
   expires_in: z.number().int().min(30).max(3600).default(300),
 })
 ```
+
+## `POST /api/site-check`
+
+- File: `src/app/api/site-check/route.ts`
+- Who: FIELD_ROLES
+
+The phone measured "off site" from the store's pin: before it says so,
+it asks here whether Google puts the store where they are standing
+(0114). Only a yes or no; the database still decides when the clock-in
+or check-in is sent.
+
+```ts
+const schema = z.object({
+  store_id: z.string().uuid(),
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  accuracy_m: z.number().nonnegative().nullable(),
+})
+```
+- Tables and views: `outlets`
 
 ## `POST /api/store-counts`
 

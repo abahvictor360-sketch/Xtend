@@ -6252,7 +6252,7 @@ begin
                                 -- 0104: what the office told the AI.
                                 'ai_knowledge',
                                 -- 0110: AI limits, and recent uses (kept 3 days).
-                                'ai_limits', 'ai_usage'];
+                                'ai_limits', 'ai_usage', 'store_google_spots'];
     all_keys text[] := public.reset_category_keys();
     k text;
     cats text[];
@@ -7704,6 +7704,112 @@ begin
     end;
   exception when others then
     if sqlerrm <> 'force-0113-done' then raise; end if;
+  end;
+
+  -- 0114: before "off site", Google's confirmed spot for the store. Rolled back.
+  begin
+    declare
+      mz uuid := gen_random_uuid();
+      mk uuid := gen_random_uuid();
+      shop uuid;
+      other uuid;
+      boss_id uuid := (select id from public.profiles where role = 'admin' order by created_at limit 1);
+      r record;
+      words text;
+    begin
+      update public.system_settings set block_off_site = true;
+      -- The pin is 850 m north of where the store really is.
+      insert into public.outlets (name, address, lat, lng, geofence_radius_m)
+      values ('Pin Shop', '50 Agbani Rd, Enugu', 6.4076, 7.4950, 150) returning id into shop;
+      insert into public.outlets (name, address, lat, lng, geofence_radius_m)
+      values ('Other Shop', 'Ogui Rd, Enugu', 6.4400, 7.5100, 150) returning id into other;
+      insert into auth.users (id, email) values (mz, 'gspot.mz@xpel.ng'), (mk, 'gspot.mk@xpel.ng');
+      insert into public.profiles (id, full_name, email, role, outlet_id, push_exempt)
+      values (mz, 'Gspot Merch', 'gspot.mz@xpel.ng', 'merchandiser', shop, true),
+             (mk, 'Gspot Marketer', 'gspot.mk@xpel.ng', 'marketer', null, true);
+      perform act_as(boss_id);
+      perform public.set_staff_outlets(mk, array[shop, other]);
+
+      -- No Google spot yet: refused, as before.
+      perform act_as(mz);
+      begin
+        insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name, device_info)
+        values ('opening', 6.4000, 7.4950, 10, fresh_photo('selfies', 'gs-1.jpg'), now(), 'Store', '{"site_confirmed_by":"google"}');
+        perform assert(false, 'google spot 0114: with no Google spot, off site is refused');
+      exception when raise_exception then
+        get stacked diagnostics words = message_text;
+        perform assert(words like 'You are off site:%Pin Shop%', 'google spot 0114: with no Google spot, off site is refused (the phone cannot claim it)');
+      end;
+
+      -- Google did not confirm it (its two answers disagreed): still refused.
+      perform set_config('request.jwt.claim.sub', '', false);
+      perform public.save_store_google_spot(shop, 'Pin Shop', '50 Agbani Rd, Enugu', 6.4000, 7.4950, false, '{}');
+      perform act_as(mz);
+      begin
+        insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name)
+        values ('opening', 6.4000, 7.4950, 10, fresh_photo('selfies', 'gs-2.jpg'), now(), 'Store');
+        perform assert(false, 'google spot 0114: an unconfirmed spot does not let anyone through');
+      exception when raise_exception then
+        perform assert(sqlerrm like 'You are off site:%', 'google spot 0114: an unconfirmed spot does not let anyone through');
+      end;
+
+      -- Confirmed: at Google's spot the clock-in goes through, on site.
+      perform set_config('request.jwt.claim.sub', '', false);
+      perform public.save_store_google_spot(shop, 'Pin Shop', '50 Agbani Rd, Enugu', 6.4000, 7.4950, true, '{"source":"test"}');
+      perform act_as(mz);
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name)
+      values ('opening', 6.4003, 7.4950, 10, fresh_photo('selfies', 'gs-3.jpg'), now(), 'Store');
+      select a.status, a.distance_m, a.device_info into r from public.attendance a where a.user_id = mz and a.type = 'opening';
+      perform assert(r.status = 'on_site' and r.distance_m < 50 and r.device_info->>'site_confirmed_by' = 'google'
+                     and (r.device_info->>'pin_distance_m')::numeric > 800,
+        'google spot 0114: at Google''s confirmed spot the clock-in goes through, on site, saying so');
+      perform assert((select used_count from public.store_google_spots where outlet_id = shop) = 1,
+        'google spot 0114: the store counts it, for the office to check the pin');
+      perform assert(not exists (select 1 from public.place_naming_due where user_id = mz),
+        'google spot 0114: let in at Google''s spot, they are not asked to name the place');
+
+      -- Far from both: refused.
+      delete from public.attendance where user_id = mz;
+      begin
+        insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name)
+        values ('opening', 6.3800, 7.4950, 10, fresh_photo('selfies', 'gs-4.jpg'), now(), 'Road');
+        perform assert(false, 'google spot 0114: far from the pin and from Google''s spot, refused');
+      exception when raise_exception then
+        perform assert(sqlerrm like 'You are off site:%', 'google spot 0114: far from the pin and from Google''s spot, refused');
+      end;
+
+      -- A changed address: the old answer no longer counts.
+      update public.outlets set address = '12 New Rd, Enugu' where id = shop;
+      begin
+        insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name)
+        values ('opening', 6.4003, 7.4950, 10, fresh_photo('selfies', 'gs-5.jpg'), now(), 'Store');
+        perform assert(false, 'google spot 0114: after the address changes, Google is asked again');
+      exception when raise_exception then
+        perform assert(sqlerrm like 'You are off site:%', 'google spot 0114: after the address changes, the old answer is not used');
+      end;
+      update public.outlets set address = '50 Agbani Rd, Enugu' where id = shop;
+
+      -- A marketer checking in with no store picked, at Google's spot: checked in there.
+      perform act_as(mk);
+      insert into public.attendance (type, lat, lng, accuracy_m, selfie_path, client_captured_at, place_name, device_info)
+      values ('opening', 6.4001, 7.4950, 10, fresh_photo('selfies', 'gs-mk.jpg'), now(), 'Store',
+              jsonb_build_object('start_store_id', shop));
+      update public.store_visits set status = 'closed', departed_at = now() where user_id = mk and status = 'open';
+      insert into public.store_visits (arrived_lat, arrived_lng, arrived_accuracy_m, client_captured_at, selfie_path, arrived_place_name)
+      values (6.4002, 7.4951, 10, now(), fresh_photo('selfies', 'gs-v1.jpg'), 'Store');
+      select v.outlet_id, v.arrived_status, v.device_info into r from public.store_visits v where v.user_id = mk and v.status = 'open';
+      perform assert(r.outlet_id = shop and r.arrived_status = 'on_site' and r.device_info->>'site_confirmed_by' = 'google',
+        'google spot 0114: a marketer at Google''s spot is checked in at that store');
+
+      perform assert(public.claim_pin_check_notice(shop) and not public.claim_pin_check_notice(shop),
+        'google spot 0114: the office is told about a store at most once a day');
+      perform assert(not has_function_privilege('authenticated',
+                       'public.save_store_google_spot(uuid, text, text, double precision, double precision, boolean, jsonb)', 'execute'),
+        'google spot 0114: only the server saves what Google said');
+      raise exception 'gspot-0114-done';
+    end;
+  exception when others then
+    if sqlerrm <> 'gspot-0114-done' then raise; end if;
   end;
 
   raise notice 'ALL RULES PASSED';

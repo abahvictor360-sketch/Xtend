@@ -206,6 +206,22 @@ select assert((select android from public.my_required_app_builds()) = 9999,
 select set_config('request.jwt.claim.sub', :'boss', false);
 select assert((select count(*) from public.app_forced_builds where user_id = :'ada') = 1,
   'rls: an admin sees who must update the app');
+-- Google's spots for stores (0114): only admins read them; nobody writes directly.
+reset role;
+insert into public.store_google_spots (outlet_id, name_used, lat, lng, confirmed)
+select id, name, 6.5, 3.3, true from public.outlets order by name limit 1;
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'ada', false);
+select assert((select count(*) from public.store_google_spots) = 0, 'rls: staff do not see Google''s store spots');
+do $$
+begin
+  update public.store_google_spots set confirmed = true;
+  perform assert(false, 'rls: nobody changes a Google spot directly');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: nobody changes a Google spot directly');
+end $$;
+select set_config('request.jwt.claim.sub', :'boss', false);
+select assert((select count(*) from public.store_google_spots) = 1, 'rls: an admin sees Google''s store spots');
 select set_config('request.jwt.claim.sub', :'boss', false);
 insert into public.app_releases (title, notes) values ('Published by an admin', 'Notes');
 select assert(exists (select 1 from public.app_releases where title = 'Published by an admin' and created_by = :'boss'),

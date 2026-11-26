@@ -944,6 +944,25 @@ Policies:
 Policies:
 - `store_counts_select` SELECT to public: using `((user_id = auth.uid()) OR is_admin() OR supervises_user(user_id))`
 
+### `store_google_spots`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| outlet_id | uuid(uuid) |  |  |
+| name_used | text(text) |  |  |
+| address_used | text(text) |  | ''::text |
+| lat | double precision(float8) | yes |  |
+| lng | double precision(float8) | yes |  |
+| confirmed | boolean(bool) |  | false |
+| detail | jsonb(jsonb) |  | '{}'::jsonb |
+| looked_up_at | timestamp with time zone(timestamptz) |  | now() |
+| used_count | integer(int4) |  | 0 |
+| last_used_at | timestamp with time zone(timestamptz) | yes |  |
+| notified_at | timestamp with time zone(timestamptz) | yes |  |
+
+Policies:
+- `store_google_spots_admin_read` SELECT to authenticated: using `is_admin()`
+
 ### `store_visits`
 
 | Column | Type | Null | Default |
@@ -1474,8 +1493,8 @@ Policies:
 - `attendance_no_early_clock_out()` → trigger · definer · 0111_clock_out_hold.sql
 - `attendance_office_store()` → trigger · definer · 0112_office_entry_location.sql
 - `attendance_office_time()` → trigger · definer · 0090_field_corrections.sql
-- `attendance_on_site_only()` → trigger · definer · 0106_on_site_only.sql
-- `attendance_place_due()` → trigger · definer · 0045_mandatory_place_naming.sql
+- `attendance_on_site_only()` → trigger · definer · 0114_store_google_check.sql
+- `attendance_place_due()` → trigger · definer · 0114_store_google_check.sql
 - `attendance_punctuality()` → trigger · definer · 0105_clock_out_window.sql
 - `attendance_push_check()` → trigger · definer · 0027_notifications_required.sql
 - `attendance_replace_for_correction()` → trigger · definer · 0090_field_corrections.sql
@@ -1508,6 +1527,7 @@ Policies:
 - `claim_clock_out_reminders(p_now timestamp with time zone)` → TABLE(user_id uuid, reminder_date date, stage smallint, shift_end text) · definer · 0069_shift_soon_reminders.sql
 - `claim_due_notifications(p_limit integer)` → SETOF scheduled_notifications · definer · 0053_support_notifications.sql
 - `claim_flag_alerts(p_limit integer)` → TABLE(id uuid, user_id uuid, staff_name text, kind text, severity text, summary text, outlet_name text, created_at timestamp with time zone) · definer · 0036_supervisor_alerts.sql
+- `claim_pin_check_notice(p_outlet uuid)` → boolean · definer · 0114_store_google_check.sql
 - `claim_scheduled_notification(p_id uuid)` → SETOF scheduled_notifications · definer · 0053_support_notifications.sql
 - `claim_selfie_sweep(p_min_minutes integer)` → boolean · definer · 0012_selfie_retention_24h.sql
 - `claim_shift_soon_reminders(p_now timestamp with time zone)` → TABLE(user_id uuid, reminder_date date, stage text, shift_time text, store text) · definer · 0069_shift_soon_reminders.sql
@@ -1573,6 +1593,7 @@ Policies:
 - `gen_salt(text)` → text
 - `gen_salt(text, integer)` → text
 - `google_calls_this_month()` → bigint · definer · 0068_place_lookups.sql
+- `google_spot_distance(p_outlet uuid, p_lat double precision, p_lng double precision)` → double precision · definer · 0114_store_google_check.sql
 - `has_allocated_stores(target uuid)` → boolean · definer · 0060_marketer_visits_reports.sql
 - `has_live_push(p_user uuid)` → boolean · definer · 0033_native_push.sql
 - `hmac(bytea, bytea, text)` → bytea
@@ -1623,6 +1644,7 @@ Policies:
 - `names_overlap(a text, b text)` → boolean · 0025_place_safeguards.sql
 - `nearest_outlet_for_user(target uuid, p_lat double precision, p_lng double precision)` → uuid · definer · 0034_stores_pinned_from_clock_in.sql
 - `no_show_already_reported(p_user uuid)` → boolean · definer · 0007_watchers_and_no_show.sql
+- `note_google_spot_used(p_outlet uuid)` → void · definer · 0114_store_google_check.sql
 - `note_place_visit(p_id uuid)` → void · definer · 0068_place_lookups.sql
 - `note_place_visit_for(p_user uuid, p_id uuid)` → void · definer · 0068_place_lookups.sql
 - `notification_sent_by_me(p_notification uuid)` → boolean · definer · 0053_support_notifications.sql
@@ -1745,6 +1767,7 @@ Policies:
 - `revoke_tracking_tokens()` → void · definer · 0050_background_tracking.sql
 - `safe_ts(p text)` → timestamp with time zone · 0026_phone_evidence.sql
 - `safe_uuid(p text)` → uuid · 0026_phone_evidence.sql
+- `save_store_google_spot(p_outlet uuid, p_name text, p_address text, p_lat double precision, p_lng double precision, p_confirmed boolean, p_detail jsonb)` → void · definer · 0114_store_google_check.sql
 - `schedule_guard(p_user uuid)` → void · definer · 0072_hr_role.sql
 - `schedule_notification(p_title text, p_body text, p_url text, p_audience notification_audience, p_detail jsonb, p_send_at timestamp with time zone)` → uuid · definer · 0053_support_notifications.sql
 - `selfie_check()` → trigger · definer · 0023_photo_checks.sql
@@ -1775,11 +1798,12 @@ Policies:
 - `staff_no_show(p_grace_minutes integer)` → TABLE(user_id uuid, full_name text, phone text, outlet_id uuid, outlet_name text, shift_start time without time zone, minutes_late integer) · definer · 0100_shift_times_per_person.sql
 - `start_store_of(p_device jsonb)` → uuid · 0101_start_day_at_a_store.sql
 - `store_count_status()` → jsonb · definer · 0020_count_requests.sql
+- `store_google_spot(p_outlet uuid)` → TABLE(lat double precision, lng double precision) · definer · 0114_store_google_check.sql
 - `store_visit_alert()` → trigger · definer · 0016_visits_without_allocation.sql
 - `store_visit_close_stale()` → trigger · definer · 0086_close_stale_visit_on_check_in.sql
 - `store_visit_enforce()` → trigger · definer · 0060_marketer_visits_reports.sql
 - `store_visit_no_departure_photo()` → trigger · 0091_visit_checkout_photo.sql
-- `store_visit_on_site_only()` → trigger · definer · 0106_on_site_only.sql
+- `store_visit_on_site_only()` → trigger · definer · 0114_store_google_check.sql
 - `store_visits_today()` → SETOF store_visit_detail · definer · 0016_visits_without_allocation.sql
 - `submit_count_sheet(p_outlet_id uuid, p_path text, p_file_name text)` → uuid · definer · 0064_count_sheets_any_time_report_files.sql
 - `submit_store_count(p_outlet_id uuid, p_lines jsonb, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_photo_path text)` → integer · definer · 0040_xpel_count_sheet.sql

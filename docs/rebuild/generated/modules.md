@@ -744,7 +744,7 @@ src/lib/place-resolve.ts):
     business within 80 m. Free and needs no key, but Nigerian POI
     coverage is thin, so it often names the street rather than the shop.
 
-Exports: `resolvePlace`, `placeForEvent`, `LocatedPlace`, `locateAddress`, `searchPlaces`, `openShortMapLink`
+Exports: `resolvePlace`, `placeForEvent`, `LocatedPlace`, `askGoogleAboutStore`, `locateAddress`, `searchPlaces`, `openShortMapLink`
 
 ## `src/lib/health.ts`
 
@@ -1377,6 +1377,14 @@ announced, the office clocks start and the activity log hears of it.
 
 Exports: `WRONG`, `DEVICE_COOKIE`, `Service`, `Attempt`, `deviceHash`, `attemptFor`, `paused`, `readCookie`, `finishSignIn`, `signInProven`
 
+## `src/lib/site-check.ts`
+
+Before "You are off site" is shown (0114): asks the server whether Google
+puts the store where they stand (its pin may be wrong). False when it
+cannot tell: offline, slow (8 s), or no Google answer.
+
+Exports: `googleSaysAtStore`
+
 ## `src/lib/staff-logins.ts`
 
 Keeps a temporary password for the staff login sheet (migration 041)
@@ -1434,6 +1442,18 @@ digits, dot, dash or underscore, never `.` or `..`, never empty.
 
 Exports: `MAX_STORAGE_PATH`, `isOwnStoragePath`
 
+## `src/lib/store-check.ts`
+
+Checking a store with Google before saying "off site" (migration 0114).
+Pure, so scripts/check-store-google.ts can exercise it.
+
+Google is asked twice: Places for the store's name with its address (it
+pins the shop), and Geocoding for the address alone. The answer counts
+only when the two agree, so a branch of the same chain on another street
+never passes for this one. A store with no address is never confirmed.
+
+Exports: `GooglePoint`, `GoogleStoreAnswer`, `AGREE_WITHIN_M`, `googleAgrees`, `RECHECK_DAYS`, `RETRY_UNCONFIRMED_DAYS`, `needsLookup`
+
 ## `src/lib/store-count-status.ts`
 
 Whether the signed-in person may take a stock count right now, and why.
@@ -1441,6 +1461,16 @@ Counts happen when a supervisor asks for one, or at the end of the month;
 store_count_status() in Postgres is the authority on which.
 
 Exports: `CountStatus`, `getCountStatus`
+
+## `src/lib/store-google.ts`
+
+Before "You are off site" stands (migration 0114): where Google puts the
+store. Looked up once and saved (store_google_spots), again when its name
+or address changes or after 90 days (a week for an answer that did not
+confirm it). The database decides whether it lets someone through; this
+only fills in Google's answer. Never throws.
+
+Exports: `confirmedStoreSpot`, `googlePutsThemAtStore`, `tellOfficeToCheckPin`, `worthAskingGoogle`
 
 ## `src/lib/supabase/admin.ts`
 
@@ -1871,9 +1901,9 @@ Exports: `Allocation`, `AllocationTeam`, `AllocatableOutlet`, `OutletAllocator`
 
 ## `src/components/admin/outlet-manager.tsx`
 
-Field staff the reader may allocate (staff_allocation, through RLS).
+A store whose pin is far from where Google confirms it (0114).
 
-Exports: `OutletManager`
+Exports: `PinCheck`, `OutletManager`
 
 ## `src/components/admin/overview-charts.tsx`
 

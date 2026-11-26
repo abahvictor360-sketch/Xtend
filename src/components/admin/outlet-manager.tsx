@@ -41,13 +41,26 @@ const EMPTY: Draft = {
   geofence_radius_m: '150',
 }
 
+/** A store whose pin is far from where Google confirms it (0114). */
+export interface PinCheck {
+  lat: number
+  lng: number
+  gap_m: number
+  /** Clock-ins and check-ins Google's spot let through. */
+  used: number
+  last_used_at: string | null
+}
+
 export function OutletManager({
   outlets,
   staffCounts,
   readOnly = false,
   staff = [],
   canAllocate = false,
+  pinChecks = {},
 }: {
+  /** Stores whose pin Google disagrees with (admins only). */
+  pinChecks?: Record<string, PinCheck>
   /** Field staff the reader may allocate (staff_allocation, through RLS). */
   staff?: StoreStaffPerson[]
   /** Admins and supervisors allocate staff from a store (0097). */
@@ -621,6 +634,10 @@ export function OutletManager({
                 )}
               </div>
 
+              {!readOnly && pinChecks[outlet.id] && (
+                <PinCheckNote outlet={outlet} check={pinChecks[outlet.id]} onMoved={() => router.refresh()} />
+              )}
+
               <dl className="grid grid-cols-2 gap-2 text-xs">
                 <Fact icon={Radius} label="Area" value={`${outlet.geofence_radius_m} m`} />
                 <Fact
@@ -700,6 +717,57 @@ function Fact({ icon: Icon, label, value }: { icon: LucideIcon; label: string; v
         <dt className="text-[11px] text-muted-foreground">{label}</dt>
         <dd className="truncate font-semibold">{value}</dd>
       </div>
+    </div>
+  )
+}
+
+/**
+ * "Check the pin" (0114): Google puts the store far from its pin, and
+ * people standing there were let in by Google's spot. One tap moves the
+ * pin there (audited like any outlet change).
+ */
+function PinCheckNote({ outlet, check, onMoved }: { outlet: Outlet; check: PinCheck; onMoved: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const far = check.gap_m >= 1000 ? `${(check.gap_m / 1000).toFixed(1)} km` : `${check.gap_m} m`
+  async function move() {
+    setBusy(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/admin/outlets/${outlet.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat: check.lat, lng: check.lng }),
+      })
+      const json = (await res.json().catch(() => ({}))) as { error?: string }
+      if (!res.ok) throw new Error(json.error ?? 'The pin could not be moved.')
+      onMoved()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'The pin could not be moved.')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="space-y-2 rounded-xl bg-warning/10 p-3 text-xs">
+      <p>
+        <span className="font-semibold">Check the pin.</span> Google puts this store {far} from its pin.
+        {check.used > 0 && ` ${check.used} clock-in${check.used === 1 ? '' : 's'} or check-in${check.used === 1 ? '' : 's'} went through at Google's spot.`}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="secondary" disabled={busy} onClick={() => void move()}>
+          {busy ? 'Moving…' : "Use Google's spot"}
+        </Button>
+        <a
+          href={`https://www.google.com/maps/search/?api=1&query=${check.lat},${check.lng}`}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex h-8 items-center rounded-lg border border-border px-3 font-semibold"
+        >
+          See it on the map
+        </a>
+      </div>
+      {error && <p className="text-destructive">{error}</p>}
     </div>
   )
 }
