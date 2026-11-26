@@ -193,6 +193,19 @@ begin
 exception when insufficient_privilege then
   perform assert(true, 'rls: nobody records an app notice directly');
 end $$;
+-- Forced app updates (0113): staff see only their own, through the function.
+reset role;
+update public.app_update_notices set times = 3, last_at = now() - interval '3 days' where user_id = :'ada';
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'bala', false);
+select assert((select count(*) from public.app_forced_builds) = 0,
+  'rls: staff do not see who else must update the app');
+select set_config('request.jwt.claim.sub', :'ada', false);
+select assert((select android from public.my_required_app_builds()) = 9999,
+  'rls: a person sees the app build they must install');
+select set_config('request.jwt.claim.sub', :'boss', false);
+select assert((select count(*) from public.app_forced_builds where user_id = :'ada') = 1,
+  'rls: an admin sees who must update the app');
 select set_config('request.jwt.claim.sub', :'boss', false);
 insert into public.app_releases (title, notes) values ('Published by an admin', 'Notes');
 select assert(exists (select 1 from public.app_releases where title = 'Published by an admin' and created_by = :'boss'),

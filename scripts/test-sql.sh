@@ -131,5 +131,6 @@ run supabase/migrations/0109_no_early_clock_out.sql
 run supabase/migrations/0110_ai_limits.sql
 run supabase/migrations/0111_clock_out_hold.sql
 run supabase/migrations/0112_office_entry_location.sql
+run supabase/migrations/0113_force_app_update.sql
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rules.sql 2>&1 | grep -E 'NOTICE|ERROR' | sed 's/^psql:[^ ]*: //'
 psql "$PGURL" -v ON_ERROR_STOP=1 -f supabase/tests/rls_counts.sql 2>&1 | grep -E 'NOTICE|ERROR|PASSED' | sed 's/^psql:[^ ]*: //'

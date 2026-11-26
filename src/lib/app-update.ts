@@ -78,6 +78,17 @@ export function shouldShowNotes(release: ReleaseNote | null, seenId: string | nu
   return now - Date.parse(release.created_at) <= NOTES_FRESH_DAYS * 86_400_000
 }
 
+/**
+ * The lowest build this person may use: the office's lowest build for
+ * everyone, or higher once they have had all three "Please update Xtend"
+ * reminders for a newer build and the grace time is over (migration 0113).
+ */
+export function lowestAllowed(minimum: number | null, forced: number | null): number | null {
+  if (minimum == null) return forced ?? null
+  if (forced == null) return minimum
+  return Math.max(minimum, forced)
+}
+
 export type InstallStatus = 'current' | 'old_site' | 'old_app' | 'must_update'
 
 /**

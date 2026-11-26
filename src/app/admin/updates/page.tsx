@@ -3,9 +3,9 @@ import { requireSession } from '@/lib/auth'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { PublishUpdate, RemindToUpdate, WithdrawRelease } from '@/components/admin/update-tools'
+import { ForceUpdateSetting, PublishUpdate, RemindToUpdate, WithdrawRelease } from '@/components/admin/update-tools'
 import { publishedAndroidApk } from '@/lib/app-release'
-import { installStatus, type InstallStatus } from '@/lib/app-update'
+import { installStatus, lowestAllowed, type InstallStatus } from '@/lib/app-update'
 import { cn, formatLagos } from '@/lib/utils'
 
 export const dynamic = 'force-dynamic'
@@ -47,12 +47,17 @@ export default async function UpdatesPage({ searchParams }: { searchParams: Prom
   const supabase = await createServerSupabase()
   const build = process.env.NEXT_PUBLIC_BUILD_ID ?? ''
 
-  const [{ data: releases, error }, { data: installs }, { data: minimum }, apk] = await Promise.all([
+  const [{ data: releases, error }, { data: installs }, { data: minimum }, apk, { data: forcedRows }, { data: settings, error: settingsError }] = await Promise.all([
     supabase.from('app_releases').select('*').order('created_at', { ascending: false }).limit(30),
     supabase.from('app_installs').select('*').order('last_seen', { ascending: false }).limit(2000),
     supabase.from('app_minimum_builds').select('android, ios').maybeSingle(),
     process.env.ANDROID_APK_URL ? Promise.resolve(null) : publishedAndroidApk(),
+    // Reminded three times and past the grace time (0113): their old app has stopped.
+    supabase.from('app_forced_builds').select('user_id, platform, build'),
+    supabase.from('system_settings').select('force_old_app, force_app_after_hours').maybeSingle(),
   ])
+  const forced = new Map(((forcedRows ?? []) as { user_id: string; platform: string; build: number }[]).map((f) => [`${f.user_id}|${f.platform}`, f.build]))
+  const force = settingsError ? null : ((settings ?? null) as { force_old_app: boolean; force_app_after_hours: number } | null)
   const rows = (installs ?? []) as Install[]
   const ids = [...new Set(rows.map((r) => r.user_id))]
   const { data: people } = ids.length
@@ -75,7 +80,15 @@ export default async function UpdatesPage({ searchParams }: { searchParams: Prom
   const listed = rows
     .filter((r) => who.get(r.user_id)?.is_active !== false)
     .filter((r) => r.platform !== 'web' || !appUsers.has(r.user_id))
-    .map((r) => ({ ...r, status: installStatus(r, live) }))
+    .map((r) => {
+      const f = forced.get(`${r.user_id}|${r.platform}`) ?? null
+      const mine = f == null ? live : {
+        ...live,
+        android: { ...live.android, minimum: r.platform === 'android' ? lowestAllowed(live.android.minimum, f) : live.android.minimum },
+        ios: { ...live.ios, minimum: r.platform === 'ios' ? lowestAllowed(live.ios.minimum, f) : live.ios.minimum },
+      }
+      return { ...r, status: installStatus(r, mine) }
+    })
   const behind = listed.filter((r) => r.status === 'old_app' || r.status === 'must_update')
   const shown = show === 'behind' ? behind : listed
   const counts = {
@@ -160,11 +173,24 @@ export default async function UpdatesPage({ searchParams }: { searchParams: Prom
 
       <Card>
         <CardHeader>
+          <CardTitle>Make people update</CardTitle>
+          <CardDescription>
+            For a new phone app. Anyone still on the old app after the last reminder must install the new one to keep using
+            Xtend. Installing it opens Xtend again at once; their account and anything waiting to send are kept.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ForceUpdateSetting on={force ? force.force_old_app : null} hours={force?.force_app_after_hours ?? 24} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Who is on which version</CardTitle>
           <CardDescription>
             Recorded each time someone opens Xtend. {counts.current} up to date, {counts.old_site} not reloaded onto the
             newest site yet (it happens by itself next time they open it), {counts.old_app} on an older app,{' '}
-            {counts.must_update} below the lowest app allowed.
+            {counts.must_update} must update (below the lowest app allowed, or past their last reminder).
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">

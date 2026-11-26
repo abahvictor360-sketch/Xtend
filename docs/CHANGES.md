@@ -45,7 +45,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0109_no_early_clock_out.sql`;
    - `supabase/migrations/0110_ai_limits.sql`;
    - `supabase/migrations/0111_clock_out_hold.sql`;
-   - `supabase/migrations/0112_office_entry_location.sql`.
+   - `supabase/migrations/0112_office_entry_location.sql`;
+   - `supabase/migrations/0113_force_app_update.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18;
    0099, 0100, 0101 and 0102 are done: you ran them on 2026-11-24.)
 4. **Turn off self sign-up in Supabase**: Authentication → Sign In /
@@ -75,6 +76,27 @@ the live database, so it cannot tell which of these are already done.)
    then tap **Sign in with fingerprint**.
 
 ---
+
+## 2026-11-26
+
+### Old phone apps must update after the last reminder (migration 0113)
+- **What was done:** when a new Xtend phone app comes out, everyone on the
+  old one is still told three times (once when it comes out, then every two
+  days). The third notification now says **"Last reminder: update Xtend
+  now"**. If they still have not updated 24 hours after it, the old app shows
+  only **"Install the new Xtend app"** with a **Get the new app** button, and
+  nothing else works until they install it. As soon as the new app is
+  installed, Xtend opens normally again. You control it on **Updates →
+  Make people update**: switch it off to go back to reminders only, or
+  change the 24 hours (0 to 720). On the "Who is on which version" list,
+  people whose old app has stopped show **Must update**.
+- **The impact:** nobody can stay on an old phone app for weeks. Their
+  account and anything waiting to send are kept when they update. The
+  download page is never covered, so the button always works. Every change
+  to the switch is in the audit log.
+- **What you need to do:** run `supabase/migrations/0113_force_app_update.sql`
+  in Supabase (after 0112) and redeploy. It is on as soon as it is run. No
+  new app build needed.
 
 ## 2026-11-25
 

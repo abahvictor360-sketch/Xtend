@@ -755,8 +755,11 @@ export default async function AdminGuidePage() {
             iPhone build to make people install a new phone app. The page shows who is on which version and
             reminds those on an older app. When a new phone app is published, everyone on an older one also
             gets a phone notification (in the day, Lagos time), and again every two days while they stay on
-            it, three times in all. In Xtend, <Ui>Later</Ui> hides the update bar only until Xtend is opened
-            again.
+            it, three times in all; the third says it is the last reminder. With <Ui>Make people update</Ui> on
+            (it is on by default), anyone still on the old app 24 hours after the last reminder can only see
+            <Ui>Install the new Xtend app</Ui> until they install it; change the hours or switch it off there.
+            They show as <Ui>Must update</Ui> on the list. In Xtend, <Ui>Later</Ui> hides the update bar only
+            until Xtend is opened again.
           </p>
           <p>
             <Ui>AI keys</Ui> (admins only): add a key for Anthropic (Claude), OpenAI (ChatGPT), Google Gemini, NVIDIA or

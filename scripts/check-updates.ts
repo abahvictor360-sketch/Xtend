@@ -7,7 +7,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { buildNumber, decideUpdate, installStatus, shouldShowNotes, type VersionInfo } from '@/lib/app-update'
+import { buildNumber, decideUpdate, installStatus, lowestAllowed, shouldShowNotes, type VersionInfo } from '@/lib/app-update'
 import { lagosHour, noticeHour, updateNoticeMessage } from '@/lib/app-update-notice'
 
 let failed = 0
@@ -63,6 +63,14 @@ check(installStatus({ platform: 'android', app_build: 57, web_build: 'B2' }, liv
 check(installStatus({ platform: 'android', app_build: 50, web_build: 'B2' }, live) === 'must_update', 'below the lowest allowed: must update')
 check(installStatus({ platform: 'web', app_build: null, web_build: 'B2' }, live) === 'current', 'a browser on the newest site is up to date')
 
+// --- Forced after three reminders (0113).
+check(lowestAllowed(null, null) === null && lowestAllowed(55, null) === 55 && lowestAllowed(null, 60) === 60
+  && lowestAllowed(55, 60) === 60 && lowestAllowed(62, 60) === 62, 'the lowest build allowed is the higher of the two')
+s = decideUpdate(info({ android: { latest_build: 60, latest_version: '1.0.60', minimum: lowestAllowed(null, 60), url: '/download' } }), { build: 'B2', platform: 'android', appBuild: 58 })
+check(s.app === 'required', 'reminded three times and still on the old app: it must be installed', s)
+s = decideUpdate(info({ android: { latest_build: 61, latest_version: '1.0.61', minimum: lowestAllowed(null, 60), url: '/download' } }), { build: 'B2', platform: 'android', appBuild: 60 })
+check(s.app === 'available', 'once installed it works again; a newer build is only offered', s)
+
 // --- Telling people about a new phone app (0082).
 check(lagosHour(new Date('2026-11-10T05:59:00Z')) === 6 && lagosHour(new Date('2026-11-10T23:30:00Z')) === 0,
   'Lagos is an hour ahead of UTC')
@@ -77,6 +85,10 @@ check(!noticeHour(new Date('2026-11-10T05:30:00Z')) && noticeHour(new Date('2026
     && /Get it/.test(first.body) && first.title.length <= 80 && first.body.length <= 400,
     'the first notice names the version and says where to get it', first)
   check(again.title === 'Please update Xtend', 'a reminder says so', again)
+  const last = updateNoticeMessage('android', '1.0.124', 3)
+  check(last.title === 'Last reminder: update Xtend now' && /stop working/.test(last.body) && last.body.length <= 400,
+    'the third reminder says it is the last and the old app will stop', last)
+  check(!/stop working/.test(again.body), 'earlier reminders do not threaten', again)
   check(ios.body.startsWith('A new Xtend app is ready to install.') && /TestFlight/.test(ios.body), 'iPhone: TestFlight', ios)
   check(!/monitor|track|location/i.test(first.body + again.body + ios.body), 'the notice says nothing about monitoring')
 }
@@ -85,8 +97,16 @@ check(!noticeHour(new Date('2026-11-10T05:30:00Z')) && noticeHour(new Date('2026
   const manager = read('src/components/update-manager.tsx')
   check(!/xt_snooze/.test(manager) && /setSnoozed\(\{ site: 0, app: 0 \}\)/.test(manager) && /SNOOZE_MS = 15 \* 60_000/.test(manager),
     '"Later" lasts only until Xtend is opened again (15 minutes at most), and is never kept')
+  check(/if \(!state \|\| onDownloadPage\) return null/.test(manager) && /startsWith\('\/download'\)/.test(manager),
+    'the "must update" screen never covers the download page it sends people to')
   check(/await flushAppUpdateNotices\(\)/.test(read('src/app/api/cron/alerts/route.ts')),
     'the five-minute job sends the new-app notices')
+  // After the last reminder (0113): their lowest build is the one they were told about.
+  const version = read('src/app/api/version/route.ts')
+  check(/my_required_app_builds/.test(version) && /lowestAllowed\(rows\.minimum\?\.android \?\? null, forced\.android\)/.test(version),
+    'the version check raises the lowest build for someone reminded three times')
+  check(/row\.times >= LAST_REMINDER \? 'last'/.test(read('src/lib/app-update-notices.ts')),
+    'the last reminder is sent with its own words, not grouped with the others')
 }
 
 if (failed) {

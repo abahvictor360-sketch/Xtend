@@ -2721,11 +2721,20 @@ Testable statements, grouped by area. They mirror the assertions in
 - The browser cannot call the reset, going live or the file queue (service role only).
 
 
+### Forced app update (0113)
+
+- `system_settings.force_old_app boolean not null default true`; `force_app_after_hours integer not null default 24` (check 0–720).
+- `app_update_reminders()` immutable → 3 (the same three as 0082).
+- View `app_forced_builds (user_id, platform, build = max(build), last_reminded_at = min(last_at))`, `security_invoker`: `app_update_notices` × `system_settings` where `s.id and s.force_old_app and times >= 3 and last_at <= now() - make_interval(hours => force_app_after_hours)`, grouped by user and platform. Staff see nothing (RLS on both tables is admins only).
+- `my_required_app_builds() returns (android int, ios int)` (SECURITY DEFINER, stable, authenticated only): the caller's rows of that view.
+- `set_force_app_update(p_on boolean, p_hours int)` (SECURITY DEFINER): not admin → "Only an admin can change this"; null or outside 0–720 → "Give the hours as a number from 0 to 720".
+- `/api/version` sets `minimum = lowestAllowed(app_minimum_builds, my_required_app_builds())` per platform; `PATCH /api/admin/updates {force_old_app, force_app_after_hours}` (admins, audit `app.force_update`).
+
 ### New phone app notices (0082)
 
 - Table `app_update_notices (user_id → profiles ON DELETE CASCADE, platform 'android'|'ios', build ≥ 0, times 1–10 default 1, first_at, last_at; PK (user_id, platform, build))`, RLS: admins read (`is_admin()`), nobody writes directly.
 - `claim_app_update_notices(p_android int, p_ios int, p_max_times int = 3, p_every interval = '2 days')` (SECURITY DEFINER, `#variable_conflict use_column`, service role only): due = `app_installs` rows with `app_build` set, `last_seen` within 30 days, an active profile, and `app_build` below the newest for its platform (null newest: never due). Inserts (user, platform, newest) with times 1, or on conflict adds 1 to `times` and sets `last_at` only when `times < greatest(p_max_times, 1)` and `last_at <= now() - p_every`; returns the rows inserted or bumped.
-- `flushAppUpdateNotices()` (`src/lib/app-update-notices.ts`), in `/api/cron/alerts` after the clock-out reminders: only when `noticeHour()` (Lagos 07:00–19:59, `src/lib/app-update-notice.ts`); newest Android = `ANDROID_LATEST_BUILD` or the published `android` release's build (none when `ANDROID_APK_URL` is set without `ANDROID_LATEST_BUILD`), iPhone = `IOS_LATEST_BUILD`; groups by platform, build and first/again; `notifyUsers(ids, { title, body, url: '/download', detail: { kind: 'app_update', system: true, platform, build } })`. Messages (`updateNoticeMessage`): first "A new Xtend app is ready", again "Please update Xtend"; body "Xtend <version> is ready to install." (or "A new Xtend app is ready to install.") + Android "Open Xtend and tap Get it, or download it from the Xtend download page." / iPhone "Open TestFlight and tap Update." + " Your account and anything waiting to send are kept."
+- `flushAppUpdateNotices()` (`src/lib/app-update-notices.ts`), in `/api/cron/alerts` after the clock-out reminders: only when `noticeHour()` (Lagos 07:00–19:59, `src/lib/app-update-notice.ts`); newest Android = `ANDROID_LATEST_BUILD` or the published `android` release's build (none when `ANDROID_APK_URL` is set without `ANDROID_LATEST_BUILD`), iPhone = `IOS_LATEST_BUILD`; groups by platform, build and first/again; `notifyUsers(ids, { title, body, url: '/download', detail: { kind: 'app_update', system: true, platform, build } })`. Messages (`updateNoticeMessage`): first "A new Xtend app is ready", again "Please update Xtend", the third "Last reminder: update Xtend now" (body adds "Soon the old app will stop working until you install the new one.", grouped separately); body "Xtend <version> is ready to install." (or "A new Xtend app is ready to install.") + Android "Open Xtend and tap Get it, or download it from the Xtend download page." / iPhone "Open TestFlight and tap Update." + " Your account and anything waiting to send are kept."
 
 
 ### Photo flags (0092)
