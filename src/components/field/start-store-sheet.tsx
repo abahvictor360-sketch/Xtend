@@ -18,19 +18,23 @@ export interface StartStore {
 }
 
 /**
- * A marketer starts the day at a store (0101): before the clock-in camera
- * opens, they pick the store they are at, from their own stores. Clocking
- * in there checks them in there too. With no stores yet, it says what to
- * send the office instead.
+ * A marketer starts the day at a store (0101). Clock in first matches the
+ * store from where they stand (src/lib/start-store-match.ts); this list is
+ * shown only when no store of theirs matched (noMatch), to pick the one
+ * they are at. Clocking in there checks them in there too. With no stores
+ * allocated, it tells them to ask the admin for one: no clock-in until then.
  */
 export function StartStoreSheet({
   stores,
   currentFix,
+  noMatch = false,
   onPick,
   onClose,
 }: {
   stores: StartStore[]
   currentFix: { lat: number; lng: number } | null
+  /** Their location matched none of their stores. */
+  noMatch?: boolean
   onPick: (store: StartStore) => void
   onClose: () => void
 }) {
@@ -52,12 +56,14 @@ export function StartStoreSheet({
           </span>
           <div className="min-w-0 flex-1">
             <h2 id="start-store-title" className="font-bold">
-              {stores.length ? 'Pick the store you are starting at' : 'No stores are allocated to you yet'}
+              {stores.length ? 'Pick the store you are at' : 'No store is allocated to you'}
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
               {stores.length
-                ? 'Your day starts when you clock in at a store. Clocking in also checks you in there. If you do not clock in at a store, today does not count.'
-                : 'You start your day at one of your stores, so the office must add your stores before you can clock in.'}
+                ? noMatch
+                  ? 'Your location does not match any of your stores. Pick the store you are at. Clocking in also checks you in there.'
+                  : 'Your day starts when you clock in at a store. Clocking in also checks you in there. If you do not clock in at a store, today does not count.'
+                : 'Ask your admin to allocate a store to you. You can clock in once a store is allocated.'}
             </p>
           </div>
           <button type="button" aria-label="Close" onClick={onClose} className="rounded-xl p-1 text-muted-foreground">
@@ -98,9 +104,9 @@ export function StartStoreSheet({
         ) : (
           <ol className="space-y-2">
             {[
-              'Message the office the list of stores you visit (today and on your usual round).',
-              'For each store, open it in Google Maps, tap Share and send the link too, so the office can pin it.',
-              'When the office has added them, come back and clock in.',
+              'Message your admin or supervisor: ask them to allocate your store to you.',
+              'Send the names of the stores you visit, and for each one its Google Maps link (open it in Google Maps, tap Share, copy the link), so they can add it.',
+              'When a store is allocated to you, come back and clock in.',
             ].map((step, i) => (
               <li key={step} className="flex gap-3 rounded-2xl bg-tint p-3 text-sm text-tint-foreground">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-primary-foreground">
@@ -116,7 +122,7 @@ export function StartStoreSheet({
           {stores.length === 0 && (
             <Link href="/field/messages" className="flex-1">
               <Button className="w-full">
-                <MessagesSquare className="h-4 w-4" /> Message the office
+                <MessagesSquare className="h-4 w-4" /> Message the admin
               </Button>
             </Link>
           )}

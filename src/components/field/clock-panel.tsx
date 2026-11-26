@@ -19,6 +19,7 @@ import { OffSiteSheet } from '@/components/field/off-site-sheet'
 import { TooEarlySheet } from '@/components/field/too-early-sheet'
 import { tooEarlyFromServer, tooEarlyToClockOut } from '@/lib/clock-out-time'
 import { googleSaysAtStore } from '@/lib/site-check'
+import { matchStartStore, nearestStore } from '@/lib/start-store-match'
 import { offSite as offSiteFrom, offSiteFromServer, type OffSite, type SiteStore } from '@/lib/on-site'
 import { processSelfie } from '@/lib/image'
 import { deviceInfo } from '@/lib/device'
@@ -190,6 +191,11 @@ export function ClockPanel({
   const [picking, setPicking] = useState(false)
   const startStore = useRef<StartStore | null>(null)
   const [startStoreName, setStartStoreName] = useState<string | null>(null)
+  // Where they were when Xtend tried to match a store (shown in the picker).
+  const [matchFix, setMatchFix] = useState<SampledFix | null>(null)
+  const [noMatch, setNoMatch] = useState(false)
+  const storesRef = useRef(startStores)
+  storesRef.current = startStores
   const [outcome, setOutcome] = useState<Outcome | null>(null)
   // "You are off site" (0106): the store to go to, until they are there.
   const [offSite, setOffSite] = useState<OffSite | null>(null)
@@ -243,7 +249,7 @@ export function ClockPanel({
   const dayDate = useRef(day.date)
   dayDate.current = day.date
 
-  const start = useCallback(async (type: AttendanceType) => {
+  const start = useCallback(async (type: AttendanceType, preFix?: SampledFix) => {
     if (heldBack.current) {
       setGuide('phone_settings')
       return
@@ -259,7 +265,7 @@ export function ClockPanel({
     const run = ++startRun.current
     setOpening(type)
     try {
-      const fix = await requireFix()
+      const fix = preFix ?? (await requireFix())
       if (run !== startRun.current) return
       // 0106: not at the store, no clock-in. Said now, before the selfie; a
       // marketer is measured against the store they picked.
@@ -300,11 +306,78 @@ export function ClockPanel({
     }
   }, [])
 
-  // A marketer opening Xtend before clocking in is asked straight away which
-  // store they are starting at (0101), once per day on this phone; then the
-  // camera opens. Not while a setting or the location is in the way.
+  /**
+   * A marketer's clock-in: their location first, matched against their own
+   * stores. Standing in one: that store, straight to the camera (clocking in
+   * there checks them in too). In none of them: Google is asked about the
+   * nearest (its pin may be wrong, 0114), else they pick the store they are
+   * at. No stores at all: they are told to ask the admin to allocate one.
+   */
+  const beginClockIn = useCallback(async () => {
+    const stores = storesRef.current
+    if (!stores) {
+      void start('opening')
+      return
+    }
+    if (heldBack.current) {
+      setGuide('phone_settings')
+      return
+    }
+    if (stores.length === 0) {
+      setNoMatch(false)
+      setPicking(true)
+      return
+    }
+    setError(null)
+    setOutcome(null)
+    const run = ++startRun.current
+    setOpening('opening')
+    let fix: SampledFix
+    try {
+      fix = await requireFix()
+    } catch (err) {
+      if (run !== startRun.current) return
+      setOpening(null)
+      if (err instanceof GeoBlocked) {
+        setError(err.message)
+        setGuide(problemFromGeo(err.reason, currentNetwork()))
+        setGuideRetry('opening')
+      } else {
+        setError(err instanceof Error ? err.message : 'Could not read your location.')
+        if (isNetworkError(err)) {
+          setGuide('no_network')
+          setGuideRetry('opening')
+        }
+      }
+      return
+    }
+    if (run !== startRun.current) return
+    let store = matchStartStore(fix, stores)
+    if (!store) {
+      const nearest = nearestStore(fix, stores)
+      if (nearest && (await googleSaysAtStore(nearest.id, fix))) store = nearest
+      if (run !== startRun.current) return
+    }
+    if (store) {
+      startStore.current = store
+      setStartStoreName(store.name)
+      setOpening(null)
+      void start('opening', fix)
+      return
+    }
+    // Not in any of their stores: they say which one they are at.
+    setOpening(null)
+    setMatchFix(fix)
+    setNoMatch(true)
+    setPicking(true)
+  }, [start])
+
+  // A marketer with no stores allocated is told straight away, once per day
+  // on this phone, to ask the admin for one: they cannot clock in until then.
+  // With stores, Clock in matches the store from where they stand (above).
+  // Not while a setting or the location is in the way.
   const readyToAsk =
-    Boolean(startStores) && nextType === 'opening' && !busyStep && !opening && locationGate.status !== 'blocked'
+    Boolean(startStores) && startStores!.length === 0 && nextType === 'opening' && !busyStep && !opening && locationGate.status !== 'blocked'
     && !background.needs.blocked && !needsNotifications
   useEffect(() => {
     if (!readyToAsk) return
@@ -315,15 +388,16 @@ export function ClockPanel({
     } catch {
       // Private mode: ask anyway.
     }
+    setNoMatch(false)
     setPicking(true)
   }, [readyToAsk, day.date])
-  // "Pick a store and clock in" on Your next step opens the picker.
+  // "Pick a store and clock in" on Your next step starts the same clock-in.
   useEffect(() => {
     if (!startStores) return
-    const onAsk = () => setPicking(true)
+    const onAsk = () => void beginClockIn()
     window.addEventListener(PICK_START_STORE_EVENT, onAsk)
     return () => window.removeEventListener(PICK_START_STORE_EVENT, onAsk)
-  }, [startStores])
+  }, [startStores, beginClockIn])
 
   // The "Clock out now" prompt at the top of the home screen starts the
   // clock-out here, the same as tapping the button below.
@@ -557,7 +631,7 @@ export function ClockPanel({
         problem={guide}
         task={(guideRetry ?? nextType) === 'closing' ? 'clock out' : 'clock in'}
         onClose={() => setGuide(null)}
-        onRetry={guideRetry ? () => (guideRetry === 'opening' && startStores ? setPicking(true) : void start(guideRetry)) : undefined}
+        onRetry={guideRetry ? () => (guideRetry === 'opening' && startStores ? void beginClockIn() : void start(guideRetry)) : undefined}
         onPickStore={startStores ? () => setPicking(true) : undefined}
       />
       <TooEarlySheet
@@ -571,18 +645,21 @@ export function ClockPanel({
         offSite={offSite}
         task="clock in"
         onClose={() => setOffSite(null)}
-        onRetry={() => (startStores ? setPicking(true) : void start('opening'))}
+        onRetry={() => (startStores ? void beginClockIn() : void start('opening'))}
       />
       {picking && startStores && (
         <StartStoreSheet
           stores={startStores}
-          currentFix={currentFix}
+          currentFix={matchFix ?? currentFix}
+          noMatch={noMatch}
           onClose={() => setPicking(false)}
           onPick={(store) => {
             setPicking(false)
             startStore.current = store
             setStartStoreName(store.name)
-            void start('opening')
+            // The position just read, if it is still fresh; else a new one.
+            const fresh = matchFix && Date.now() - Date.parse(matchFix.captured_at) < 90_000 ? matchFix : undefined
+            void start('opening', fresh)
           }}
         />
       )}
@@ -666,7 +743,7 @@ export function ClockPanel({
           id="clock-button"
           type="button"
           disabled={Boolean(busyStep)}
-          onClick={() => (nextType === 'opening' && startStores ? setPicking(true) : void start(nextType))}
+          onClick={() => (nextType === 'opening' && startStores ? void beginClockIn() : void start(nextType))}
           className="relative flex h-16 w-full items-center rounded-full bg-brand p-2 text-primary-foreground transition-[filter] hover:brightness-105 active:scale-[0.99] disabled:opacity-80"
         >
           <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-white text-brand">

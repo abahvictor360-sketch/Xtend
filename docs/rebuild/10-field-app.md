@@ -811,18 +811,27 @@ switched off by the office (0111, `profiles.hold_clock_out = false`),
   "Your day is complete"; else "You’re on shift" / "Clock controls".
 - **A marketer starts the day at a store (0101).** `/field` loads
   `my_outlets` (active ones) as `startStores` for marketers (null for
-  others). **Clock in** opens `StartStoreSheet` ("Pick the store you are
-  starting at" / "Your day starts when you clock in at a store. Clocking in
-  also checks you in there. If you do not clock in at a store, today does
-  not count.", their stores nearest first with distance and **Here** inside
+  others). **Clock in** (2026-11-26) first reads the location
+  (`requireFix`) and matches it with their stores (`matchStartStore` in
+  `src/lib/start-store-match.ts`: the nearest pinned store whose radius plus
+  up to 50 m of accuracy holds them). A match → that store, straight to the
+  camera with the same fix. No match → Google is asked about the nearest
+  store (`googleSaysAtStore`, 0114); still none → `StartStoreSheet` with
+  `noMatch` ("Pick the store you are at" / "Your location does not match any
+  of your stores. Pick the store you are at. Clocking in also checks you in
+  there."; without noMatch: "Your day starts when you clock in at a store.
+  Clocking in also checks you in there. If you do not clock in at a store,
+  today does not count."), their stores nearest first with distance and **Here** inside
   the fence, a tip to message the office a new store's Google Maps link,
   **Not now**, "Not sure? Read the staff guide"). Picking one opens the
   camera ("Clock in at <store>") and the clock-in carries
-  `device_info.start_store_id`. With no stores: "No stores are allocated to
-  you yet", three steps (message the office the stores, each one's Google
-  Maps link, clock in once added), **Message the office** (`/field/messages`).
-  The sheet also opens by itself when Home loads before the clock-in, once a
-  day per tab (`sessionStorage xt-start-ask-<date>`), only when no location,
+  `device_info.start_store_id` (a pick reuses the fix if under 90 s old).
+  With no stores: "No store is allocated to you" / "Ask your admin to
+  allocate a store to you. You can clock in once a store is allocated.",
+  three steps (ask the admin or supervisor to allocate the store; send the
+  stores with Google Maps links; clock in once allocated), **Message the
+  admin** (`/field/messages`). With no stores the sheet also opens by itself
+  when Home loads before the clock-in, once a day per tab (`sessionStorage xt-start-ask-<date>`), only when no location,
   settings or notifications gate is showing; and from **Pick a store and
   clock in** on Your next step (`PICK_START_STORE_EVENT`). Home passes
   `ask={kind: here|pick|out, n}` to `StoreVisits` for later stores.

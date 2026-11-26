@@ -222,21 +222,21 @@ export function guideFor(problem: GuideProblem, platform: GuidePlatform, task = 
       }
     case 'no_stores':
       return {
-        title: 'No stores are allocated to you yet',
-        why: 'You start your day at one of your stores, so the office must add your stores first.',
+        title: 'No store is allocated to you',
+        why: 'You start your day at one of your stores, so your admin must allocate a store to you before you can clock in.',
         steps: [
-          'Message the office the list of stores you visit (today and on your usual round).',
-          'For each store, open it in Google Maps, tap Share and send the link too, so the office can pin it.',
-          'When the office has added them, come back and clock in.',
+          'Message your admin or supervisor: ask them to allocate your store to you.',
+          'Send the stores you visit, each with its Google Maps link (open it in Google Maps, tap Share, copy the link).',
+          'When a store is allocated to you, come back and clock in.',
         ],
         action: 'message_office',
-        actionLabel: 'Message the office',
+        actionLabel: 'Message the admin',
       }
     case 'pick_store':
       return {
         title: 'Pick your store first',
         why: 'You clock in at the store you are starting your day at. Clocking in also checks you in there.',
-        steps: ['Tap Clock in.', 'Pick the store you are at from your list.', 'Take your selfie.'],
+        steps: ['Go inside the store and tap Clock in.', 'If Xtend asks, pick the store you are at from your list.', 'Take your selfie.'],
         action: 'pick_store',
         actionLabel: 'Pick a store',
       }

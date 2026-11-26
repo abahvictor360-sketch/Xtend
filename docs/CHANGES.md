@@ -81,6 +81,25 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-26
 
+### Marketers' clock-in finds their store by itself (no migration)
+- **What was done:** when a marketer taps **Clock in**, Xtend first reads
+  where they are and matches it with the stores allocated to them (home or
+  allocated). Standing in one of them: the camera opens at once for that
+  store, and the selfie clocks them in and checks them in there. Only when
+  their location matches none of their stores (after also asking Google,
+  in case a pin is wrong) does it show their stores: **"Your location does
+  not match any of your stores. Pick the store you are at."** A marketer
+  with no store allocated sees **"No store is allocated to you. Ask your
+  admin to allocate a store to you. You can clock in once a store is
+  allocated."** with a **Message the admin** button, as soon as they open
+  Xtend, and cannot clock in.
+- **The impact:** one tap less for marketers at their store, and the right
+  store every time; nobody can clock in with no store allocated. The list
+  no longer pops up by itself every morning.
+- **What you need to do:** redeploy. Allocate a store to every marketer
+  (**Outlets → Allocate staff**, or **Store allocation**). No migration, no
+  new app build.
+
 ### Location turned off during a shift is noticed (migration 0115, new app build)
 - **What was done:** no app can see where a phone is while its location is
   switched off. So Xtend now notices when it happens instead. If someone

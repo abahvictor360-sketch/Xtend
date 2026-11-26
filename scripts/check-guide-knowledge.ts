@@ -32,7 +32,7 @@ for (const p of GUIDE_PROBLEMS) {
   check(text.includes(`### ${a.title}`) && a.steps.every((s) => text.includes(s)) && i.steps.every((s) => text.includes(s)),
     `the guide gives the pop-up's own steps for "${a.title}" (Android and iPhone)`)
 }
-for (const q of ['Why must I pick a store when I clock in?', 'The store I am at is not on my list', 'I forgot to check out of a store', 'What time should I clock in?', 'There is no signal in my store'])
+for (const q of ['How does Xtend know which store I am clocking in at?', 'The store I am at is not on my list', 'I forgot to check out of a store', 'What time should I clock in?', 'There is no signal in my store'])
   check(text.includes(`Q: ${q}`), `the questions staff ask include "${q}"`)
 check(text.includes('Pick the store you are starting at') && text.includes('today does not count'), 'the clock-in section explains the marketer start of day')
 check(!/monitor|tracking|tracked|integrity|fake location|\bvpn\b|follow/i.test(text), 'the guide never tells staff how they are monitored')

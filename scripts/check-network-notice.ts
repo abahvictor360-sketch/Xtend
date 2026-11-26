@@ -43,7 +43,7 @@ for (const platform of ['android', 'ios'] as const) {
 check(/Weak network/.test(guideFor('location_no_network', 'android').title), 'the location pop-up names the weak network')
 
 const panel = read('src/components/field/clock-panel.tsx')
-check((panel.match(/problemFromGeo\(err\.reason, currentNetwork\(\)\)/g) ?? []).length === 2 && panel.includes("setGuide('no_network')"), 'clock in and out read the network when location or the request fails')
+check((panel.match(/problemFromGeo\(err\.reason, currentNetwork\(\)\)/g) ?? []).length >= 2 && panel.includes("setGuide('no_network')"), 'clock in and out read the network when location or the request fails')
 check(panel.includes('To send it sooner: check Mobile data is on'), 'a clock-in saved on the phone says how to send it sooner')
 const visits = read('src/components/field/store-visits.tsx')
 check((visits.match(/problemFromGeo\(err\.reason, currentNetwork\(\)\)/g) ?? []).length === 4 && (visits.match(/if \(isNetworkError\(err\)\) setGuide\('no_network'\)/g) ?? []).length === 2,
