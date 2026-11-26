@@ -242,7 +242,7 @@ export function MapFrame({
               ))}
             </div>
           )}
-          <span className="rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-medium text-muted-foreground shadow-sm">
+          <span className="rounded-full bg-white/90 px-2 py-0.5 text-[0.6875rem] font-medium text-muted-foreground shadow-sm">
             {label.note}
           </span>
         </div>

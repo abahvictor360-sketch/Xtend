@@ -503,7 +503,7 @@ export default async function DayOverview({ searchParams }: { searchParams: Prom
                   <dl className="space-y-2 text-sm">
                     {r.fields.map(([label, value]) => (
                       <div key={label}>
-                        <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</dt>
+                        <dt className="text-[0.6875rem] uppercase tracking-wide text-muted-foreground">{label}</dt>
                         <dd className="whitespace-pre-wrap break-words">{value}</dd>
                       </div>
                     ))}

@@ -265,7 +265,7 @@ export function NotificationComposer({
             onChange={(e) => setBody(e.target.value)}
           />
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-[11px] text-muted-foreground">{body.length}/400</p>
+            <p className="text-[0.6875rem] text-muted-foreground">{body.length}/400</p>
             {title.trim() && body.trim().length >= 2 && (
               <button
                 type="button"
@@ -397,7 +397,7 @@ export function NotificationComposer({
                   </button>
                 ))}
               </div>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-[0.6875rem] text-muted-foreground">
                 Goes out within five minutes of the time, Lagos time. Who gets it is fixed now, with the people this
                 audience reaches today.
               </p>
@@ -447,7 +447,7 @@ export function NotificationComposer({
         )}
 
         {off.length > 0 && (
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-[0.6875rem] text-muted-foreground">
             {off.length} of these {off.length === 1 ? 'has' : 'have'} not turned notifications on for any device, so they
             will not receive it. They are still recorded in the history, and you can
             send it again to them later.

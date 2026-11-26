@@ -127,13 +127,13 @@ export function StoreStaff({
               <li key={p.user_id} className="flex items-center gap-2 px-3 py-2 text-sm">
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{p.staff_name}</span>
-                  <span className="block text-[11px] text-muted-foreground">
+                  <span className="block text-[0.6875rem] text-muted-foreground">
                     {roleName(p.role)}
                     {!p.is_active && ' · inactive'}
                   </span>
                 </span>
                 {homeHere(p) ? (
-                  <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground" title="Their home store is changed on their account (Staff)">
+                  <span className="inline-flex items-center gap-1 text-[0.6875rem] text-muted-foreground" title="Their home store is changed on their account (Staff)">
                     <Home className="h-3.5 w-3.5" /> Home store
                   </span>
                 ) : (
@@ -183,7 +183,7 @@ export function StoreStaff({
                 <li key={p.user_id} className="flex items-center gap-2 px-3 py-2 text-sm">
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-medium">{p.staff_name}</span>
-                    <span className="block truncate text-[11px] text-muted-foreground">
+                    <span className="block truncate text-[0.6875rem] text-muted-foreground">
                       {roleName(p.role)}
                       {p.home_outlet_name ? ` · home: ${p.home_outlet_name}` : ''}
                       {p.outlet_names.length ? ` · also ${p.outlet_names.length} store${p.outlet_names.length === 1 ? '' : 's'}` : ''}
@@ -198,7 +198,7 @@ export function StoreStaff({
             </ul>
           )}
           {results.length > MAX_SHOWN && (
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-[0.6875rem] text-muted-foreground">
               Showing {MAX_SHOWN} of {results.length}. Type a name to find someone.
             </p>
           )}

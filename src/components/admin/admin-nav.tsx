@@ -145,7 +145,7 @@ function Count({ n, active }: { n: number | null | undefined; active?: boolean }
   return (
     <span
       className={cn(
-        'ml-auto min-w-6 rounded-full px-1.5 py-0.5 text-center text-[11px] font-bold tabular-nums',
+        'ml-auto min-w-6 rounded-full px-1.5 py-0.5 text-center text-[0.6875rem] font-bold tabular-nums',
         active ? 'bg-brand text-primary-foreground' : 'bg-destructive/10 text-destructive',
       )}
     >
@@ -239,7 +239,7 @@ export function AdminSidebarNav({
                   type="button"
                   aria-expanded={isOpen}
                   onClick={() => !searching && toggle(group.title!, isOpen)}
-                  className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground"
+                  className="flex w-full items-center gap-2 rounded-lg px-3 py-1.5 text-[0.6875rem] font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground"
                 >
                   {group.title}
                   {!isOpen && groupCount > 0 && <span className="h-1.5 w-1.5 rounded-full bg-destructive" aria-label="Something to look at" />}
@@ -360,7 +360,7 @@ export function AdminNav({
           {shown.map((group, i) => (
             <div key={group.title ?? i}>
               {group.title && (
-                <p className="px-4 pb-1 pt-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                <p className="px-4 pb-1 pt-3 text-[0.6875rem] font-bold uppercase tracking-wider text-muted-foreground">
                   {group.title}
                 </p>
               )}

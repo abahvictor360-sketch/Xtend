@@ -96,12 +96,12 @@ export function Onboarding({ name, photoUrl }: { name: string; photoUrl: string 
       <div key={step} className="flex flex-1 animate-fade-up flex-col pt-6">
         {step === 'welcome' && (
           <>
-            <h1 className="text-[34px] font-extrabold leading-[1.05] tracking-tight">
+            <h1 className="text-[2.125rem] font-extrabold leading-[1.05] tracking-tight">
               Welcome,
               <br />
               <span className="text-brand">{first}!</span>
             </h1>
-            <p className="mt-3 text-[15px] text-muted-foreground">
+            <p className="mt-3 text-[0.9375rem] text-muted-foreground">
               Xtend is where your work day starts and ends. Here is how a day goes:
             </p>
             <ul className="mt-5 space-y-2.5">
@@ -246,8 +246,8 @@ export function Onboarding({ name, photoUrl }: { name: string; photoUrl: string 
 function Title({ title, text }: { title: string; text: string }) {
   return (
     <>
-      <h1 className="text-[28px] font-extrabold leading-tight tracking-tight">{title}</h1>
-      <p className="mt-2 text-[15px] text-muted-foreground">{text}</p>
+      <h1 className="text-[1.75rem] font-extrabold leading-tight tracking-tight">{title}</h1>
+      <p className="mt-2 text-[0.9375rem] text-muted-foreground">{text}</p>
     </>
   )
 }

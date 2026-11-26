@@ -359,7 +359,7 @@ function FlagItem({
               </Button>
             </div>
           )}
-          <p className="text-[11px] text-muted-foreground">Flag day: {longDate(f.flag_date)}</p>
+          <p className="text-[0.6875rem] text-muted-foreground">Flag day: {longDate(f.flag_date)}</p>
         </div>
       </details>
     </li>

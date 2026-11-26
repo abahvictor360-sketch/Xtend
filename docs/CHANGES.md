@@ -82,6 +82,22 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-26
 
+### Easier to read: bigger small text, darker colours, and text that follows the phone's setting (new app build, no migration)
+- **What was done:** from the Apple design review: (1) the smallest text in
+  the staff app (calendar words and day labels at 9 and 10 px) is now 11 px,
+  the smallest Apple allows on phones; (2) grey, green and orange-warning
+  text are darker, so small text in them is easy to read (all now 5:1 or
+  better against their background; before, 3.1:1 to 4.4:1); (3) Xtend now
+  follows the phone's text-size setting: make the text bigger on the phone
+  and Xtend's text grows with it, up to twice the size, on iPhone at once
+  and on Android with the new app build. The staff guide says how ("The
+  writing is too small for me").
+- **The impact:** staff with weaker eyesight, or working in bright light
+  outside, can read every word; nothing else moves at the normal text size.
+  Warning badges look a little browner, success text a little deeper green.
+- **What you need to do:** redeploy, and publish the new Android app build
+  (for the text size on Android). No migration.
+
 ### Ask Xtend can add a store from a Google Maps link, and the link gives the right address (no migration)
 - **What was done:** (1) Ask Xtend had no way to add a store, so when you
   asked it to add one from a Google Maps link and allocate it, nothing was

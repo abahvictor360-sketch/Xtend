@@ -53,7 +53,7 @@ export function StackChart({
 
   return (
     <div className={cn('relative flex gap-2', height)} onMouseLeave={() => setPicked(null)}>
-      <div className="flex w-8 flex-col justify-between pb-6 text-right text-[11px] tabular-nums text-muted-foreground">
+      <div className="flex w-8 flex-col justify-between pb-6 text-right text-[0.6875rem] tabular-nums text-muted-foreground">
         {ticks.map((t) => (
           <span key={t} className="-translate-y-1/2 leading-none first:translate-y-0 last:translate-y-0">
             {Number.isInteger(t) ? t : t.toFixed(1)}
@@ -95,7 +95,7 @@ export function StackChart({
                 </div>
                 <span
                   className={cn(
-                    'mt-1.5 h-4 whitespace-nowrap text-[11px] leading-4',
+                    'mt-1.5 h-4 whitespace-nowrap text-[0.6875rem] leading-4',
                     on ? 'font-semibold text-foreground' : 'text-muted-foreground',
                     i % every !== 0 && !on && 'invisible',
                   )}
@@ -109,7 +109,7 @@ export function StackChart({
                       i >= columns.length / 2 ? 'right-1/2' : 'left-1/2',
                     )}
                   >
-                    <p className="mb-1 text-[11px] text-muted-foreground">{c.long}</p>
+                    <p className="mb-1 text-[0.6875rem] text-muted-foreground">{c.long}</p>
                     {c.parts.map((p) => (
                       <p key={p.label} className="flex items-center justify-between gap-6">
                         <span className="flex items-center gap-1.5">

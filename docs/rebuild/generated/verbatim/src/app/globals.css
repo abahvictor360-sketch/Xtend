@@ -36,11 +36,13 @@
     --accent-foreground: 18 55% 34%;
 
     --muted: 28 16% 95%;
-    --muted-foreground: 25 8% 46%;
+    /* 2026-11-26: darker, so small grey text reads (5.0:1 on the staff app's grey page). */
+    --muted-foreground: 25 8% 40%;
 
-    --success: 152 58% 34%;
+    /* 2026-11-26: success and warning darkened so small text in them passes 4.5:1. */
+    --success: 152 60% 30%;
     --success-foreground: 0 0% 100%;
-    --warning: 36 94% 42%;
+    --warning: 35 100% 30%;
     --warning-foreground: 0 0% 100%;
     --destructive: 4 74% 48%;
     --destructive-foreground: 0 0% 100%;

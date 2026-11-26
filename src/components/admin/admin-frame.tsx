@@ -61,7 +61,7 @@ export function AdminFrame({
     >
       <Bell className="h-[18px] w-[18px]" />
       {Boolean(openAlerts) && (
-        <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1 text-[10px] font-bold text-white">
+        <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-brand px-1 text-[0.6875rem] font-bold text-white">
           {openAlerts! > 99 ? '99+' : openAlerts}
         </span>
       )}
@@ -84,7 +84,7 @@ export function AdminFrame({
           <div className="space-y-3 border-t border-border p-3">
             {isAdmin && (
               <div className="space-y-1.5">
-                <p className="px-1 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">View as</p>
+                <p className="px-1 text-[0.6875rem] font-bold uppercase tracking-wider text-muted-foreground">View as</p>
                 <RoleSwitch current="admin" />
               </div>
             )}
@@ -115,7 +115,7 @@ export function AdminFrame({
             <AdminNav readOnly={readOnly} xmEnabled={xmEnabled} hr={hr} badges={badges} />
             {isAdmin && (
               <div className="flex items-center gap-2 px-4 pb-3">
-                <span className="shrink-0 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">View as</span>
+                <span className="shrink-0 text-[0.6875rem] font-bold uppercase tracking-wider text-muted-foreground">View as</span>
                 <RoleSwitch current="admin" />
               </div>
             )}

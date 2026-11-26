@@ -199,7 +199,7 @@ function Side({
             <img src={photo} alt={alt} className="w-full rounded-lg border border-border" />
           </a>
         ) : (
-          <p className="text-[11px] leading-snug text-muted-foreground">
+          <p className="text-[0.6875rem] leading-snug text-muted-foreground">
             {path ? 'Photo deleted. Visit photos are kept for 14 days.' : noPhoto}
           </p>
         )}

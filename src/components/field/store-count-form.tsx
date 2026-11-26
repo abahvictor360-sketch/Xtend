@@ -485,7 +485,7 @@ function SheetRow({
         <span className="min-w-0 flex-1">
           <span className="block text-sm font-medium leading-snug">{product.name}</span>
           {product.barcode && (
-            <span className="block font-mono text-[11px] text-muted-foreground">{product.barcode}</span>
+            <span className="block font-mono text-[0.6875rem] text-muted-foreground">{product.barcode}</span>
           )}
         </span>
         {done ? (
@@ -534,7 +534,7 @@ function FigureFields({
   onChange: (field: keyof Figures, value: string) => void
 }) {
   const numberField = (field: 'back' | 'shop' | 'sold', title: string) => (
-    <label className="space-y-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+    <label className="space-y-1 text-[0.6875rem] font-semibold uppercase tracking-wide text-muted-foreground">
       <span className="block">{title}</span>
       <Input
         inputMode="numeric"
@@ -552,7 +552,7 @@ function FigureFields({
       <div className="grid grid-cols-3 gap-2">
         {numberField('back', 'Back store')}
         {numberField('shop', 'Shop floor')}
-        <div className="space-y-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="space-y-1 text-[0.6875rem] font-semibold uppercase tracking-wide text-muted-foreground">
           <span className="block">Total</span>
           <span className="flex h-11 items-center justify-center rounded-2xl bg-muted text-base font-bold tabular-nums text-foreground">
             {counted(figures) ? total(figures) : '–'}
@@ -561,7 +561,7 @@ function FigureFields({
       </div>
       <div className="grid grid-cols-2 gap-2">
         {numberField('sold', 'Sold')}
-        <label className="space-y-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <label className="space-y-1 text-[0.6875rem] font-semibold uppercase tracking-wide text-muted-foreground">
           <span className="block">Expiry date</span>
           <Input
             type="date"

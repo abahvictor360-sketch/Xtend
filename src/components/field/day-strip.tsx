@@ -57,11 +57,11 @@ export function DayStrip({
             )}
           >
             <span className="text-lg font-extrabold leading-none">{dayOfMonth(date)}</span>
-            <span className={cn('text-[10px] font-semibold', active ? 'text-white/80' : 'opacity-70')}>
+            <span className={cn('text-[0.6875rem] font-semibold', active ? 'text-white/80' : 'text-muted-foreground')}>
               {weekdayShort(date)}
             </span>
             {word ? (
-              <span className={cn('text-[9px] leading-none', active ? 'font-bold text-white' : WORD_CLASS[mark])}>{word}</span>
+              <span className={cn('text-[0.6875rem] leading-none', active ? 'font-bold text-white' : WORD_CLASS[mark])}>{word}</span>
             ) : (
               <span
                 className={cn(

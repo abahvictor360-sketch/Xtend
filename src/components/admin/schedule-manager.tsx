@@ -83,7 +83,7 @@ export function WeekToggles({
             onClick={() => onChange?.(cleanDays(active ? days.filter((d) => d !== w.dow) : [...days, w.dow]))}
             className={cn(
               'flex shrink-0 items-center justify-center rounded-full font-bold transition-colors disabled:cursor-default',
-              size === 'sm' ? 'h-7 w-7 text-[11px]' : 'h-9 w-9 text-xs',
+              size === 'sm' ? 'h-7 w-7 text-[0.6875rem]' : 'h-9 w-9 text-xs',
               active ? 'bg-brand text-primary-foreground' : 'bg-muted text-muted-foreground',
               onChange && !disabled && 'hover:ring-2 hover:ring-brand/40',
             )}
@@ -236,7 +236,7 @@ export function ScheduleManager({
               aria-selected={category === c.value}
               onClick={() => chooseCategory(c.value)}
               className={cn(
-                'flex-1 whitespace-nowrap rounded-xl px-2 py-2 text-[13px] font-semibold transition-colors sm:flex-none sm:px-4 sm:text-sm',
+                'flex-1 whitespace-nowrap rounded-xl px-2 py-2 text-[0.8125rem] font-semibold transition-colors sm:flex-none sm:px-4 sm:text-sm',
                 category === c.value ? 'bg-card text-foreground shadow-soft' : 'text-muted-foreground hover:text-foreground',
               )}
             >
@@ -351,7 +351,7 @@ export function ScheduleManager({
                     />
                     <span className="w-24 text-xs text-muted-foreground">
                       {patternText(draft)}
-                      {!p.days && !changed && <span className="block text-[10px]">usual week</span>}
+                      {!p.days && !changed && <span className="block text-[0.6875rem]">usual week</span>}
                     </span>
                     {changed && (
                       <span className="flex gap-1">

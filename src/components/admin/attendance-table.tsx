@@ -415,7 +415,7 @@ function EventDetail({
           // eslint-disable-next-line @next/next/no-img-element
           <img src={photo} alt={`${title} photo`} className="w-full rounded-lg border border-border" />
         ) : (
-          <p className="text-[11px] leading-snug text-muted-foreground">Photo deleted. Clock photos are kept for 14 days.</p>
+          <p className="text-[0.6875rem] leading-snug text-muted-foreground">Photo deleted. Clock photos are kept for 14 days.</p>
         )}
       </div>
       <dl className="grid min-w-0 flex-1 gap-x-4 gap-y-1 text-sm sm:grid-cols-2">
@@ -461,7 +461,7 @@ function EventDetail({
 function Fact({ label, value, wide }: { label: string; value: React.ReactNode; wide?: boolean }) {
   return (
     <div className={cn('min-w-0', wide && 'sm:col-span-2')}>
-      <dt className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dt className="text-[0.6875rem] uppercase tracking-wide text-muted-foreground">{label}</dt>
       <dd className="break-words">{value}</dd>
     </div>
   )

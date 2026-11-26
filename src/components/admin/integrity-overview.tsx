@@ -116,7 +116,7 @@ export function Trend({ days }: { days: DayCount[] }) {
           </div>
         ))}
       </div>
-      <div className="flex justify-between text-[11px] tabular-nums text-muted-foreground">
+      <div className="flex justify-between text-[0.6875rem] tabular-nums text-muted-foreground">
         <span>{days[0]?.date.slice(5)}</span>
         {days.length > 2 && <span>{days[Math.floor(days.length / 2)].date.slice(5)}</span>}
         <span>{days.at(-1)?.date.slice(5)}</span>

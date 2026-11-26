@@ -188,6 +188,16 @@ const FAQ: { q: string; a: React.ReactNode }[] = [
     ),
   },
   {
+    q: 'The writing is too small for me',
+    a: (
+      <>
+        Make the text bigger on your phone: on Android, <Ui>Settings</Ui>, <Ui>Display</Ui>, <Ui>Font size</Ui>; on
+        iPhone, <Ui>Settings</Ui>, <Ui>Display &amp; Brightness</Ui>, <Ui>Text Size</Ui>. Xtend uses that size the next time
+        you open it (needs the newest app on Android). You can also pinch to zoom.
+      </>
+    ),
+  },
+  {
     q: 'There is no signal in my store',
     a: (
       <>

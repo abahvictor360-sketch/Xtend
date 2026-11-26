@@ -11,7 +11,7 @@ export function DayBars({ month, byDay }: { month: string; byDay: Map<string, nu
         return (
           <div key={k} className="flex flex-1 flex-col items-center justify-end gap-1" title={`${k}: ${v}`}>
             <div className="w-full rounded-t bg-brand/80" style={{ height: `${(v / max) * 100}%`, minHeight: v ? 2 : 0 }} />
-            <span className="text-[9px] text-muted-foreground">{(i + 1) % 5 === 1 ? i + 1 : ''}</span>
+            <span className="text-[0.6875rem] text-muted-foreground">{(i + 1) % 5 === 1 ? i + 1 : ''}</span>
           </div>
         )
       })}

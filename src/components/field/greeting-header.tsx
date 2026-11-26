@@ -74,7 +74,7 @@ export function GreetingHeader({
           )}
         </button>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[15px] text-muted-foreground">Hi {firstName}</p>
+          <p className="truncate text-[0.9375rem] text-muted-foreground">Hi {firstName}</p>
           <p className="truncate text-base font-bold leading-tight">{subtitle}</p>
         </div>
         <Link

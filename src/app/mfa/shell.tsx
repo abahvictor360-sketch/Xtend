@@ -4,7 +4,7 @@ export function MfaShell({ title, intro, children }: { title: string; intro: str
     <main className="flex min-h-dvh flex-col">
       <div className="bg-brand px-6 pb-20 pt-14 text-white safe-top">
         <div className="mx-auto w-full max-w-sm">
-          <h1 className="text-[26px] font-extrabold leading-tight">{title}</h1>
+          <h1 className="text-[1.625rem] font-extrabold leading-tight">{title}</h1>
           <p className="mt-2 text-sm text-white/80">{intro}</p>
         </div>
       </div>

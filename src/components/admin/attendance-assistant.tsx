@@ -550,7 +550,7 @@ function ChatHistory({
       {problem && <p className="text-xs text-destructive">{problem}</p>}
       {groups.map((g) => (
         <div key={g.label}>
-          <p className="mb-1 text-[11px] font-semibold text-muted-foreground">{g.label}</p>
+          <p className="mb-1 text-[0.6875rem] font-semibold text-muted-foreground">{g.label}</p>
           <ul className="space-y-0.5">
             {g.items.map((c) => (
               <li key={c.id} className={cn('group rounded-lg', c.id === current ? 'bg-tint' : 'hover:bg-muted')}>
@@ -586,7 +586,7 @@ function ChatHistory({
                       className="min-w-0 flex-1 px-2 py-1.5 text-left"
                     >
                       <span className={cn('block truncate text-sm', c.id === current && 'font-semibold')}>{c.title}</span>
-                      <span className="block text-[11px] text-muted-foreground">
+                      <span className="block text-[0.6875rem] text-muted-foreground">
                         {formatLagos(c.updated_at)} · {Math.ceil(c.turn_count / 2)} question{c.turn_count > 2 ? 's' : ''}
                       </span>
                     </button>
@@ -643,7 +643,7 @@ function CopyButton({ text }: { text: string }) {
             setCopied(false)
           }
         }}
-        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-semibold text-muted-foreground hover:bg-tint hover:text-tint-foreground"
+        className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[0.6875rem] font-semibold text-muted-foreground hover:bg-tint hover:text-tint-foreground"
         aria-label="Copy this answer"
       >
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}

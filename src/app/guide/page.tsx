@@ -15,10 +15,10 @@ export default function GuidePage() {
       <div className="bg-brand px-6 pb-24 pt-14 text-white safe-top">
         <div className="mx-auto w-full max-w-3xl">
           <XpelTile />
-          <h1 className="mt-6 text-[32px] font-extrabold leading-tight tracking-tight sm:text-[40px]">
+          <h1 className="mt-6 text-[2rem] font-extrabold leading-tight tracking-tight sm:text-[2.5rem]">
             How to use Xtend
           </h1>
-          <p className="mt-2 max-w-md text-[15px] leading-relaxed text-white/85">
+          <p className="mt-2 max-w-md text-[0.9375rem] leading-relaxed text-white/85">
             Everything a merchandiser or marketer needs, from the first sign-in to the end of the
             day.
           </p>

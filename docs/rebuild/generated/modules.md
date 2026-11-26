@@ -1591,6 +1591,24 @@ The TECNO, Infinix and itel setup video, its length and where each step starts (
 
 Exports: `TECNO_VIDEO`
 
+## `src/lib/text-size.ts`
+
+Text follows the phone's text-size setting (2026-11-26, Apple's
+"Support larger text sizes"). Sizes in Xtend are in rem, so scaling the
+page's root size scales every text and the room around it together.
+
+iPhone and iPad (the app and Safari): the system body style
+(-apple-system-body) is 17 px at the standard setting and grows or shrinks
+with the setting, so the root size is 16 px times that over 17: unchanged
+at the standard setting, up to twice as large; never smaller, so text
+boxes stay at 16 px and the iPhone does not zoom in when one is tapped. Measured again whenever
+Xtend comes back to the screen. A browser that does not know the style
+(not WebKit) is left alone. Android is done in the app
+(MainActivity: the WebView's text zoom follows the font scale), and other
+browsers already follow their own setting.
+
+Exports: `rootSizeFor`, `TEXT_SIZE_SCRIPT`
+
 ## `src/lib/ttl-cache.ts`
 
 A small in-memory cache for work that is the same for many people: the

@@ -75,7 +75,7 @@ export function LiveAlertFeed({ initial }: { initial: AlertDetail[] }) {
                 </div>
                 <div className="shrink-0 text-right">
                   <p className="text-xs font-semibold tabular-nums">{formatLagos(alert.created_at, false)}</p>
-                  <p className="text-[11px] text-brand">Open</p>
+                  <p className="text-[0.6875rem] text-brand">Open</p>
                 </div>
               </li>
             ))}

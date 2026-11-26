@@ -151,7 +151,7 @@ export function AiSettings({
                         onChange={(e) => setFeature((x) => ({ ...x, [f.id]: { ...x[f.id], model: e.target.value } }))}
                         placeholder={providerInfo(sel.provider)?.defaultModel}
                       />
-                      <p className="text-[11px] text-muted-foreground">
+                      <p className="text-[0.6875rem] text-muted-foreground">
                         Suggested: {providerInfo(sel.provider)?.defaultModel}. Any model name the service offers works.
                       </p>
                     </div>
@@ -208,7 +208,7 @@ export function AiSettings({
                     <Badge variant="outline">Not added</Badge>
                   )}
                 </div>
-                {k && <p className="text-[11px] text-muted-foreground">Saved {formatLagos(k.updated_at)}</p>}
+                {k && <p className="text-[0.6875rem] text-muted-foreground">Saved {formatLagos(k.updated_at)}</p>}
                 <form
                   className="flex gap-2"
                   onSubmit={(e) => {

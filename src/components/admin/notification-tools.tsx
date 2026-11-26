@@ -76,12 +76,12 @@ export function ScheduledList({ items, now }: { items: ScheduledItem[]; now: str
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold">{s.title}</p>
                   <p className="truncate text-xs text-muted-foreground">{s.body}</p>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-[0.6875rem] text-muted-foreground">
                     {formatLagos(s.send_at)} · to {s.audienceText} ({s.people}){s.byName ? ` · by ${s.byName}` : ''}
                   </p>
-                  {s.status === 'failed' && s.error && <p className="text-[11px] text-destructive">{s.error}</p>}
+                  {s.status === 'failed' && s.error && <p className="text-[0.6875rem] text-destructive">{s.error}</p>}
                   {late && (
-                    <p className="text-[11px] text-destructive">
+                    <p className="text-[0.6875rem] text-destructive">
                       This should have gone by now. The five-minute job may not be running: send it now, and tell
                       whoever looks after the server.
                     </p>

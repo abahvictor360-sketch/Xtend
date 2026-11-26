@@ -443,6 +443,10 @@ Every exported UPPER_CASE constant in `src/lib`, with the comment above it. Thes
 
 - `TECNO_VIDEO` = `{ src: '/guide/xtend-tecno-setup.mp4', poster: '/guide/xtend-tecno-setup.jpg', seconds: 88, chapters: [ { "title": "Turn on Auto-start", "at": 16.3 }, { "title": "Lock Xtend in recent apps", "at": 40.6 }, { "title": "Tell Xtend you are done", "at": 64.9 } ], }` — The TECNO, Infinix and itel setup video, its length and where each step starts (seconds).
 
+## `src/lib/text-size.ts`
+
+- `TEXT_SIZE_SCRIPT` = `'(function(){try{` — Text follows the phone's text-size setting (2026-11-26, Apple's "Support larger text sizes"). Sizes in Xtend are in rem, so scaling the page's root size scales every text and the room around it together. iPhone and iPad (the app and Safari): the system body style (-apple-system-body) is 17 px at the standard setting and grows or shrinks with the setting, so the root size is 16 px times that over 17: unchanged at the standard setting, up to twice as large; never smaller, so text boxes stay at 16 px and the iPhone does not zoom in when one is tapped. Measured again whenever Xtend comes back to the screen. A browser that does not know the style (not WebKit) is left alone. Android is done in the app (MainActivity: the WebView's text zoom follows the font scale), and other browsers already follow their own setting. / The page's root size for a measured iOS body size (px). export function rootSizeFor(bodyPx: number): number | null { if (!(bodyPx > 0)) return null const ratio = Math.min(2, Math.max(1, bodyPx / 17)) return Math.round(16 * ratio * 100) / 100 } Runs in <head> before the page paints; kept small and dependency-free.
+
 ## `src/lib/turnstile.ts`
 
 - `TURNSTILE_VERIFY_URL` = `'https://challenges.cloudflare.com/turnstile/v0/siteverify'` — Cloudflare Turnstile: an optional "are you human?" check on the sign-in form, against bots trying passwords. It is on only when both keys are set (NEXT_PUBLIC_TURNSTILE_SITE_KEY for the form, TURNSTILE_SECRET_KEY for the server); without them sign-in works exactly as before. The widget runs in "managed" mode, so most people never see a puzzle. /

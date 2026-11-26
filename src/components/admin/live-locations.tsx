@@ -113,7 +113,7 @@ export function LiveLocations({ rows }: { rows: LiveLocation[] }) {
                       </span>
                     </p>
 
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-[0.6875rem] text-muted-foreground">
                       Clocked in {formatLagos(row.clocked_in_at, false)}
                       {' · '}
                       {row.last_ping_at ? (

@@ -239,7 +239,7 @@ function Entry({ row, flag }: { row: AuditEntry; flag?: { newDevice: boolean; ne
         {detail && (
           <div className="sm:col-span-2">
             <p className="font-semibold text-muted-foreground">Detail</p>
-            <pre className="mt-1 max-h-60 overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 font-mono text-[11px]">
+            <pre className="mt-1 max-h-60 overflow-auto whitespace-pre-wrap break-all rounded bg-muted p-2 font-mono text-[0.6875rem]">
               {JSON.stringify(row.meta, null, 2)}
             </pre>
           </div>
@@ -253,7 +253,7 @@ function Fact({ k, v, mono }: { k: string; v: string | null | undefined; mono?: 
   return (
     <p className="min-w-0 break-words">
       <span className="font-semibold text-muted-foreground">{k}: </span>
-      <span className={mono ? 'font-mono text-[11px]' : ''}>{v ?? '—'}</span>
+      <span className={mono ? 'font-mono text-[0.6875rem]' : ''}>{v ?? '—'}</span>
     </p>
   )
 }
