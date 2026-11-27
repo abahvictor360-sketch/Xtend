@@ -2329,6 +2329,18 @@ reached from the home week row, History ("Your month") and You.
   than breaking the app. See `load-test/` for the k6 script that finds the
   ceiling.
 
+### 13.3a Loading only what is needed (2026-11-27)
+
+ClockPanel loads the camera (`CameraCapture`) and its pop-ups (`GuideSheet`,
+`StartStoreSheet`, `OffSiteSheet`, `TooEarlySheet`) with `next/dynamic`
+(`ssr: false`), renders each only while it is open, and calls
+`preloadClockParts()` once on mount (requestIdleCallback, 4 s timeout, else
+1.5 s) so they are fetched in the background and cached by the service
+worker; the field layout shows "name this place" through `NamePlaceLazy`.
+Background timers (clock notices 5 s, network 10 s, outbox 15 s, report
+files 5 s) use `everyWhileVisible`; the setup card's 3 s re-check uses
+`whenVisible`.
+
 ### 13.4 Native shift tracker (`shift-tracker.tsx`, `src/lib/native.ts`, `mobile/`)
 
 - Only inside the native app with the `ShiftTracker` plugin; renders nothing

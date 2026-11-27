@@ -5,12 +5,14 @@ import { FieldNav } from '@/components/field/field-nav'
 import { PhoneBeacon } from '@/components/field/phone-beacon'
 import { NativeBridge } from '@/components/native-bridge'
 import { ActivityPing } from '@/components/activity-ping'
-import { NamePlace, type PlaceDue } from '@/components/field/name-place'
+import type { PlaceDue } from '@/components/field/name-place'
+import { NamePlaceLazy } from '@/components/field/name-place-lazy'
 import { getCountStatus } from '@/lib/store-count-status'
 import { readXmFeatures } from '@/lib/metrics/features-server'
 import { getActingRole } from '@/lib/acting'
 import { RoleSwitchBar } from '@/components/field/role-switch-bar'
 import { ReconfirmDialog } from '@/components/reconfirm'
+import { myOutlets } from '@/lib/my-outlets'
 
 export const dynamic = 'force-dynamic'
 
@@ -40,7 +42,7 @@ export default async function FieldLayout({ children }: { children: React.ReactN
   // The Count tab only appears while a count is due: asked for, or month end.
   const [countStatus, { data: myStores }, { data: xmStores }, { data: placeDue }, xmFeatures] = await Promise.all([
     getCountStatus(supabase),
-    supabase.rpc('my_outlets'),
+    myOutlets(supabase),
     // X Metrics (043): the tab shows once one of their stores is in it.
     supabase.from('xm_stores').select('outlet_id').eq('is_active', true),
     // A place they must name before going on (045). Undefined before the
@@ -60,7 +62,7 @@ export default async function FieldLayout({ children }: { children: React.ReactN
           {isAdmin && <RoleSwitchBar acting={acting} />}
           {due && (
             <div className="mb-4">
-              <NamePlace due={due} />
+              <NamePlaceLazy due={due} />
             </div>
           )}
           {children}

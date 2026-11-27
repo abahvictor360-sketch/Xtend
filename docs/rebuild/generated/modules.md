@@ -563,6 +563,14 @@ not a determined spoofer.
 
 Exports: `deviceInfo`
 
+## `src/lib/distance.ts`
+
+Metres between two points on the Earth (haversine). The one copy in
+Xtend (2026-11-27: there were four); used in the browser and on the
+server. Display and checks only: the database measures the real distance.
+
+Exports: `haversineMetres`
+
 ## `src/lib/excuse-server.ts`
 
 Gathers the evidence for a window and judges the claim. The extra
@@ -750,7 +758,7 @@ Exports: `STAFF_GUIDE_TEXT`
 
 A fix worse than this is not evidence of anything.
 
-Exports: `ACCURACY_CEILING_M`, `HEARTBEAT_INTERVAL_MS`, `HEARTBEAT_GEOFENCE_M`, `GeoBlockReason`, `Fix`, `GeoBlocked`, `readPosition`, `LocationProbe`, `probeLocation`, `FixOptions`, `SampledFix`, `combineFixes`, `fixesAgree`, `NATIVE_FIRST_WAIT_MS`, `bestFix`, `requireFix`, `followPosition`, `positionCheck`, `haversineMetres`
+Exports: `ACCURACY_CEILING_M`, `HEARTBEAT_INTERVAL_MS`, `HEARTBEAT_GEOFENCE_M`, `GeoBlockReason`, `Fix`, `GeoBlocked`, `readPosition`, `LocationProbe`, `probeLocation`, `FixOptions`, `SampledFix`, `combineFixes`, `fixesAgree`, `NATIVE_FIRST_WAIT_MS`, `bestFix`, `requireFix`, `followPosition`, `positionCheck`
 
 ## `src/lib/geocode.ts`
 
@@ -1032,6 +1040,15 @@ away from their store, and the longest stretch Xtend heard nothing.
 Plain functions, used on the server and in the browser alike.
 
 Exports: `PointKind`, `TrailPoint`, `TrailStore`, `Trail`, `ROUGH_M`, `GAP_MINUTES`, `KIND_LABEL`, `metresBetween`, `storeAt`, `TrailSummary`, `summarise`, `duration`, `STOP_RADIUS_M`, `STOP_MINUTES`, `JUMP_KMH`, `StopLeg`, `MoveLeg`, `GapLeg`, `Leg`, `Jump`, `Journey`, `mergeTrails`, `journey`
+
+## `src/lib/my-outlets.ts`
+
+The signed-in person's own stores (home and allocated), read once per
+request (2026-11-27): the staff app's frame and the page inside it both
+need them, and asked the database twice on every page load. React's
+cache() shares the answer within one request only, so it is never stale.
+
+Exports: `myOutlets`, `xmSettingsOnce`
 
 ## `src/lib/native.ts`
 
@@ -1706,6 +1723,16 @@ Africa/Lagos is the timezone of record for every human-facing timestamp.
 
 Exports: `cn`, `TZ`, `formatLagos`, `lagosDateString`, `metres`, `addDays`, `dayOfMonth`, `weekdayShort`, `monthLabel`, `longDate`
 
+## `src/lib/visible.ts`
+
+For timers that only matter while someone is looking (2026-11-27): the
+tick is skipped while the app is in the background, so a phone in a
+pocket is not woken every few seconds to read storage for nothing. Each
+timer still runs straight away when the app comes back (its own focus,
+online or visibility handler, or its next tick).
+
+Exports: `onScreen`, `whenVisible`, `everyWhileVisible`
+
 ## `src/lib/visit-leave.ts`
 
 "Check out before you leave" (2026-11-26): the phone's tracker is told
@@ -2322,9 +2349,9 @@ Exports: `CLOCK_OUT_EVENT`, `startClockOut`, `ClockOutPrompt`
 
 ## `src/components/field/clock-panel.tsx`
 
-Older than this and the fix is read again before it is submitted.
+Fetches the camera and pop-ups once the page is idle, so they open at once and offline.
 
-Exports: `PICK_START_STORE_EVENT`, `ClockPanel`
+Exports: `preloadClockParts`, `PICK_START_STORE_EVENT`, `ClockPanel`
 
 ## `src/components/field/count-due-banner.tsx`
 
@@ -2411,6 +2438,14 @@ Exports: `PermissionState`, `useLocationPermission`, `LocationHelp`
 A reminder on the home screen while there are unread messages (0073).
 
 Exports: `MessagesBanner`
+
+## `src/components/field/name-place-lazy.tsx`
+
+"Name this place" (045) is shown only now and then, but it carries the
+camera and form checks: loaded when it is needed (2026-11-27), not with
+every page of the staff app.
+
+Exports: `NamePlaceLazy`
 
 ## `src/components/field/name-place.tsx`
 

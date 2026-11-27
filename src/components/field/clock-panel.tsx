@@ -2,21 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import { AlertTriangle, Camera, CheckCircle2, CloudUpload, LogIn, LogOut } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { NotificationGate } from '@/components/field/notification-gate'
 import { usePush } from '@/components/field/use-push'
-import { CameraCapture } from '@/components/field/camera-capture'
 import { CLOCK_OUT_EVENT } from '@/components/field/clock-out-prompt'
 import { useLocationPermission } from '@/components/field/location-help'
 import { LocationGate } from '@/components/field/location-gate'
 import { BackgroundGate, useBackgroundNeeds } from '@/components/field/background-gate'
 import { Alert } from '@/components/ui/alert'
-import { GuideSheet } from '@/components/field/guide-sheet'
 import { currentNetwork, isNetworkError, problemFromGeo, problemFromMessage, type GuideProblem } from '@/lib/field-guide'
-import { StartStoreSheet, type StartStore } from '@/components/field/start-store-sheet'
-import { OffSiteSheet } from '@/components/field/off-site-sheet'
-import { TooEarlySheet } from '@/components/field/too-early-sheet'
+import type { StartStore } from '@/components/field/start-store-sheet'
 import { tooEarlyFromServer, tooEarlyToClockOut } from '@/lib/clock-out-time'
 import { googleSaysAtStore } from '@/lib/site-check'
 import { matchStartStore, nearestStore } from '@/lib/start-store-match'
@@ -40,6 +37,34 @@ import { takeClockNotices } from '@/lib/clock-notices'
 import { supabase } from '@/lib/supabase/client'
 import { formatLagos, metres } from '@/lib/utils'
 import type { AttendanceType, DayState } from '@/lib/types'
+import { everyWhileVisible } from '@/lib/visible'
+
+/*
+ * Opened only when needed (2026-11-27): the camera and the pop-ups are not
+ * part of the page's first download, which matters on a weak network. Each
+ * is fetched in the background as soon as the page is idle (preloadClockParts),
+ * and the service worker keeps it, so the camera still opens offline later.
+ */
+const loadCamera = () => import('@/components/field/camera-capture').then((m) => m.CameraCapture)
+const loadGuide = () => import('@/components/field/guide-sheet').then((m) => m.GuideSheet)
+const loadStartStore = () => import('@/components/field/start-store-sheet').then((m) => m.StartStoreSheet)
+const loadOffSite = () => import('@/components/field/off-site-sheet').then((m) => m.OffSiteSheet)
+const loadTooEarly = () => import('@/components/field/too-early-sheet').then((m) => m.TooEarlySheet)
+const CameraCapture = dynamic(loadCamera, { ssr: false })
+const GuideSheet = dynamic(loadGuide, { ssr: false })
+const StartStoreSheet = dynamic(loadStartStore, { ssr: false })
+const OffSiteSheet = dynamic(loadOffSite, { ssr: false })
+const TooEarlySheet = dynamic(loadTooEarly, { ssr: false })
+
+/** Fetches the camera and pop-ups once the page is idle, so they open at once and offline. */
+export function preloadClockParts() {
+  const run = () => {
+    for (const load of [loadCamera, loadGuide, loadStartStore, loadOffSite, loadTooEarly]) void load().catch(() => {})
+  }
+  const w = window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }
+  if (w.requestIdleCallback) w.requestIdleCallback(run, { timeout: 4000 })
+  else window.setTimeout(run, 1500)
+}
 
 /** Older than this and the fix is read again before it is submitted. */
 const STALE_FIX_MS = 90_000
@@ -208,6 +233,8 @@ export function ClockPanel({
   // Clock-ins and clock-outs made with no signal that the server then
   // refused: told here, since the saved copy has been deleted by then.
   const [notices, setNotices] = useState<string[]>([])
+  // The camera and pop-ups, fetched once the page is idle.
+  useEffect(() => preloadClockParts(), [])
   useEffect(() => {
     const check = () => {
       const fresh = takeClockNotices(noticeStore())
@@ -215,10 +242,10 @@ export function ClockPanel({
     }
     check()
     window.addEventListener('online', check)
-    const timer = window.setInterval(check, 5000)
+    const stop = everyWhileVisible(check, 5000)
     return () => {
       window.removeEventListener('online', check)
-      window.clearInterval(timer)
+      stop()
     }
   }, [])
   // Set after a clock-out: the day's login is over.
@@ -631,6 +658,7 @@ export function ClockPanel({
       ))}
 
       {error && <Alert variant="destructive">{error}</Alert>}
+      {guide && (
       <GuideSheet
         problem={guide}
         task={(guideRetry ?? nextType) === 'closing' ? 'clock out' : 'clock in'}
@@ -638,6 +666,8 @@ export function ClockPanel({
         onRetry={guideRetry ? () => (guideRetry === 'opening' && startStores ? void beginClockIn() : void start(guideRetry)) : undefined}
         onPickStore={startStores ? () => setPicking(true) : undefined}
       />
+      )}
+      {tooEarly && (
       <TooEarlySheet
         opensAt={tooEarly}
         canVisitStores={canVisitStores}
@@ -645,12 +675,15 @@ export function ClockPanel({
         onStoreWork={onStoreWork}
         onClose={() => setTooEarly(null)}
       />
+      )}
+      {offSite && (
       <OffSiteSheet
         offSite={offSite}
         task="clock in"
         onClose={() => setOffSite(null)}
         onRetry={() => (startStores ? void beginClockIn() : void start('opening'))}
       />
+      )}
       {picking && startStores && (
         <StartStoreSheet
           stores={startStores}
@@ -708,8 +741,9 @@ export function ClockPanel({
 
       {/* The selfie is mandatory and is taken in-app. There is no file
           input in this flow, so a gallery photo cannot be submitted. */}
+      {opening !== null && (
       <CameraCapture
-        open={opening !== null}
+        open
         title={opening === 'closing' ? 'Clock out selfie' : startStoreName ? `Clock in at ${startStoreName}` : 'Clock in selfie'}
         subtitle={pending ? (pending.place.label ?? null) : 'Getting your location…'}
         shutterHeld={pending === null}
@@ -721,6 +755,7 @@ export function ClockPanel({
         }}
         locate
       />
+      )}
 
       {nextType && locationGate.status === 'blocked' ? (
         <LocationGate

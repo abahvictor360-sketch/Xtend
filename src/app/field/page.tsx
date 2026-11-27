@@ -12,6 +12,7 @@ import type { VisitOutlet, VisitRow } from '@/components/field/store-visits'
 import type { CalendarDay } from '@/lib/schedule'
 import { addDays, lagosDateString } from '@/lib/utils'
 import { getActingRole } from '@/lib/acting'
+import { myOutlets } from '@/lib/my-outlets'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Clock — Xtend' }
@@ -52,7 +53,7 @@ export default async function FieldPage() {
     // Missing function (0086 not run): nothing extra.
     supabase.rpc('my_open_store_visits'),
     // Their own stores (home and allocated): a marketer starts the day at one (0101).
-    supabase.rpc('my_outlets'),
+    myOutlets(supabase),
     // No clocking out before their time (0109); missing (not run): not held back.
     supabase.rpc('early_clock_out_blocked'),
   ])

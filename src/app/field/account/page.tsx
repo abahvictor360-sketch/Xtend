@@ -16,6 +16,7 @@ import { getCountStatus } from '@/lib/store-count-status'
 import { countMonth } from '@/lib/count-sheet'
 import { countSheetStatus } from '@/lib/report-files'
 import { QuickSignInSettings } from '@/components/quick-sign-in-settings'
+import { myOutlets } from '@/lib/my-outlets'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Your account — Xtend' }
@@ -69,7 +70,7 @@ export default async function AccountPage() {
   const sheet =
     countStatus.reason !== 'not_allowed' && businessDate
       ? await Promise.all([
-          supabase.rpc('my_outlets'),
+          myOutlets(supabase),
           supabase
             .from('store_count_sheet_detail')
             .select('id, outlet_name, file_name, created_at, request_id, count_was_due')

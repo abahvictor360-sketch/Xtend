@@ -4,6 +4,7 @@
  * away from their store, and the longest stretch Xtend heard nothing.
  * Plain functions, used on the server and in the browser alike.
  */
+import { haversineMetres } from '@/lib/distance'
 
 export type PointKind =
   | 'clock_in'
@@ -55,14 +56,7 @@ export const KIND_LABEL: Record<PointKind, string> = {
   app: 'Phone reported in',
 }
 
-export function metresBetween(aLat: number, aLng: number, bLat: number, bLng: number) {
-  const rad = Math.PI / 180
-  const dLat = (bLat - aLat) * rad
-  const dLng = (bLng - aLng) * rad
-  const h =
-    Math.sin(dLat / 2) ** 2 + Math.cos(aLat * rad) * Math.cos(bLat * rad) * Math.sin(dLng / 2) ** 2
-  return 2 * 6371000 * Math.asin(Math.sqrt(h))
-}
+export const metresBetween = haversineMetres
 
 /** The store a point is inside, if any. */
 export function storeAt(point: { lat: number; lng: number }, stores: TrailStore[]) {

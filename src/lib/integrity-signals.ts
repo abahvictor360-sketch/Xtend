@@ -1,5 +1,6 @@
 import 'server-only'
 import { lookupIp, type IpGeo } from '@/lib/ip-geo'
+import { haversineMetres } from '@/lib/distance'
 
 /**
  * The manipulation checks that need more than the GPS columns: the request
@@ -45,14 +46,7 @@ export interface EvaluateResult {
 
 /** Great-circle distance in km. */
 function distanceKm(lat1: number, lng1: number, lat2: number, lng2: number) {
-  const R = 6371
-  const toRad = (v: number) => (v * Math.PI) / 180
-  const dLat = toRad(lat2 - lat1)
-  const dLng = toRad(lng2 - lng1)
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
-  return 2 * R * Math.asin(Math.sqrt(a))
+  return haversineMetres(lat1, lng1, lat2, lng2) / 1000
 }
 
 // A carrier or ISP IP can legitimately sit this far from the handset; beyond

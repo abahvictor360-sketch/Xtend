@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ExportRow, Sheet } from '@/lib/export/render'
 import { formatLagos } from '@/lib/utils'
+import { haversineMetres } from '@/lib/distance'
 
 /**
  * The audit log as the Audit log page and its export read it: who did
@@ -160,9 +161,7 @@ const deviceKey = (e: AuditEntry) =>
 
 /** Great-circle distance in km. */
 export function km(aLat: number, aLng: number, bLat: number, bLng: number) {
-  const r = (d: number) => (d * Math.PI) / 180
-  const h = Math.sin(r(bLat - aLat) / 2) ** 2 + Math.cos(r(aLat)) * Math.cos(r(bLat)) * Math.sin(r(bLng - aLng) / 2) ** 2
-  return 12_742 * Math.asin(Math.sqrt(h))
+  return haversineMetres(aLat, aLng, bLat, bLng) / 1000
 }
 
 /** How far from all their earlier spots counts as somewhere new. */

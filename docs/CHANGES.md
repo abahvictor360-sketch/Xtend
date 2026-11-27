@@ -83,6 +83,26 @@ the live database, so it cannot tell which of these are already done.)
 
 ## 2026-11-27
 
+### Faster and lighter: less repeated work, smarter caching, less battery (no migration)
+- **What was done:** (1) the staff app asked the database for the person's
+  stores twice on every page, and the X Metrics switches twice; now once
+  per page load. (2) The phone tracker's uploads, the health check and
+  signed-out pages no longer make a needless call to Supabase's sign-in
+  service on every request. (3) A clock-in answers the phone sooner: its
+  checks are saved together, and the alerts to supervisors go out just
+  after the phone has its answer. (4) The staff Home page downloads less
+  at first: the camera and pop-ups load in the background right after the
+  page shows (and are kept for offline), and "name this place" loads only
+  when it is needed. (5) Background checks that ran every 3 to 15 seconds
+  (waiting uploads, network, notices, the setup card) now pause while the
+  app is in the background, so a phone in a pocket is not woken for
+  nothing; they run at once when the app is opened again. (6) Four copies
+  of the same distance calculation became one.
+- **The impact:** pages and clock-ins respond a little faster, especially
+  on weak networks; less load on the server and Supabase; less battery
+  used on staff phones. Nothing looks different.
+- **What you need to do:** redeploy. No migration, no app build.
+
 ### Problems are caught, recorded and shown on System; Xtend keeps working (migration 0117)
 - **What was done:** every fault is now caught and handled the same way:
   written to the server log (without passwords or keys) and recorded on a

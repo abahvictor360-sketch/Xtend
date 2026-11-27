@@ -5,6 +5,7 @@ import { CloudUpload, WifiOff } from 'lucide-react'
 import { listOutbox } from '@/lib/offline/db'
 import { flushOutbox } from '@/lib/offline/sync'
 import { Button } from '@/components/ui/button'
+import { everyWhileVisible } from '@/lib/visible'
 
 /** Shows what is still sitting on the phone, and drains it on reconnect. */
 export function OutboxBanner({ onFlushed }: { onFlushed?: () => void }) {
@@ -47,11 +48,11 @@ export function OutboxBanner({ onFlushed }: { onFlushed?: () => void }) {
     window.addEventListener('offline', goOffline)
     if (navigator.onLine) void flush()
 
-    const timer = setInterval(refresh, 15000)
+    const stop = everyWhileVisible(refresh, 15000)
     return () => {
       window.removeEventListener('online', goOnline)
       window.removeEventListener('offline', goOffline)
-      clearInterval(timer)
+      stop()
     }
   }, [flush, refresh])
 
