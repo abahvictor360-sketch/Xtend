@@ -27,23 +27,20 @@ the live database, so it cannot tell which of these are already done.)
    alter table public.clock_out_reminders drop constraint if exists clock_out_reminders_stage_check;
    alter table public.clock_out_reminders add constraint clock_out_reminders_stage_check check (stage in (1, 2, 3, 4));
    ```
-5. **Scheduled jobs on the new server**: check that the alerts job (every 5
-   minutes) and the two nightly jobs run with the right `CRON_SECRET`. When
-   the nightly job does not run, old photos are not deleted on time and
-   forgotten store check-ins were not closed (0086 now covers the second).
-6. **iPhone app on TestFlight**: the Android app is published by itself on
+5. **iPhone app on TestFlight**: the Android app is published by itself on
    the download page after each merge (signed). The iPhone app is built but
    not uploaded until the App Store keys are set as repository secrets
    (`APPSTORE_API_KEY_P8`, `APPSTORE_KEY_ID`, `APPSTORE_ISSUER_ID`,
    `APPLE_TEAM_ID`; see `mobile/README.md`, "iPhone app on TestFlight").
-7. **Add `SITE_URL=https://www.withxtend.com`** to the environment in
+6. **Add `SITE_URL=https://www.withxtend.com`** to the environment in
    Dokploy (no rebuild), so the server always knows its real address.
-8. **Try fingerprint sign-in on one Android phone and one iPhone** before
+7. **Try fingerprint sign-in on one Android phone and one iPhone** before
    telling all staff (it could not be tested on a real phone here). Sign in
    with the password in the new app, tap **Use my fingerprint**, sign out,
    then tap **Sign in with fingerprint**.
 
-Done: every migration up to `0117_error_log.sql` (you confirmed on
+Done: the scheduled jobs are set up in Dokploy (you confirmed on
+2026-11-27); every migration up to `0117_error_log.sql` (you confirmed on
 2026-11-27; 0093 on 2026-11-18, 0099 to 0102 on 2026-11-24), and the
 Android signing secrets (the app builds are signed, so updates install over
 the old app).
@@ -61,6 +58,18 @@ the old app).
   store check-ins, forced app updates and System → Problems.
 - **What you need to do:** nothing for this. The rest of "Waiting on you"
   still stands.
+
+### Scheduled jobs set up (no code change)
+- **What was done:** you added the three scheduled jobs in Dokploy (the
+  five-minute alerts, the morning no-show check and the night clean-up), so
+  "Waiting on you" no longer lists them.
+- **The impact:** reminders, supervisor alerts and clean-ups run on time on
+  the new server. If the GitHub copy of the alerts job is still on, set the
+  repository variable `JOBS_ON_VPS` to `true` so it does not run twice.
+- **What you need to do:** after about 10 minutes, open **System →
+  Problems**: **Five-minute alerts and reminders** should say **Running**.
+  The two daily jobs show **Running** after their first run (09:30 and
+  03:20 Lagos time). Tell me if any says **Has not run on time**.
 
 ### Faster and lighter: less repeated work, smarter caching, less battery (no migration)
 - **What was done:** (1) the staff app asked the database for the person's
