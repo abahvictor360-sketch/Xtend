@@ -69,7 +69,7 @@ check(/xt-start-ask-/.test(panel) && /readyToAsk/.test(panel), 'opening Xtend be
 check(/setGuide\(why\)/.test(panel), 'clock-in refusals are explained step by step')
 const sheet = read('src/components/field/start-store-sheet.tsx')
 check(/today does not count/.test(sheet) && /Google Maps link/.test(sheet) && /Message the admin/.test(sheet), 'the picker says the day only counts from a store, and what to do with no stores')
-check(/my_outlets/.test(read('src/app/field/page.tsx')), 'the picker lists their own stores (home and allocated)')
+check(/myOutlets\(supabase\)/.test(read('src/app/field/page.tsx')) && /rpc\('my_outlets'\)/.test(read('src/lib/my-outlets.ts')), 'the picker lists their own stores (home and allocated)')
 
 // 0116: the clock-in selfie is the check-in photo too.
 {

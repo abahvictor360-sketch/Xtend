@@ -1,6 +1,7 @@
 'use client'
 
 import { getNativeFix } from '@/lib/native'
+import { haversineMetres } from '@/lib/distance'
 
 /** A fix worse than this is not evidence of anything. */
 export const ACCURACY_CEILING_M = 100
@@ -413,13 +414,4 @@ export function positionCheck(first: Fix | SampledFix, shutter: SampledFix | nul
 }
 
 /** Display only. The authoritative distance is computed by the database. */
-export function haversineMetres(lat1: number, lng1: number, lat2: number, lng2: number) {
-  const R = 6371000
-  const toRad = (v: number) => (v * Math.PI) / 180
-  const dLat = toRad(lat2 - lat1)
-  const dLng = toRad(lng2 - lng1)
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
-  return 2 * R * Math.asin(Math.sqrt(a))
-}
+export { haversineMetres }

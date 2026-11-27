@@ -13,6 +13,7 @@ import {
 } from '@/lib/report-files'
 import { newClientId, savedFileView, takeRemovalNotices } from '@/lib/report-file-queue'
 import { PermanentJobError, flushOutbox, noticeStore, queuedRemovals, submitOrQueue } from '@/lib/offline/sync'
+import { everyWhileVisible } from '@/lib/visible'
 
 /** A document already on today's report. */
 export interface SavedReportFile {
@@ -146,10 +147,10 @@ export function ReportFiles({
     }
     window.addEventListener('online', onOnline)
     if (navigator.onLine) onOnline()
-    const timer = setInterval(() => void check(), 5000)
+    const stop = everyWhileVisible(() => void check(), 5000)
     return () => {
       window.removeEventListener('online', onOnline)
-      clearInterval(timer)
+      stop()
     }
   }, [check])
 

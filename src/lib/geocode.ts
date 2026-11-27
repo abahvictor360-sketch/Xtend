@@ -5,6 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { MAP_HOSTS } from '@/lib/map-link'
 import type { GoogleStoreAnswer } from '@/lib/store-check'
+import { haversineMetres } from '@/lib/distance'
 import {
   join,
   parseLimit,
@@ -601,7 +602,7 @@ export async function placeFromLink(
         const pLat = p.location?.latitude
         const pLng = p.location?.longitude
         if (typeof pLat !== 'number' || typeof pLng !== 'number') continue
-        const d = metresApart(lat, lng, pLat, pLng)
+        const d = haversineMetres(lat, lng, pLat, pLng)
         if (d > 300 || (best && best.d <= d)) continue
         best = { d, name: p.displayName?.text ?? null, address: p.formattedAddress ?? null, lat: pLat, lng: pLng }
       }
@@ -615,13 +616,6 @@ export async function placeFromLink(
   return place ? { name: place.name, address: place.address, lat, lng } : null
 }
 
-function metresApart(aLat: number, aLng: number, bLat: number, bLng: number) {
-  const rad = Math.PI / 180
-  const dLat = (bLat - aLat) * rad
-  const dLng = (bLng - aLng) * rad
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(aLat * rad) * Math.cos(bLat * rad) * Math.sin(dLng / 2) ** 2
-  return 2 * 6371000 * Math.asin(Math.sqrt(h))
-}
 
 /**
  * Where Google puts a store, asked two ways (migration 0114): Places for its

@@ -21,6 +21,7 @@
  */
 
 import { DEFAULT_GOOGLE_MONTHLY_LOOKUP_LIMIT } from '@/lib/usage-limits'
+import { haversineMetres } from '@/lib/distance'
 
 export type PlaceSource = 'outlet' | 'known' | 'google' | 'osm' | 'coordinates'
 
@@ -96,16 +97,7 @@ export function join(name: string | null, address: string | null, fallback: stri
   return name ?? address ?? fallback
 }
 
-export function metresBetween(lat1: number, lng1: number, lat2: number, lng2: number) {
-  const R = 6371000
-  const toRad = (v: number) => (v * Math.PI) / 180
-  const dLat = toRad(lat2 - lat1)
-  const dLng = toRad(lng2 - lng1)
-  const a =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
-  return 2 * R * Math.asin(Math.sqrt(a))
-}
+export const metresBetween = haversineMetres
 
 const coordinates = (lat: number, lng: number) => `${lat.toFixed(5)}, ${lng.toFixed(5)}`
 

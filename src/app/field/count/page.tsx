@@ -8,6 +8,7 @@ import { Alert } from '@/components/ui/alert'
 import { getCountStatus } from '@/lib/store-count-status'
 import { longDate } from '@/lib/utils'
 import { countMonth } from '@/lib/count-sheet'
+import { myOutlets } from '@/lib/my-outlets'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Stock count — Xtend' }
@@ -37,7 +38,7 @@ export default async function StoreCountPage() {
   // counted so far, for suggestions when adding one not on the sheet.
   const [{ data: outlets }, { data: mine }, { data: sheetProducts }, { data: names }, { data: sheets }, { count: templates }] =
     await Promise.all([
-      supabase.rpc('my_outlets'),
+      myOutlets(supabase),
       supabase
         .from('store_count_detail')
         .select('outlet_id, product_name, back_store, shop_floor, in_store, sold, expiry_date')

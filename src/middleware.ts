@@ -93,9 +93,10 @@ async function route(request: NextRequest): Promise<NextResponse> {
     },
   )
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  // Asking Supabase who this is costs a round trip. Without a sign-in cookie
+  // the answer is always nobody (the phone tracker's uploads, the health
+  // check, signed-out pages), so it is not asked (2026-11-27).
+  const user = hasSignInCookie(request) ? (await supabase.auth.getUser()).data.user : null
 
   if (user && request.headers.get(BACKGROUND_HEADER) !== '1') {
     response.cookies.set(LAST_SEEN_COOKIE, String(Date.now()), {
@@ -131,6 +132,11 @@ async function route(request: NextRequest): Promise<NextResponse> {
   }
 
   return response
+}
+
+/** Supabase's session cookie (sb-<project>-auth-token, possibly split into .0, .1…). */
+function hasSignInCookie(request: NextRequest) {
+  return request.cookies.getAll().some((c) => c.name.startsWith('sb-') && c.name.includes('-auth-token'))
 }
 
 export const config = {

@@ -4,6 +4,7 @@
  * excuse page and Ask Xtend, so both say the same thing.
  */
 import { formatLagos, metres } from '@/lib/utils'
+import { haversineMetres } from '@/lib/distance'
 
 export type Claim = 'no_network' | 'phone_off' | 'gps_failed' | 'at_store' | 'app_failed'
 
@@ -125,13 +126,7 @@ const time = (t: string) => formatLagos(t, false)
 
 function distance(a: Reading | null, b: Reading | null) {
   if (!a || !b || a.lat == null || a.lng == null || b.lat == null || b.lng == null) return null
-  const rad = Math.PI / 180
-  const dLat = (b.lat - a.lat) * rad
-  const dLng = (b.lng - a.lng) * rad
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLng / 2) ** 2
-  return 2 * 6371000 * Math.asin(Math.sqrt(h))
+  return haversineMetres(a.lat, a.lng, b.lat, b.lng)
 }
 
 function describeContact(c: Contact) {

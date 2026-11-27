@@ -8,6 +8,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { askAlwaysLocation, hasShiftTracker, openAutoStart, openBatterySettings, shiftTrackerState } from '@/lib/native'
 import { backgroundNeeds, strictMaker, type BackgroundNeeds, type BackgroundState } from '@/lib/background-gate'
 import { TECNO_VIDEO } from '@/lib/tecno-video'
+import { whenVisible } from '@/lib/visible'
 
 const CONFIRM_KEY = 'xtend-battery-confirmed'
 /** TECNO, Infinix, itel: Auto-start and the lock confirmed on this phone (kept until the app is reinstalled). */
@@ -74,7 +75,7 @@ export function useBackgroundNeeds() {
   const needs = backgroundNeeds(state, { batteryConfirmed, makerConfirmed })
   useEffect(() => {
     if (!needs.blocked) return
-    const timer = window.setInterval(() => void recheck(), 3000)
+    const timer = window.setInterval(whenVisible(() => void recheck()), 3000)
     return () => window.clearInterval(timer)
   }, [needs.blocked, recheck])
 

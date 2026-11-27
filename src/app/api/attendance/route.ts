@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { after } from 'next/server'
 import { offSiteRefusal, tooEarlyRefusal } from '@/lib/off-site-refusal'
 import { createServerSupabase } from '@/lib/supabase/server'
 import { apiError, requireApiSession, FIELD_ROLES, dbErrorMessage, PAUSED_MESSAGE } from '@/lib/auth'
@@ -128,7 +129,9 @@ export async function POST(request: Request) {
           ? ` at ${input.address.split(',').slice(0, 2).join(',')}`
           : ''
 
-      await notifyWatchers({
+      // Sent right after the phone has its answer (2026-11-27): the
+      // clock-in does not wait for the push service.
+      const alert = {
         subjectId: session.userId,
         title:
           data.status === 'off_site'
@@ -140,7 +143,8 @@ export async function POST(request: Request) {
             : `Location could not be verified${where}. Fix accuracy ±${Math.round(data.accuracy_m)} m.`,
         url: '/admin/attendance',
         detail: { kind: 'attendance_off_site', attendance_id: data.id, status: data.status },
-      })
+      }
+      after(() => notifyWatchers(alert))
     }
 
     // VPN / location-manipulation checks (migration 030). These need the
@@ -160,15 +164,18 @@ export async function POST(request: Request) {
         clientIp(request.headers),
       )
 
-      for (const s of signals) {
-        await supabase.rpc('flag_own_integrity', {
-          p_kind: s.kind,
-          p_severity: s.severity,
-          p_summary: s.summary,
-          p_detail: { ...s.detail, attendance_id: data.id },
-          p_outlet: (data as { outlet_id: string | null }).outlet_id,
-        })
-      }
+      // Independent of each other: recorded together (2026-11-27).
+      await Promise.all(
+        signals.map((s) =>
+          supabase.rpc('flag_own_integrity', {
+            p_kind: s.kind,
+            p_severity: s.severity,
+            p_summary: s.summary,
+            p_detail: { ...s.detail, attendance_id: data.id },
+            p_outlet: (data as { outlet_id: string | null }).outlet_id,
+          }),
+        ),
+      )
 
       // Anything serious those checks found (a VPN, a fake GPS app) is
       // pushed to the watchers with every other new flag, below.
@@ -178,8 +185,9 @@ export async function POST(request: Request) {
     }
 
     // New flags from this clock-in (late, early, a VPN, a jump across the
-    // country...) go to the person's admins and supervisor now.
-    await flushFlagAlerts()
+    // country...) go to the person's admins and supervisor, right after the
+    // phone has its answer.
+    after(() => flushFlagAlerts())
 
     // A fake-GPS app paused the account just now (0108): the clock-in and its
     // photo are kept as evidence; the phone signs the person out.

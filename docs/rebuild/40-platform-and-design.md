@@ -150,6 +150,16 @@ rejections that do not crash a screen as kind `unknown`, code `BG`, where
 `background`: noise (ResizeObserver, "Script error.", aborts, network
 failures, chunk errors, extensions) skipped, each message once, at most 5
 per page load.
+Efficiency (2026-11-27): data read by both the field layout and its page
+goes through React `cache()` (`myOutlets`, `xmSettingsOnce` in
+`src/lib/my-outlets.ts`; `createServerSupabase` and `getSession` are
+cached the same way), so once per request and never across requests. The
+middleware skips `auth.getUser()` when there is no `sb-…-auth-token`
+cookie. Timers that only matter on screen use `everyWhileVisible` /
+`whenVisible` (`src/lib/visible.ts`). Parts opened rarely are loaded with
+`next/dynamic` and preloaded when idle; the service worker caches
+`/_next/static/`, so they work offline once fetched. One distance formula:
+`src/lib/distance.ts`.
 The root layout's `<head>` runs `EARLY_RECOVERY_SCRIPT` before the app: a
 failed `/_next/static/` script or stylesheet, or a chunk error, clears Cache
 Storage and reloads once (sessionStorage `xt_early_reload`, 30 s).

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Signal, Wifi, WifiOff } from 'lucide-react'
 import { currentNetwork, type NetworkQuality } from '@/lib/field-guide'
+import { everyWhileVisible } from '@/lib/visible'
 
 /**
  * Tells staff straight away when their network is off or weak, and what
@@ -34,12 +35,12 @@ export function NetworkNotice() {
     window.addEventListener('online', read)
     window.addEventListener('offline', read)
     connection?.addEventListener?.('change', read)
-    const timer = setInterval(read, 10_000)
+    const stopTimer = everyWhileVisible(read, 10_000)
     return () => {
       window.removeEventListener('online', read)
       window.removeEventListener('offline', read)
       connection?.removeEventListener?.('change', read)
-      clearInterval(timer)
+      stopTimer()
       clearTimeout(backTimer)
     }
   }, [])
