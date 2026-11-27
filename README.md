@@ -138,6 +138,7 @@ cp .env.example .env.local     # fill in your Supabase keys
    supabase/migrations/0114_store_google_check.sql             # before "off site", Google is asked where the store is
    supabase/migrations/0115_location_off.sql                   # location turned off during a shift: asked to turn it on, supervisor told
    supabase/migrations/0116_clock_in_photo_checks_in.sql       # the clock-in selfie is the store check-in photo too
+   supabase/migrations/0117_error_log.sql                      # problems recorded for System, scheduled jobs' last runs
    ```
 
 2. **Environment** (`.env.local`, and the same in Vercel):

@@ -314,7 +314,7 @@ On screen: Showing the 500 most recent threads. Search or pick a person to go fu
 
 - File: `src/app/admin/system/page.tsx`
 - Who: ['admin']
-- Components: `ui/card`, `admin/system-reset`
+- Components: `ui/card`, `admin/system-reset`, `admin/problems-panel`
 
 Test mode, resetting the test run and going live (0066). Admins only.
 

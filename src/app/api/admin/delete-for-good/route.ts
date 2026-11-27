@@ -4,6 +4,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { apiError, requireApiSession, ApiError, dbErrorMessage } from '@/lib/auth'
 import { requireRecentAuth } from '@/lib/reconfirm'
 import { removeQueuedFiles, serviceClientWithContext } from '@/lib/system-reset-server'
+import { logProblem } from '@/lib/log'
 
 export const maxDuration = 60
 
@@ -61,7 +62,7 @@ export async function POST(request: Request) {
 
     if (k === 'staff' && result.auth_fallback) {
       const { error: authError } = await createAdminSupabase().auth.admin.deleteUser(id)
-      if (authError) console.error('delete for good: sign-in not removed', authError.message)
+      if (authError) logProblem('delete for good: sign-in not removed', authError.message)
     }
     let filesLeft = 0
     if (result.files > 0) {

@@ -44,7 +44,7 @@ check(/sessionStorage/.test(EARLY_RECOVERY_SCRIPT) && /30000/.test(EARLY_RECOVER
 const recover = read('src/lib/app-recover.ts')
 check(/caches\.delete/.test(recover) && !/indexedDB|serviceWorker\.getRegistrations|unregister/.test(recover), 'reloading clears only the stored copy, never saved work or notifications')
 const route = read('src/app/api/client-error/route.ts')
-check(/allowAttempt\(/.test(route) && /console\.error\('app screen crashed'/.test(route) && !/email|full_name|user_id/.test(route), 'crashes are logged with their code, rate-limited, nothing about the person')
+check(/allowAttempt\(/.test(route) && /logError\(\s*e\.where === 'background' \? 'client\.background_error' : 'client\.screen_crash'/.test(route) && !/email|full_name|user_id/.test(route), 'crashes are logged with their code, rate-limited, nothing about the person')
 
 if (failed) {
   console.log(`\n${failed} check(s) FAILED`)

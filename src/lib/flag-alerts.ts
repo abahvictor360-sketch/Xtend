@@ -2,6 +2,7 @@ import 'server-only'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { notifyWatchers } from '@/lib/notify'
 import { flagHeadline } from '@/lib/flag-labels'
+import { logProblem } from '@/lib/log'
 
 interface ClaimedFlag {
   id: string
@@ -38,7 +39,7 @@ export async function flushFlagAlerts(): Promise<number> {
     }
     return flags.length
   } catch (error) {
-    console.error('flag alerts failed', error)
+    logProblem('flag alerts failed', error)
     return 0
   }
 }

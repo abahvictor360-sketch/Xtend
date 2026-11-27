@@ -1455,7 +1455,7 @@ the secret's hash. A new way into the account, so the password must have
 been given in the last few minutes (a password sign-in counts).
 - Tables and views: `sign_in_keys`
 
-## `POST /api/auth/biometric`
+## `? /api/auth/biometric`
 
 - File: `src/app/api/auth/biometric/route.ts`
 - Who: public / own check
@@ -1474,7 +1474,7 @@ const schema = z.object({
 ```
 - Tables and views: `sign_in_keys`
 
-## `GET /api/auth/expired`
+## `? /api/auth/expired`
 
 - File: `src/app/api/auth/expired/route.ts`
 - Who: public / own check
@@ -1521,7 +1521,7 @@ const schema = z.object({ event: z.enum(['enroll', 'verify']) })
 - Database functions: `confirm_recent_auth`
 - Tables and views: `audit_log`
 
-## `POST /api/auth/passkey/options`
+## `? /api/auth/passkey/options`
 
 - File: `src/app/api/auth/passkey/options/route.ts`
 - Who: public / own check
@@ -1583,7 +1583,7 @@ const schema = z.object({
 ```
 - Tables and views: `profiles`, `sign_in_keys`
 
-## `GET /api/auth/paused`
+## `? /api/auth/paused`
 
 - File: `src/app/api/auth/paused/route.ts`
 - Who: public / own check
@@ -1612,7 +1612,7 @@ const schema = z.object({
 - Database functions: `confirm_recent_auth`
 - Tables and views: `audit_log`
 
-## `POST /api/auth/sign-in`
+## `? /api/auth/sign-in`
 
 - File: `src/app/api/auth/sign-in/route.ts`
 - Who: public / own check
@@ -1654,7 +1654,7 @@ checks and cleans every value; see record_beacon() in migration 026.
 
 - Database functions: `record_beacon`
 
-## `POST /api/client-error`
+## `? /api/client-error`
 
 - File: `src/app/api/client-error/route.ts`
 - Who: public / own check
@@ -1748,7 +1748,7 @@ office. Staff are never told.
 
 Vercel Cron sends `Authorization: Bearer $CRON_SECRET`.
 
-- Database functions: `close_abandoned_visits`, `purge_user_activity`
+- Database functions: `close_abandoned_visits`, `purge_user_activity`, `record_job_run`
 - Tables and views: `device_beacons`, `phone_checks`
 
 ## `GET /api/geocode`
@@ -1770,6 +1770,8 @@ Health. Publicly only `{ ok, checked_at }`, enough for Docker's
 HEALTHCHECK and uptime monitors. With `Authorization: Bearer $CRON_SECRET`
 it also lists which settings are configured (booleans and diagnoses,
 never a key or any data), for checking a deploy that is not behaving.
+
+- Database functions: `error_summary`
 
 ## `POST /api/leave/[id]/cancel`
 
@@ -1918,7 +1920,7 @@ const schema = z.object({
 
 - Database functions: `xm_submit_sales`
 
-## `POST /api/phone-check/ack`
+## `? /api/phone-check/ack`
 
 - File: `src/app/api/phone-check/ack/route.ts`
 - Who: public / own check

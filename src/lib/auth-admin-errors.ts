@@ -1,3 +1,5 @@
+import { logProblem } from '@/lib/log'
+
 /**
  * What an error from Supabase's account service (creating an account,
  * changing its email or password) may tell the person who asked. A few
@@ -19,6 +21,6 @@ export function authAdminError(
   if (code === 'weak_password' || text.includes('password should be')) {
     return { message: 'That password is too easy to guess.', status: 400 }
   }
-  if (error) console.error('account service error', error)
+  if (error) logProblem('account service error', error)
   return { message: fallback, status: 400 }
 }

@@ -49,7 +49,8 @@ the live database, so it cannot tell which of these are already done.)
    - `supabase/migrations/0113_force_app_update.sql`;
    - `supabase/migrations/0114_store_google_check.sql`;
    - `supabase/migrations/0115_location_off.sql`;
-   - `supabase/migrations/0116_clock_in_photo_checks_in.sql`.
+   - `supabase/migrations/0116_clock_in_photo_checks_in.sql`;
+   - `supabase/migrations/0117_error_log.sql`.
    (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18;
    0099, 0100, 0101 and 0102 are done: you ran them on 2026-11-24.)
 4. **Turn off self sign-up in Supabase**: Authentication → Sign In /
@@ -79,6 +80,29 @@ the live database, so it cannot tell which of these are already done.)
    then tap **Sign in with fingerprint**.
 
 ---
+
+## 2026-11-27
+
+### Problems are caught, recorded and shown on System; Xtend keeps working (migration 0117)
+- **What was done:** every fault is now caught and handled the same way:
+  written to the server log (without passwords or keys) and recorded on a
+  new **System → Problems** panel, grouped so the same problem again adds
+  to its count. Crashes and background errors on phones and browsers are
+  recorded too, with the code staff read out. The five-minute alerts job
+  runs each step on its own, so one failing (say, store reminders) no
+  longer stops the others (notifications, location-off alerts); the panel
+  shows each scheduled job as **Running**, **Last run failed** (with the
+  reason) or **Has not run on time**. Every server route now answers a
+  fault with a plain message the app can show, never an error page, and
+  sign-out pages still send people to the login page if something fails.
+  The health check never crashes and, for the deploy check, reports the
+  problem counts.
+- **The impact:** problems are spotted quickly from System instead of by
+  a phone call, a broken part of a job no longer takes the rest down with
+  it, and staff see a clear message instead of a blank or broken screen.
+- **What you need to do:** run `supabase/migrations/0117_error_log.sql` in
+  Supabase (after 0116) and redeploy. Then look at **System → Problems**
+  now and then; until 0117 runs, the panel says to run it. No app build.
 
 ## 2026-11-26
 

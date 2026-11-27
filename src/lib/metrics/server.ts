@@ -4,6 +4,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { notifyUsers } from '@/lib/notify'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
 import { windowLabel } from '@/lib/metrics/shared'
+import { logProblem } from '@/lib/log'
 
 interface ClaimedExpiry {
   id: string
@@ -48,7 +49,7 @@ export async function pushExpiryAlerts(): Promise<number> {
     })
     return alerts.length
   } catch (error) {
-    console.error('expiry alerts failed', error)
+    logProblem('expiry alerts failed', error)
     return 0
   }
 }
@@ -62,8 +63,8 @@ export async function runMetricsSweep(client?: SupabaseClient) {
   const db = client ?? createAdminSupabase()
   const reconciled = await db.rpc('xm_reconcile_pending')
   const scanned = await db.rpc('xm_expiry_scan')
-  if (reconciled.error) console.error('xm_reconcile_pending failed', reconciled.error.message)
-  if (scanned.error) console.error('xm_expiry_scan failed', scanned.error.message)
+  if (reconciled.error) logProblem('xm_reconcile_pending failed', reconciled.error.message)
+  if (scanned.error) logProblem('xm_expiry_scan failed', scanned.error.message)
   const expiry_alerts = await pushExpiryAlerts()
   const flags = await flushFlagAlerts()
   return {

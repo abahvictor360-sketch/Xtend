@@ -142,8 +142,14 @@ screen"; each with numbered steps, a code (the digest, else an FNV hash
 `E…`), and **Try again** (`reset`) or **Load the new version**
 (`reloadFresh`: deletes Cache Storage only, then `location.replace` with
 `?_r=<time>`). Each reports once to `POST /api/client-error` (sendBeacon;
-no sign-in; 30 an hour per IP; logged as "app screen crashed" with code,
-kind, where, path, build, online, digest, message ≤ 300, user agent ≤ 160).
+no sign-in; 30 an hour per IP; logged and recorded (0117) as
+`client.screen_crash`, or `client.background_error` for `where: 'background'`,
+with code, kind, where, path, build, online, digest, message ≤ 300, user
+agent ≤ 160). `ErrorReporter` (root layout) reports unhandled errors and
+rejections that do not crash a screen as kind `unknown`, code `BG`, where
+`background`: noise (ResizeObserver, "Script error.", aborts, network
+failures, chunk errors, extensions) skipped, each message once, at most 5
+per page load.
 The root layout's `<head>` runs `EARLY_RECOVERY_SCRIPT` before the app: a
 failed `/_next/static/` script or stylesheet, or a chunk error, clears Cache
 Storage and reloads once (sessionStorage `xt_early_reload`, 30 s).

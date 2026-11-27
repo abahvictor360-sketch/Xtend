@@ -5,6 +5,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import type { Profile, UserRole } from '@/lib/types'
 import type { SupabaseClient, User } from '@supabase/supabase-js'
 import { lagosDateString } from '@/lib/utils'
+import { logError, logWarn } from '@/lib/log'
 import { CHANGE_PASSWORD_CODE, CHANGE_PASSWORD_MESSAGE, passwordChangeBlocks } from '@/lib/password-gate'
 import { APP_ONLY_CODE, APP_ONLY_MESSAGE, APP_ONLY_PATH, appOnlyBlocks } from '@/lib/app-only'
 import { APP_COOKIE } from '@/lib/app-agent'
@@ -210,7 +211,8 @@ export function apiError(error: unknown) {
   }
   // Anything else is a fault, not an answer: its text can name tables,
   // columns or services, so it goes to the server log and not the caller.
-  console.error('unexpected API error', error)
+  // Recorded for System → Problems (0117) as well as the server log.
+  logError('api.unexpected', error)
   return Response.json({ error: 'Something went wrong. Try again.' }, { status: 500 })
 }
 
@@ -225,7 +227,7 @@ export function dbErrorMessage(
   fallback = 'That could not be saved. Try again.',
 ): string {
   if (error?.code === 'P0001') return error.message
-  if (error) console.error('database error', error)
+  if (error) logWarn('db.error', error, { code: error.code ?? null })
   return fallback
 }
 

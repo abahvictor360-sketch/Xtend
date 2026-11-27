@@ -2,6 +2,7 @@ import 'server-only'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { notifyUsers } from '@/lib/notify'
 import { reminderMessage } from '@/lib/clock-out-reminder'
+import { logProblem } from '@/lib/log'
 
 interface ClaimedReminder {
   user_id: string
@@ -25,7 +26,7 @@ export async function flushClockOutReminders(): Promise<{ claimed: number; deliv
     if (error) {
       // Before migration 0061 the function does not exist; nothing to send.
       if (!/claim_clock_out_reminders/.test(error.message)) {
-        console.error('claim_clock_out_reminders failed', error.message)
+        logProblem('claim_clock_out_reminders failed', error.message)
       }
       return { claimed: 0, delivered: 0 }
     }
@@ -49,7 +50,7 @@ export async function flushClockOutReminders(): Promise<{ claimed: number; deliv
     }
     return { claimed: rows.length, delivered }
   } catch (error) {
-    console.error('clock-out reminders failed', error)
+    logProblem('clock-out reminders failed', error)
     return { claimed: 0, delivered: 0 }
   }
 }

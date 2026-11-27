@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { createAdminSupabase } from '@/lib/supabase/admin'
+import { withErrors } from '@/lib/api-safe'
 
 const schema = z.object({
   id: z.string().guid(),
@@ -12,7 +13,7 @@ const schema = z.object({
  * may be signed out for the day, and the token in the push is the proof
  * that the answer came from the phone that received it.
  */
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return Response.json({ ok: false }, { status: 400 })
   const { id, token, stage } = parsed.data
@@ -33,3 +34,6 @@ export async function POST(request: Request) {
   if (Object.keys(update).length) await admin.from('phone_checks').update(update).eq('id', id)
   return Response.json({ ok: true })
 }
+
+// Never an HTML error page: logged, recorded, and answered (2026-11-27).
+export const POST = withErrors(handlePost)

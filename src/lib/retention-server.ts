@@ -2,6 +2,7 @@ import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { notifyUsers } from '@/lib/notify'
 import { SELFIE_RETENTION_HOURS, groupRetentionNotices, type RetentionDue } from '@/lib/retention'
+import { logProblem } from '@/lib/log'
 
 /**
  * The nightly clean-up (0067). Nothing goes before it is 14 days old, and
@@ -31,7 +32,7 @@ async function removeInBatches(admin: SupabaseClient, bucket: string, paths: str
     const { data: removed, error } = await admin.storage.from(bucket).remove(batch)
     if (error) {
       failed += batch.length
-      console.error(`${what} clean-up failed for a batch`, error.message)
+      logProblem(`${what} clean-up failed for a batch`, error.message)
       continue
     }
     deleted += removed?.length ?? 0
@@ -132,5 +133,5 @@ export async function sendRetentionNotices(admin: SupabaseClient): Promise<Notic
 /** Keeps what was deleted, and audits it (retention.purge) when anything was. */
 export async function recordRetentionPurge(admin: SupabaseClient, result: Record<string, unknown>) {
   const { error } = await admin.rpc('record_retention_purge', { p_result: result })
-  if (error) console.error('retention record failed', error.message)
+  if (error) logProblem('retention record failed', error.message)
 }

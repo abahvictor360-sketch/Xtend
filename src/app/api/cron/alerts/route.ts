@@ -1,4 +1,5 @@
 import { cronAuthorized } from '@/lib/cron'
+import { runJob } from '@/lib/log'
 import { flushClockOutReminders } from '@/lib/clock-out-reminders'
 import { flushShiftSoonReminders } from '@/lib/shift-reminders'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
@@ -30,21 +31,25 @@ export async function GET(request: Request) {
   if (!cronAuthorized(request)) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
-  // First, as they only count inside their five minutes: "Time to clock
-  // in" / "Your shift ends at" five minutes before the start and end (0069).
-  const shift_heads_ups = await flushShiftSoonReminders()
-  // X Metrics reconciliation and expiry checks, once an hour.
-  const metrics = new Date().getUTCMinutes() < 5 ? await runMetricsSweep() : null
-  const sent = await flushFlagAlerts()
-  // Notifications the office scheduled for now or earlier (migration 053).
-  const scheduled = await flushScheduledNotifications()
-  // "Time to clock out" at the shift end, and once more an hour later.
-  const clock_out_reminders = await flushClockOutReminders()
-  // "Check out of the store before you leave", every 25 minutes in a store (0099).
-  const store_check_out_reminders = await flushVisitCheckoutReminders()
-  // "A new Xtend app is ready" for anyone on an older phone app (0082).
-  const app_updates = await flushAppUpdateNotices()
-  // "<name>'s location is off" to their supervisor, after 15 minutes off on shift (0115).
-  const location_off = await flushLocationOffAlerts()
-  return Response.json({ sent, metrics, scheduled, shift_heads_ups, clock_out_reminders, store_check_out_reminders, app_updates, location_off, ran_at: new Date().toISOString() })
+  // Each step on its own (2026-11-27): one failing is logged and recorded
+  // (System → Problems, and the job's last run) and the others still run.
+  const { results, failed } = await runJob('alerts', {
+    // First, as they only count inside their five minutes: "Time to clock
+    // in" / "Your shift ends at" five minutes before the start and end (0069).
+    shift_heads_ups: () => flushShiftSoonReminders(),
+    // X Metrics reconciliation and expiry checks, once an hour.
+    metrics: async () => (new Date().getUTCMinutes() < 5 ? await runMetricsSweep() : null),
+    sent: () => flushFlagAlerts(),
+    // Notifications the office scheduled for now or earlier (migration 053).
+    scheduled: () => flushScheduledNotifications(),
+    // "Time to clock out" at the shift end, and once more an hour later.
+    clock_out_reminders: () => flushClockOutReminders(),
+    // "Check out of the store before you leave", every 25 minutes in a store (0099).
+    store_check_out_reminders: () => flushVisitCheckoutReminders(),
+    // "A new Xtend app is ready" for anyone on an older phone app (0082).
+    app_updates: () => flushAppUpdateNotices(),
+    // "<name>'s location is off" to their supervisor, after 15 minutes off on shift (0115).
+    location_off: () => flushLocationOffAlerts(),
+  })
+  return Response.json({ ...results, failed, ran_at: new Date().toISOString() }, { status: failed.length === 8 ? 500 : 200 })
 }

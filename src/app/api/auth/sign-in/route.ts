@@ -5,6 +5,7 @@ import { allowAttempt, clientAddress } from '@/lib/rate-limit'
 import { NO_SUCH_ACCOUNT, passwordIsRight } from '@/lib/password-check'
 import { TURNSTILE_ERROR, turnstileEnabled, verifyTurnstile } from '@/lib/turnstile'
 import { WRONG, attemptFor, finishSignIn, paused, type Attempt, type Service } from '@/lib/sign-in-finish'
+import { withErrors } from '@/lib/api-safe'
 
 const schema = z.object({
   identifier: z.string().trim().min(3).max(120),
@@ -31,7 +32,7 @@ const WINDOW_MS = 15 * 60 * 1000
  * with Cloudflare before the password is even looked at, so a bot without
  * one never reaches the password check.
  */
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   const parsed = schema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return Response.json({ error: WRONG }, { status: 400 })
   const { identifier, password, turnstile } = parsed.data
@@ -103,3 +104,6 @@ async function emailForPhone(identifier: string): Promise<string | null> {
     .maybeSingle<{ email: string | null }>()
   return data?.email ?? null
 }
+
+// Never an HTML error page: logged, recorded, and answered (2026-11-27).
+export const POST = withErrors(handlePost)

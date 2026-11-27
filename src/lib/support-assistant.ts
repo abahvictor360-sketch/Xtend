@@ -8,6 +8,7 @@ import { takeAiUse } from '@/lib/ai/quota'
 import { STAFF_GUIDE_TEXT } from '@/lib/generated/staff-guide-text'
 import { lagosDateString } from '@/lib/utils'
 import { compatToolAnswer, type ToolDef } from '@/lib/ai/compat'
+import { logProblem } from '@/lib/log'
 
 /**
  * The AI that answers a field member's support message.
@@ -254,7 +255,7 @@ export async function respondToSupportThread(
     const reply = (out.reply ?? '').trim() || "Thanks for your message. I've passed this to the office."
     return finish(admin, thread, staffName, out.escalate !== false ? out.escalate === true : false, reply, out.reason)
   } catch (err) {
-    console.error('support assistant failed', err)
+    logProblem('support assistant failed', err)
     return finish(admin, thread, staffName, true, "Thanks for your message. I've passed this to the office and someone will follow up with you.")
   }
 }

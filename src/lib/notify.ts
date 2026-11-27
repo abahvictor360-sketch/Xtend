@@ -1,6 +1,7 @@
 import 'server-only'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { pushConfigured, sendPush, type PushTarget } from '@/lib/push'
+import { logProblem } from '@/lib/log'
 
 export interface WatcherAlert {
   /** The member of staff the alert is about. */
@@ -32,7 +33,7 @@ export async function notifyWatchers(alert: WatcherAlert): Promise<{
       p_user: alert.subjectId,
     })
     if (watcherError) {
-      console.error('alert_watchers failed', watcherError.message)
+      logProblem('alert_watchers failed', watcherError.message)
       return { watchers: 0, delivered: 0 }
     }
 
@@ -133,7 +134,7 @@ export async function notifyWatchers(alert: WatcherAlert): Promise<{
 
     return { watchers: watchers.length, delivered }
   } catch (error) {
-    console.error('notifyWatchers failed', error)
+    logProblem('notifyWatchers failed', error)
     return { watchers: 0, delivered: 0 }
   }
 }
@@ -233,7 +234,7 @@ export async function notifyUsers(
 
     return { delivered }
   } catch (error) {
-    console.error('notifyUsers failed', error)
+    logProblem('notifyUsers failed', error)
     return { delivered: 0 }
   }
 }

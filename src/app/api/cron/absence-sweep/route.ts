@@ -1,5 +1,6 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { cronAuthorized } from '@/lib/cron'
+import { runJob } from '@/lib/log'
 import { notifyWatchers } from '@/lib/notify'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
 import { dbErrorMessage } from '@/lib/auth'
@@ -37,6 +38,12 @@ export async function GET(request: Request) {
   if (!cronAuthorized(request)) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
+  // Logged, recorded and answered whatever happens (2026-11-27).
+  const { results, failed } = await runJob('absence_sweep', { sweep: () => sweep(request) })
+  return Response.json({ ...(results.sweep as object), failed }, { status: failed.length ? 500 : 200 })
+}
+
+async function sweep(request: Request) {
 
   const graceMinutes = Number(new URL(request.url).searchParams.get('grace') ?? 30)
   const supabase = createAdminSupabase()
@@ -44,7 +51,7 @@ export async function GET(request: Request) {
   const { data, error } = await supabase.rpc('staff_no_show', {
     p_grace_minutes: Number.isFinite(graceMinutes) ? graceMinutes : 30,
   })
-  if (error) return Response.json({ error: dbErrorMessage(error) }, { status: 500 })
+  if (error) throw new Error(`staff_no_show: ${dbErrorMessage(error)}`)
 
   const absent = (data ?? []) as NoShow[]
   let reported = 0
@@ -71,12 +78,12 @@ export async function GET(request: Request) {
   // And anything flagged that nobody has been told about yet.
   const flags_sent = await flushFlagAlerts()
 
-  return Response.json({
+  return {
     flags_sent,
     checked_at: new Date().toISOString(),
     grace_minutes: graceMinutes,
     absent: absent.length,
     reported,
     already_reported: absent.length - reported,
-  })
+  }
 }

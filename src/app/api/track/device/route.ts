@@ -5,6 +5,7 @@ import { resolvePlace } from '@/lib/geocode'
 import { flushFlagAlerts } from '@/lib/flag-alerts'
 import { liveInterval, sendLivePosition } from '@/lib/follow-live-server'
 import { openVisitForPhone, type OpenVisitRow } from '@/lib/visit-leave'
+import { logProblem } from '@/lib/log'
 
 export const maxDuration = 30
 
@@ -176,7 +177,7 @@ export async function POST(request: Request) {
       ...(interval ? { interval_ms: interval } : {}),
     })
   } catch (error) {
-    console.error('background positions failed', error)
+    logProblem('background positions failed', error)
     return Response.json({ error: 'Try again later' }, { status: 503 })
   }
 }

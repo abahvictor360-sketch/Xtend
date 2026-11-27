@@ -3,6 +3,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { notifyUsers } from '@/lib/notify'
 import { publishedAndroidApk } from '@/lib/app-release'
 import { LAST_REMINDER, noticeHour, updateNoticeMessage } from '@/lib/app-update-notice'
+import { logProblem } from '@/lib/log'
 
 interface Claimed {
   user_id: string
@@ -42,7 +43,7 @@ export async function flushAppUpdateNotices(at: Date = new Date()): Promise<{ cl
     if (error) {
       // Before migration 0082 the function does not exist; nothing to send.
       if (!/claim_app_update_notices/.test(error.message)) {
-        console.error('claim_app_update_notices failed', error.message)
+        logProblem('claim_app_update_notices failed', error.message)
       }
       return { claimed: 0, delivered: 0 }
     }
@@ -68,7 +69,7 @@ export async function flushAppUpdateNotices(at: Date = new Date()): Promise<{ cl
     }
     return { claimed: rows.length, delivered }
   } catch (error) {
-    console.error('app update notices failed', error)
+    logProblem('app update notices failed', error)
     return { claimed: 0, delivered: 0 }
   }
 }

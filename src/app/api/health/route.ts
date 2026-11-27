@@ -2,6 +2,8 @@ import { vapidStatus } from '@/lib/push'
 import { cronAuthorized } from '@/lib/cron'
 import { healthBody } from '@/lib/health'
 import { redisReachable } from '@/lib/redis'
+import { createAdminSupabase } from '@/lib/supabase/admin'
+import { logError } from '@/lib/log'
 
 /**
  * Health. Publicly only `{ ok, checked_at }`, enough for Docker's
@@ -11,7 +13,7 @@ import { redisReachable } from '@/lib/redis'
  */
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: Request) {
+async function handleGet(request: Request) {
   const vapid = vapidStatus()
 
   const configured = {
@@ -30,8 +32,26 @@ export async function GET(request: Request) {
 
   // Redis is pinged only for the detailed answer, never for Docker's checks.
   const detailed = cronAuthorized(request)
-  const reachable = detailed ? await redisReachable() : null
-  return Response.json(healthBody(detailed, configured, vapid, new Date().toISOString(), reachable), {
-    headers: { 'Cache-Control': 'no-store' },
-  })
+  const reachable = detailed ? await redisReachable().catch(() => false) : null
+  const body = healthBody(detailed, configured, vapid, new Date().toISOString(), reachable)
+  // Detailed: problems in the last hour and day, and each job's last run (0117).
+  if (detailed) {
+    try {
+      const { data } = await createAdminSupabase().rpc('error_summary')
+      body.problems = data ?? null
+    } catch {
+      body.problems = null
+    }
+  }
+  return Response.json(body, { headers: { 'Cache-Control': 'no-store' } })
+}
+
+// The health check itself never crashes: a fault answers 503 with ok false.
+export async function GET(request: Request) {
+  try {
+    return await handleGet(request)
+  } catch (error) {
+    logError('health.failed', error)
+    return Response.json({ ok: false, checked_at: new Date().toISOString() }, { status: 503, headers: { 'Cache-Control': 'no-store' } })
+  }
 }

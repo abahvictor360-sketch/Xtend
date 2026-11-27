@@ -806,6 +806,15 @@ export default async function AdminGuidePage() {
             helper passes to the office.
           </p>
           <p>
+            <Ui>System</Ui> → <Ui>Problems</Ui> (admins only): anything that went wrong lately, grouped (the same
+            problem again adds to its count), with where it happened: on the server, on someone&apos;s phone or in a
+            scheduled job. A crash screen&apos;s code (like Code X-4F2A) shows here, so when staff read one out you
+            can find it. Below, each scheduled job (the five-minute alerts and reminders, the morning no-show check,
+            the night clean-up) says <Ui>Running</Ui>, <Ui>Last run failed</Ui> with the reason, or{' '}
+            <Ui>Has not run on time</Ui>. Xtend keeps working through problems: each one is caught and the rest
+            carries on. Kept 30 days.
+          </p>
+          <p>
             <Ui>System</Ui> (admins only): <strong>test mode</strong>, for a test run before real work. While
             it is on, a dark orange strip across the top of the dashboard says <Ui>Test mode: records can be
             reset</Ui>. Supervisors and staff see nothing of it, and staff are not told it is a test.

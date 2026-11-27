@@ -5,6 +5,7 @@ import { googleAgrees, needsLookup, type GooglePoint } from '@/lib/store-check'
 import { tooFar } from '@/lib/on-site'
 import { haversineMetres } from '@/lib/geo'
 import { notifyUsers } from '@/lib/notify'
+import { logProblem } from '@/lib/log'
 
 /**
  * Before "You are off site" stands (migration 0114): where Google puts the
@@ -49,7 +50,7 @@ export async function confirmedStoreSpot(storeId: string): Promise<GooglePoint |
     })
     return spot
   } catch (error) {
-    console.error('store Google check failed', error)
+    logProblem('store Google check failed', error)
     return null
   }
 }
@@ -89,7 +90,7 @@ export async function tellOfficeToCheckPin(storeId: string): Promise<void> {
       },
     )
   } catch (error) {
-    console.error('pin check notice failed', error)
+    logProblem('pin check notice failed', error)
   }
 }
 
