@@ -15,73 +15,52 @@ _Every change to Xtend adds an entry here in the same commit (see `CLAUDE.md`)._
 These are things only you can do. Tick them off as you go. (Claude cannot see
 the live database, so it cannot tell which of these are already done.)
 
-1. **Deploy the latest code** from the main branch before running the
-   migrations below.
+1. **Deploy the latest code** from the main branch.
 2. **Supabase → Authentication → Multi-Factor**: allow TOTP (needed for
    two-step sign-in, 0080).
-3. **Run in the Supabase SQL editor, in this order** (each is safe to run
-   again):
-   - `supabase/reapply_0079_to_0085.sql` (0079, 0080, 0081, 0082, 0083,
-     0085 in one file);
-   - `supabase/migrations/0084_app_only.sql`;
-   - `supabase/migrations/0086_close_stale_visit_on_check_in.sql`;
-   - `supabase/migrations/0087_clock_in_checks_in.sql`;
-   - `supabase/migrations/0088_report_per_store_or_day.sql`;
-   - `supabase/migrations/0089_quick_sign_in.sql`;
-   - `supabase/migrations/0090_field_corrections.sql`;
-   - `supabase/migrations/0091_visit_checkout_photo.sql`;
-   - `supabase/migrations/0092_photo_flags.sql`;
-   - `supabase/migrations/0094_reports_for_recent_days.sql`;
-   - `supabase/migrations/0095_offline_movement_always_kept.sql`;
-   - `supabase/migrations/0096_every_synced_position_kept.sql`;
-   - `supabase/migrations/0097_allocate_from_store.sql`;
-   - `supabase/migrations/0098_delete_for_good.sql`;
-   - `supabase/migrations/0103_close_public_key.sql`;
-   - `supabase/migrations/0104_ai_knowledge.sql`;
-   - `supabase/migrations/0105_clock_out_window.sql`;
-   - `supabase/migrations/0106_on_site_only.sql`;
-   - `supabase/migrations/0107_offline_clock_day.sql`;
-   - `supabase/migrations/0108_pause_on_fake_location.sql`;
-   - `supabase/migrations/0109_no_early_clock_out.sql`;
-   - `supabase/migrations/0110_ai_limits.sql`;
-   - `supabase/migrations/0111_clock_out_hold.sql`;
-   - `supabase/migrations/0112_office_entry_location.sql`;
-   - `supabase/migrations/0113_force_app_update.sql`;
-   - `supabase/migrations/0114_store_google_check.sql`;
-   - `supabase/migrations/0115_location_off.sql`;
-   - `supabase/migrations/0116_clock_in_photo_checks_in.sql`;
-   - `supabase/migrations/0117_error_log.sql`.
-   (`0093_reset_clock_out.sql` is done: you ran it on 2026-11-18;
-   0099, 0100, 0101 and 0102 are done: you ran them on 2026-11-24.)
-4. **Turn off self sign-up in Supabase**: Authentication → Sign In /
+3. **Turn off self sign-up in Supabase**: Authentication → Sign In /
    Providers → turn off **Allow new users to sign up** (self-hosted: set
    `DISABLE_SIGNUP=true` in the Supabase server's `.env` and restart). Staff
    are only ever created by you on Staff, which keeps working.
-5. **Clock-out reminder fix (0069)**, if never pasted:
+4. **Clock-out reminder fix (0069)**, if never pasted:
    ```sql
    alter table public.clock_out_reminders drop constraint if exists clock_out_reminders_stage_check;
    alter table public.clock_out_reminders add constraint clock_out_reminders_stage_check check (stage in (1, 2, 3, 4));
    ```
-6. **Scheduled jobs on the new server**: check that the alerts job (every 5
+5. **Scheduled jobs on the new server**: check that the alerts job (every 5
    minutes) and the two nightly jobs run with the right `CRON_SECRET`. When
    the nightly job does not run, old photos are not deleted on time and
    forgotten store check-ins were not closed (0086 now covers the second).
-7. **Android signing secrets** (`ANDROID_KEYSTORE_BASE64`,
-   `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`): until they are set,
-   each new APK cannot replace the old one, and phones say "App not
-   installed". Staff must uninstall, then install again.
-8. **New phone app builds**: several fixes below say "needs a new app build".
-   Publish the latest APK (and TestFlight build) so staff get them.
-9. **Add `SITE_URL=https://www.withxtend.com`** to the environment in
+6. **iPhone app on TestFlight**: the Android app is published by itself on
+   the download page after each merge (signed). The iPhone app is built but
+   not uploaded until the App Store keys are set as repository secrets
+   (`APPSTORE_API_KEY_P8`, `APPSTORE_KEY_ID`, `APPSTORE_ISSUER_ID`,
+   `APPLE_TEAM_ID`; see `mobile/README.md`, "iPhone app on TestFlight").
+7. **Add `SITE_URL=https://www.withxtend.com`** to the environment in
    Dokploy (no rebuild), so the server always knows its real address.
-10. **Try fingerprint sign-in on one Android phone and one iPhone** before
+8. **Try fingerprint sign-in on one Android phone and one iPhone** before
    telling all staff (it could not be tested on a real phone here). Sign in
    with the password in the new app, tap **Use my fingerprint**, sign out,
    then tap **Sign in with fingerprint**.
 
+Done: every migration up to `0117_error_log.sql` (you confirmed on
+2026-11-27; 0093 on 2026-11-18, 0099 to 0102 on 2026-11-24), and the
+Android signing secrets (the app builds are signed, so updates install over
+the old app).
+
 ---
 
 ## 2026-11-27
+
+### All migrations run (no code change)
+- **What was done:** "Waiting on you" updated: every migration up to 0117
+  is run in Supabase (you confirmed), and the Android signing secrets are
+  set (the latest app builds are signed). Both are off the list.
+- **The impact:** the database has every feature built so far: on-site
+  checks with Google, the location-off warnings, the clock-in photo on
+  store check-ins, forced app updates and System → Problems.
+- **What you need to do:** nothing for this. The rest of "Waiting on you"
+  still stands.
 
 ### Faster and lighter: less repeated work, smarter caching, less battery (no migration)
 - **What was done:** (1) the staff app asked the database for the person's
