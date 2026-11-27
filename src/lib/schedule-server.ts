@@ -1,6 +1,7 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { makeSchedule, type LeaveRow, type OverrideRow, type PatternRow, type ScheduleBook } from '@/lib/schedule'
+import { logProblem } from '@/lib/log'
 
 const PAGE = 1000
 const MAX_ROWS = 20_000
@@ -75,7 +76,7 @@ export async function loadScheduleSafe(
   try {
     return await loadSchedule(supabase, from, to, userIds)
   } catch (error) {
-    console.error('schedule could not be read', error)
+    logProblem('schedule could not be read', error)
     return makeSchedule()
   }
 }

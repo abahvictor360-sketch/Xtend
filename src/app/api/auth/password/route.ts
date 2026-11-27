@@ -6,6 +6,7 @@ import { recordActivity } from '@/lib/activity-server'
 import { passwordIsRight } from '@/lib/password-check'
 import { currentPasswordRequired } from '@/lib/password-gate'
 import { allowAttempt } from '@/lib/rate-limit'
+import { logProblem } from '@/lib/log'
 
 const schema = z.object({
   password: z.string().min(8, 'Use at least 8 characters.').max(200),
@@ -79,6 +80,6 @@ function passwordProblem(error: { code?: string; message: string }): string {
   if (code === 'weak_password' || text.includes('weak') || text.includes('at least')) {
     return 'That password is too easy to guess. Try a longer one.'
   }
-  console.error('password change refused', error)
+  logProblem('password change refused', error)
   return 'The password could not be saved. Try again.'
 }

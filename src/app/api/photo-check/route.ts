@@ -7,6 +7,7 @@ import { flushFlagAlerts } from '@/lib/flag-alerts'
 import { isOwnStoragePath } from '@/lib/storage-path'
 import { allowAttempt } from '@/lib/rate-limit'
 import { HOUR_MS, PHOTO_CHECKS_PER_HOUR } from '@/lib/usage-limits'
+import { logProblem } from '@/lib/log'
 
 export const maxDuration = 60
 
@@ -80,7 +81,7 @@ export async function POST(request: Request) {
         setting = judged.setting
       } catch (error) {
         if (!(error instanceof Anthropic.APIError) && !(error instanceof SyntaxError)) {
-          console.error('photo check failed', error)
+          logProblem('photo check failed', error)
         }
       }
     }

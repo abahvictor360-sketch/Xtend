@@ -54,6 +54,25 @@ A readable summary of `schema.sql`. Every table has row-level security unless ma
 | feature | text(text) |  |  |
 | used_at | timestamp with time zone(timestamptz) |  | now() |
 
+### `app_errors`
+
+| Column | Type | Null | Default |
+|---|---|---|---|
+| id | bigint(int8) |  |  |
+| source | text(text) |  |  |
+| event | text(text) |  |  |
+| message | text(text) |  | ''::text |
+| code | text(text) | yes |  |
+| path | text(text) | yes |  |
+| detail | jsonb(jsonb) |  | '{}'::jsonb |
+| fingerprint | text(text) |  |  |
+| count | integer(int4) |  | 1 |
+| first_at | timestamp with time zone(timestamptz) |  | now() |
+| last_at | timestamp with time zone(timestamptz) |  | now() |
+
+Policies:
+- `app_errors_admin_read` SELECT to authenticated: using `is_admin()`
+
 ### `app_installs`
 
 | Column | Type | Null | Default |
@@ -345,6 +364,9 @@ Policies:
 | job | text(text) |  |  |
 | last_run_at | timestamp with time zone(timestamptz) |  | now() |
 | last_result | jsonb(jsonb) |  | '{}'::jsonb |
+| last_ok_at | timestamp with time zone(timestamptz) | yes |  |
+| last_error | text(text) | yes |  |
+| last_error_at | timestamp with time zone(timestamptz) | yes |  |
 
 ### `known_places`
 
@@ -1585,6 +1607,7 @@ Policies:
 - `encrypt(bytea, bytea, text)` → bytea
 - `encrypt_iv(bytea, bytea, bytea, text)` → bytea
 - `end_store_visit(p_visit_id uuid, p_lat double precision, p_lng double precision, p_accuracy_m double precision, p_place_name text, p_address text, p_selfie_path text, p_thumb_path text)` → jsonb · definer · 0091_visit_checkout_photo.sql
+- `error_summary()` → jsonb · definer · 0117_error_log.sql
 - `expired_selfie_paths(p_hours integer)` → TABLE(path text) · definer · 0091_visit_checkout_photo.sql
 - `field_topic(uid uuid)` → text · 0058_realtime_broadcast.sql
 - `finish_onboarding()` → void · definer · 0037_profile_photos.sql
@@ -1736,9 +1759,11 @@ Policies:
 - `realtime_notify_support_message()` → trigger · definer · 0058_realtime_broadcast.sql
 - `recent_auth_ok(p_user uuid, p_minutes integer)` → boolean · definer · 0080_zero_trust.sql
 - `record_activity(p_user uuid, p_kind text, p_ip text, p_platform text, p_app_build integer, p_user_agent text, p_device jsonb, p_detail jsonb, p_at timestamp with time zone)` → boolean · definer · 0062_user_activity.sql
+- `record_app_error(p_source text, p_event text, p_message text, p_code text, p_path text, p_detail jsonb)` → void · definer · 0117_error_log.sql
 - `record_background_pings(p_token text, p_points jsonb, p_sent_at timestamp with time zone)` → jsonb · definer · 0096_every_synced_position_kept.sql
 - `record_beacon(p jsonb)` → jsonb · definer · 0026_phone_evidence.sql
 - `record_excuse_check(p_user uuid, p_claim text, p_from timestamp with time zone, p_to timestamp with time zone, p_verdict text, p_headline text, p_note text)` → uuid · definer · 0048_excuse_check_advanced.sql
+- `record_job_run(p_job text, p_ok boolean, p_result jsonb, p_error text)` → void · definer · 0117_error_log.sql
 - `record_location_state(p_token text, p_off_since timestamp with time zone, p_on_at timestamp with time zone, p_sent_at timestamp with time zone)` → jsonb · definer · 0115_location_off.sql
 - `record_offline_pings(p_points jsonb, p_sent_at timestamp with time zone)` → integer · definer · 0096_every_synced_position_kept.sql
 - `record_retention_purge(p_result jsonb)` → void · definer · 0067_report_photos_offline.sql

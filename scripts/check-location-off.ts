@@ -44,7 +44,7 @@ check(/remove\("loc_off_since"\)/.test(android) && /removeObject\(forKey: "xtend
 
 const device = read('src/app/api/track/device/route.ts')
 check(/record_location_state/.test(device) && /p_off_since: state\.off_since/.test(device), 'the tracker route records it')
-check(/await flushLocationOffAlerts\(\)/.test(read('src/app/api/cron/alerts/route.ts')), 'the five-minute job tells supervisors')
+check(/location_off: \(\) => flushLocationOffAlerts\(\)/.test(read('src/app/api/cron/alerts/route.ts')), 'the five-minute job tells supervisors')
 const movement = read('src/app/admin/tracking/page.tsx')
 check(/Location off since/.test(movement) && /Location turned off/.test(movement) && /LocationOffSetting/.test(movement),
   'Movement shows who has location off now, each time it was off, and the admin\'s minutes')

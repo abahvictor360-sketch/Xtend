@@ -9,6 +9,7 @@ import { askAssistant, assistantConfigured } from '@/lib/assistant'
 import { attachmentBlocks, attachmentSchema } from '@/lib/assistant-attachment'
 import { allowAttempt } from '@/lib/rate-limit'
 import { ASK_XTEND_LIMIT_MESSAGE, ASK_XTEND_PER_HOUR, HOUR_MS } from '@/lib/usage-limits'
+import { logProblem } from '@/lib/log'
 
 // Reading a long allocation sheet and matching every name takes several
 // model turns; a minute is not always enough.
@@ -94,7 +95,7 @@ export async function POST(request: Request) {
     // OpenAI, Gemini, NVIDIA or OpenRouter refused or did not answer: say
     // what the service said (never the key), and where to change it.
     if (error instanceof AiServiceError) {
-      console.error('Ask Xtend: AI service error', error.message)
+      logProblem('Ask Xtend: AI service error', error.message)
       return Response.json({ error: aiServiceAdvice(error) }, { status: 502 })
     }
     return apiError(error)

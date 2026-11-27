@@ -11,6 +11,7 @@ import { authAdminError } from '@/lib/auth-admin-errors'
 import { requireRecentAuth } from '@/lib/reconfirm'
 import { OFFICE_ROLES } from '@/lib/zero-trust'
 import type { UserRole } from '@/lib/types'
+import { logProblem } from '@/lib/log'
 
 const patchSchema = z.object({
   full_name: personName.optional(),
@@ -365,7 +366,7 @@ export async function DELETE(_request: Request, ctx: { params: Promise<{ id: str
     // still holds them back, the delete fails — report it as history too.
     const { error } = await admin.auth.admin.deleteUser(id)
     if (error) {
-      console.error('deleteUser failed', error)
+      logProblem('deleteUser failed', error)
       return Response.json(
         {
           error: 'This account has records.',

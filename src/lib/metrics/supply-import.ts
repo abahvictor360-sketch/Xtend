@@ -5,6 +5,7 @@ import Papa from 'papaparse'
 import ExcelJS from 'exceljs'
 import JSZip from 'jszip'
 import { ApiError } from '@/lib/auth'
+import { logProblem } from '@/lib/log'
 
 /*
  * Reading supplies from a file: a CSV or Excel sheet, or a PDF or Word
@@ -309,7 +310,7 @@ async function readWithClaude(content: Anthropic.Beta.BetaContentBlockParam[]): 
       throw new ApiError('The invoice reader is busy. Try again in a minute.', 503)
     }
     if (error instanceof Anthropic.APIError) {
-      console.error('invoice reading failed', error.status, error.message)
+      logProblem('invoice reading failed', error.status, error.message)
       throw new ApiError('That file could not be read. Try a clearer copy, or a CSV or Excel file.', 400)
     }
     throw error

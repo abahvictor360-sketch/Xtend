@@ -1,6 +1,7 @@
 import 'server-only'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { auditContextHeader } from '@/lib/audit-context'
+import { logProblem } from '@/lib/log'
 
 /**
  * Server side of test mode and the reset (0066). Admin checks happen in
@@ -45,7 +46,7 @@ export async function removeQueuedFiles(
   while (Date.now() < deadline) {
     const { data, error } = await admin.rpc('reset_files_next', { p_limit: BATCH })
     if (error) {
-      console.error('reset files: listing failed', error.message)
+      logProblem('reset files: listing failed', error.message)
       failed = true
       break
     }
@@ -57,13 +58,13 @@ export async function removeQueuedFiles(
       // A file already gone (photos are purged after 14 days) is not an error.
       const { error: rmError } = await admin.storage.from(bucket).remove(names)
       if (rmError) {
-        console.error('reset files: remove failed', bucket, rmError.message)
+        logProblem('reset files: remove failed', bucket, rmError.message)
         failed = true
         break
       }
       const { error: doneError } = await admin.rpc('reset_files_done', { p_bucket: bucket, p_names: names })
       if (doneError) {
-        console.error('reset files: could not mark done', doneError.message)
+        logProblem('reset files: could not mark done', doneError.message)
         failed = true
         break
       }

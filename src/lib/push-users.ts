@@ -1,6 +1,7 @@
 import 'server-only'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { pushConfigured, sendPush, type PushPayload, type PushTarget } from '@/lib/push'
+import { logProblem } from '@/lib/log'
 
 /**
  * Pushes one message to every device of the given people. Best effort and
@@ -22,7 +23,7 @@ export async function pushToUsers(userIds: string[], payload: PushPayload) {
     if (dead.length) await admin.from('push_subscriptions').update({ is_active: false }).in('id', dead)
     return new Set(results.filter((r) => r.ok).map((r) => r.userId)).size
   } catch (error) {
-    console.error('push to users failed', error)
+    logProblem('push to users failed', error)
     return 0
   }
 }

@@ -4,6 +4,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { allowAttempt, clientAddress } from '@/lib/rate-limit'
 import { newAppSecret, secretMatches } from '@/lib/quick-sign-in'
 import { signInProven } from '@/lib/sign-in-finish'
+import { withErrors } from '@/lib/api-safe'
 
 const schema = z.object({
   key_id: z.string().guid(),
@@ -20,7 +21,7 @@ const TURNED_OFF =
  * new secret for the phone to keep: each one works once. A wrong secret
  * for a real key (a copied or old one) removes the key.
  */
-export async function POST(request: Request) {
+async function handlePost(request: Request) {
   const address = clientAddress(request)
   const parsed = schema.safeParse(await request.json().catch(() => null))
   if (!parsed.success) return Response.json({ error: TURNED_OFF, code: 'key_gone' }, { status: 400 })
@@ -65,3 +66,6 @@ export async function POST(request: Request) {
   }
   return answer
 }
+
+// Never an HTML error page: logged, recorded, and answered (2026-11-27).
+export const POST = withErrors(handlePost)

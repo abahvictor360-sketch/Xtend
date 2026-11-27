@@ -71,6 +71,12 @@ INSERT INTO public.ai_limits VALUES ('admin_assistant', 40, 200, '2026-01-01 00:
 
 
 --
+-- Data for Name: app_errors; Type: TABLE DATA; Schema: public; Owner: -
+--
+
+
+
+--
 -- Data for Name: app_installs; Type: TABLE DATA; Schema: public; Owner: -
 --
 
@@ -780,6 +786,13 @@ INSERT INTO public.xm_settings VALUES (true, 5.00, 40, 30, 20, 10, 40, 70, '{730
 --
 
 SELECT pg_catalog.setval('public.ai_usage_id_seq', 1, false);
+
+
+--
+-- Name: app_errors_id_seq; Type: SEQUENCE SET; Schema: public; Owner: -
+--
+
+SELECT pg_catalog.setval('public.app_errors_id_seq', 1, false);
 
 
 --

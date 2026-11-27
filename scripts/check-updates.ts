@@ -99,7 +99,7 @@ check(!noticeHour(new Date('2026-11-10T05:30:00Z')) && noticeHour(new Date('2026
     '"Later" lasts only until Xtend is opened again (15 minutes at most), and is never kept')
   check(/if \(!state \|\| onDownloadPage\) return null/.test(manager) && /startsWith\('\/download'\)/.test(manager),
     'the "must update" screen never covers the download page it sends people to')
-  check(/await flushAppUpdateNotices\(\)/.test(read('src/app/api/cron/alerts/route.ts')),
+  check(/app_updates: \(\) => flushAppUpdateNotices\(\)/.test(read('src/app/api/cron/alerts/route.ts')),
     'the five-minute job sends the new-app notices')
   // After the last reminder (0113): their lowest build is the one they were told about.
   const version = read('src/app/api/version/route.ts')

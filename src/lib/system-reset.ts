@@ -172,6 +172,7 @@ export const KEPT_TABLES: { table: string; what: string }[] = [
   { table: 'ai_limits', what: 'How much each person may use the AI' },
   { table: 'ai_usage', what: 'Recent AI uses (kept 3 days, for the limits)' },
   { table: 'store_google_spots', what: 'Where Google puts each store (goes with its store)' },
+  { table: 'app_errors', what: 'Problems recorded for System (kept 30 days)' },
   { table: 'place_addresses', what: 'Street addresses Google gave for spots with no shop' },
   { table: 'place_lookup_stats', what: 'Counts of place lookups (Google use)' },
   { table: 'sign_in_lockouts', what: 'Sign-in pauses after wrong passwords (they lift by themselves)' },

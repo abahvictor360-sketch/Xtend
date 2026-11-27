@@ -3160,6 +3160,30 @@ $$;
 
 
 --
+-- Name: error_summary(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.error_summary() RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  if auth.uid() is not null and not public.is_admin() then
+    raise exception 'Only an admin can see this';
+  end if;
+  return jsonb_build_object(
+    'last_hour', (select coalesce(sum(count), 0) from public.app_errors where last_at > now() - interval '1 hour'),
+    'last_day', (select coalesce(sum(count), 0) from public.app_errors where last_at > now() - interval '1 day'),
+    'jobs', coalesce((select jsonb_agg(jsonb_build_object(
+               'job', j.job, 'last_run_at', j.last_run_at, 'last_ok_at', j.last_ok_at,
+               'last_error', j.last_error, 'last_error_at', j.last_error_at) order by j.job)
+             from public.job_runs j), '[]'::jsonb)
+  );
+end;
+$$;
+
+
+--
 -- Name: expired_selfie_paths(integer); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -6632,6 +6656,41 @@ $$;
 
 
 --
+-- Name: record_app_error(text, text, text, text, text, jsonb); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.record_app_error(p_source text, p_event text, p_message text, p_code text DEFAULT NULL::text, p_path text DEFAULT NULL::text, p_detail jsonb DEFAULT '{}'::jsonb) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+declare
+  src  text := case when p_source in ('server', 'client', 'job') then p_source else 'server' end;
+  ev   text := left(coalesce(nullif(btrim(p_event), ''), 'unknown'), 80);
+  msg  text := left(coalesce(p_message, ''), 500);
+  fp   text;
+begin
+  fp := md5(src || '|' || ev || '|' || coalesce(left(p_code, 40), '') || '|' || left(msg, 160) || '|' || coalesce(left(p_path, 200), ''));
+  update public.app_errors
+     set count = count + 1, last_at = now(),
+         detail = coalesce(p_detail, '{}'::jsonb)
+   where id = (select e.id from public.app_errors e
+               where e.fingerprint = fp and e.last_at > now() - interval '1 day'
+               order by e.last_at desc limit 1);
+  if not found then
+    insert into public.app_errors (source, event, message, code, path, detail, fingerprint)
+    values (src, ev, msg, left(p_code, 40), left(p_path, 200), coalesce(p_detail, '{}'::jsonb), fp);
+  end if;
+  -- Now and then, the old ones go.
+  if random() < 0.02 then
+    delete from public.app_errors where last_at < now() - interval '30 days';
+  end if;
+exception when others then
+  null;
+end;
+$$;
+
+
+--
 -- Name: record_background_pings(text, jsonb, timestamp with time zone); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -6855,6 +6914,32 @@ begin
           nullif(btrim(coalesce(p_note, '')), ''), auth.uid())
   returning id into new_id;
   return new_id;
+end;
+$$;
+
+
+--
+-- Name: record_job_run(text, boolean, jsonb, text); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.record_job_run(p_job text, p_ok boolean, p_result jsonb DEFAULT '{}'::jsonb, p_error text DEFAULT NULL::text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public'
+    AS $$
+begin
+  insert into public.job_runs as j (job, last_run_at, last_result, last_ok_at, last_error, last_error_at)
+  values (left(p_job, 60), now(), coalesce(p_result, '{}'::jsonb),
+          case when p_ok then now() end,
+          case when p_ok then null else left(p_error, 500) end,
+          case when p_ok then null else now() end)
+  on conflict (job) do update
+    set last_run_at = now(),
+        last_result = coalesce(p_result, '{}'::jsonb),
+        last_ok_at = case when p_ok then now() else j.last_ok_at end,
+        last_error = case when p_ok then j.last_error else left(p_error, 500) end,
+        last_error_at = case when p_ok then j.last_error_at else now() end;
+exception when others then
+  null;
 end;
 $$;
 
@@ -11415,6 +11500,45 @@ CREATE VIEW public.alert_detail WITH (security_invoker='true') AS
 
 
 --
+-- Name: app_errors; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.app_errors (
+    id bigint NOT NULL,
+    source text NOT NULL,
+    event text NOT NULL,
+    message text DEFAULT ''::text NOT NULL,
+    code text,
+    path text,
+    detail jsonb DEFAULT '{}'::jsonb NOT NULL,
+    fingerprint text NOT NULL,
+    count integer DEFAULT 1 NOT NULL,
+    first_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT app_errors_code_check CHECK (((code IS NULL) OR (length(code) <= 40))),
+    CONSTRAINT app_errors_count_check CHECK ((count >= 1)),
+    CONSTRAINT app_errors_event_check CHECK (((length(event) >= 1) AND (length(event) <= 80))),
+    CONSTRAINT app_errors_message_check CHECK ((length(message) <= 500)),
+    CONSTRAINT app_errors_path_check CHECK (((path IS NULL) OR (length(path) <= 200))),
+    CONSTRAINT app_errors_source_check CHECK ((source = ANY (ARRAY['server'::text, 'client'::text, 'job'::text])))
+);
+
+
+--
+-- Name: app_errors_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.app_errors ALTER COLUMN id ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.app_errors_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: app_update_notices; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -11983,7 +12107,10 @@ CREATE VIEW public.integrity_flag_detail WITH (security_invoker='true') AS
 CREATE TABLE public.job_runs (
     job text NOT NULL,
     last_run_at timestamp with time zone DEFAULT now() NOT NULL,
-    last_result jsonb DEFAULT '{}'::jsonb NOT NULL
+    last_result jsonb DEFAULT '{}'::jsonb NOT NULL,
+    last_ok_at timestamp with time zone,
+    last_error text,
+    last_error_at timestamp with time zone
 );
 
 
@@ -13604,6 +13731,14 @@ ALTER TABLE ONLY public.ai_usage
 
 
 --
+-- Name: app_errors app_errors_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.app_errors
+    ADD CONSTRAINT app_errors_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: app_installs app_installs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -14432,6 +14567,20 @@ ALTER TABLE ONLY public.xm_targets
 --
 
 CREATE INDEX ai_usage_user_feature_time ON public.ai_usage USING btree (user_id, feature, used_at DESC);
+
+
+--
+-- Name: app_errors_by_fingerprint; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX app_errors_by_fingerprint ON public.app_errors USING btree (fingerprint, last_at DESC);
+
+
+--
+-- Name: app_errors_recent; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX app_errors_recent ON public.app_errors USING btree (last_at DESC);
 
 
 --
@@ -16659,6 +16808,19 @@ CREATE POLICY alerts_supervisor_select ON public.location_alerts FOR SELECT USIN
 
 
 --
+-- Name: app_errors; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.app_errors ENABLE ROW LEVEL SECURITY;
+
+--
+-- Name: app_errors app_errors_admin_read; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY app_errors_admin_read ON public.app_errors FOR SELECT TO authenticated USING (public.is_admin());
+
+
+--
 -- Name: app_installs; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -18574,6 +18736,15 @@ GRANT ALL ON FUNCTION public.end_store_visit(p_visit_id uuid, p_lat double preci
 
 
 --
+-- Name: FUNCTION error_summary(); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.error_summary() FROM PUBLIC;
+GRANT ALL ON FUNCTION public.error_summary() TO authenticated;
+GRANT ALL ON FUNCTION public.error_summary() TO service_role;
+
+
+--
 -- Name: FUNCTION expired_selfie_paths(p_hours integer); Type: ACL; Schema: public; Owner: -
 --
 
@@ -19466,6 +19637,14 @@ GRANT ALL ON FUNCTION public.record_activity(p_user uuid, p_kind text, p_ip text
 
 
 --
+-- Name: FUNCTION record_app_error(p_source text, p_event text, p_message text, p_code text, p_path text, p_detail jsonb); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.record_app_error(p_source text, p_event text, p_message text, p_code text, p_path text, p_detail jsonb) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.record_app_error(p_source text, p_event text, p_message text, p_code text, p_path text, p_detail jsonb) TO service_role;
+
+
+--
 -- Name: FUNCTION record_background_pings(p_token text, p_points jsonb, p_sent_at timestamp with time zone); Type: ACL; Schema: public; Owner: -
 --
 
@@ -19489,6 +19668,14 @@ GRANT ALL ON FUNCTION public.record_beacon(p jsonb) TO service_role;
 REVOKE ALL ON FUNCTION public.record_excuse_check(p_user uuid, p_claim text, p_from timestamp with time zone, p_to timestamp with time zone, p_verdict text, p_headline text, p_note text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.record_excuse_check(p_user uuid, p_claim text, p_from timestamp with time zone, p_to timestamp with time zone, p_verdict text, p_headline text, p_note text) TO authenticated;
 GRANT ALL ON FUNCTION public.record_excuse_check(p_user uuid, p_claim text, p_from timestamp with time zone, p_to timestamp with time zone, p_verdict text, p_headline text, p_note text) TO service_role;
+
+
+--
+-- Name: FUNCTION record_job_run(p_job text, p_ok boolean, p_result jsonb, p_error text); Type: ACL; Schema: public; Owner: -
+--
+
+REVOKE ALL ON FUNCTION public.record_job_run(p_job text, p_ok boolean, p_result jsonb, p_error text) FROM PUBLIC;
+GRANT ALL ON FUNCTION public.record_job_run(p_job text, p_ok boolean, p_result jsonb, p_error text) TO service_role;
 
 
 --
@@ -20563,6 +20750,13 @@ GRANT ALL ON FUNCTION public.xm_submit_sales(p_outlet uuid, p_sale_date date, p_
 REVOKE ALL ON FUNCTION public.xm_void(p_kind text, p_id uuid, p_reason text) FROM PUBLIC;
 GRANT ALL ON FUNCTION public.xm_void(p_kind text, p_id uuid, p_reason text) TO authenticated;
 GRANT ALL ON FUNCTION public.xm_void(p_kind text, p_id uuid, p_reason text) TO service_role;
+
+
+--
+-- Name: TABLE app_errors; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT ON TABLE public.app_errors TO authenticated;
 
 
 --

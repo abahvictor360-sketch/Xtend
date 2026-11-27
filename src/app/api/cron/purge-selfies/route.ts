@@ -1,5 +1,6 @@
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { cronAuthorized } from '@/lib/cron'
+import { logError } from '@/lib/log'
 import {
   purgeExpiredSelfies,
   purgeOrphanReportFiles,
@@ -32,7 +33,8 @@ export async function GET(request: Request) {
   try {
     purge = await purgeExpiredSelfies(supabase)
   } catch (error) {
-    console.error('selfie purge failed', error)
+    logError('job.step_failed', error, { job: 'purge_selfies', step: 'purge' }, 'job')
+    await recordJob('nightly', false, 'purge: ' + (error instanceof Error ? error.message : String(error)))
     return Response.json({ error: 'Purge failed. See the server log.' }, { status: 500 })
   }
 
@@ -57,13 +59,13 @@ export async function GET(request: Request) {
   try {
     reportFiles = await purgeOrphanReportFiles(supabase)
   } catch (error) {
-    console.error('report file clean-up skipped', error instanceof Error ? error.message : error)
+    logError('job.step_failed', error, { job: 'purge_selfies', step: 'report_files' }, 'job')
   }
   let reportPhotos = { files_deleted: 0, failed: 0 }
   try {
     reportPhotos = await purgeOrphanReportPhotos(supabase)
   } catch (error) {
-    console.error('report photo clean-up skipped', error instanceof Error ? error.message : error)
+    logError('job.step_failed', error, { job: 'purge_selfies', step: 'report_photos' }, 'job')
   }
 
   const result = {
@@ -87,9 +89,10 @@ export async function GET(request: Request) {
   try {
     notices = await sendRetentionNotices(supabase)
   } catch (error) {
-    console.error('retention notices skipped', error instanceof Error ? error.message : error)
+    logError('job.step_failed', error, { job: 'purge_selfies', step: 'notices' }, 'job')
   }
 
+  await recordJob('nightly', true, null)
   return Response.json({
     activity_cleared: activityCleared ?? 0,
     ...result,
@@ -98,4 +101,13 @@ export async function GET(request: Request) {
     visits_abandoned: abandoned ?? 0,
     ran_at: new Date().toISOString(),
   })
+}
+
+/** The night job's last run, for System (0117). */
+async function recordJob(job: string, ok: boolean, error: string | null) {
+  try {
+    await createAdminSupabase().rpc('record_job_run', { p_job: job, p_ok: ok, p_result: { ran_at: new Date().toISOString() }, p_error: error })
+  } catch {
+    // Before 0117: the log has it.
+  }
 }

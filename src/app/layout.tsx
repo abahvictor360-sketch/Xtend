@@ -3,6 +3,7 @@ import './globals.css'
 import { ServiceWorker } from '@/components/service-worker'
 import { SplashScreen } from '@/components/splash-screen'
 import { UpdateManager } from '@/components/update-manager'
+import { ErrorReporter } from '@/components/error-reporter'
 import { EARLY_RECOVERY_SCRIPT } from '@/lib/app-error'
 import { TEXT_SIZE_SCRIPT } from '@/lib/text-size'
 
@@ -49,6 +50,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         {children}
         <ServiceWorker />
         <UpdateManager />
+        <ErrorReporter />
       </body>
     </html>
   )

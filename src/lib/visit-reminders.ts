@@ -2,6 +2,7 @@ import 'server-only'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { notifyUsers } from '@/lib/notify'
 import { visitReminderMessage } from '@/lib/visit-reminder'
+import { logProblem } from '@/lib/log'
 
 interface ClaimedVisitReminder {
   user_id: string
@@ -24,7 +25,7 @@ export async function flushVisitCheckoutReminders(): Promise<{ claimed: number; 
     if (error) {
       // Before migration 0099 the function does not exist; nothing to send.
       if (!/claim_visit_checkout_reminders/.test(error.message)) {
-        console.error('claim_visit_checkout_reminders failed', error.message)
+        logProblem('claim_visit_checkout_reminders failed', error.message)
       }
       return { claimed: 0, delivered: 0 }
     }
@@ -39,7 +40,7 @@ export async function flushVisitCheckoutReminders(): Promise<{ claimed: number; 
     }
     return { claimed: rows.length, delivered }
   } catch (error) {
-    console.error('store check-out reminders failed', error)
+    logProblem('store check-out reminders failed', error)
     return { claimed: 0, delivered: 0 }
   }
 }

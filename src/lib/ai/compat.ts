@@ -1,6 +1,7 @@
 import 'server-only'
 import type { AiConnection } from '@/lib/ai/config'
 import { suggestModels } from '@/lib/ai/providers'
+import { logProblem } from '@/lib/log'
 
 /**
  * Talking to OpenAI, Gemini, NVIDIA and OpenRouter, which all take the
@@ -236,7 +237,7 @@ async function postWithRetry(conn: AiConnection, body: Json, tools: ToolDef[], t
       try {
         const data = await postShaped({ ...conn, model }, body, tools, timeoutMs)
         replacements.set(key, model)
-        console.error(`AI model ${conn.provider} ${conn.model} is retired or unknown; using ${model} instead. Choose a model on Settings → AI keys.`)
+        logProblem(`AI model ${conn.provider} ${conn.model} is retired or unknown; using ${model} instead. Choose a model on Settings → AI keys.`)
         return data
       } catch (next) {
         if (!(next instanceof AiServiceError) || next.status === null || next.status >= 500 || next.status === 401 || next.status === 403 || next.status === 429) throw next
@@ -251,7 +252,7 @@ async function postShaped(conn: AiConnection, body: Json, tools: ToolDef[], time
     return await post(conn, { ...body, ...(tools.length ? { tools: toOpenAiTools(tools, conn.provider === 'nvidia') } : {}) }, timeoutMs)
   } catch (err) {
     if (!(err instanceof AiServiceError) || (err.status !== 400 && err.status !== 422)) throw err
-    console.error(`AI service refused a request (${conn.provider} ${conn.model}): ${err.message}`)
+    logProblem(`AI service refused a request (${conn.provider} ${conn.model}): ${err.message}`)
     const shorter = typeof body.max_tokens === 'number' ? Math.min(body.max_tokens, 2048) : 2048
     // A named tool choice is not supported everywhere: 'auto' instead.
     const choice = body.tool_choice && typeof body.tool_choice === 'object' ? { tool_choice: 'auto' } : {}

@@ -3,6 +3,7 @@ import { createAdminSupabase } from '@/lib/supabase/admin'
 import { notifyWatchers } from '@/lib/notify'
 import { formatLagos, lagosDateString } from '@/lib/utils'
 import { locationOffAlert } from '@/lib/location-off-words'
+import { logProblem } from '@/lib/log'
 
 interface Claimed {
   spell_id: string
@@ -26,7 +27,7 @@ export async function flushLocationOffAlerts(now = new Date()): Promise<{ claime
     const { data, error } = await admin.rpc('claim_location_off_alerts')
     if (error) {
       // Before 0115 the function does not exist: nothing to send.
-      if (!/claim_location_off_alerts/.test(error.message)) console.error('claim_location_off_alerts failed', error.message)
+      if (!/claim_location_off_alerts/.test(error.message)) logProblem('claim_location_off_alerts failed', error.message)
       return { claimed: 0, delivered: 0 }
     }
     const rows = (data ?? []) as Claimed[]
@@ -52,7 +53,7 @@ export async function flushLocationOffAlerts(now = new Date()): Promise<{ claime
     }
     return { claimed: rows.length, delivered }
   } catch (error) {
-    console.error('location off alerts failed', error)
+    logProblem('location off alerts failed', error)
     return { claimed: 0, delivered: 0 }
   }
 }

@@ -2,6 +2,7 @@ import 'server-only'
 import { createAdminSupabase } from '@/lib/supabase/admin'
 import { pushConfigured, sendPush, type PushTarget } from '@/lib/push'
 import { auditContext } from '@/lib/audit-context'
+import { logProblem } from '@/lib/log'
 
 export interface OutgoingNotification {
   senderId: string | null
@@ -153,7 +154,7 @@ export async function flushScheduledNotifications(): Promise<{ sent: number; fai
   const { data, error } = await admin.rpc('claim_due_notifications', { p_limit: 20 })
   if (error) {
     // Before migration 053 the function does not exist; nothing to send.
-    if (!/claim_due_notifications/.test(error.message)) console.error('claim_due_notifications failed', error.message)
+    if (!/claim_due_notifications/.test(error.message)) logProblem('claim_due_notifications failed', error.message)
     return { sent: 0, failed: 0 }
   }
   let sent = 0

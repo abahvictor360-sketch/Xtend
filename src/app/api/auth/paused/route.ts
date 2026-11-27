@@ -2,6 +2,7 @@ import { createServerSupabase } from '@/lib/supabase/server'
 import { getSession } from '@/lib/auth'
 import { recordActivity } from '@/lib/activity-server'
 import { sameSiteRedirect } from '@/lib/origin'
+import { withRedirectOnError } from '@/lib/api-safe'
 
 /**
  * A fake location paused this account (0108): sign them out, everywhere
@@ -9,7 +10,7 @@ import { sameSiteRedirect } from '@/lib/origin'
  * Only a paused account is signed out here; opening this address otherwise
  * changes nothing.
  */
-export async function GET(request: Request) {
+async function handleGet(request: Request) {
   const session = await getSession()
   if (session && !session.profile.paused_at) return sameSiteRedirect('/')
   if (session) {
@@ -19,3 +20,6 @@ export async function GET(request: Request) {
   }
   return sameSiteRedirect('/login?reason=paused')
 }
+
+// Never an HTML error page: logged, recorded, and answered (2026-11-27).
+export const GET = withRedirectOnError(handleGet, '/login?reason=paused')

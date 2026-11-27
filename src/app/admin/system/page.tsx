@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { FinishFiles, GoLivePanel, ResetPanel } from '@/components/admin/system-reset'
 import { categoryLabel, type ResetResult } from '@/lib/system-reset'
 import { formatLagos } from '@/lib/utils'
+import { ProblemsPanel } from '@/components/admin/problems-panel'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'System — Xtend' }
@@ -44,6 +45,8 @@ export default async function SystemPage() {
           are ready for real work, turn test mode off.
         </p>
       </div>
+
+      <ProblemsPanel supabase={supabase} />
 
       {(error || !data) && (
         <p className="text-sm text-destructive">

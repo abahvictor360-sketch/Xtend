@@ -98,6 +98,15 @@ page, its downloads and scripts/check-visits-alerts.ts.
 
 Exports: `ALERT_LABEL`, `ALERT_SHORT`, `ALERT_TYPES`, `isAlertType`, `alertLabel`, `STALE_HOURS`, `REPEAT_AT`, `AlertState`, `AlertFilter`, `parseAlertFilter`, `alertQueryString`, `alertAgeMinutes`, `ageText`, `typeCounts`, `PersonAlerts`, `byPerson`, `repeatOffenders`, `typeMix`, `alertLinks`, `alertPresets`
 
+## `src/lib/api-safe.ts`
+
+A route handler that always answers in JSON (2026-11-27): anything it
+throws becomes apiError() (logged and recorded, "Something went wrong.
+Try again." to the caller) instead of Next's HTML error page, which the
+phone apps cannot read.
+
+Exports: `withErrors`, `withRedirectOnError`
+
 ## `src/lib/app-agent.ts`
 
 The Xtend apps (mobile/) add this to their user agent, so a server page
@@ -388,6 +397,17 @@ Exports: `Session`, `ReloginReason`, `getSession`, `appOnlyHere`, `requireSessio
 Sign the photo path already read by the session guard, without querying the profile again.
 
 Exports: `profileAvatarUrl`, `avatarUrls`, `withAvatars`
+
+## `src/lib/background-errors.ts`
+
+Errors in the browser that do not crash a screen (a failed promise, a
+script error in the background) were never seen by anyone. Now they are
+reported to /api/client-error as "background" (2026-11-27) and show on
+System → Problems. Noise is left out, the same message is sent once per
+page load, and at most five per page load. Pure parts here, for
+scripts/check-error-handling.ts; the listener is ErrorReporter.
+
+Exports: `isNoise`, `MAX_PER_PAGE`, `messageOf`
 
 ## `src/lib/background-gate.ts`
 
@@ -820,6 +840,13 @@ A clock-in is never blocked by this.
 
 Exports: `IpGeo`, `clientIp`, `lookupIp`
 
+## `src/lib/job-health.ts`
+
+How each scheduled job is doing, for System → Problems (0117). Pure, so
+scripts/check-error-handling.ts can test it.
+
+Exports: `JOBS`, `JobState`, `JobRun`, `jobState`, `JOB_WORDS`, `EVENT_WORDS`
+
 ## `src/lib/leaflet.ts`
 
 Leaflet, fetched from a CDN only when a map is opened, so pages without a
@@ -842,6 +869,25 @@ office's minutes (15 unless changed) while still clocked in. Their
 supervisor and the admins are told once per spell. Never throws.
 
 Exports: `flushLocationOffAlerts`
+
+## `src/lib/log-core.ts`
+
+The pure parts of Xtend's error logging (src/lib/log.ts), so
+scripts/check-error-handling.ts can test them: what an error says, what
+may be written down, and how often the same problem is recorded.
+
+Exports: `ErrorSource`, `Described`, `describe`, `redact`, `fingerprintOf`, `RECORD_EVERY_MS`, `dueToRecord`
+
+## `src/lib/log.ts`
+
+Xtend's error logging (2026-11-27, migration 0117). Every problem is
+written to the server's log as one JSON line (level, time, event, the
+error and its context, secrets hidden), and recorded in app_errors so
+admins see it on System → Problems. The same problem is recorded at most
+once a minute from one server; the database adds repeats to its count.
+Nothing here ever throws: logging must not cause a second failure.
+
+Exports: `LogContext`, `logError`, `logWarn`, `runJob`, `logProblem`, `eventName`
 
 ## `src/lib/login-destination.ts`
 
@@ -2031,6 +2077,14 @@ From migration 025; absent before it.
 
 Exports: `KnownPlace`, `WaitingStore`, `PlaceManager`
 
+## `src/components/admin/problems-panel.tsx`
+
+System → Problems (0117): what went wrong lately, grouped, and how each
+scheduled job is doing. For finding a fault quickly; nothing here changes
+anything. Before 0117 it says to run the migration.
+
+Exports: `ProblemsPanel`
+
 ## `src/components/admin/report-file-list.tsx`
 
 A document attached to a daily report, as report_file_detail gives it (0064).
@@ -2230,6 +2284,15 @@ gradient of the printed logo; `tone="light"` is the flat white version for
 use on the brand block.
 
 Exports: `XpelMark`, `XpelTile`, `XpelLockup`
+
+## `src/components/error-reporter.tsx`
+
+Reports errors that happen in the background of a page, without crashing
+it (src/lib/background-errors.ts): a failed promise or a script error.
+Crashes are reported by the error screens; a missing file after an
+update is handled by UpdateManager. Shows nothing.
+
+Exports: `ErrorReporter`
 
 ## `src/components/field/background-gate.tsx`
 

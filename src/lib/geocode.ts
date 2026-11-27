@@ -17,6 +17,7 @@ import {
   type OutletAnchor,
   type ResolvedPlace,
 } from '@/lib/place-resolve'
+import { logProblem } from '@/lib/log'
 
 export type { OutletAnchor, PlaceSource, ResolvedPlace } from '@/lib/place-resolve'
 
@@ -177,7 +178,7 @@ async function fromGoogle(lat: number, lng: number): Promise<GoogleAnswer> {
     return { place: got.place, fresh, calls: fresh ? got.calls : [] }
   } catch (error) {
     if (error instanceof NothingFound) return { place: null, fresh: true, calls: error.calls }
-    console.error('google place lookup failed', error)
+    logProblem('google place lookup failed', error)
     // Something was sent before it failed.
     return { place: null, fresh: true, calls: ['call_nearby'] }
   }

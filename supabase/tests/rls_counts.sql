@@ -206,6 +206,22 @@ select assert((select android from public.my_required_app_builds()) = 9999,
 select set_config('request.jwt.claim.sub', :'boss', false);
 select assert((select count(*) from public.app_forced_builds where user_id = :'ada') = 1,
   'rls: an admin sees who must update the app');
+-- Problems (0117): admins read; staff never; nobody writes directly.
+reset role;
+insert into public.app_errors (source, event, message, fingerprint) values ('server', 'rls.test', 'x', 'rls-test');
+set role authenticated;
+select set_config('request.jwt.claim.sub', :'ada', false);
+select assert((select count(*) from public.app_errors) = 0, 'rls: staff do not see recorded problems');
+select set_config('request.jwt.claim.sub', :'boss', false);
+select assert((select count(*) from public.app_errors where event = 'rls.test') = 1, 'rls: an admin sees recorded problems');
+do $$
+begin
+  insert into public.app_errors (source, event, message, fingerprint) values ('server', 'x', 'x', 'x');
+  perform assert(false, 'rls: nobody records a problem directly');
+exception when insufficient_privilege then
+  perform assert(true, 'rls: nobody records a problem directly');
+end $$;
+
 -- Location turned off (0115): admins and their supervisor read; staff never.
 reset role;
 insert into public.location_off_spells (user_id, started_at) values (:'ada', now() - interval '20 minutes');

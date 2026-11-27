@@ -1,4 +1,5 @@
 import { cronAuthorized } from '@/lib/cron'
+import { runJob } from '@/lib/log'
 import { runMetricsSweep } from '@/lib/metrics/server'
 
 export const maxDuration = 60
@@ -14,6 +15,6 @@ export async function GET(request: Request) {
   if (!cronAuthorized(request)) {
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
-  const result = await runMetricsSweep()
-  return Response.json({ ...result, ran_at: new Date().toISOString() })
+  const { results, failed } = await runJob('metrics', { sweep: () => runMetricsSweep() })
+  return Response.json({ ...(results.sweep as object), failed, ran_at: new Date().toISOString() }, { status: failed.length ? 500 : 200 })
 }

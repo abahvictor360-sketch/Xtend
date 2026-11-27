@@ -1,6 +1,7 @@
 import 'server-only'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { auditContext } from '@/lib/audit-context'
+import { logProblem } from '@/lib/log'
 
 /**
  * Every admin mutation leaves a row. actor_id is taken from the session by
@@ -21,5 +22,5 @@ export async function audit(
     // Where and on what it was done (migration 049).
     p_context: await auditContext(),
   })
-  if (error) console.error('audit failed', action, error.message)
+  if (error) logProblem('audit failed', action, error.message)
 }

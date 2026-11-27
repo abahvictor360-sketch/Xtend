@@ -6266,7 +6266,9 @@ begin
                                 -- 0104: what the office told the AI.
                                 'ai_knowledge',
                                 -- 0110: AI limits, and recent uses (kept 3 days).
-                                'ai_limits', 'ai_usage', 'store_google_spots'];
+                                'ai_limits', 'ai_usage', 'store_google_spots',
+                                -- 0117: problems recorded for the office.
+                                'app_errors'];
     all_keys text[] := public.reset_category_keys();
     k text;
     cats text[];
@@ -7914,6 +7916,56 @@ begin
     end;
   exception when others then
     if sqlerrm <> 'locoff-0115-done' then raise; end if;
+  end;
+
+  -- 0117: problems recorded where the office can see them. Rolled back.
+  begin
+    declare
+      boss_id uuid := (select id from public.profiles where role = 'admin' order by created_at limit 1);
+      staff uuid := (select id from public.profiles where role = 'merchandiser' order by created_at limit 1);
+      r record;
+      j jsonb;
+    begin
+      perform set_config('request.jwt.claim.sub', '', false);
+      delete from public.app_errors;
+      perform public.record_app_error('server', 'api.unexpected', 'boom', null, '/api/x', '{"a":1}');
+      perform public.record_app_error('server', 'api.unexpected', 'boom', null, '/api/x', '{"a":2}');
+      perform public.record_app_error('client', 'screen.crash', 'other', 'X-1', '/field', '{}');
+      select count(*) as rows, sum(count) as total into r from public.app_errors;
+      perform assert(r.rows = 2 and r.total = 3, 'errors 0117: the same problem again adds to its count');
+      perform assert((select detail->>'a' from public.app_errors where event = 'api.unexpected') = '2',
+        'errors 0117: the latest detail is kept');
+      perform public.record_app_error('nonsense', '', repeat('x', 900), repeat('c', 90), null, null);
+      perform assert(exists (select 1 from public.app_errors where source = 'server' and event = 'unknown' and length(message) = 500),
+        'errors 0117: odd input is tidied, never refused');
+      update public.app_errors set last_at = now() - interval '2 days' where event = 'screen.crash';
+      perform public.record_app_error('client', 'screen.crash', 'other', 'X-1', '/field', '{}');
+      perform assert((select count(*) from public.app_errors where event = 'screen.crash') = 2,
+        'errors 0117: after a day the same problem starts a new row');
+
+      perform public.record_job_run('alerts', true, '{"sent":1}', null);
+      perform public.record_job_run('alerts', false, '{}', 'flushFlagAlerts: timeout');
+      select * into r from public.job_runs where job = 'alerts';
+      perform assert(r.last_ok_at is not null and r.last_error = 'flushFlagAlerts: timeout' and r.last_error_at is not null,
+        'errors 0117: a job run records the last success and the last failure');
+      j := public.error_summary();
+      perform assert((j->>'last_hour')::int >= 4 and jsonb_array_length(j->'jobs') >= 1, 'errors 0117: the summary counts problems and lists jobs');
+
+      perform act_as(staff);
+      begin
+        perform public.error_summary();
+        perform assert(false, 'errors 0117: staff cannot read the summary');
+      exception when raise_exception then
+        perform assert(sqlerrm = 'Only an admin can see this', 'errors 0117: staff cannot read the summary');
+      end;
+      perform act_as(boss_id);
+      perform assert((public.error_summary()->>'last_day')::int >= 4, 'errors 0117: an admin reads the summary');
+      perform assert(not has_function_privilege('authenticated', 'public.record_app_error(text, text, text, text, text, jsonb)', 'execute'),
+        'errors 0117: only the server records problems');
+      raise exception 'errors-0117-done';
+    end;
+  exception when others then
+    if sqlerrm <> 'errors-0117-done' then raise; end if;
   end;
 
   raise notice 'ALL RULES PASSED';

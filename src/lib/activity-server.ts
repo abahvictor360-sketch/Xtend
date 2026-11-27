@@ -5,6 +5,7 @@ import { requestIp } from '@/lib/client-ip'
 import { parseUserAgent } from '@/lib/audit-context'
 import { deviceLabel } from '@/lib/audit-log'
 import { type ActivityFilter, type ActivityRow, filterKinds } from '@/lib/activity-log'
+import { logProblem } from '@/lib/log'
 
 export type RecordedKind = 'sign_in' | 'sign_out' | 'app_open' | 'password_changed' | 'photo_changed'
 
@@ -32,9 +33,9 @@ export async function recordActivity(
       p_device: parseUserAgent(ua),
       p_detail: extra.detail ?? {},
     })
-    if (error) console.error('activity not recorded', kind, error.message)
+    if (error) logProblem('activity not recorded', kind, error.message)
   } catch (error) {
-    console.error('activity not recorded', kind, error instanceof Error ? error.message : error)
+    logProblem('activity not recorded', kind, error instanceof Error ? error.message : error)
   }
 }
 
